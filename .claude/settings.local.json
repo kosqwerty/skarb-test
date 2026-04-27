@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c ' *)",
+      "Bash(node -e ' *)",
+      "Bash(node --check \"c:/Users/neoli/OneDrive/Desktop/lms/js/pages/schedule-graph.js\")",
+      "Bash(node --input-type=module)",
+      "Bash(node -e \"require\\('fs'\\).readFileSync\\('c:/Users/neoli/OneDrive/Desktop/lms/js/pages/schedule-graph.js','utf8'\\)\")",
+      "Bash(node -c \"c:/Users/neoli/OneDrive/Desktop/lms/js/pages/schedule-graph.js\")",
+      "Bash(echo \"exit:$?\")"
+    ]
+  }
+}

@@ -1,0 +1,6 @@
+Прізвище;Ім'я;По батькові;Логін;Email;Пароль;Роль;Стать;Телефон;Дата нар.;Місто;Посада;Підрозділ;Мітка
+Іваненко;Олег;Петрович;o.ivanenko;oleg@company.com;pass123;user;male;+380501234567;1990-05-15;Київ;Менеджер;Відділ продажів;Новий
+Коваль;Марія;Андріївна;m.koval;maria@company.com;pass456;teacher;female;+380671112233;1985-11-20;Львів;Викладач;HR;;
+Сидоренко;Андрій;;a.sydorenko;andrii@company.com;secure99;admin;male;+380931234567;;Харків;;;
+Бондаренко;Олена;;o.bondar;olena@company.com;qwerty1;smm;female;;;Одеса;SMM-спеціаліст;Маркетинг;
+Мельник;Тарас;Іванович;;taras@company.com;mypass1;user;male;;;;;;;

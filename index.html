@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Скарбниця - портал</title>
+    <link rel="icon" href="favicon.png" type="image/x-icon">
+    <meta name="description" content="Система управління навчанням">
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
+    <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
+
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<!-- ================================================
+     ЕКРАН АВТОРИЗАЦІЇ
+================================================ -->
+<div id="auth-screen" class="auth-screen hidden">
+    <button class="theme-toggle-btn auth-theme-btn" onclick="Theme.toggle()" title="Світла тема">☀️</button>
+    <div class="auth-bg">
+        <div class="auth-blob b1"></div>
+        <div class="auth-blob b2"></div>
+        <div class="auth-blob b3"></div>
+    </div>
+    <div class="auth-card">
+        <div class="auth-logo">
+            <div class="login-icon"><img src="/ava-login.png"></div>
+            <h1>LMS СКАРБНИЦЯ</h1>
+            <p></p>
+        </div>
+
+        <!-- Форма входу -->
+        <div id="login-form">
+            
+            <div class="form-group">
+                <label>Ваш Логін</label>
+                <input type="text" id="login-username" placeholder="Логін (не email)" autocomplete="username">
+            </div>
+            <div class="form-group">
+                <label>Пароль</label>
+                <div class="input-with-icon">
+                    <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password">
+                    <button type="button" class="toggle-pwd" onclick="togglePassword('login-password',this)">👁</button>
+                </div>
+            </div>
+            <button id="login-btn" class="btn-login" onclick="Auth.login()">
+                <span>Увійти</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ================================================
+     ОСНОВНИЙ ІНТЕРФЕЙС
+================================================ -->
+<div id="app-shell" class="app-shell hidden">
+
+    <!-- Бічна панель -->
+    <aside id="sidebar" class="sidebar">
+        <div class="sidebar-header">
+            <div class="logo">
+                <span class="logo-icon"><img src="/dark.png"></span>
+                <!-- <span class="logo-text">Скарбниця</span> -->
+            </div>
+            
+        </div>
+
+        <nav id="sidebar-nav" class="sidebar-nav"></nav>
+
+        <div class="sidebar-footer">
+            <div id="sidebar-user" class="sidebar-user"></div>
+            <button class="theme-toggle-btn sidebar-theme-btn" onclick="Theme.toggle()" title="Світла тема">☀️</button>
+            <button class="btn-logout" onclick="Auth.logout()">
+                <span class="icon">↩</span>
+                <span>Вийти</span>
+            </button>
+        </div>
+    </aside>
+
+    <div id="sidebar-overlay" class="sidebar-overlay" onclick="UI.closeSidebar()"></div>
+
+    <!-- Основний контент -->
+    <div class="main-wrapper">
+        <header class="top-bar">
+            <div class="top-bar-left">
+                <button class="mobile-menu-btn" onclick="UI.openSidebar()">☰</button>
+                <nav class="breadcrumb" id="breadcrumb"></nav>
+            </div>
+            <div class="top-bar-right">
+                <button class="ntf-bell-btn" id="ntf-bell" onclick="Router.go('notifications')" title="Сповіщення">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                    </svg>
+                    <span class="ntf-bell-badge hidden" id="ntf-bell-badge">0</span>
+                </button>
+            </div>
+        </header>
+
+        <main id="page-content" class="page-content"></main>
+    </div>
+</div>
+
+<!-- МОДАЛЬНЕ ВІКНО -->
+<div id="modal-backdrop" class="modal-backdrop hidden" onclick="Modal.close()"></div>
+<div id="modal-container" class="modal-container hidden">
+    <div id="modal-box" class="modal-box">
+        <div class="modal-header">
+            <h3 id="modal-title"></h3>
+            <button class="modal-close" onclick="Modal.close()">✕</button>
+        </div>
+        <div id="modal-body" class="modal-body"></div>
+        <div id="modal-footer" class="modal-footer"></div>
+    </div>
+</div>
+
+<!-- СПОВІЩЕННЯ -->
+<div id="toast-container" class="toast-container"></div>
+
+<!-- ЗАВАНТАЖЕННЯ -->
+<div id="loading-overlay" class="loading-overlay">
+    <div class="loading-box">
+        <div class="spinner"></div>
+        <p>Завантаження...</p>
+    </div>
+</div>
+
+<!-- SCORM ПЛЕЄР -->
+<div id="scorm-overlay" class="scorm-overlay hidden">
+    <div class="scorm-header">
+        <span id="scorm-title" class="scorm-title"></span>
+        <div class="scorm-controls">
+            <span id="scorm-status" class="scorm-status-badge"></span>
+            <button onclick="ScormPlayer.close()" class="btn btn-sm btn-ghost">✕ Закрити</button>
+        </div>
+    </div>
+    <iframe id="scorm-frame" class="scorm-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-top-navigation"></iframe>
+</div>
+
+<!-- СКРИПТИ -->
+<script>
+const _v = Date.now();
+document.write([
+  'js/config.js','js/utils.js','js/api.js','js/auth.js','js/router.js','js/scorm.js',
+  'js/pages/dashboard.js','js/pages/courses.js','js/pages/course-view.js',
+  'js/pages/lesson-view.js','js/pages/tests.js','js/pages/analytics.js',
+  'js/pages/admin.js','js/pages/access-groups.js','js/pages/news.js',
+  'js/pages/resources.js','js/pages/collections.js','js/pages/profile.js',
+  'js/pages/scheduler.js','js/pages/notifications.js','js/pages/contacts.js',
+  'js/pages/bookmarks.js','js/pages/label-access.js','js/pages/schedule-graph.js','js/app.js'
+].map(s=>`<scr`+`ipt src="${s}?v=${_v}"></scr`+`ipt>`).join(''));
+</script>
+
+<script>
+function togglePassword(id, btn) {
+    const input = document.getElementById(id);
+    if (input.type === 'password') { input.type = 'text'; btn.textContent = '🙈'; }
+    else { input.type = 'password'; btn.textContent = '👁'; }
+}
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('login-password')?.addEventListener('keydown', e => {
+        if (e.key === 'Enter') Auth.login();
+    });
+    document.getElementById('reg-password')?.addEventListener('keydown', e => {
+        if (e.key === 'Enter') Auth.register();
+    });
+});
+</script>
+</body>
+</html>

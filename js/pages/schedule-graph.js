@@ -207,11 +207,18 @@ const ScheduleGraphPage = {
     },
 
     async _loadLocations() {
-        const { data } = await supabase.from('schedule_locations')
-            .select('*').is('deleted_at', null).order('created_at')
-            .eq('created_by', AppState.user.id);
+        let query = supabase.from('schedule_locations')
+            .select('*').is('deleted_at', null).order('created_at');
+        if (!AppState.isOwner()) query = query.eq('created_by', AppState.user.id);
+        const { data } = await query;
         this._locations = data || [];
         this._applyLocOrder();
+    },
+
+    _isViewOnlyLoc(locId) {
+        if (!AppState.isOwner()) return false;
+        const loc = this._locations.find(l => l.id === locId);
+        return !!loc && loc.created_by !== AppState.user.id;
     },
 
     async _loadDeletedLocations() {
@@ -561,20 +568,22 @@ ${this._styles()}`;
             const whText = (wh.start && wh.end) ? `${wh.start}–${wh.end}` : '';
             const hasHelp = this._helpLocIds.has(l.id);
             const isActive = l.id === this._locId;
+            const viewOnly = this._isViewOnlyLoc(l.id);
             return `
-        <div class="sg-loc-item-row" draggable="true"
-            ondragstart="ScheduleGraphPage._onLocDragStart(event,'${l.id}')"
-            ondragover="ScheduleGraphPage._onLocDragOver(event)"
-            ondragleave="ScheduleGraphPage._onLocDragLeave(event)"
-            ondrop="ScheduleGraphPage._onLocDrop(event,'${l.id}')">
-            <span class="sg-loc-drag-handle" title="Перетягнути">⠿</span>
+        <div class="sg-loc-item-row${viewOnly ? ' sg-loc-view-only' : ''}" draggable="${viewOnly ? 'false' : 'true'}"
+            ondragstart="${viewOnly ? '' : `ScheduleGraphPage._onLocDragStart(event,'${l.id}')`}"
+            ondragover="${viewOnly ? '' : 'ScheduleGraphPage._onLocDragOver(event)'}"
+            ondragleave="${viewOnly ? '' : 'ScheduleGraphPage._onLocDragLeave(event)'}"
+            ondrop="${viewOnly ? '' : `ScheduleGraphPage._onLocDrop(event,'${l.id}')`}">
+            ${viewOnly ? '' : `<span class="sg-loc-drag-handle" title="Перетягнути">⠿</span>`}
             <button class="sg-loc-item ${isActive ? 'active' : ''}${hasHelp ? ' has-help' : ''}"
                 onclick="ScheduleGraphPage._selectLocation('${l.id}')">
-                <span class="sg-loc-item-ico">🏪</span>
+                <span class="sg-loc-item-ico">${viewOnly ? '👁' : '🏪'}</span>
                 <span class="sg-loc-item-name">${l.name}</span>
                 <span class="sg-loc-item-meta">
                     ${whText ? `<span class="sg-loc-item-wh">${whText}</span>` : ''}
                     ${hasHelp ? `<span class="sg-loc-item-helpdot"></span>` : ''}
+                    ${viewOnly ? `<span class="sg-loc-item-ro" title="Тільки перегляд">👁</span>` : ''}
                 </span>
             </button>
         </div>`;
@@ -624,16 +633,19 @@ ${this._styles()}`;
         const wEnd   = wh.end   || '18:00';
         const locName = this._locations.find(l => l.id === this._locId)?.name || '';
         const locked  = this._isLocked();
+        const viewOnly = this._isViewOnlyLoc(this._locId);
 
         return `
 <div class="sg-section">
     <div class="sg-work-hours-bar${locked ? ' sg-locked-bar' : ''}">
         <span class="sg-loc-name-ico">🏪</span>
         <span class="sg-loc-name-text">${locName}</span>
-        <button class="sg-loc-name-edit" onclick="ScheduleGraphPage._renameLocation('${this._locId}','${locName.replace(/'/g,"\\'")}')" title="Перейменувати">✏️</button>
+        ${viewOnly ? `<span class="sg-view-only-badge">👁 Тільки перегляд</span>` : `
+        <button class="sg-loc-name-edit" onclick="ScheduleGraphPage._renameLocation('${this._locId}','${locName.replace(/'/g,"\\'")}')" title="Перейменувати">✏️</button>`}
         <span class="sg-wh-sep">·</span>
         <span class="sg-wh-label">🕐 Час роботи:</span>
         <span class="sg-wh-time" id="sg-wh-display">${wStart} — ${wEnd}</span>
+        ${viewOnly ? '' : `
         <button class="sg-wh-edit" onclick="ScheduleGraphPage._editWorkHours()" title="Редагувати">✏️</button>
         <div class="sg-wh-inputs" id="sg-wh-inputs" style="display:none">
             <input type="time" id="sg-wh-start" class="sg-tinput" style="width:110px">
@@ -647,21 +659,22 @@ ${this._styles()}`;
             title="${locked ? 'Графік заблоковано — натисніть щоб розблокувати' : 'Заблокувати зміни для співробітників'}">
             ${locked ? '🔒' : '🔓'}
         </button>
-        <button class="sg-loc-del-btn" onclick="ScheduleGraphPage._deleteLocation('${this._locId}')" title="Видалити локацію">🗑</button>
+        <button class="sg-loc-del-btn" onclick="ScheduleGraphPage._deleteLocation('${this._locId}')" title="Видалити локацію">🗑</button>`}
     </div>
     <div class="sg-toolbar">
         <div class="sg-legend">
             ${getShiftTypeEntries().map(([k, v]) => `
             <button class="sg-leg-btn ${this._quickType === k ? 'active' : ''}"
-                style="--lc:${v.color};--lb:${v.bg}"
-                onclick="ScheduleGraphPage._setQuickType('${k}')"
-                title="${this._quickType === k ? 'Клік щоб скасувати' : 'Клік щоб вибрати — потім тиснути комірки'}">
+                style="--lc:${v.color};--lb:${v.bg}${viewOnly ? ';cursor:default;opacity:.75' : ''}"
+                ${viewOnly ? 'disabled' : `onclick="ScheduleGraphPage._setQuickType('${k}')"`}
+                title="${viewOnly ? v.label : (this._quickType === k ? 'Клік щоб скасувати' : 'Клік щоб вибрати — потім тиснути комірки')}">
                 <span class="sg-leg-short" style="background:${v.bg};color:${v.color}">${v.short}</span>
                 ${v.label}
-                ${this._quickType === k ? '<span class="sg-leg-active-mark">✓ активно</span>' : ''}
+                ${!viewOnly && this._quickType === k ? '<span class="sg-leg-active-mark">✓ активно</span>' : ''}
             </button>`).join('')}
-            <button class="sg-types-mgr-btn" onclick="ScheduleGraphPage._showShiftTypesModal()" title="Налаштувати типи змін">⚙️</button>
+            ${viewOnly ? '' : `<button class="sg-types-mgr-btn" onclick="ScheduleGraphPage._showShiftTypesModal()" title="Налаштувати типи змін">⚙️</button>`}
         </div>
+        ${viewOnly ? '' : `
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             <button class="sg-mgr-help-btn" onclick="ScheduleGraphPage._showManagerHelpModal()">
                 🆘 Потрібна підміна
@@ -672,7 +685,7 @@ ${this._styles()}`;
             <button class="sg-add-btn" onclick="ScheduleGraphPage._addEmployee()">
                 <span class="sg-add-ico">＋</span> Співробітник
             </button>
-        </div>
+        </div>`}
     </div>
     ${this._quickType ? `
     <div class="sg-quick-bar">
@@ -716,9 +729,7 @@ ${this._styles()}`;
                         <div class="sg-th-sum-inner">Σ</div>
                         <div class="sg-th-sub">Дні</div>
                     </th>
-                    <th class="sg-th-del">
-                        <div class="sg-th-sub">Дія</div>
-                    </th>
+                    ${viewOnly ? '' : `<th class="sg-th-del"><div class="sg-th-sub">Дія</div></th>`}
                 </tr>
             </thead>
             <tbody ondragend="ScheduleGraphPage._draggingEmpId=null;document.querySelectorAll('.sg-row-dragging,.sg-row-drag-over').forEach(r=>r.classList.remove('sg-row-dragging','sg-row-drag-over'))">
@@ -730,7 +741,8 @@ ${this._styles()}`;
                     const cells = nums.map(d => {
                         const date  = this._dateStr(d);
                         const entry = lookupId ? this._entries[`${lookupId}_${date}`] : null;
-                        const shift = entry ? getShiftTypes()[entry.shift_type] : null;
+                        const dispType = entry && !a.is_primary && entry.shift_type === 'work' ? 'day_off' : entry?.shift_type;
+                        const shift = entry ? getShiftTypes()[dispType] : null;
                         const dow   = new Date(this._year, this._month, d).getDay();
                         const we    = dow === 0 || dow === 6;
                         const isSubConf = entry?.notes === '__sub_confirmed__';
@@ -741,10 +753,10 @@ ${this._styles()}`;
                         const flagIco = entry?.notes === '__sub__' ? '🙋' : entry?.notes === '__needsub__' ? '🆘' : '';
                         const otherLocName = !entry && lookupId ? (this._otherLocDayOff?.[`${lookupId}_${date}`] || null) : null;
                         const noWork = !datesWithWork.has(date);
-                        return `<td class="sg-cell${we?' we':''}${entry?.notes==='__needsub__'?' sg-needsub-cell':''}${noWork?' sg-cell-no-work':''}"
+                        return `<td class="sg-cell${we?' we':''}${entry?.notes==='__needsub__'?' sg-needsub-cell':''}${noWork?' sg-cell-no-work':''}${viewOnly?' sg-cell-partner':''}${!a.is_primary && dispShift?' sg-cell-sub':''}"
                             data-uid="${a.user_id}" data-date="${date}"
-                            onclick="ScheduleGraphPage._openCell('${a.user_id}','${date}')"
-                            title="${entry?.notes==='__sub__' ? 'Може вийти на підміну' : entry?.notes==='__needsub__' ? 'Потрібна підміна' : isSubConf ? 'Підтверджена підміна' : shift ? shift.label : otherLocName ? `Підміна у «${otherLocName}»` : 'Клік щоб додати'}">
+                            ${viewOnly ? '' : `onclick="ScheduleGraphPage._openCell('${a.user_id}','${date}')"`}
+                            title="${entry?.notes==='__sub__' ? 'Може вийти на підміну' : entry?.notes==='__needsub__' ? 'Потрібна підміна' : isSubConf ? 'Підтверджена підміна' : shift ? shift.label : otherLocName ? `Підміна у «${otherLocName}»` : viewOnly ? '' : 'Клік щоб додати'}">
                             ${flagIco
                                 ? `<span class="sg-flag-cell">${flagIco}</span>`
                                 : dispShift ? `<span class="sg-badge" style="background:${dispShift.bg};color:${dispShift.color}">${dispShift.short}</span>`
@@ -761,12 +773,12 @@ ${this._styles()}`;
                         ${this._nameCell(a)}
                         ${cells}
                         <td class="sg-td-sum">${workTotal(a)}</td>
-                        <td class="sg-td-del">
+                        ${viewOnly ? '' : `<td class="sg-td-del">
                             <button class="sg-rm" title="Видалити зі списку"
                                 onclick="ScheduleGraphPage._removeEmployee('${a.id}','${a.user_id}',event)">
                                 🗑 <span>Видалити</span>
                             </button>
-                        </td>
+                        </td>`}
                     </tr>`;
                 }).join('')}
             </tbody>
@@ -2226,16 +2238,17 @@ ${this._styles()}`;
                             const crossShifts = !entry && uid2 ? (shiftsByUidDate[`${uid2}_${date}`] || null) : null;
                             const crossOther  = crossShifts?.find(x => x.locId !== locId) || null;
                             const otherLocName = crossOther?.locName || null;
+                            const isVOLoc = this._isViewOnlyLoc(locId);
                             const cellTitle = isFired ? 'Звільнений співробітник'
-                                : a.isPartner ? 'Локація партнера — лише перегляд'
+                                : a.isPartner || isVOLoc ? 'Тільки перегляд'
                                 : entry?.notes==='__sub__' ? 'Може вийти на підміну'
                                 : entry?.notes==='__needsub__' ? 'Потрібна підміна'
                                 : isSubConf ? 'Підтверджена підміна'
                                 : shift ? shift.label
                                 : otherLocName ? `Підміна у «${otherLocName}»` : 'Клік щоб додати';
-                            return `<td class="sg-cell${we?' we':''}${isSd?' sg-sd-col':''}${isFree?' sg-free-cell':''}${isBusy?' sg-busy-cell':''}${entry?.notes==='__needsub__'?' sg-needsub-cell':''}${a.isPartner?' sg-cell-partner':''}${isFired?' sg-cell-fired':''}${isEmpty?' sg-cell-no-work':''}"
+                            return `<td class="sg-cell${we?' we':''}${isSd?' sg-sd-col':''}${isFree?' sg-free-cell':''}${isBusy?' sg-busy-cell':''}${entry?.notes==='__needsub__'?' sg-needsub-cell':''}${a.isPartner||isVOLoc?' sg-cell-partner':''}${isFired?' sg-cell-fired':''}${isEmpty?' sg-cell-no-work':''}"
                                 data-uid="${a.user_id}" data-date="${date}" data-locid="${locId}"
-                                ${(isFired || a.isPartner) ? '' : `onclick="ScheduleGraphPage._openCellAll('${locId}','${a.user_id}','${date}')"`}
+                                ${(isFired || a.isPartner || isVOLoc) ? '' : `onclick="ScheduleGraphPage._openCellAll('${locId}','${a.user_id}','${date}')"`}
                                 title="${cellTitle}">
                                 ${flagIco
                                     ? `<span class="sg-flag-cell">${flagIco}</span>`
@@ -2364,6 +2377,7 @@ ${this._styles()}`;
     _openCellAll(locId, userId, date) {
         if (!userId || userId === 'null') return;
         if (this._partnerLocations?.some(l => l.id === locId)) return;
+        if (this._isViewOnlyLoc(locId)) return;
         if (this._isPastMonth()) { Toast.error('Місяць завершено', 'Редагування минулих місяців заблоковано'); return; }
         if (this._quickType) {
             this._quickSaveAll(locId, userId, date, this._quickType);
@@ -2729,6 +2743,7 @@ ${this._styles()}`;
     },
 
     _openCell(userId, date) {
+        if (this._isViewOnlyLoc(this._locId)) return;
         if (this._isPastMonth()) { Toast.error('Місяць завершено', 'Редагування минулих місяців заблоковано'); return; }
         if (this._quickType) {
             this._quickSave(userId, date, this._quickType);
@@ -3187,7 +3202,7 @@ ${this._styles()}`;
     <div class="sg-name-full${fired ? ' sg-name-deleted' : ''}">
         ${primaryBtn}${name}${fired
         ? ` <span class="sg-deleted-badge">${firedBadge}</span>`
-        : !a.is_primary ? ` <span class="sg-temp-badge">тимч.</span>` : ''}
+        : !a.is_primary ? ` <span class="sg-temp-badge">підміна</span>` : ''}
     </div>
 </td>`;
     },
@@ -3219,7 +3234,7 @@ ${this._styles()}`;
     <div class="sg-name-full${fired ? ' sg-name-deleted' : ''}">
         ${name}${fired
         ? ` <span class="sg-deleted-badge">${firedBadge}</span>`
-        : !a.is_primary ? ` <span class="sg-temp-badge">тимч.</span>` : ''}
+        : !a.is_primary ? ` <span class="sg-temp-badge">підміна</span>` : ''}
         ${isFiltered ? ' <span class="sg-filter-active-badge">✓ фільтр</span>' : ''}
     </div>
 </td>`;
@@ -3586,9 +3601,17 @@ ${this._styles()}`;
     padding:9px 16px;font-size:.72rem;font-weight:700;
     text-transform:uppercase;letter-spacing:.07em;
     color:var(--primary);
+    text-shadow:0 1px 3px rgba(0,0,0,.25);
     background:rgba(99,102,241,.07);
     border-top:2px solid rgba(99,102,241,.18);
     border-bottom:1px solid rgba(99,102,241,.14);
+}
+.light-theme .sg-loc-group-header {
+    background:rgba(38,52,115,.15);
+    border-top-color:rgba(38,52,115,.35);
+    border-bottom-color:rgba(38,52,115,.22);
+    color:#263473;
+    text-shadow:0 1px 2px rgba(38,52,115,.15);
 }
 .sg-loc-end-row td {
     height:10px;padding:0;
@@ -3613,6 +3636,13 @@ ${this._styles()}`;
     opacity:.4;transition:opacity .15s;padding:2px 4px;border-radius:6px;
 }
 .sg-loc-name-edit:hover { opacity:1;background:var(--bg-hover); }
+.sg-view-only-badge {
+    display:inline-flex;align-items:center;gap:4px;
+    font-size:.75rem;font-weight:600;padding:2px 8px;border-radius:20px;
+    background:rgba(139,92,246,.12);color:#8b5cf6;border:1px solid rgba(139,92,246,.25);
+}
+.sg-loc-item-ro { font-size:.7rem;opacity:.7; }
+.sg-loc-view-only .sg-loc-item { opacity:.85; }
 .sg-work-hours-bar {
     display:flex;align-items:center;gap:10px;flex-wrap:wrap;
     padding:10px 20px;border-bottom:1px solid var(--border);
@@ -4000,6 +4030,7 @@ ${this._styles()}`;
 }
 .sg-name-deleted { color:var(--text-muted);font-style:italic; }
 .sg-cell-fired { background:repeating-linear-gradient(45deg,transparent,transparent 4px,rgba(0,0,0,.03) 4px,rgba(0,0,0,.03) 8px) !important;cursor:default; }
+.sg-cell-sub { border-bottom:2px solid rgba(139,92,246,.3) !important; }
 .sg-cell-no-work { background:rgba(239,68,68,.07) !important;border-top:2px solid rgba(239,68,68,.35) !important; }
 .sg-th-day.sg-th-no-work { background:rgba(239,68,68,.12) !important;color:#ef4444 !important; }
 .sg-deleted-badge {
@@ -4008,7 +4039,7 @@ ${this._styles()}`;
 }
 .sg-temp-badge {
     font-size:.6rem;font-weight:600;padding:1px 4px;border-radius:4px;
-    background:rgba(156,163,175,.15);color:var(--text-muted);white-space:nowrap;flex-shrink:0;
+    background:rgba(239,68,68,.12);color:#f87171;white-space:nowrap;flex-shrink:0;
 }
 .sg-drag-handle {
     cursor:grab;color:var(--text-muted);font-size:1rem;margin-right:6px;

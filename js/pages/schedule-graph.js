@@ -425,22 +425,25 @@ const ScheduleGraphPage = {
 
         this._applyEmpOrder();
 
-        // Cross-location day_off badges: load Підміна entries of these employees in other own locations
+        // Cross-location shift badges: load real shifts of these employees in other locations (own + partner)
         this._otherLocDayOff = {};
-        const otherLocIds = this._locations.filter(l => l.id !== this._locId).map(l => l.id);
+        const ownOtherLocIds   = this._locations.filter(l => l.id !== this._locId).map(l => l.id);
+        const partnerLocIds    = (this._partnerLocations || []).map(l => l.id);
+        const otherLocIds      = [...ownOtherLocIds, ...partnerLocIds];
         const empIds = [...new Set(this._assignments.map(a => a.user_id || a.original_user_id).filter(Boolean))];
         if (otherLocIds.length && empIds.length) {
             const { data: otherE } = await supabase.from('schedule_entries')
-                .select('user_id, date, location_id')
+                .select('user_id, date, location_id, shift_type, notes')
                 .in('user_id', empIds)
                 .in('location_id', otherLocIds)
-                .eq('shift_type', 'day_off')
                 .gte('date', dateFrom)
                 .lte('date', dateTo);
             (otherE || []).forEach(e => {
+                if (!_isRealShift(e)) return;
                 const key = `${e.user_id}_${e.date}`;
                 if (!this._otherLocDayOff[key]) {
-                    const locName = this._locations.find(l => l.id === e.location_id)?.name || '';
+                    const locName = this._locations.find(l => l.id === e.location_id)?.name
+                        || (this._partnerLocations || []).find(l => l.id === e.location_id)?.name || '';
                     this._otherLocDayOff[key] = locName;
                 }
             });
@@ -2032,18 +2035,19 @@ ${this._styles()}`;
         const _hasEntries    = a => nums.some(d => _getEntry(a, this._dateStr(d)));
         const _isPartnerLoc  = locId => this._partnerLocations?.some(l => l.id === locId);
 
-        // Cross-location day_off: uid_date → { locId, locName } for first found day_off per employee per date
-        const dayOffByUidDate = {};
+        // Cross-location shift: uid_date → [{ locId, locName }, ...] — all real shifts per employee per date
+        const shiftsByUidDate = {};
         Object.entries(this._allEntries || {}).forEach(([key, e]) => {
-            if (e.shift_type !== 'day_off') return;
+            if (!_isRealShift(e)) return;
             const parts = key.split('_');
             if (parts.length !== 3) return;
             const [lid, uid, dt] = parts;
             const k = `${uid}_${dt}`;
-            if (!dayOffByUidDate[k]) {
+            if (!shiftsByUidDate[k]) shiftsByUidDate[k] = [];
+            if (!shiftsByUidDate[k].some(x => x.locId === lid)) {
                 const locName = this._locations.find(l => l.id === lid)?.name
                     || this._partnerLocations?.find(l => l.id === lid)?.name || '';
-                dayOffByUidDate[k] = { locId: lid, locName };
+                shiftsByUidDate[k].push({ locId: lid, locName });
             }
         });
 
@@ -2219,8 +2223,9 @@ ${this._styles()}`;
                             const isFired  = !a.user_id;
                             const isEmpty  = !isFired && !locDatesWithWork[locId]?.has(date);
                             const uid2 = a.user_id || a.original_user_id;
-                            const crossDayOff = !entry && uid2 ? (dayOffByUidDate[`${uid2}_${date}`] || null) : null;
-                            const otherLocName = crossDayOff && crossDayOff.locId !== locId ? crossDayOff.locName : null;
+                            const crossShifts = !entry && uid2 ? (shiftsByUidDate[`${uid2}_${date}`] || null) : null;
+                            const crossOther  = crossShifts?.find(x => x.locId !== locId) || null;
+                            const otherLocName = crossOther?.locName || null;
                             const cellTitle = isFired ? 'Звільнений співробітник'
                                 : a.isPartner ? 'Локація партнера — лише перегляд'
                                 : entry?.notes==='__sub__' ? 'Може вийти на підміну'

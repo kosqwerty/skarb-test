@@ -1586,7 +1586,8 @@ ${this._styles()}`;
                     const cells = nums.map(d => {
                         const date  = this._dateStr(d);
                         const entry = _getEntry(a, date);
-                        const shift = entry ? getShiftTypes()[entry.shift_type] : null;
+                        const dispType = entry && !a.is_primary && entry.shift_type === 'work' ? 'day_off' : entry?.shift_type;
+                        const shift = entry ? getShiftTypes()[dispType] : null;
                         const dow   = new Date(this._year, this._month, d).getDay();
                         const we    = dow === 0 || dow === 6;
                         const isSd   = date === sd;
@@ -2221,7 +2222,8 @@ ${this._styles()}`;
                         const cells = nums.map(d => {
                             const date   = this._dateStr(d);
                             const entry  = _getEntry(a, date);
-                            const shift  = entry ? getShiftTypes()[entry.shift_type] : null;
+                            const dispType = entry && !a.is_primary && entry.shift_type === 'work' ? 'day_off' : entry?.shift_type;
+                            const shift  = entry ? getShiftTypes()[dispType] : null;
                             const dow    = new Date(this._year, this._month, d).getDay();
                             const we     = dow === 0 || dow === 6;
                             const isSd   = date === sd;

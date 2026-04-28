@@ -518,6 +518,7 @@ const ScheduleGraphPage = {
     </div>
 </div>
 ${this._styles()}`;
+        this._initStickyScroll();
     },
 
     _hero() {
@@ -3948,15 +3949,15 @@ ${this._styles()}`;
 .sg-scroll-wrap::-webkit-scrollbar-track { background:var(--border);border-radius:10px; }
 .sg-scroll-wrap::-webkit-scrollbar-thumb { background:var(--primary);border-radius:10px;opacity:.7; }
 .sg-scroll-wrap::-webkit-scrollbar-thumb:hover { opacity:1; }
-.sg-table { width:100%;border-collapse:collapse;table-layout:fixed; }
+.sg-table { width:max-content;min-width:100%;border-collapse:collapse; }
 .sg-th-name {
     text-align:left;padding:10px 16px;font-size:.75rem;font-weight:700;
     text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);
     border-bottom:1px solid var(--border);background:var(--bg-raised);
-    position:sticky;left:0;z-index:2;width:300px;min-width:300px;max-width:300px;white-space:nowrap;
+    position:sticky;left:0;z-index:2;width:300px;min-width:300px;max-width:300px;white-space:nowrap;overflow:hidden;
 }
 .sg-th-day {
-    padding:4px 2px;text-align:center;
+    padding:4px 2px;text-align:center;min-width:30px;
     border-bottom:1px solid var(--border);border-left:1px solid var(--border-light,rgba(255,255,255,.05));
     background:var(--bg-raised);overflow:hidden;
 }
@@ -3982,7 +3983,7 @@ ${this._styles()}`;
 .sg-td-name {
     padding:4px 12px;border-bottom:1px solid var(--border);
     background:var(--bg-raised);position:sticky;left:0;z-index:1;
-    width:300px;min-width:300px;max-width:300px;
+    width:300px;min-width:300px;max-width:300px;overflow:hidden;
     display:flex;align-items:center;gap:4px;
 }
 .sg-emp-chip { display:flex;align-items:center;gap:8px;min-width:0; }
@@ -4034,7 +4035,7 @@ tr.sg-row-drag-over td { background:rgba(99,102,241,.12) !important;border-top:2
     padding:2px 1px;text-align:center;border-bottom:1px solid var(--border);
     border-left:1px solid var(--border-light,rgba(255,255,255,.05));
     cursor:pointer;transition:background .12s;height:22px;vertical-align:middle;
-    overflow:hidden;
+    overflow:hidden;min-width:30px;
 }
 .sg-cell.we { background:rgba(139,92,246,.04); }
 .sg-cell:hover { background:var(--bg-hover); }
@@ -4433,8 +4434,101 @@ tr:last-child td { border-bottom:none; }
     border-radius:6px;padding:1px 5px;margin-left:4px;
     vertical-align:middle;
 }
+
+/* Sticky bottom scrollbar */
+#sg-sticky-bar {
+    display:none;position:fixed;bottom:0;z-index:500;box-sizing:border-box;
+    background:var(--bg-surface);border-top:1px solid var(--border);padding:4px 0;
+}
+#sg-sticky-inner {
+    overflow-x:auto;height:20px;
+    scrollbar-width:auto;scrollbar-color:var(--primary) var(--border);
+}
+#sg-sticky-inner::-webkit-scrollbar { height:20px; }
+#sg-sticky-inner::-webkit-scrollbar-track { background:var(--border);border-radius:10px; }
+#sg-sticky-inner::-webkit-scrollbar-thumb { background:var(--primary);border-radius:10px; }
+#sg-sticky-inner::-webkit-scrollbar-thumb:hover { filter:brightness(1.15); }
+#sg-sticky-spacer { height:1px; }
 </style>`;
-    }
+    },
+
+    _initStickyScroll() {
+        if (this._cleanupStickyScroll) { this._cleanupStickyScroll(); this._cleanupStickyScroll = null; }
+
+        const bar = document.createElement('div');
+        bar.id = 'sg-sticky-bar';
+        bar.innerHTML = '<div id="sg-sticky-inner"><div id="sg-sticky-spacer"></div></div>';
+        document.body.appendChild(bar);
+
+        const inner = bar.querySelector('#sg-sticky-inner');
+        const spacer = bar.querySelector('#sg-sticky-spacer');
+
+        const getActiveWrap = () => {
+            for (const id of ['sg-wrap-main','sg-wrap-subst','sg-wrap-all']) {
+                const el = document.getElementById(id);
+                if (el && el.getBoundingClientRect().width > 0) return el;
+            }
+            return null;
+        };
+
+        let syncing = false;
+
+        const update = () => {
+            const wrap = getActiveWrap();
+            if (!wrap) { bar.style.display = 'none'; return; }
+            const rect = wrap.getBoundingClientRect();
+            const hasOverflow = wrap.scrollWidth > wrap.clientWidth + 2;
+            bar.style.display = hasOverflow ? 'block' : 'none';
+            bar.style.left    = rect.left + 'px';
+            bar.style.width   = rect.width + 'px';
+            spacer.style.width = wrap.scrollWidth + 'px';
+            if (!syncing) inner.scrollLeft = wrap.scrollLeft;
+        };
+
+        inner.addEventListener('scroll', () => {
+            if (syncing) return;
+            syncing = true;
+            const wrap = getActiveWrap();
+            if (wrap) wrap.scrollLeft = inner.scrollLeft;
+            requestAnimationFrame(() => { syncing = false; });
+        });
+
+        const onWrapScroll = () => {
+            if (syncing) return;
+            syncing = true;
+            const wrap = getActiveWrap();
+            if (wrap) inner.scrollLeft = wrap.scrollLeft;
+            requestAnimationFrame(() => { syncing = false; update(); });
+        };
+
+        document.querySelectorAll('.sg-scroll-wrap').forEach(w => {
+            w.addEventListener('scroll', onWrapScroll);
+            w.addEventListener('wheel', e => {
+                if (w.scrollWidth <= w.clientWidth + 2) return;
+                e.preventDefault();
+                w.scrollLeft += e.deltaY !== 0 ? e.deltaY : e.deltaX;
+            }, { passive: false });
+        });
+
+        // ResizeObserver — надёжнее rAF: срабатывает когда браузер посчитал размеры
+        const ro = new ResizeObserver(() => requestAnimationFrame(update));
+        document.querySelectorAll('.sg-scroll-wrap').forEach(w => ro.observe(w));
+        document.querySelectorAll('.sg-scroll-wrap .sg-table').forEach(t => ro.observe(t));
+
+        let _resizeRaf;
+        const onResize = () => {
+            cancelAnimationFrame(_resizeRaf);
+            _resizeRaf = requestAnimationFrame(() => requestAnimationFrame(update));
+        };
+        window.addEventListener('resize', onResize);
+
+        this._cleanupStickyScroll = () => {
+            bar.remove();
+            ro.disconnect();
+            window.removeEventListener('resize', onResize);
+        };
+    },
+
 };
 
 

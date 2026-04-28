@@ -1,0 +1,524 @@
+// ================================================================
+// EduFlow LMS — Main App Entry Point
+// ================================================================
+
+const App = {
+    async boot() {
+        Theme.init();
+        SearchSelect.init();
+        CreatableSelect.init();
+
+        // Restore sidebar collapsed state
+        const collapsed = localStorage.getItem('sidebar_collapsed') === 'true';
+        if (collapsed) document.getElementById('sidebar')?.classList.add('collapsed');
+
+        // Initialize auth
+        const loggedIn = await Auth.init();
+
+        // Hide loading overlay
+        document.getElementById('loading-overlay').style.display = 'none';
+
+        if (loggedIn) {
+            this.start();
+        } else {
+            // Show auth screen
+            document.getElementById('auth-screen').classList.remove('hidden');
+        }
+
+        Auth.listen();
+    },
+
+    start() {
+        const profile = AppState.profile;
+        if (!profile) { Auth._showAuth(); return; }
+
+        // Show app shell
+        document.getElementById('auth-screen').classList.add('hidden');
+        document.getElementById('app-shell').classList.remove('hidden');
+
+        // Render navigation based on role
+        UI.renderNavigation(profile.role);
+        UI.renderSidebarUser(profile);
+
+        // Define routes
+        Router.define({
+            'dashboard': async ({ container }) => {
+                await DashboardPage.init(container);
+            },
+
+            'courses': async ({ container, params }) => {
+                await CoursesPage.init(container, params);
+            },
+
+            'courses/:id': async ({ container, params }) => {
+                await CourseViewPage.init(container, params);
+            },
+
+            'lessons/:id': async ({ container, params }) => {
+                await LessonViewPage.init(container, params);
+            },
+
+            'tests/:id': async ({ container, params }) => {
+                await TestsPage.init(container, params);
+            },
+
+            'analytics': async ({ container, params }) => {
+                await AnalyticsPage.init(container, params);
+                return () => AnalyticsPage.destroy?.();
+            },
+
+            'admin': async ({ container, params }) => {
+                await AdminPage.init(container, params);
+            },
+
+            'resources': async ({ container, params }) => {
+                await ResourcesPage.init(container, { view: 'admin' });
+            },
+
+            'knowledge-base': async ({ container, params }) => {
+                await ResourcesPage.init(container, { view: 'kb' });
+            },
+
+            'collections': async ({ container }) => {
+                await CollectionsPage.init(container);
+            },
+
+            'collections/:id': async ({ container, params }) => {
+                await CollectionsPage.initView(container, params);
+            },
+
+            'resource/:id': async ({ container, params }) => {
+                await ResourceViewPage.init(container, params);
+            },
+
+            'news': async ({ container, params }) => {
+                await NewsPage.init(container, params);
+            },
+
+            'news/:id': async ({ container, params }) => {
+                await NewsPage.init(container, params);
+            },
+
+            'results': async ({ container }) => {
+                await App.renderResults(container);
+            },
+
+            'profile': async ({ container }) => {
+                await App.renderProfile(container);
+            }
+        });
+
+        // Start router
+        Router.start();
+
+        // Redirect to dashboard if no hash
+        if (!location.hash || location.hash === '#' || location.hash === '#/') {
+            Router.go('dashboard');
+        }
+    },
+
+    // ── Results Page (quick inline) ───────────────────────────────
+    async renderResults(container) {
+        UI.setBreadcrumb([{ label: 'Мої результати' }]);
+        container.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
+
+        try {
+            const stats = await API.analytics.getStudentStats(AppState.user.id);
+            const { enrollments, attempts } = stats;
+
+            container.innerHTML = `
+                <div class="page-header">
+                    <div class="page-title">
+                        <h1>🏆 Мої результати</h1>
+                        <p>Історія навчання</p>
+                    </div>
+                </div>
+
+                <div class="stats-grid" style="margin-bottom:2rem">
+                    ${[
+                        { icon: '📚', label: 'Курси', value: enrollments.length, color: '#6366F1' },
+                        { icon: '✅', label: 'Завершено', value: enrollments.filter(e => e.completed_at).length, color: '#10B981' },
+                        { icon: '📝', label: 'Спроби тестів', value: attempts.length, color: '#8B5CF6' },
+                        { icon: '🏆', label: 'Успішних', value: attempts.filter(a => a.passed).length, color: '#F59E0B' }
+                    ].map(s => `
+                        <div class="stat-card" style="--accent-color:${s.color}">
+                            <div class="stat-icon">${s.icon}</div>
+                            <div class="stat-value">${s.value}</div>
+                            <div class="stat-label">${s.label}</div>
+                        </div>`).join('')}
+                </div>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem" class="dash-two-col">
+                    <!-- Course progress -->
+                    <div class="card">
+                        <div class="card-header"><h3>📚 Курси</h3></div>
+                        <div class="card-body" style="padding:0">
+                            ${enrollments.length ? enrollments.map(e => `
+                                <div onclick="Router.go('courses/${e.course_id}')" style="display:flex;align-items:center;gap:1rem;padding:.875rem 1.25rem;border-bottom:1px solid var(--border);cursor:pointer;transition:background var(--transition)" onmouseenter="this.style.background='var(--bg-hover)'" onmouseleave="this.style.background=''">
+                                    <div style="flex:1;min-width:0">
+                                        <div style="font-weight:500;font-size:.875rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.course?.title || '—'}</div>
+                                        <div style="margin-top:.4rem">
+                                            <div class="progress-bar" style="height:4px">
+                                                <div class="progress-fill ${e.completed_at ? 'success' : ''}" style="width:${e.progress_percentage||0}%"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <span style="font-size:.8rem;color:var(--text-muted);flex-shrink:0">${e.progress_percentage||0}%</span>
+                                    ${e.completed_at ? '<span class="badge badge-success">✓</span>' : ''}
+                                </div>`).join('')
+                            : '<div style="padding:2rem;text-align:center;color:var(--text-muted)">Ви не записані на жодний курс</div>'}
+                        </div>
+                    </div>
+
+                    <!-- Test attempts -->
+                    <div class="card">
+                        <div class="card-header"><h3>📝 Тести</h3></div>
+                        <div class="card-body" style="padding:0">
+                            ${attempts.slice(0, 10).length ? attempts.slice(0, 10).map(a => `
+                                <div style="display:flex;align-items:center;gap:1rem;padding:.875rem 1.25rem;border-bottom:1px solid var(--border)">
+                                    <div style="flex:1;min-width:0">
+                                        <div style="font-weight:500;font-size:.875rem">${a.test?.title || '—'}</div>
+                                        <div style="font-size:.75rem;color:var(--text-muted)">${Fmt.datetime(a.completed_at)}</div>
+                                    </div>
+                                    <div style="text-align:right;flex-shrink:0">
+                                        <div style="font-weight:700;color:${a.passed ? 'var(--success)' : 'var(--danger)'}">${Math.round(a.percentage||0)}%</div>
+                                        <span class="badge ${a.passed ? 'badge-success' : 'badge-danger'}" style="font-size:.65rem">${a.passed ? 'Зараховано' : 'Не зараховано'}</span>
+                                    </div>
+                                </div>`).join('')
+                            : '<div style="padding:2rem;text-align:center;color:var(--text-muted)">Спроб поки немає</div>'}
+                        </div>
+                    </div>
+                </div>`;
+        } catch(e) {
+            container.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>${e.message}</h3></div>`;
+        }
+    },
+
+    // ── Profile Page ──────────────────────────────────────────────
+    async renderProfile(container) {
+        UI.setBreadcrumb([{ label: 'Профіль' }]);
+        // завжди беремо свіжі дані з БД
+        AppState.profile = await API.profiles.me().catch(() => AppState.profile);
+        UI.renderSidebarUser(AppState.profile);
+        const profile = AppState.profile;
+        const subordinates = await API.profiles.getSubordinates(AppState.user.id).catch(() => []);
+        const allUsers     = await API.profiles.getAll({ pageSize: 500 }).then(r => r.data).catch(() => []);
+        const manager      = allUsers.find(u => u.id === profile?.manager_id);
+
+        const field = (label, value) => value ? `
+            <div style="min-width:0">
+                <div style="font-size:.75rem;color:var(--text-muted);margin-bottom:.2rem">${label}</div>
+                <div style="font-size:.875rem;font-weight:500">${value}</div>
+            </div>` : '';
+
+        const genderLabel = { male: 'Чоловіча', female: 'Жіноча' }[profile?.gender] || '';
+
+       container.innerHTML = `
+<div style="max-width: 900px; margin-left: 5px;">
+    
+    <!-- Шапка -->
+    <div style="margin-bottom: 24px; display: flex; align-items: baseline; justify-content: space-between;">
+        <div>
+            <h1 style="margin: 0; font-weight: 600; font-size: 1.8rem; letter-spacing: -0.01em; color: var(--text-primary);">👤 Мій профіль</h1>
+            <p style="margin: 4px 0 0; color: var(--text-muted); font-size: 0.9rem;">Керування особистою інформацією та перегляд даних облікового запису</p>
+        </div>
+        <button class="btn btn-primary" onclick="App.editProfile()" style="display: flex; align-items: center; gap: 8px; padding: 10px 20px;">
+            <span style="font-size: 1.1em;">✎</span> Редагувати профіль
+        </button>
+    </div>
+
+    <!-- Основная карточка -->
+    <div style="background: var(--bg-surface); border-radius: var(--radius-xl); box-shadow: var(--shadow-md); border: 1px solid var(--border); padding: 32px; margin-bottom: 24px;">
+        
+        <!-- Блок с аватаром -->
+        <div style="display: flex; align-items: center; gap: 28px; margin-bottom: 32px; padding-bottom: 28px; border-bottom: 1px solid var(--border);">
+            <div style="position: relative; flex-shrink: 0;">
+                <div style="width: 96px; height: 96px; border-radius: var(--radius-lg); overflow: hidden; background: linear-gradient(135deg, var(--primary), var(--secondary)); display: flex; align-items: center; justify-content: center; font-size: 2.2rem; font-weight: 600; color: var(--text-inverse); box-shadow: var(--shadow-glow); cursor: pointer; transition: transform var(--transition); border: 2px solid var(--border-light);" onclick="document.getElementById('prof-avatar-input-view').click()" title="Змінити фото">
+                    ${profile?.avatar_url
+                        ? `<img src="${profile.avatar_url}" style="width:100%;height:100%;object-fit:cover">`
+                        : Fmt.initials(profile?.full_name)}
+                </div>
+                <div style="position: absolute; bottom: 2px; right: 2px; width: 28px; height: 28px; background: var(--bg-raised); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; font-size: 0.9rem; cursor: pointer; box-shadow: var(--shadow-sm); border: 1px solid var(--border); color: var(--text-primary); pointer-events: none; backdrop-filter: blur(4px);">📷</div>
+                <input id="prof-avatar-input-view" type="file" accept="image/*" style="display:none" onchange="App.uploadAvatar(this, true)">
+            </div>
+            <div style="flex: 1;">
+                <h2 style="margin: 0 0 6px 0; font-weight: 700; font-size: 1.75rem; color: var(--text-primary); line-height: 1.2;">${profile?.full_name || 'Користувач'}</h2>
+                <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px;">
+                    ${Fmt.roleBadge(profile?.role)}
+                    ${profile?.label ? `<span style="background: rgba(245, 158, 11, 0.15); color: var(--warning); padding: 4px 12px; border-radius: var(--radius-full); font-size: 0.8rem; font-weight: 600; border: 1px solid rgba(245, 158, 11, 0.2);">${profile.label}</span>` : ''}
+                </div>
+                <p style="margin: 0; color: var(--text-secondary); font-size: 0.95rem; display: flex; align-items: center; gap: 6px;">
+                    <span style="opacity: 0.6;">✉️</span> ${profile?.email || '—'}
+                </p>
+            </div>
+        </div>
+
+        <!-- Сетка полей -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px 32px;">
+            
+            ${fieldStyled('📞 Телефон', profile?.phone)}
+            ${fieldStyled('🏙️ Місто', profile?.city)}
+            ${fieldStyled('⚥ Стать', genderLabel)}
+            ${fieldStyled('💼 Посада', profile?.job_position)}
+            ${fieldStyled('📁 Підрозділ', profile?.subdivision)}
+            ${fieldStyled('🎂 Дата народження', profile?.birth_date ? Fmt.date(profile.birth_date) : '')}
+            ${fieldStyled('👔 Керівник', manager ? `${manager.full_name} ${manager.job_position ? '· ' + manager.job_position : ''}` : '')}
+        </div>
+    </div>
+
+    <!-- Блок подчинённых -->
+    ${subordinates.length ? `
+    <div style="background: var(--bg-surface); border-radius: var(--radius-xl); box-shadow: var(--shadow-md); border: 1px solid var(--border); overflow: hidden;">
+        <div style="padding: 20px 28px; border-bottom: 1px solid var(--border);">
+            <h3 style="margin: 0; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
+                <span>👥 Підлеглі</span>
+                <span style="background: var(--bg-raised); color: var(--text-secondary); padding: 2px 10px; border-radius: var(--radius-full); font-size: 0.8rem; border: 1px solid var(--border-light);">${subordinates.length}</span>
+            </h3>
+        </div>
+        <div style="padding: 8px 0;">
+            ${subordinates.map(s => `
+                <div style="display: flex; align-items: center; gap: 16px; padding: 12px 28px; transition: background var(--transition); border-bottom: 1px solid var(--border);">
+                    <div style="width: 44px; height: 44px; border-radius: var(--radius-md); background: linear-gradient(135deg, var(--bg-raised), var(--bg-hover)); display: flex; align-items: center; justify-content: center; font-size: 1rem; font-weight: 600; color: var(--primary); flex-shrink: 0; overflow: hidden; border: 1px solid var(--border-light);">
+                        ${s.avatar_url ? `<img src="${s.avatar_url}" style="width:100%;height:100%;object-fit:cover">` : Fmt.initials(s.full_name)}
+                    </div>
+                    <div style="flex: 1; min-width: 0;">
+                        <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 2px;">${s.full_name}</div>
+                        <div style="font-size: 0.8rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${[s.job_position, s.subdivision].filter(Boolean).join(' · ') || s.email}</div>
+                    </div>
+                    <div style="opacity: 0.4; color: var(--text-muted);">→</div>
+                </div>
+            `).join('')}
+        </div>
+    </div>` : ''}
+</div>`;
+
+// Вспомогательная функция для полей (тёмная тема)
+function fieldStyled(label, value) {
+    const displayValue = value || '<span style="color: var(--text-muted); opacity: 0.5;">—</span>';
+    return `
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+            <span style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-muted);">${label}</span>
+            <span style="font-size: 1rem; color: var(--text-primary); font-weight: 500; word-break: break-word;">${displayValue}</span>
+        </div>
+    `;
+}
+    },
+
+    async editProfile() {
+        const container = document.getElementById('page-content');
+        const profile = AppState.profile;
+
+        // ── Визначення прав ──────────────────────────────────────────
+        // canExtended: може редагувати розширені поля (логін, телефон,
+        // посада, підрозділ, мітка, стать, керівник, біо)
+        const canExtended = AppState.isAdmin() || AppState.isOwner() || AppState.isSmm();
+
+        const [cities, positions, subdivisions, allUsers] = await Promise.all([
+            API.directories.getAll('cities').catch(() => []),
+            canExtended ? API.directories.getAll('positions').catch(() => [])    : Promise.resolve([]),
+            canExtended ? API.directories.getAll('subdivisions').catch(() => []) : Promise.resolve([]),
+            canExtended ? API.profiles.getAll({ pageSize: 500 }).then(r => r.data).catch(() => []) : Promise.resolve([])
+        ]);
+
+        // ── Хелпери ──────────────────────────────────────────────────
+        const S = `width: 100%; padding: 12px 16px; background: rgba(255,255,255,0.02); border: 0.5px solid rgba(255,255,255,0.08); border-radius: 12px; font-size: 15px; font-weight: 400; letter-spacing: -0.01em; color: var(--text-primary); outline: none; transition: all 0.2s ease;`;
+        const LBL = `display: block; font-size: 13px; font-weight: 500; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.02em; margin-bottom: 6px;`;
+        const RO  = `${S} opacity: 0.45; cursor: not-allowed;`;
+
+        const ff = (label, id, type, value, placeholder, ro = false) => `
+            <div>
+                <label style="${LBL}">${label}</label>
+                <input id="${id}" type="${type}" value="${value}" placeholder="${placeholder}"
+                    ${ro ? `readonly style="${RO}"` : `style="${S}"`}>
+            </div>`;
+
+        const citySelect = `
+            <div>
+                <label style="${LBL}">Місто</label>
+                <select id="prof-city" style="${S} cursor:pointer;">
+                    <option value="">— не вказано —</option>
+                    ${cities.map(i => `<option value="${i.name}" ${i.name === profile?.city ? 'selected' : ''}>${i.name}</option>`).join('')}
+                </select>
+            </div>`;
+
+        container.innerHTML = `
+<div style="-webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; max-width: 720px; margin: 5px;">
+
+    <!-- Шапка -->
+    <div style="margin-bottom: 28px;">
+        <h1 style="margin: 0 0 4px; font-weight: 590; font-size: 34px; letter-spacing: -0.022em; color: var(--text-primary); line-height: 1.1;">✎ Редагування профілю</h1>
+        <p style="margin: 0; color: var(--text-secondary); font-size: 17px; font-weight: 400; letter-spacing: -0.01em;">Оновіть особисту інформацію</p>
+    </div>
+
+    <div style="background: var(--bg-surface); border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.3); border: 0.5px solid rgba(255,255,255,0.06); padding: 36px; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);">
+
+        <!-- Аватар (доступно всім) -->
+        <div style="display: flex; align-items: center; gap: 28px; margin-bottom: 36px; padding-bottom: 28px; border-bottom: 0.5px solid rgba(255,255,255,0.06);">
+            <div style="position: relative; flex-shrink: 0;">
+                <div id="prof-avatar-preview" style="width: 96px; height: 96px; border-radius: 22px; overflow: hidden; background: linear-gradient(135deg, var(--primary), var(--secondary)); display: flex; align-items: center; justify-content: center; font-size: 36px; font-weight: 500; letter-spacing: -0.5px; color: var(--text-inverse); box-shadow: 0 8px 20px var(--primary-glow); cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); border: none;" onclick="document.getElementById(\'prof-avatar-input\').click()" title="Змінити фото">
+                    ${profile?.avatar_url ? `<img src="${profile.avatar_url}" style="width:100%;height:100%;object-fit:cover">` : Fmt.initials(profile?.full_name)}
+                </div>
+                <div style="position: absolute; bottom: 4px; right: 4px; width: 28px; height: 28px; background: rgba(26,26,46,0.9); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 0.9rem; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.3); border: 0.5px solid rgba(255,255,255,0.1); color: var(--text-primary); pointer-events: none; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);">📷</div>
+                <input id="prof-avatar-input" type="file" accept="image/*" style="display:none" onchange="App.uploadAvatar(this, false)">
+            </div>
+            <div>
+                <p style="margin: 0 0 8px; font-size: 15px; font-weight: 400; letter-spacing: -0.01em; color: var(--text-secondary);">Натисніть на фото щоб змінити</p>
+                ${Fmt.roleBadge(profile?.role)}
+            </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 24px;">
+
+            <!-- ── ДОСТУПНО ВСІМ: ПІБ, Місто, Дата народження ──── -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                ${ff('ПІБ *', 'prof-name', 'text', profile?.full_name || '', 'Петренко Тарас')}
+                <div>
+                    <label style="${LBL}">Email</label>
+                    <input type="email" value="${profile?.email || ''}" readonly style="${RO}">
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                ${citySelect}
+                <div>
+                    <label style="${LBL}">Дата народження</label>
+                    <input id="prof-birthdate" type="date" value="${profile?.birth_date || ''}" style="${S}">
+                </div>
+            </div>
+
+            <!-- ── ЗМІНА ПАРОЛЯ (доступно всім) ──────────────────── -->
+            <div style="border-top: 0.5px solid rgba(255,255,255,0.06); padding-top: 24px;">
+                <p style="margin: 0 0 16px; font-size: 13px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em;">🔒 Зміна пароля</p>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    ${ff('Новий пароль', 'prof-password', 'password', '', 'Мінімум 6 символів')}
+                    ${ff('Повторіть пароль', 'prof-password2', 'password', '', 'Повторіть пароль')}
+                </div>
+                <p style="margin: 8px 0 0; font-size: 12px; color: var(--text-muted);">Залиште порожнім, якщо не хочете змінювати пароль</p>
+            </div>
+
+            ${canExtended ? `
+            <!-- ── ТІЛЬКИ АДМІН / ВЛАСНИК / SMM ─────────────────── -->
+            <div style="border-top: 0.5px solid rgba(255,255,255,0.06); padding-top: 24px;">
+                <p style="margin: 0 0 16px; font-size: 13px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em;">⚙️ Розширені налаштування</p>
+                <div style="display: flex; flex-direction: column; gap: 20px;">
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                        ${ff('Логін', 'prof-login', 'text', profile?.login || '', 'ПризвіщеІм\'я')}
+                        ${ff('Телефон', 'prof-phone', 'tel', profile?.phone || '', '+380XXXXXXXXX')}
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                        <div>
+                            <label style="${LBL}">Стать</label>
+                            <select id="prof-gender" style="${S} cursor:pointer;">
+                                <option value="">— не вказано —</option>
+                                <option value="male"   ${profile?.gender==='male'  ?'selected':''}>Чоловіча</option>
+                                <option value="female" ${profile?.gender==='female'?'selected':''}>Жіноча</option>
+                                <option value="other"  ${profile?.gender==='other' ?'selected':''}>Інша</option>
+                            </select>
+                        </div>
+                        ${ff('Мітка', 'prof-label', 'text', profile?.label || '', 'Наприклад: VIP, стажер...')}
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                        <div>
+                            <label style="${LBL}">Посада</label>
+                            ${SearchSelect.html('prof-job-position', positions.map(p=>({value:p.name,label:p.name})), profile?.job_position||'')}
+                        </div>
+                        <div>
+                            <label style="${LBL}">Підрозділ</label>
+                            ${SearchSelect.html('prof-subdivision', subdivisions.map(p=>({value:p.name,label:p.name})), profile?.subdivision||'')}
+                        </div>
+                    </div>
+
+                    <div>
+                        <label style="${LBL}">Керівник</label>
+                        ${SearchSelect.html('prof-manager',
+                            allUsers.filter(u => u.id !== AppState.user.id).map(u=>({value:u.id, label:u.full_name+(u.job_position?' · '+u.job_position:'')})),
+                            profile?.manager_id||''
+                        )}
+                    </div>
+
+                    <div>
+                        <label style="${LBL}">Про себе</label>
+                        <textarea id="prof-bio" style="${S} resize:vertical;min-height:80px;" placeholder="Кілька слів про себе...">${profile?.bio || ''}</textarea>
+                    </div>
+                </div>
+            </div>` : ''}
+
+            <!-- Кнопки -->
+            <div style="display: flex; gap: 12px; margin-top: 12px; padding-top: 8px;">
+                <button class="btn btn-primary" onclick="App.saveProfile()" style="padding: 12px 24px; font-weight: 500; letter-spacing: -0.01em; border-radius: 12px; font-size: 15px;">Зберегти зміни</button>
+                <button class="btn btn-secondary" onclick="App.renderProfile(document.getElementById(\'page-content\'))" style="padding: 12px 24px; font-weight: 500; letter-spacing: -0.01em; border-radius: 12px; font-size: 15px;">Скасувати</button>
+            </div>
+        </div>
+    </div>
+</div>`;
+    },
+
+    async saveProfile() {
+        const canExtended = AppState.isAdmin() || AppState.isOwner() || AppState.isSmm();
+
+        // Зміна пароля
+        const newPwd  = (Dom.val('prof-password') || '').trim();
+        const newPwd2 = (Dom.val('prof-password2') || '').trim();
+        if (newPwd || newPwd2) {
+            if (newPwd.length < 6) { Toast.error('Помилка', 'Пароль має містити мінімум 6 символів'); return; }
+            if (newPwd !== newPwd2) { Toast.error('Помилка', 'Паролі не співпадають'); return; }
+        }
+
+        const name = Dom.val('prof-name').trim();
+        if (!name) { Toast.error('Помилка', 'ПІБ не може бути порожнім'); return; }
+
+        Loader.show();
+        try {
+            if (newPwd) {
+                const { error: pwdErr } = await supabase.auth.updateUser({ password: newPwd });
+                if (pwdErr) throw pwdErr;
+            }
+
+            // Базові поля — доступні всім
+            const payload = {
+                full_name:  name,
+                city:       Dom.val('prof-city') || null,
+                birth_date: Dom.val('prof-birthdate') || null,
+            };
+
+            // Розширені поля — тільки адмін / власник / SMM
+            if (canExtended) {
+                Object.assign(payload, {
+                    login:        Dom.val('prof-login').trim() || null,
+                    phone:        Dom.val('prof-phone').trim() || null,
+                    gender:       Dom.val('prof-gender') || null,
+                    label:        Dom.val('prof-label').trim() || null,
+                    job_position: Dom.val('prof-job-position') || null,
+                    subdivision:  Dom.val('prof-subdivision') || null,
+                    manager_id:   Dom.val('prof-manager') || null,
+                    bio:          Dom.val('prof-bio').trim() || null,
+                });
+            }
+
+            const updated = await API.profiles.update(AppState.user.id, payload);
+            AppState.profile = updated;
+            UI.renderSidebarUser(updated);
+            Toast.success('Профіль оновлено');
+            await App.renderProfile(document.getElementById('page-content'));
+        } catch(e) {
+            Toast.error('Помилка', e.message);
+        } finally { Loader.hide(); }
+    }
+};
+
+// ── Bootstrap ─────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+    App.boot().catch(err => {
+        console.error('Boot error:', err);
+        document.getElementById('loading-overlay').style.display = 'none';
+        document.getElementById('auth-screen').classList.remove('hidden');
+    });
+});
+
+// ── Responsive sidebar handling ────────────────────────────────────
+window.addEventListener('resize', () => {
+    if (window.innerWidth > 1024) UI.closeSidebar();
+});

@@ -89,11 +89,28 @@
 //
 // Migration: block name support
 // ALTER TABLE schedule_partners ADD COLUMN IF NOT EXISTS block_name text;
+//
+// Migration: fix schedule_partners RLS so the block owner can update block_name
+// (run in Supabase SQL editor if "Назва блоку" rename silently does nothing)
+// DROP POLICY IF EXISTS "spartner_update" ON schedule_partners;
+// CREATE POLICY "spartner_update" ON schedule_partners FOR UPDATE
+//     USING (owner_id = auth.uid() OR partner_id = auth.uid());
+//
+// Migration: shift type config stored per-user in DB
+// CREATE TABLE IF NOT EXISTS schedule_shift_config (
+//     user_id    uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+//     config     jsonb NOT NULL DEFAULT '{}',
+//     updated_at timestamptz DEFAULT now()
+// );
+// ALTER TABLE schedule_shift_config ENABLE ROW LEVEL SECURITY;
+// CREATE POLICY "ssc_select" ON schedule_shift_config FOR SELECT USING (user_id = auth.uid());
+// CREATE POLICY "ssc_insert" ON schedule_shift_config FOR INSERT WITH CHECK (user_id = auth.uid());
+// CREATE POLICY "ssc_update" ON schedule_shift_config FOR UPDATE USING (user_id = auth.uid());
 // ================================================================
 
 const SHIFT_TYPES = {
-    work:     { label: 'Робочий',    short: 'Р',  color: '#10b981', bg: 'rgba(16,185,129,.14)' },
-    day_off:  { label: 'Вихідний',   short: 'В',  color: '#8b5cf6', bg: 'rgba(139,92,246,.14)' },
+    work:     { label: 'Зміна',      short: 'З',  color: '#10b981', bg: 'rgba(16,185,129,.14)' },
+    day_off:  { label: 'Підміна',    short: 'П',  color: '#8b5cf6', bg: 'rgba(139,92,246,.14)' },
     vacation: { label: 'Відпустка',  short: 'ВД', color: '#f59e0b', bg: 'rgba(245,158,11,.14)' },
     sick:     { label: 'Лікарняний', short: 'Л',  color: '#ef4444', bg: 'rgba(239,68,68,.14)' },
 };
@@ -103,15 +120,21 @@ const _FLAG_NOTES = ['__sub__', '__needsub__'];
 const _isRealShift = e => ['work','day_off'].includes(e?.shift_type) && !_FLAG_NOTES.includes(e?.notes);
 
 const _BUILTIN_SHIFT_KEYS = ['work','day_off','vacation','sick'];
+function getShiftTypeEntries() {
+    const t = getShiftTypes();
+    const builtin = _BUILTIN_SHIFT_KEYS.filter(k => t[k]).map(k => [k, t[k]]);
+    const custom  = Object.entries(t).filter(([k]) => !_BUILTIN_SHIFT_KEYS.includes(k));
+    return [...builtin, ...custom];
+}
 
 function _sgHexToRgba(hex, alpha) {
     const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
     return `rgba(${r},${g},${b},${alpha})`;
 }
 
+let _cachedShiftTypes = null;
 function getShiftTypes() {
-    try { const s=localStorage.getItem('sg_shift_types'); if(s) return JSON.parse(s); } catch(e){}
-    return { ...SHIFT_TYPES };
+    return _cachedShiftTypes || { ...SHIFT_TYPES };
 }
 
 const MONTHS_UA = ['Січень','Лютий','Березень','Квітень','Травень','Червень',
@@ -169,7 +192,8 @@ const ScheduleGraphPage = {
                     .eq('user_id', AppState.user.id),
             this._loadHelpLocIds(),
             this._loadDeletedLocations(),
-            this._loadPartners()
+            this._loadPartners(),
+            this._loadShiftConfig()
         ]);
         this._isAssignedAsEmployee = (empCheck.count || 0) > 0;
 
@@ -277,6 +301,36 @@ const ScheduleGraphPage = {
         arr.splice(to, 0, item);
         this._saveLocOrder();
         this._render(this._container);
+    },
+
+    async _loadShiftConfig() {
+        try {
+            const { data } = await supabase.from('schedule_shift_config')
+                .select('config').eq('user_id', AppState.user.id).maybeSingle();
+            if (data?.config && Object.keys(data.config).length) {
+                _cachedShiftTypes = data.config;
+            } else {
+                // Migrate from localStorage on first DB load
+                try {
+                    const s = localStorage.getItem('sg_shift_types');
+                    if (s) {
+                        _cachedShiftTypes = JSON.parse(s);
+                        await supabase.from('schedule_shift_config')
+                            .upsert({ user_id: AppState.user.id, config: _cachedShiftTypes }, { onConflict: 'user_id' });
+                    }
+                } catch(e) {}
+            }
+        } catch(e) {
+            // Table not yet created — fall back to localStorage
+            try { const s = localStorage.getItem('sg_shift_types'); if (s) _cachedShiftTypes = JSON.parse(s); } catch(e2) {}
+        }
+    },
+
+    async _persistShiftConfig() {
+        const { error } = await supabase.from('schedule_shift_config')
+            .upsert({ user_id: AppState.user.id, config: _cachedShiftTypes }, { onConflict: 'user_id' });
+        if (error) Toast.error('Помилка збереження типів', error.message);
+        else localStorage.setItem('sg_shift_types', JSON.stringify(_cachedShiftTypes));
     },
 
     async _loadHelpLocIds() {
@@ -593,7 +647,7 @@ ${this._styles()}`;
     </div>
     <div class="sg-toolbar">
         <div class="sg-legend">
-            ${Object.entries(getShiftTypes()).map(([k, v]) => `
+            ${getShiftTypeEntries().map(([k, v]) => `
             <button class="sg-leg-btn ${this._quickType === k ? 'active' : ''}"
                 style="--lc:${v.color};--lb:${v.bg}"
                 onclick="ScheduleGraphPage._setQuickType('${k}')"
@@ -602,9 +656,9 @@ ${this._styles()}`;
                 ${v.label}
                 ${this._quickType === k ? '<span class="sg-leg-active-mark">✓ активно</span>' : ''}
             </button>`).join('')}
+            <button class="sg-types-mgr-btn" onclick="ScheduleGraphPage._showShiftTypesModal()" title="Налаштувати типи змін">⚙️</button>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            <button class="sg-types-mgr-btn" onclick="ScheduleGraphPage._showShiftTypesModal()" title="Налаштувати типи змін">⚙️ Типи</button>
             <button class="sg-mgr-help-btn" onclick="ScheduleGraphPage._showManagerHelpModal()">
                 🆘 Потрібна підміна
             </button>
@@ -1318,10 +1372,15 @@ ${this._styles()}`;
             onSave: async name => {
                 if (name === current) return;
                 // Update all schedule_partners rows where this user is owner
-                const { error } = await supabase.from('schedule_partners')
+                const { data: updated, error } = await supabase.from('schedule_partners')
                     .update({ block_name: name })
-                    .eq('owner_id', uid);
+                    .eq('owner_id', uid)
+                    .select('id');
                 if (error) { Toast.error('Помилка', error.message); return; }
+                if (!updated?.length) {
+                    Toast.error('Не вдалось зберегти', 'Запустіть міграцію SQL (spartner_update) у Supabase');
+                    return;
+                }
                 this._blockName = name;
                 Toast.success('Назву блоку змінено');
                 await this._showPartnersModal();
@@ -2038,7 +2097,7 @@ ${this._styles()}`;
 
         const sdLabel = sd ? new Date(sd + 'T00:00:00').toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', weekday: 'short' }) : '';
 
-        const legend = Object.entries(getShiftTypes()).map(([k, v]) => `
+        const legend = getShiftTypeEntries().map(([k, v]) => `
             <button class="sg-leg-btn ${this._quickType === k ? 'active' : ''}"
                 style="--lc:${v.color};--lb:${v.bg}"
                 onclick="ScheduleGraphPage._setQuickType('${k}')">
@@ -2050,9 +2109,8 @@ ${this._styles()}`;
         return `
 <div class="sg-section">
     <div class="sg-toolbar">
-        <div class="sg-legend">${legend}</div>
+        <div class="sg-legend">${legend}<button class="sg-types-mgr-btn" onclick="ScheduleGraphPage._showShiftTypesModal()" title="Налаштувати типи змін">⚙️</button></div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            <button class="sg-types-mgr-btn" onclick="ScheduleGraphPage._showShiftTypesModal()" title="Налаштувати типи змін">⚙️ Типи</button>
             <button class="sg-collapse-all-btn" title="Згорнути всі локації"
                 onclick="ScheduleGraphPage._collapseAllLocs()">▼ Згорнути всі</button>
             <button class="sg-collapse-all-btn" title="Розгорнути всі локації"
@@ -2132,28 +2190,11 @@ ${this._styles()}`;
 
     <div class="sg-scroll-wrap" id="sg-wrap-all" onscroll="ScheduleGraphPage._onScroll('all')">
         <table class="sg-table">
-            <thead>
-                <tr>
-                    <th class="sg-th-name">Співробітник</th>
-                    ${nums.map(d => {
-                        const date   = this._dateStr(d);
-                        const dow    = new Date(this._year, this._month, d).getDay();
-                        const we     = dow === 0 || dow === 6;
-                        const isSd   = date === sd;
-                        const noWork = !datesWithAnyWork.has(date);
-                        return `<th class="sg-th-day${we?' we':''}${isSd?' sg-sd-col':''}${noWork?' sg-th-no-work':''}"
-                            style="cursor:pointer" title="Клік — пошук підміни"
-                            onclick="ScheduleGraphPage._selectSubstDate('${date}')">
-                            <div class="sg-day-num">${d}</div>
-                            <div class="sg-day-dow">${DAYS_SHORT[dow]}</div>
-                        </th>`;
-                    }).join('')}
-                    <th class="sg-th-sum">
-                        <div class="sg-th-sum-inner">Σ</div>
-                        <div class="sg-th-sub">Дні</div>
-                    </th>
-                </tr>
-            </thead>
+            <colgroup>
+                <col style="width:300px;min-width:300px">
+                ${'<col>'.repeat(days)}
+                <col style="width:58px">
+            </colgroup>
             <tbody>
                 ${Object.entries(visibleByLoc).sort(([a],[b])=>(_locOrder[a]??999)-(_locOrder[b]??999)).map(([locId, loc]) => {
                     const rows = loc.members.map(a => {
@@ -2229,6 +2270,26 @@ ${this._styles()}`;
                             <span class="sg-loc-collapsed-hint" data-loc-badge="${locId}" style="display:${isCollapsed?'inline':'none'}">
                                 — згорнуто
                             </span>
+                        </td>
+                    </tr>
+                    <tr class="sg-loc-date-header" data-loc-rows="${locId}" style="display:${isCollapsed?'none':''}">
+                        <td class="sg-th-name" style="position:sticky;left:0;z-index:2">Співробітник</td>
+                        ${nums.map(d => {
+                            const _dow  = new Date(this._year, this._month, d).getDay();
+                            const _we   = _dow === 0 || _dow === 6;
+                            const _date = this._dateStr(d);
+                            const _isSd   = _date === sd;
+                            const _noWork = !datesWithAnyWork.has(_date);
+                            return `<td class="sg-th-day${_we?' we':''}${_isSd?' sg-sd-col':''}${_noWork?' sg-th-no-work':''}"
+                                style="cursor:pointer" title="Клік — пошук підміни"
+                                onclick="ScheduleGraphPage._selectSubstDate('${_date}')">
+                                <div class="sg-day-num">${d}</div>
+                                <div class="sg-day-dow">${DAYS_SHORT[_dow]}</div>
+                            </td>`;
+                        }).join('')}
+                        <td class="sg-th-sum">
+                            <div class="sg-th-sum-inner">Σ</div>
+                            <div class="sg-th-sub">Дні</div>
                         </td>
                     </tr>
                     ${rows.replace(/<tr /g, `<tr data-loc-rows="${locId}" style="display:${isCollapsed?'none':''}" `)}
@@ -2743,7 +2804,7 @@ ${this._styles()}`;
         <button class="sg-mclose" onclick="document.getElementById('sg-types-modal').remove()">✕</button>
     </div>
     <div id="sg-typelist" style="display:flex;flex-direction:column;gap:6px;max-height:50vh;overflow-y:auto;padding:12px 0">
-        ${Object.entries(types).map(([k, v]) => rowHtml(k, v)).join('')}
+        ${getShiftTypeEntries().map(([k, v]) => rowHtml(k, v)).join('')}
     </div>
     <div style="padding-top:10px;border-top:1px solid var(--border)">
         <button class="sg-btn-add-type" id="sg-add-type-trigger" onclick="ScheduleGraphPage._showAddTypeForm()">＋ Додати тип</button>
@@ -2810,7 +2871,8 @@ ${this._styles()}`;
         if (!label || !short || !color) { Toast.error('Помилка', 'Заповніть всі поля'); return; }
         const types = getShiftTypes();
         types[key] = { ...types[key], label, short, color, bg: _sgHexToRgba(color, 0.14) };
-        localStorage.setItem('sg_shift_types', JSON.stringify(types));
+        _cachedShiftTypes = types;
+        this._persistShiftConfig();
         this._refreshAfterTypesChange();
     },
 
@@ -2819,7 +2881,8 @@ ${this._styles()}`;
         const name = types[key]?.label || key;
         if (!confirm(`Видалити тип «${name}»? Вже збережені записи залишаться в базі даних.`)) return;
         delete types[key];
-        localStorage.setItem('sg_shift_types', JSON.stringify(types));
+        _cachedShiftTypes = types;
+        this._persistShiftConfig();
         this._refreshAfterTypesChange();
     },
 
@@ -2847,7 +2910,8 @@ ${this._styles()}`;
         const key = 'cst_' + Date.now();
         const types = getShiftTypes();
         types[key] = { label, short, color, bg: _sgHexToRgba(color, 0.14) };
-        localStorage.setItem('sg_shift_types', JSON.stringify(types));
+        _cachedShiftTypes = types;
+        this._persistShiftConfig();
         this._refreshAfterTypesChange();
     },
 
@@ -2882,7 +2946,7 @@ ${this._styles()}`;
     </div>
 
     <div class="sg-shift-grid">
-        ${Object.entries(getShiftTypes()).map(([k, v]) => `
+        ${getShiftTypeEntries().map(([k, v]) => `
         <button class="sg-stype ${curType === k ? 'active' : ''}"
             style="--sc:${v.color};--sb:${v.bg}"
             onclick="ScheduleGraphPage._pickType('${k}',this)" data-type="${k}">
@@ -3832,9 +3896,9 @@ ${this._styles()}`;
     background:var(--lc);color:#fff;padding:1px 6px;border-radius:10px;margin-left:2px;
 }
 .sg-types-mgr-btn {
-    padding:8px 14px;border-radius:10px;font-size:.82rem;font-weight:700;cursor:pointer;
-    border:2px solid rgba(99,102,241,.3);background:rgba(99,102,241,.07);color:#6366f1;
-    transition:all .15s;white-space:nowrap;
+    padding:5px 8px;border-radius:8px;font-size:1rem;cursor:pointer;line-height:1;
+    border:1.5px solid rgba(99,102,241,.3);background:rgba(99,102,241,.07);color:#6366f1;
+    transition:all .15s;white-space:nowrap;flex-shrink:0;
 }
 .sg-types-mgr-btn:hover { background:#6366f1;color:#fff;border-color:#6366f1; }
 .sg-types-modal-box { max-width:480px;padding:20px 20px 20px; }
@@ -4551,7 +4615,7 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
             <button class="sg-mnav" onclick="ScheduleGraphEmployee._nextMonth()">›</button>
         </div>
         <div class="sge-stats">
-            ${Object.entries(getShiftTypes()).map(([k, v]) => stats[k] ? `
+            ${getShiftTypeEntries().map(([k, v]) => stats[k] ? `
             <div class="sge-stat-chip" style="background:${v.bg};color:${v.color}">
                 <span class="sge-stat-short">${v.short}</span>
                 <span>${stats[k]} ${k==='work'?'роб.':k==='day_off'?'вих.':k==='vacation'?'відп.':'лік.'}</span>
@@ -4566,7 +4630,7 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
 
     <div class="sg-section sge-cal-section">
         <div class="sge-legend-bar">
-            ${Object.entries(getShiftTypes()).map(([k, v]) => `
+            ${getShiftTypeEntries().map(([k, v]) => `
             <span class="sge-legend-item">
                 <span class="sge-legend-dot" style="background:${v.color}"></span>${v.label}
             </span>`).join('')}

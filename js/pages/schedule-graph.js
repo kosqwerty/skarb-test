@@ -1053,8 +1053,29 @@ ${this._styles()}`;
         if (assignRows.length) {
             const ids = [...new Set(assignRows.map(a => a.user_id).filter(Boolean))];
             if (ids.length) {
-                const { data: pData } = await supabase.from('profiles').select('id, full_name, avatar_url, role').in('id', ids);
+                const { data: pData } = await supabase.from('profiles').select('id, full_name, avatar_url, role, job_position, phone, manager_id').in('id', ids);
                 profiles = pData || [];
+
+                // Load manager names
+                const mgrIds = [...new Set(profiles.map(p => p.manager_id).filter(Boolean))];
+                let mgrProfiles = [];
+                if (mgrIds.length) {
+                    const { data: mData } = await supabase.from('profiles').select('id, full_name').in('id', mgrIds);
+                    mgrProfiles = mData || [];
+                }
+                profiles.forEach(p => { p._managerName = mgrProfiles.find(m => m.id === p.manager_id)?.full_name || null; });
+
+                // Load dovirenosti
+                const { data: dovData } = await supabase
+                    .from('profile_dovirenosti')
+                    .select('profile_id, dovirenosti(name)')
+                    .in('profile_id', ids);
+                const dovByUser = {};
+                (dovData || []).forEach(r => {
+                    if (!dovByUser[r.profile_id]) dovByUser[r.profile_id] = [];
+                    if (r.dovirenosti?.name) dovByUser[r.profile_id].push(r.dovirenosti.name);
+                });
+                profiles.forEach(p => { p._dovirenosti = dovByUser[p.id] || []; });
             }
         }
 
@@ -1150,7 +1171,7 @@ ${this._styles()}`;
             const ids = [...new Set(pAssignRows.map(a => a.user_id).filter(Boolean))];
             if (ids.length) {
                 const { data: pd } = await supabase.from('profiles')
-                    .select('id, full_name, avatar_url, role').in('id', ids);
+                    .select('id, full_name, avatar_url, role, job_position').in('id', ids);
                 pProfiles = pd || [];
             }
         }
@@ -1479,19 +1500,6 @@ ${this._styles()}`;
         });
         const _locOrder = Object.fromEntries(this._locations.map((l, i) => [l.id, i]));
 
-        // For selected date: who is free vs busy (exclude fired employees)
-        let freeList = [], busyList = [];
-        if (sd) {
-            this._allAssignments.forEach(a => {
-                if (!a.user_id) return;
-                const entry = _getEntry(a, sd);
-                if (_isRealShift(entry)) busyList.push(a);
-                else freeList.push(a);
-            });
-        }
-
-        const sdLabel = sd ? new Date(sd + 'T00:00:00').toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', weekday: 'short' }) : '';
-
         return `
 <div class="sg-section">
     <div class="sg-subst-hint">
@@ -1500,57 +1508,6 @@ ${this._styles()}`;
         </span>
         ${sd ? `<button class="sg-subst-clear" onclick="ScheduleGraphPage._selectSubstDate(null)">✕ Скинути</button>` : ''}
     </div>
-
-    ${sd ? `
-    <div class="sg-subst-panel">
-        <div class="sg-subst-date-label">📅 ${sdLabel}</div>
-        <div class="sg-subst-cols">
-            <div class="sg-subst-free">
-                <div class="sg-subst-col-title free">🟢 Вільні (${freeList.length})</div>
-                <div class="sg-subst-scroll">
-                ${freeList.length ? freeList.map(a => {
-                    const entry = _getEntry(a, sd);
-                    const shift = entry ? getShiftTypes()[entry.shift_type] : null;
-                    const wantsSub = entry?.notes === '__sub__';
-                    const isPartnerMember = !!a.isPartner;
-                    return `<div class="sg-subst-person sg-subst-free-card${wantsSub?' sg-subst-wants-sub':''}${isPartnerMember?' sg-subst-partner':''}"
-                        ${isPartnerMember ? `title="${a.partnerOwnerLabel||'Керівник'}: ${a.partnerOwnerName}"` : `onclick="ScheduleGraphPage._assignSubstitute('${a.user_id}')" title="Натисніть щоб призначити на підміну"`}>
-                        <div class="sg-av sm">${(a.profile?.full_name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}</div>
-                        <div>
-                            <div class="sg-subst-name">${a.profile?.full_name || a.employee_name || 'Невідомо'}</div>
-                            <div class="sg-subst-loc">${isPartnerMember?'🤝':'🏪'} ${a.locName}</div>
-                            ${wantsSub ? `<div class="sg-sub-wants-badge">🙋 Пропонує підміну</div>` : ''}
-                        </div>
-                        ${shift ? `<span class="sg-badge" style="background:${shift.bg};color:${shift.color};margin-left:auto">${shift.short}</span>` :
-                          `<span class="sg-badge" style="background:rgba(16,185,129,.1);color:#10b981;margin-left:auto">—</span>`}
-                        ${isPartnerMember ? '' : `<span class="sg-subst-add-btn">+</span>`}
-                    </div>`;
-                }).join('') : '<div class="sg-subst-empty">Немає вільних співробітників</div>'}
-                </div>
-            </div>
-            <div class="sg-subst-busy">
-                <div class="sg-subst-col-title busy">🔴 Зайняті (${busyList.length})</div>
-                <div class="sg-subst-scroll">
-                ${busyList.map(a => {
-                    const entry = _getEntry(a, sd);
-                    const shift = entry ? getShiftTypes()[entry.shift_type] : null;
-                    const needsSub = entry?.notes === '__needsub__';
-                    const isPartnerMember = !!a.isPartner;
-                    return `
-                <div class="sg-subst-person busy${needsSub?' sg-subst-needs-sub':''}${isPartnerMember?' sg-subst-partner':''}">
-                    <div class="sg-av sm">${(a.profile?.full_name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}</div>
-                    <div>
-                        <div class="sg-subst-name">${a.profile?.full_name || a.employee_name || 'Невідомо'}</div>
-                        <div class="sg-subst-loc">${isPartnerMember?'🤝':'🏪'} ${a.locName}</div>
-                        ${needsSub ? `<div class="sg-needsub-badge">🆘 Потрібна підміна</div>` : ''}
-                    </div>
-                    ${shift ? `<span class="sg-badge" style="background:${shift.bg};color:${shift.color};margin-left:auto">${shift.short}</span>` : ''}
-                </div>`;
-                }).join('')}
-                </div>
-            </div>
-        </div>
-    </div>` : ''}
 
     <div class="sg-scroll-wrap" id="sg-wrap-subst" onscroll="ScheduleGraphPage._onScroll('subst')">
         <table class="sg-table">
@@ -1629,7 +1586,154 @@ ${this._styles()}`;
 
     _selectSubstDate(date) {
         this._substDate = date;
+        document.getElementById('sg-subst-modal')?.remove();
+        if (date) this._openSubstModal(date);
         this._render(this._container);
+    },
+
+    _switchSubstTab(tab) {
+        document.querySelectorAll('.sg-subst-tab').forEach(b => b.classList.toggle('active', b.id === `sg-stab-${tab}`));
+        document.querySelectorAll('.sg-subst-tab-content').forEach(c => { c.style.display = c.id === `sg-stab-content-${tab}` ? '' : 'none'; });
+    },
+
+    _openSubstModal(date) {
+        const sd = date;
+        const sdLabel = new Date(sd + 'T00:00:00').toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', weekday: 'short' });
+
+        const isAllLocs = this._locId === 'all';
+
+        // Count confirmed substitutions per user this month
+        const days = new Date(this._year, this._month + 1, 0).getDate();
+        const subCount = {};
+        for (let d = 1; d <= days; d++) {
+            const dateStr = this._dateStr(d);
+            this._allAssignments.forEach(a => {
+                if (!a.user_id) return;
+                let e;
+                if (isAllLocs) {
+                    e = this._allEntries[`${a.locId}_${a.user_id}_${dateStr}`];
+                } else {
+                    e = (this._entriesByLoc?.[a.locId] || {})[`${a.user_id}_${dateStr}`] || null;
+                }
+                if (e?.shift_type === 'day_off') subCount[a.user_id] = (subCount[a.user_id] || 0) + 1;
+            });
+        }
+        const getSubGroup = uid => { const n = subCount[uid] || 0; return n <= 1 ? 0 : n <= 3 ? 1 : 2; };
+
+        let freeList = [], busyList = [];
+        const seenUids = new Set();
+        this._allAssignments.forEach(a => {
+            if (!a.user_id || seenUids.has(a.user_id)) return;
+            seenUids.add(a.user_id);
+            let entry;
+            if (isAllLocs) {
+                entry = this._allEntries[`${a.locId}_${a.user_id}_${sd}`];
+            } else {
+                const locEntries = this._entriesByLoc?.[a.locId] || {};
+                entry = locEntries[`${a.user_id}_${sd}`] || null;
+            }
+            (_isRealShift(entry) ? busyList : freeList).push(a);
+        });
+
+        const sortBySubCount = list => list.slice().sort((a, b) => getSubGroup(a.user_id) - getSubGroup(b.user_id));
+        freeList = sortBySubCount(freeList);
+        busyList = sortBySubCount(busyList);
+
+        const renderPerson = (a, isFree) => {
+            let entry;
+            if (isAllLocs) {
+                entry = this._allEntries[`${a.locId}_${a.user_id}_${sd}`];
+            } else {
+                const locEntries = this._entriesByLoc?.[a.locId] || {};
+                entry = locEntries[`${a.user_id}_${sd}`] || null;
+            }
+            const shift        = entry ? getShiftTypes()[entry.shift_type] : null;
+            const wantsSub     = entry?.notes === '__sub__';
+            const needsSub     = entry?.notes === '__needsub__';
+            const isPartner    = !!a.isPartner;
+            const initials     = (a.profile?.full_name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+            const name         = a.profile?.full_name || a.employee_name || 'Невідомо';
+            const cnt          = subCount[a.user_id] || 0;
+            const cntColor     = cnt <= 1 ? '#10b981' : cnt <= 3 ? '#f59e0b' : '#ef4444';
+            const cntBadge     = `<span class="sg-sub-cnt-badge" style="background:${cntColor}1a;color:${cntColor};border-color:${cntColor}40">${cnt} підм.</span>`;
+            const position     = a.profile?.job_position || '';
+            const managerName  = a.profile?._managerName || '';
+            const dovirenosti  = a.profile?._dovirenosti || [];
+            const phone        = a.profile?.phone || '';
+            const badge        = shift
+                ? `<span class="sg-badge" style="background:${shift.bg};color:${shift.color};margin-left:auto">${shift.short}</span>`
+                : '';
+
+            const extraInfo = `
+                ${managerName ? `<div class="sg-subst-meta">Керівник: <span class="sg-subst-meta-val">${managerName}</span></div>` : ''}
+                ${dovirenosti.length ? `<div class="sg-subst-meta">Довіреність: <span class="sg-subst-meta-val">${dovirenosti.join(', ')}</span></div>` : ''}
+                ${phone ? `<div class="sg-subst-meta">${phone}</div>` : ''}
+            `;
+
+            if (isFree) {
+                return `<div class="sg-subst-person sg-subst-free-card${wantsSub?' sg-subst-wants-sub':''}${isPartner?' sg-subst-partner':''}"
+                    ${isPartner
+                        ? `title="${a.partnerOwnerLabel||'Керівник'}: ${a.partnerOwnerName}"`
+                        : `onclick="ScheduleGraphPage._assignSubstitute('${a.user_id}')" title="Натисніть щоб призначити на підміну"`}>
+                    <div class="sg-av sm">${initials}</div>
+                    <div style="flex:1;min-width:0">
+                        <div class="sg-subst-name">${name}</div>
+                        ${position ? `<div class="sg-subst-position">${position}</div>` : ''}
+                        ${extraInfo}
+                        ${wantsSub ? `<div class="sg-sub-wants-badge">🙋 Пропонує підміну</div>` : ''}
+                    </div>
+                    ${cntBadge}
+                    ${badge}
+                    ${isPartner ? '' : `<span class="sg-subst-add-btn">+</span>`}
+                </div>`;
+            }
+            return `<div class="sg-subst-person busy${needsSub?' sg-subst-needs-sub':''}${isPartner?' sg-subst-partner':''}">
+                <div class="sg-av sm">${initials}</div>
+                <div style="flex:1;min-width:0">
+                    <div class="sg-subst-name">${name}</div>
+                    ${position ? `<div class="sg-subst-position">${position}</div>` : ''}
+                    ${extraInfo}
+                    ${needsSub ? `<div class="sg-needsub-badge">🆘 Потрібна підміна</div>` : ''}
+                </div>
+                ${cntBadge}
+                ${badge}
+            </div>`;
+        };
+
+        document.getElementById('sg-subst-modal')?.remove();
+        const el = document.createElement('div');
+        el.id = 'sg-subst-modal';
+        el.className = 'sg-overlay';
+        el.innerHTML = `
+<div class="sg-modal sg-subst-modal-box">
+    <div class="sg-mhdr">
+        <div>
+            <h3 style="margin:0;font-size:1.05rem">🔍 Пошук підміни</h3>
+            <p style="margin:3px 0 0;color:var(--text-muted);font-size:.8rem;text-transform:capitalize">📅 ${sdLabel}</p>
+        </div>
+        <button class="sg-mclose" onclick="ScheduleGraphPage._selectSubstDate(null)">✕</button>
+    </div>
+    <div class="sg-subst-tabs">
+        <button class="sg-subst-tab active" id="sg-stab-free" onclick="ScheduleGraphPage._switchSubstTab('free')">
+            🟢 Вільні <span class="sg-stab-count">${freeList.length}</span>
+        </button>
+        <button class="sg-subst-tab" id="sg-stab-busy" onclick="ScheduleGraphPage._switchSubstTab('busy')">
+            🔴 Зайняті <span class="sg-stab-count">${busyList.length}</span>
+        </button>
+    </div>
+    <div class="sg-subst-tab-content" id="sg-stab-content-free">
+        <div class="sg-subst-scroll sg-subst-modal-scroll">
+            ${freeList.length ? freeList.map(a => renderPerson(a, true)).join('') : '<div class="sg-subst-empty">Немає вільних співробітників</div>'}
+        </div>
+    </div>
+    <div class="sg-subst-tab-content" id="sg-stab-content-busy" style="display:none">
+        <div class="sg-subst-scroll sg-subst-modal-scroll">
+            ${busyList.length ? busyList.map(a => renderPerson(a, false)).join('') : '<div class="sg-subst-empty">Всі вільні</div>'}
+        </div>
+    </div>
+</div>`;
+        document.body.appendChild(el);
+        el.addEventListener('click', e => { if (e.target === el) this._selectSubstDate(null); });
     },
 
 
@@ -2103,18 +2207,6 @@ ${this._styles()}`;
         const datesWithAnyWork = new Set();
         Object.values(locDatesWithWork).forEach(s => s.forEach(d => datesWithAnyWork.add(d)));
 
-        // Build substitution lists (exclude fired employees)
-        let freeList = [], busyList = [];
-        if (sd) {
-            this._allAssignments.forEach(a => {
-                if (!a.user_id) return;
-                const entry = _getEntry(a, sd);
-                (_isRealShift(entry) ? busyList : freeList).push(a);
-            });
-        }
-
-        const sdLabel = sd ? new Date(sd + 'T00:00:00').toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', weekday: 'short' }) : '';
-
         const legend = getShiftTypeEntries().map(([k, v]) => `
             <button class="sg-leg-btn ${this._quickType === k ? 'active' : ''}"
                 style="--lc:${v.color};--lb:${v.bg}"
@@ -2160,51 +2252,6 @@ ${this._styles()}`;
         <span class="sg-subst-hint-text">🖱 Натисніть на <strong>заголовок дня</strong> щоб побачити хто може підмінити</span>
         ${sd ? `<button class="sg-subst-clear" onclick="ScheduleGraphPage._selectSubstDate(null)">✕ Скинути</button>` : ''}
     </div>
-
-    ${sd ? `
-    <div class="sg-subst-panel">
-        <div class="sg-subst-date-label">📅 ${sdLabel}</div>
-        <div class="sg-subst-cols">
-            <div class="sg-subst-free">
-                <div class="sg-subst-col-title free">🟢 Вільні (${freeList.length})</div>
-                <div class="sg-subst-scroll">
-                ${freeList.length ? freeList.map(a => {
-                    const entry = this._allEntries[`${a.locId}_${a.user_id}_${sd}`];
-                    const shift = entry ? getShiftTypes()[entry.shift_type] : null;
-                    const wantsSub = entry?.notes === '__sub__';
-                    return `<div class="sg-subst-person sg-subst-free-card${wantsSub?' sg-subst-wants-sub':''}"
-                        onclick="ScheduleGraphPage._assignSubstitute('${a.user_id}')"
-                        title="Натисніть щоб призначити на підміну">
-                        <div class="sg-av sm">${(a.profile?.full_name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}</div>
-                        <div><div class="sg-subst-name">${a.profile?.full_name||'Невідомо'}</div>
-                        <div class="sg-subst-loc">🏪 ${a.locName}</div>
-                        ${wantsSub ? `<div class="sg-sub-wants-badge">🙋 Пропонує підміну</div>` : ''}</div>
-                        ${shift ? `<span class="sg-badge" style="background:${shift.bg};color:${shift.color};margin-left:auto">${shift.short}</span>`
-                                : `<span class="sg-badge" style="background:rgba(16,185,129,.1);color:#10b981;margin-left:auto">—</span>`}
-                        <span class="sg-subst-add-btn">+</span>
-                    </div>`;
-                }).join('') : '<div class="sg-subst-empty">Немає вільних</div>'}
-                </div>
-            </div>
-            <div class="sg-subst-busy">
-                <div class="sg-subst-col-title busy">🔴 Зайняті (${busyList.length})</div>
-                <div class="sg-subst-scroll">
-                ${busyList.map(a => {
-                    const entry = this._allEntries[`${a.locId}_${a.user_id}_${sd}`];
-                    const shift = entry ? getShiftTypes()[entry.shift_type] : null;
-                    const needsSub = entry?.notes === '__needsub__';
-                    return `<div class="sg-subst-person busy${needsSub?' sg-subst-needs-sub':''}">
-                        <div class="sg-av sm">${(a.profile?.full_name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}</div>
-                        <div><div class="sg-subst-name">${a.profile?.full_name||'Невідомо'}</div>
-                        <div class="sg-subst-loc">🏪 ${a.locName}</div>
-                        ${needsSub ? `<div class="sg-needsub-badge">🆘 Потрібна підміна</div>` : ''}</div>
-                        ${shift ? `<span class="sg-badge" style="background:${shift.bg};color:${shift.color};margin-left:auto">${shift.short}</span>` : ''}
-                    </div>`;
-                }).join('')}
-                </div>
-            </div>
-        </div>
-    </div>` : ''}
 
     <div class="sg-scroll-wrap" id="sg-wrap-all" onscroll="ScheduleGraphPage._onScroll('all')">
         <table class="sg-table">
@@ -3544,18 +3591,43 @@ ${this._styles()}`;
     white-space:nowrap;transition:all .15s;
 }
 .sg-subst-clear:hover { border-color:#ef4444;color:#ef4444; }
-.sg-subst-panel {
-    padding:10px 16px;border-bottom:1px solid var(--border);
-    background:var(--bg-raised);max-width:760px;
+.sg-subst-modal-box {
+    width:480px;max-width:95vw;
+    display:flex;flex-direction:column;
+    max-height:85vh;
 }
-.sg-subst-date-label {
-    font-size:.85rem;font-weight:700;color:var(--text-primary);
-    margin-bottom:10px;text-transform:capitalize;
+.sg-subst-tabs {
+    display:flex;gap:6px;
+    padding-bottom:12px;
+    border-bottom:1px solid var(--border);
+    margin-bottom:12px;
 }
-.sg-subst-cols { display:grid;grid-template-columns:1fr 1fr;gap:10px; }
-.sg-subst-free, .sg-subst-busy { min-width:0; }
+.sg-subst-tab {
+    flex:1;padding:8px 12px;border-radius:8px;
+    border:1px solid var(--border);background:var(--bg-raised);
+    color:var(--text-muted);font-size:.85rem;font-weight:600;
+    cursor:pointer;transition:all .15s;
+    display:flex;align-items:center;justify-content:center;gap:6px;
+}
+.sg-subst-tab.active {
+    border-color:var(--primary);
+    background:rgba(99,102,241,.1);
+    color:var(--text-primary);
+}
+.sg-stab-count {
+    background:var(--bg-hover);border-radius:10px;
+    padding:1px 7px;font-size:.75rem;
+}
+.sg-subst-tab.active .sg-stab-count {
+    background:var(--primary);color:#fff;
+}
+.sg-subst-tab-content { flex:1;overflow:hidden; }
+.sg-subst-modal-scroll {
+    max-height:520px;overflow-y:auto;
+    scrollbar-width:thin;scrollbar-color:var(--border) transparent;
+}
 .sg-subst-scroll {
-    max-height:calc(3 * 44px);overflow-y:auto;
+    max-height:calc(9 * 44px);overflow-y:auto;
     scrollbar-width:thin;scrollbar-color:var(--border) transparent;
 }
 .sg-subst-col-title {
@@ -3597,7 +3669,9 @@ ${this._styles()}`;
 .sg-subst-loc-wh { font-size:.78rem;color:var(--text-muted); }
 .sg-subst-loc-arrow { color:var(--text-muted);font-size:1rem; }
 .sg-subst-name { font-size:.8rem;font-weight:600;color:var(--text-primary); }
-.sg-subst-loc  { font-size:.7rem;color:var(--text-muted);margin-top:1px; }
+.sg-subst-position { font-size:.7rem;color:var(--text-secondary);margin-top:1px; }
+.sg-subst-meta { font-size:.7rem;color:var(--text-muted);margin-top:1px; }
+.sg-subst-meta-val { font-weight:700;color:var(--primary); }
 .sg-subst-empty { font-size:.82rem;color:var(--text-muted);font-style:italic;padding:8px 0; }
 .sg-loc-group-header {
     padding:9px 16px;font-size:.72rem;font-weight:700;
@@ -3627,7 +3701,6 @@ ${this._styles()}`;
 .sg-free-dot  { font-size:.6rem;color:#10b981;opacity:.6; }
 .sg-row-free td.sg-td-name { border-left:3px solid #10b981; }
 .sg-row-busy td.sg-td-name { border-left:3px solid #ef4444; }
-@media(max-width:700px){ .sg-subst-cols { grid-template-columns:1fr; } }
 
 /* Work hours bar */
 .sg-loc-name-ico { font-size:1rem; }
@@ -4131,7 +4204,7 @@ tr:last-child td { border-bottom:none; }
 }
 .sg-modal {
     background:var(--bg-surface);border:1px solid var(--border);border-radius:20px;
-    padding:24px;width:100%;max-width:440px;max-height:80vh;overflow-y:auto;
+    padding:24px;width:100%;max-width:540px;height:580px;max-height:80vh;overflow-y:auto;
     box-shadow:0 24px 64px rgba(0,0,0,.4);animation:scaleIn .2s cubic-bezier(.16,1,.3,1);
 }
 @keyframes scaleIn { from{transform:scale(.95);opacity:0} to{transform:scale(1);opacity:1} }
@@ -4264,6 +4337,10 @@ tr:last-child td { border-bottom:none; }
     border-color:#10b981 !important;
     background:rgba(16,185,129,.08) !important;
     box-shadow:0 0 0 2px rgba(16,185,129,.2);
+}
+.sg-sub-cnt-badge {
+    font-size:.7rem;font-weight:700;padding:2px 6px;border-radius:6px;
+    border:1px solid;white-space:nowrap;flex-shrink:0;
 }
 .sg-sub-wants-badge {
     font-size:.7rem;font-weight:700;color:#10b981;margin-top:2px;

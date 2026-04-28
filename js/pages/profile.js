@@ -41,15 +41,17 @@ const ProfilePage = {
 
         container.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
 
-        const [cities, positions, subdivisions, allUsers] = await Promise.all([
+        const [cities, positions, subdivisions, allUsers, allDovirenosti, userDovirenosti] = await Promise.all([
             API.directories.getAll('cities').catch(() => []),
             canExtended ? API.directories.getAll('positions').catch(() => [])    : Promise.resolve([]),
             canExtended ? API.directories.getAll('subdivisions').catch(() => []) : Promise.resolve([]),
-            canExtended ? API.profiles.getAll({ pageSize: 500 }).then(r => r.data).catch(() => []) : Promise.resolve([])
+            canExtended ? API.profiles.getAll({ pageSize: 500 }).then(r => r.data).catch(() => []) : Promise.resolve([]),
+            isAdminEdit ? API.dovirenosti.getAll().catch(() => [])                    : Promise.resolve([]),
+            isAdminEdit ? API.dovirenosti.getForProfile(user.id).catch(() => [])      : Promise.resolve([])
         ]);
 
         const mgItems = allUsers
-            .filter(u => u.id !== user.id)
+            .filter(u => u.id !== user.id && u.role === 'manager')
             .map(u => ({ value: u.id, label: u.full_name + (u.job_position ? ' · ' + u.job_position : '') }));
 
         const avatarInner = user.avatar_url
@@ -177,6 +179,7 @@ const ProfilePage = {
                     <label class="input-label"><span>Підрозділ</span>${CreatableSelect.html('pe-subdivision', 'subdivisions', subdivisions.map(i=>i.name), user.subdivision||'')}</label>
                     <label class="input-label"><span>Посада</span>${CreatableSelect.html('pe-job-position', 'positions', positions.map(i=>i.name), user.job_position||'')}</label>
                     <label class="input-label"><span>Керівник</span>${SearchSelect.html('pe-manager', mgItems, user.manager_id||'')}</label>
+                    ${isAdminEdit ? `<label class="input-label"><span>Довіреність</span>${CreatableMultiSelect.html('pe-dovirenosti')}</label>` : ''}
                     ` : `
                     <label class="input-label"><span>Підрозділ</span><input type="text" value="${user.subdivision || ''}" readonly style="opacity:.6;cursor:not-allowed"></label>
                     <label class="input-label"><span>Посада</span><input type="text" value="${user.job_position || ''}" readonly style="opacity:.6;cursor:not-allowed"></label>
@@ -236,6 +239,13 @@ const ProfilePage = {
     </style>`;
 
         CreatableSelect.init();
+        if (isAdminEdit) {
+            CreatableMultiSelect.init(
+                'pe-dovirenosti',
+                allDovirenosti.map(d => ({ id: d.id, name: d.name })),
+                userDovirenosti.map(d => ({ id: d.id, name: d.name }))
+            );
+        }
     },
 
     // ── Avatar preview (local only, no upload yet) ────────────────
@@ -326,6 +336,11 @@ const ProfilePage = {
             if (avatarUrl !== undefined) payload.avatar_url = avatarUrl;
 
             const updated = await API.profiles.update(userId, payload);
+
+            if (isAdminEdit && AppState.isAdmin()) {
+                const dovIds = CreatableMultiSelect.getValues('pe-dovirenosti');
+                await API.dovirenosti.setForProfile(userId, dovIds);
+            }
 
             // Email change
             const newEmail = Dom.val('pe-email').trim();

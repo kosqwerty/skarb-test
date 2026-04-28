@@ -828,6 +828,36 @@ const API = {
         }
     },
 
+    // ── Довіреності ──────────────────────────────────────────────────
+    dovirenosti: {
+        async getAll() {
+            const { data, error } = await supabase.from('dovirenosti').select('*').order('name');
+            if (error) throw error;
+            return data || [];
+        },
+        async create(name) {
+            const { data, error } = await supabase.from('dovirenosti').insert({ name }).select().single();
+            if (error) throw error;
+            return data;
+        },
+        async getForProfile(profileId) {
+            const { data, error } = await supabase
+                .from('profile_dovirenosti')
+                .select('dovirenost_id, dovirenosti(id, name)')
+                .eq('profile_id', profileId);
+            if (error) throw error;
+            return (data || []).map(r => r.dovirenosti).filter(Boolean);
+        },
+        async setForProfile(profileId, dovirenostIds) {
+            await supabase.from('profile_dovirenosti').delete().eq('profile_id', profileId);
+            if (dovirenostIds.length) {
+                const rows = dovirenostIds.map(id => ({ profile_id: profileId, dovirenost_id: id }));
+                const { error } = await supabase.from('profile_dovirenosti').insert(rows);
+                if (error) throw error;
+            }
+        }
+    },
+
     // ── Іменинники ───────────────────────────────────────────────────
     birthdays: {
         async getToday() {

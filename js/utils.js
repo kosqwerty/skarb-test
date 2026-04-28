@@ -435,9 +435,11 @@ const SearchSelect = {
     },
 
     init() {
-        document.addEventListener('click', e => {
+        document.addEventListener('mousedown', e => {
             const opt = e.target.closest('.ss-opt');
-            if (opt) { SearchSelect._pick(opt); return; }
+            if (opt) { e.preventDefault(); SearchSelect._pick(opt); return; }
+        });
+        document.addEventListener('click', e => {
             if (!e.target.closest('.ss-wrap')) {
                 document.querySelectorAll('.ss-list:not([hidden])').forEach(l => { l.hidden = true; });
             }
@@ -596,15 +598,184 @@ const CreatableSelect = {
     },
 
     init() {
-        document.addEventListener('click', e => {
+        document.addEventListener('mousedown', e => {
             const opt = e.target.closest('.cs-opt');
-            if (opt && !e.target.closest('.cs-add-row')) { CreatableSelect._pick(opt); return; }
+            if (opt && !e.target.closest('.cs-add-row')) { e.preventDefault(); CreatableSelect._pick(opt); return; }
+        });
+        document.addEventListener('click', e => {
             if (!e.target.closest('.cs-wrap') && !e.target.closest('.cs-add-row')) {
                 document.querySelectorAll('.cs-list:not([hidden])').forEach(l => { l.hidden = true; });
             }
         });
     }
 };
+
+// ── CreatableMultiSelect ───────────────────────────────────────────
+// Мультивибір з можливістю додавання нових варіантів до БД
+// Використання:
+//   CreatableMultiSelect.html('my-id')             → HTML-рядок
+//   CreatableMultiSelect.init('my-id', options, selected)
+//   CreatableMultiSelect.getValues('my-id')        → [id, ...]
+const CreatableMultiSelect = (() => {
+    const _s = {};
+
+    function _st(id) {
+        if (!_s[id]) _s[id] = { options: [], selected: [] };
+        return _s[id];
+    }
+
+    function _updateHidden(id) {
+        const el = document.getElementById(id);
+        if (el) el.value = _st(id).selected.map(x => x.id).join('\x00');
+    }
+
+    function _renderChips(id) {
+        const chips = document.getElementById(`cms-chips-${id}`);
+        if (!chips) return;
+        chips.innerHTML = _st(id).selected.map(item =>
+            `<span class="ms-chip">${item.name}<span class="cms-chip-x" data-cms="${id}" data-iid="${item.id}">✕</span></span>`
+        ).join('');
+        const input = document.getElementById(`cms-input-${id}`);
+        if (input) input.placeholder = _st(id).selected.length ? '' : 'Оберіть або введіть...';
+    }
+
+    function _renderList(id, q = '') {
+        const s = _st(id);
+        const list = document.getElementById(`cms-list-${id}`);
+        if (!list) return;
+        const ql = q.toLowerCase();
+        const selIds = new Set(s.selected.map(x => x.id));
+        const filtered = s.options.filter(o => !selIds.has(o.id) && (!ql || o.name.toLowerCase().includes(ql)));
+        list.innerHTML = filtered.length
+            ? filtered.map(o => `<div class="cs-opt cms-opt" data-cms="${id}" data-iid="${o.id}" data-iname="${o.name.replace(/"/g,'&quot;')}">${o.name}</div>`).join('')
+            : `<div class="cs-opt" style="color:var(--text-muted);pointer-events:none">${ql ? 'Нічого не знайдено' : 'Всі варіанти обрані'}</div>`;
+
+        const addRow = document.getElementById(`cms-add-row-${id}`);
+        if (addRow) {
+            const canCreate = ['owner', 'admin'].includes(AppState.profile?.role);
+            const exact = s.options.some(o => o.name.toLowerCase() === ql);
+            const show = canCreate && ql.length > 0 && !exact;
+            addRow.hidden = !show;
+            if (show) { const t = document.getElementById(`cms-add-text-${id}`); if (t) t.textContent = q; }
+        }
+    }
+
+    function _openDrop(id) {
+        const dd = document.getElementById(`cms-dd-${id}`);
+        if (!dd) return;
+        dd.hidden = false;
+        _renderList(id, document.getElementById(`cms-input-${id}`)?.value || '');
+    }
+
+    function _closeDrop(id) {
+        const dd = document.getElementById(`cms-dd-${id}`);
+        if (dd) dd.hidden = true;
+    }
+
+    function _pick(id, optId, optName) {
+        const s = _st(id);
+        if (!s.selected.find(x => x.id === optId)) {
+            s.selected.push({ id: optId, name: optName });
+            _renderChips(id);
+            _updateHidden(id);
+        }
+        const input = document.getElementById(`cms-input-${id}`);
+        if (input) { input.value = ''; input.focus(); }
+        _renderList(id, '');
+    }
+
+    let _gb = false;
+    function _bindGlobal() {
+        if (_gb) return; _gb = true;
+        document.addEventListener('mousedown', e => {
+            // chip remove
+            const cx = e.target.closest('.cms-chip-x');
+            if (cx) {
+                e.preventDefault(); e.stopPropagation();
+                const id = cx.dataset.cms;
+                _st(id).selected = _st(id).selected.filter(x => x.id !== cx.dataset.iid);
+                _renderChips(id); _renderList(id, ''); _updateHidden(id);
+                return;
+            }
+            // option pick
+            const opt = e.target.closest('.cms-opt[data-cms]');
+            if (opt) { e.preventDefault(); _pick(opt.dataset.cms, opt.dataset.iid, opt.dataset.iname); return; }
+            // close outside
+            Object.keys(_s).forEach(id => {
+                const wrap = document.getElementById(`cms-wrap-${id}`);
+                if (wrap && !wrap.contains(e.target)) _closeDrop(id);
+            });
+        });
+    }
+
+    return {
+        html(id) {
+            _bindGlobal();
+            const canCreate = ['owner', 'admin'].includes(AppState.profile?.role);
+            return `
+<div class="cms-wrap" id="cms-wrap-${id}">
+    <div class="cms-field">
+        <div class="cms-chips" id="cms-chips-${id}"></div>
+        <input class="cms-input" id="cms-input-${id}" type="text"
+               placeholder="Оберіть або введіть..." autocomplete="off"
+               oninput="CreatableMultiSelect._onInput('${id}',this.value)"
+               onfocus="CreatableMultiSelect._openDrop('${id}')">
+    </div>
+    <div class="cms-dropdown" id="cms-dd-${id}" hidden>
+        <div class="cms-list" id="cms-list-${id}"></div>
+        ${canCreate ? `<div class="cms-add-row cs-add-row" id="cms-add-row-${id}" hidden>
+            <span class="cs-add-label">Додати: <strong id="cms-add-text-${id}"></strong></span>
+            <button type="button" class="cs-add-btn cs-confirm" id="cms-add-btn-${id}" onclick="CreatableMultiSelect._confirmAdd('${id}')">✅</button>
+            <button type="button" class="cs-add-btn cs-cancel" onclick="CreatableMultiSelect._cancelAdd('${id}')">❌</button>
+        </div>` : ''}
+    </div>
+</div>
+<input type="hidden" id="${id}">`;
+        },
+
+        init(id, options, selected = []) {
+            _bindGlobal();
+            const s = _st(id);
+            s.options  = [...options];
+            s.selected = [...selected];
+            _renderChips(id);
+        },
+
+        _onInput(id, val) {
+            _openDrop(id);
+            _renderList(id, val);
+        },
+
+        _openDrop,
+
+        _cancelAdd(id) {
+            const input = document.getElementById(`cms-input-${id}`);
+            if (input) { input.value = ''; input.focus(); }
+            _renderList(id, '');
+        },
+
+        async _confirmAdd(id) {
+            const input = document.getElementById(`cms-input-${id}`);
+            const name = input?.value?.trim();
+            if (!name) return;
+            const btn = document.getElementById(`cms-add-btn-${id}`);
+            if (btn) btn.disabled = true;
+            try {
+                const rec = await API.dovirenosti.create(name);
+                _st(id).options.push({ id: rec.id, name: rec.name });
+                _pick(id, rec.id, rec.name);
+                _closeDrop(id);
+                Toast.success('Створено', rec.name);
+            } catch(e) {
+                Toast.error('Помилка', e.message);
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        },
+
+        getValues(id) { return _st(id).selected.map(x => x.id); }
+    };
+})();
 
 // ── MultiSelect ────────────────────────────────────────────────────
 // Поле вибору з пошуком і мульти-вибором (теги-чіпси)

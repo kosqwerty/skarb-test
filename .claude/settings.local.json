@@ -3,13 +3,13 @@
     "allow": [
       "Bash(python3 -c ' *)",
       "Bash(node -e ' *)",
-      "Bash(git init *)",
-      "Bash(git remote *)",
-      "Bash(git fetch *)",
-      "Bash(git branch *)",
-      "Bash(git add *)",
-      "Bash(git commit *)",
-      "Bash(git ls-tree *)"
+      "Bash(node --check \"c:/Users/neoli/OneDrive/Desktop/lms/js/pages/schedule-graph.js\")",
+      "Bash(node --input-type=module)",
+      "Bash(node -e \"require\\('fs'\\).readFileSync\\('c:/Users/neoli/OneDrive/Desktop/lms/js/pages/schedule-graph.js','utf8'\\)\")",
+      "Bash(node -c \"c:/Users/neoli/OneDrive/Desktop/lms/js/pages/schedule-graph.js\")",
+      "Bash(echo \"exit:$?\")",
+      "Bash(git -C \"c:/Users/neoli/OneDrive/Desktop/lms\" status)",
+      "Bash(git -C \"c:/Users/neoli/OneDrive/Desktop/lms\" remote -v)"
     ]
   }
 }

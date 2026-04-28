@@ -1961,7 +1961,7 @@ const AdminPage = {
         }
         const items = data || [];
 
-        const typeLabel = { page: '🖥 Сторінки', news: '📰 Новини', resource: '📎 Ресурси' };
+        const typeLabel = { page: '🖥 Сторінки', news: '📰 Новини', resource: '📎 Ресурси', user: '👤 Користувачі' };
         const grouped = {};
         items.forEach(i => { (grouped[i.type] = grouped[i.type] || []).push(i); });
 
@@ -1974,7 +1974,7 @@ const AdminPage = {
 
         const rowHtml = item => {
             const d = item.item_data;
-            const title = d.title || d.name || item.item_id;
+            const title = d.full_name || d.title || d.name || d.email || item.item_id;
             return `
                 <tr>
                     <td style="font-size:.85rem;font-weight:500">${title}</td>
@@ -1983,7 +1983,7 @@ const AdminPage = {
                     <td style="font-size:.78rem;white-space:nowrap">${daysLeft(item.expires_at)}</td>
                     <td style="white-space:nowrap">
                         <button class="btn btn-ghost btn-sm" onclick="AdminPage._previewTrashItem(${JSON.stringify(item).replace(/"/g,'&quot;')})">👁 Перегляд</button>
-                        <button class="btn btn-primary btn-sm" style="margin-left:.3rem" onclick="AdminPage._restoreTrashItem('${item.id}')">↩ Відновити</button>
+                        <button class="btn btn-primary btn-sm" style="margin-left:.3rem" onclick="AdminPage._restoreTrashItem('${item.id}','${item.item_id}','${item.type}')">↩ Відновити</button>
                         <button class="btn btn-danger btn-sm" style="margin-left:.3rem" onclick="AdminPage._deleteTrashItem('${item.id}')">🗑 Видалити</button>
                     </td>
                 </tr>`;
@@ -2120,7 +2120,7 @@ const AdminPage = {
         });
     },
 
-    async _restoreTrashItem(trashId) {
+    async _restoreTrashItem(trashId, itemId, itemType) {
         const ok = await Modal.confirm({
             title: '↩ Відновити',
             message: 'Відновити цей об\'єкт?',
@@ -2141,8 +2141,19 @@ const AdminPage = {
         }
         Loader.hide(); // ховаємо до показу модалки і перерендеру
 
-        if (result?.type === 'user') {
-            Toast.success('Відновлено', `${result.full_name || ''} — пароль збережено`);
+        const isUser = result?.type === 'user' || itemType === 'user';
+        if (isUser) {
+            // Re-link schedule assignments that were unlinked when account was deleted
+            const userId = result?.id || itemId;
+            if (userId) {
+                const { error: saErr } = await supabase
+                    .from('schedule_assignments')
+                    .update({ user_id: userId })
+                    .eq('original_user_id', userId)
+                    .is('user_id', null);
+                if (saErr) console.warn('schedule_assignments relink:', saErr.message);
+            }
+            Toast.success('Відновлено', `${result?.full_name || ''} — повернуто до графіку`);
         } else {
             Toast.success('Відновлено');
         }

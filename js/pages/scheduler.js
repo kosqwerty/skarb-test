@@ -165,7 +165,23 @@ const SchedulerPage = {
 
     async _renderHub(container) {
         UI.setBreadcrumb([{ label: 'Планувальник' }]);
+        const uid = AppState.user.id;
         const isManager = AppState.isManager() || AppState.isAdmin() || AppState.isOwner();
+
+        // For managers: show "Мій графік" only if added as employee to a non-owned location
+        let showMySchedule = !isManager;
+        if (isManager) {
+            const { data: ownLocs } = await supabase.from('schedule_locations')
+                .select('id').eq('created_by', uid).is('deleted_at', null);
+            const ownIds = (ownLocs || []).map(l => l.id);
+            const q = supabase.from('schedule_assignments')
+                .select('id', { count: 'exact', head: true }).eq('user_id', uid);
+            const { count } = ownIds.length
+                ? await q.not('location_id', 'in', `(${ownIds.join(',')})`)
+                : await q;
+            showMySchedule = (count || 0) > 0;
+        }
+
         container.innerHTML = `
 <div class="planner-hub">
     <div class="planner-hub-hero">
@@ -181,17 +197,13 @@ const SchedulerPage = {
             <div class="planner-hub-card-ico" style="background:rgba(99,102,241,.12);color:#6366f1">🗓</div>
             <div class="planner-hub-card-title">Графік роботи</div>
             <div class="planner-hub-card-desc">Управління розкладом співробітників по локаціях</div>
-        </button>
-        <button class="planner-hub-card" onclick="Router.go('schedule-graph?view=employee')">
+        </button>` : ''}
+        ${showMySchedule ? `
+        <button class="planner-hub-card" onclick="Router.go('${isManager ? 'schedule-graph?view=employee' : 'schedule-graph'}')">
             <div class="planner-hub-card-ico" style="background:rgba(16,185,129,.12);color:#10b981">👤</div>
             <div class="planner-hub-card-title">Мій графік</div>
             <div class="planner-hub-card-desc">Перегляд власного розкладу роботи</div>
-        </button>` : `
-        <button class="planner-hub-card" onclick="Router.go('schedule-graph')">
-            <div class="planner-hub-card-ico" style="background:rgba(16,185,129,.12);color:#10b981">👤</div>
-            <div class="planner-hub-card-title">Мій графік</div>
-            <div class="planner-hub-card-desc">Перегляд власного розкладу роботи</div>
-        </button>`}
+        </button>` : ''}
         ${isManager ? `
         <button class="planner-hub-card" onclick="Router.go('scheduler?view=notifications')">
             <div class="planner-hub-card-ico" style="background:rgba(245,158,11,.12);color:#f59e0b">🔔</div>

@@ -9,7 +9,7 @@ const DashboardPage = {
         container.innerHTML = `
             <div class="page-header">
                 <div class="page-title">
-                    <h1>👋 Вітаємо, ${AppState.profile?.full_name?.split(' ')[0] || 'користувачу'}</h1>
+                    <h1>👋 Вітаємо, ${AppState.profile?.full_name?.split(' ')[1] || AppState.profile?.full_name?.split(' ')[0] || 'користувачу'}</h1>
                     <p>${new Date().toLocaleDateString('uk-UA', { weekday:'long', day:'numeric', month:'long', year:'numeric' })}</p>
                 </div>
             </div>

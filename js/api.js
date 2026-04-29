@@ -240,7 +240,7 @@ const API = {
             if (error) throw error;
         },
 
-        async getAll({ courseId, search, category, page = 0, pageSize = 20, includeLessonResources = false, studentOnly = false } = {}) {
+        async getAll({ courseId, search, category, page = 0, pageSize = 20, includeLessonResources = false, studentOnly = false, trackedOnly = false } = {}) {
             let q = supabase.from('resources')
                 .select(`*, course:courses(id,title), creator:profiles!created_by(full_name),
                     access_group:access_groups(id,name,is_public,
@@ -252,9 +252,8 @@ const API = {
             if (courseId) q = q.eq('course_id', courseId);
             if (category) q = q.eq('category', category);
             if (search) q = q.or(`title.ilike.%${search}%,description.ilike.%${search}%`);
-            // Для студентів — тільки ресурси без прив'язки до курсу,
-            // або курсу на який він записаний (RLS на рівні Supabase повинен це закривати)
             if (studentOnly) q = q.is('course_id', null);
+            if (trackedOnly) q = q.eq('is_tracked_download', true);
             q = q.order('created_at', { ascending: false })
                  .range(page * pageSize, (page + 1) * pageSize - 1);
             const { data, error, count } = await q;
@@ -855,6 +854,89 @@ const API = {
                 const { error } = await supabase.from('profile_dovirenosti').insert(rows);
                 if (error) throw error;
             }
+        }
+    },
+
+    // ── Document Downloads ───────────────────────────────────────────
+    documentDownloads: {
+        async track(resourceId, { locationId = null, isOffShift = false } = {}) {
+            const { error } = await supabase.from('document_downloads').insert({
+                resource_id:  resourceId,
+                user_id:      AppState.user.id,
+                location_id:  locationId,
+                is_off_shift: isOffShift
+            });
+            if (error) throw error;
+        },
+
+        // Returns map { resourceId → latest downloaded_at }
+        async getMyLatest(resourceIds) {
+            if (!resourceIds.length) return {};
+            const { data, error } = await supabase.from('document_downloads')
+                .select('resource_id, downloaded_at')
+                .eq('user_id', AppState.user.id)
+                .in('resource_id', resourceIds)
+                .order('downloaded_at', { ascending: false });
+            if (error) throw error;
+            const map = {};
+            (data || []).forEach(d => { if (!map[d.resource_id]) map[d.resource_id] = d.downloaded_at; });
+            return map;
+        },
+
+        // Tries to find today's active shift location for current user
+        async getTodayShiftLocation() {
+            const today = new Date().toISOString().slice(0, 10);
+            const { data } = await supabase.from('schedule_entries')
+                .select('location_id, location:schedule_locations(id, name)')
+                .eq('user_id', AppState.user.id)
+                .eq('date', today)
+                .in('shift_type', ['work', 'day_off'])
+                .not('notes', 'in', '("__mgr_help__","__sub__","__needsub__","__sub_confirmed__")')
+                .limit(1)
+                .maybeSingle();
+            return data?.location_id ? { id: data.location_id, name: data.location?.name } : null;
+        },
+
+        async getAllLocations() {
+            const { data, error } = await supabase.from('schedule_locations')
+                .select('id, name').is('deleted_at', null).order('name');
+            if (error) throw error;
+            return data || [];
+        },
+
+        async getManagerLocations() {
+            let q = supabase.from('schedule_locations')
+                .select('id, name').is('deleted_at', null).order('name');
+            if (!AppState.isOwner()) q = q.eq('created_by', AppState.user.id);
+            const { data, error } = await q;
+            if (error) throw error;
+            return data || [];
+        },
+
+        // Downloads during shift for given locations (for status matrix)
+        async getStatusForLocations(locationIds) {
+            if (!locationIds.length) return [];
+            const { data, error } = await supabase.from('document_downloads')
+                .select('resource_id, location_id, downloaded_at')
+                .in('location_id', locationIds)
+                .eq('is_off_shift', false);
+            if (error) throw error;
+            return data || [];
+        },
+
+        async getOffShiftForLocations(locationIds) {
+            if (!locationIds.length) return [];
+            const { data, error } = await supabase.from('document_downloads')
+                .select(`resource_id, location_id, downloaded_at,
+                    user:profiles!user_id(full_name),
+                    resource:resources(title),
+                    location:schedule_locations(name)`)
+                .in('location_id', locationIds)
+                .eq('is_off_shift', true)
+                .order('downloaded_at', { ascending: false })
+                .limit(300);
+            if (error) throw error;
+            return data || [];
         }
     },
 

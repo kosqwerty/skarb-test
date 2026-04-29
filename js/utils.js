@@ -181,6 +181,7 @@ const UI = {
         const contentItems = [
             ...common,
             { icon: '📂', label: 'Ресурси',   route: 'resources' },
+            { icon: '📋', label: 'Документи',  route: 'documents' },
             { icon: '🖥',  label: 'Меню порталу',  route: 'collections' }
         ];
         const ntfItem      = { icon: '🔔', label: 'Сповіщення', route: 'notifications', badgeId: 'nav-ntf-badge' };
@@ -202,6 +203,7 @@ const UI = {
             const managerNav = [
                 ...common,
                 { icon: '📂', label: 'База знань',   route: 'knowledge-base' },
+                { icon: '📋', label: 'Документи',    route: 'documents' },
                 { icon: '🖥',  label: 'Меню порталу', route: 'collections' }
             ];
             return [
@@ -237,6 +239,7 @@ const UI = {
             { title: 'Навчання', items: [
                 ...common,
                 { icon: '📂', label: 'База знань',    route: 'knowledge-base' },
+                { icon: '📋', label: 'Документи',     route: 'documents' },
                 { icon: '🖥',  label: 'Меню порталу', route: 'collections' }
             ]},
             { title: 'Особисте', items: [

@@ -94,6 +94,10 @@ const App = {
                 await ResourcesPage.init(container, { view: 'kb' });
             },
 
+            'documents': async ({ container }) => {
+                await ResourcesPage.init(container, { view: 'docs' });
+            },
+
             'collections': async ({ container }) => {
                 await CollectionsPage.init(container);
             },

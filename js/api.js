@@ -891,7 +891,7 @@ const API = {
                 .eq('user_id', AppState.user.id)
                 .eq('date', today)
                 .in('shift_type', ['work', 'day_off'])
-                .not('notes', 'in', '("__mgr_help__","__sub__","__needsub__","__sub_confirmed__")')
+                .or('notes.is.null,notes.not.in.("__mgr_help__","__sub__","__needsub__","__sub_confirmed__")')
                 .limit(1)
                 .maybeSingle();
             return data?.location_id ? { id: data.location_id, name: data.location?.name } : null;

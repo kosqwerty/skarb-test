@@ -927,8 +927,7 @@ const API = {
         async getOffShiftForLocations(locationIds) {
             if (!locationIds.length) return [];
             const { data, error } = await supabase.from('document_downloads')
-                .select(`resource_id, location_id, downloaded_at,
-                    user:profiles!user_id(full_name),
+                .select(`resource_id, location_id, downloaded_at, user_id,
                     resource:resources(title),
                     location:schedule_locations(name)`)
                 .in('location_id', locationIds)
@@ -936,7 +935,15 @@ const API = {
                 .order('downloaded_at', { ascending: false })
                 .limit(300);
             if (error) throw error;
-            return data || [];
+            const rows = data || [];
+            const userIds = [...new Set(rows.map(d => d.user_id))];
+            if (userIds.length) {
+                const { data: profiles } = await supabase.from('profiles')
+                    .select('id, full_name').in('id', userIds);
+                const map = Object.fromEntries((profiles || []).map(p => [p.id, p.full_name]));
+                rows.forEach(d => { d.user = { full_name: map[d.user_id] || '—' }; });
+            }
+            return rows;
         }
     },
 

@@ -16,6 +16,8 @@ const ResourcesPage = {
     _myDownloads: {},
     _myLocations: [],
     _activeTab: 'list',
+    _pendingResource: null,
+    _pendingDownloadFile: false,
 
     async init(container, { view = 'kb' } = {}) {
         this._page = 0;
@@ -36,7 +38,7 @@ const ResourcesPage = {
 
         if (view === 'docs') {
             UI.setBreadcrumb([{ label: 'Документи' }]);
-            const isManager = AppState.isStaff();
+            const isManager = AppState.canSchedule();
             container.innerHTML = `
                 <div class="page-header">
                     <div class="page-title">
@@ -61,7 +63,7 @@ const ResourcesPage = {
                     <button id="docs-tab-offshift" class="btn btn-ghost btn-sm" onclick="ResourcesPage.switchTab('offshift',this)">⚠️ Поза зміною</button>
                 </div>` : ''}
                 <div id="docs-tab-content">
-                    <div id="resource-list" class="resource-list"></div>
+                    <div id="resource-list" class="resource-list-docs"></div>
                     <div id="resources-pagination" style="display:flex;justify-content:center;gap:.5rem;margin-top:1.5rem"></div>
                 </div>`;
 
@@ -114,7 +116,7 @@ const ResourcesPage = {
         if (!content) return;
         if (tab === 'list') {
             content.innerHTML = `
-                <div id="resource-list" class="resource-list"></div>
+                <div id="resource-list" class="resource-list-docs"></div>
                 <div id="resources-pagination" style="display:flex;justify-content:center;gap:.5rem;margin-top:1.5rem"></div>`;
             this.load();
         } else if (tab === 'status') {
@@ -133,7 +135,7 @@ const ResourcesPage = {
                 API.documentDownloads.getStatusForLocations(locationIds)
             ]);
             const allDocs = docsRes.data || [];
-            let docs = AppState.isStaff() ? allDocs : allDocs.filter(r => AccessGroupsPage.checkAccess(r.access_group));
+            let docs = AppState.canSchedule() ? allDocs : allDocs.filter(r => AccessGroupsPage.checkAccess(r.access_group));
 
             if (!docs.length || !this._myLocations.length) {
                 content.innerHTML = `<div class="empty-state"><div class="empty-icon">📊</div><h3>Немає даних для відображення</h3></div>`;
@@ -273,9 +275,10 @@ const ResourcesPage = {
                 trackedOnly: this._view === 'docs'
             });
 
-            // Frontend access filter for non-staff users
+            // Frontend access filter: staff and managers in docs view see all
             let filtered = data;
-            if (!AppState.isStaff()) {
+            const bypassFilter = AppState.isStaff() || (this._view === 'docs' && AppState.isManager());
+            if (!bypassFilter) {
                 filtered = data.filter(r => AccessGroupsPage.checkAccess(r.access_group));
             }
 
@@ -315,16 +318,9 @@ const ResourcesPage = {
         if (this._view === 'docs') {
             const dlAt = this._myDownloads[resource.id];
             const statusBadge = dlAt
-                ? `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.75rem;color:#10b981;font-weight:500">✅ ${Fmt.dateShort(dlAt)}</span>`
+                ? `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.75rem;color:#10b981;font-weight:500">✅ ${this._ackLabel()} ${Fmt.dateShort(dlAt)}</span>`
                 : `<span style="font-size:.75rem;color:var(--text-muted)">Не ознайомлено</span>`;
-            const dlBtn = resource.download_allowed
-                ? `<button onclick="ResourcesPage.downloadTracked('${resource.id}')"
-                        style="display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:20px;border:1.5px solid var(--primary);background:transparent;color:var(--primary);font-size:.8rem;font-weight:500;cursor:pointer;transition:background var(--transition),color var(--transition)"
-                        onmouseenter="this.style.background='var(--primary)';this.style.color='#fff'"
-                        onmouseleave="this.style.background='transparent';this.style.color='var(--primary)'">
-                        ⬇ Завантажити
-                   </button>`
-                : '';
+
             return `
                 <div class="resource-item" onclick="ResourcesPage.openViewer('${resource.id}')" style="cursor:pointer">
                     <div class="resource-icon ${resource.type || 'file'}">${icon}</div>
@@ -341,7 +337,6 @@ const ResourcesPage = {
                     </div>
                     <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center" onclick="event.stopPropagation()">
                         <button class="btn btn-ghost btn-sm" onclick="ResourcesPage.openViewer('${resource.id}')">Відкрити</button>
-                        ${dlBtn}
                         ${AppState.isStaff() ? `<button class="btn btn-ghost btn-sm" onclick="ResourcesPage.openEdit('${resource.id}')">✏️</button>` : ''}
                     </div>
                 </div>`;
@@ -373,6 +368,19 @@ const ResourcesPage = {
                         onclick="Bookmarks.toggleResource('${resource.id}','${resource.title.replace(/'/g,"\\'")}','${icon}','${(resource.category||'').replace(/'/g,"\\'")}')">★</button>
                 </div>
             </div>`;
+    },
+
+    _ackLabel() {
+        return AppState.user?.gender === 'female' ? 'Ознайомлена' : 'Ознайомлений';
+    },
+
+    _buildFilename(resource) {
+        const ext = resource.storage_path
+            ? '.' + resource.storage_path.split('.').pop().toLowerCase()
+            : '';
+        const base = (resource.title || resource.storage_path?.split('/').pop() || 'download')
+            .replace(/[/\\:*?"<>|]/g, '_').trim();
+        return ext && !base.toLowerCase().endsWith(ext) ? base + ext : base;
     },
 
     _resourceIcon(type) {
@@ -430,11 +438,7 @@ const ResourcesPage = {
         Loader.show();
         try {
             const resource = await API.resources.getById(id);
-            const ext = resource.storage_path
-                ? '.' + resource.storage_path.split('.').pop().toLowerCase()
-                : '';
-            const baseName = resource.title || resource.storage_path?.split('/').pop() || 'download';
-            const filename = ext && !baseName.toLowerCase().endsWith(ext) ? baseName + ext : baseName;
+            const filename = this._buildFilename(resource);
 
             let url;
             if (resource.storage_path) {
@@ -458,6 +462,14 @@ const ResourcesPage = {
     },
 
     async downloadTracked(id) {
+        await this._trackedAction(id, true);
+    },
+
+    async acknowledgeDoc(id) {
+        await this._trackedAction(id, false);
+    },
+
+    async _trackedAction(id, downloadFile) {
         Loader.show();
         let resource;
         try {
@@ -471,23 +483,24 @@ const ResourcesPage = {
 
         const shiftLoc = await API.documentDownloads.getTodayShiftLocation().catch(() => null);
         if (shiftLoc) {
-            await this._doTrackedDownload(resource, shiftLoc.id, false);
+            await this._doTrackedDownload(resource, shiftLoc.id, false, downloadFile);
         } else {
-            this._showLocationModal(resource);
+            this._showLocationModal(resource, downloadFile);
         }
     },
 
-    async _showLocationModal(resource) {
+    async _showLocationModal(resource, downloadFile) {
         let allLocs = this._myLocations;
         if (!allLocs.length) {
             allLocs = await API.documentDownloads.getAllLocations().catch(() => []);
         }
         const options = allLocs.map(l => `<option value="${l.id}">${l.name}</option>`).join('');
+        const actionLabel = downloadFile ? 'Завантажити' : 'Підтвердити';
         Modal.open({
-            title: '📥 Завантажити документ',
+            title: downloadFile ? '📥 Завантажити документ' : '✅ Підтвердити ознайомлення',
             size: 'sm',
             body: `
-                <p style="color:var(--text-muted);margin-bottom:1rem">Ви завантажуєте документ поза зміною. Оберіть локацію, до якої відносите це завантаження.</p>
+                <p style="color:var(--text-muted);margin-bottom:1rem">Ви не у зміні. Оберіть локацію, до якої відносите це ознайомлення.</p>
                 <div class="form-group">
                     <label>Локація</label>
                     <select id="dl-location-sel">
@@ -497,53 +510,70 @@ const ResourcesPage = {
                 </div>`,
             footer: `
                 <button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
-                <button class="btn btn-primary" onclick="ResourcesPage._confirmLocationDownload('${resource.id}')">Завантажити</button>`
+                <button class="btn btn-primary" onclick="ResourcesPage._confirmLocationDownload()">${actionLabel}</button>`
         });
         this._pendingResource = resource;
+        this._pendingDownloadFile = downloadFile;
     },
 
-    async _confirmLocationDownload(id) {
+    async _confirmLocationDownload() {
         const locId = Dom.val('dl-location-sel') || null;
         Modal.close();
         const resource = this._pendingResource;
+        const downloadFile = this._pendingDownloadFile;
         this._pendingResource = null;
+        this._pendingDownloadFile = false;
         if (!resource) return;
-        await this._doTrackedDownload(resource, locId, true);
+        await this._doTrackedDownload(resource, locId, true, downloadFile);
     },
 
-    async _doTrackedDownload(resource, locationId, isOffShift) {
+    async _doTrackedDownload(resource, locationId, isOffShift, downloadFile = true) {
         Loader.show();
         try {
-            const ext = resource.storage_path
-                ? '.' + resource.storage_path.split('.').pop().toLowerCase()
-                : '';
-            const baseName = resource.title || resource.storage_path?.split('/').pop() || 'download';
-            const filename = ext && !baseName.toLowerCase().endsWith(ext) ? baseName + ext : baseName;
+            if (downloadFile) {
+                const filename = this._buildFilename(resource);
 
-            let url;
-            if (resource.storage_path) {
-                url = await API.resources.getSignedDownloadUrl(resource.storage_path, filename);
-            } else {
-                url = resource.file_url;
+                let url;
+                if (resource.storage_path) {
+                    url = await API.resources.getSignedDownloadUrl(resource.storage_path, filename);
+                } else {
+                    url = resource.file_url;
+                }
+
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.target = '_blank';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
             }
-
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            a.target = '_blank';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
 
             await API.documentDownloads.track(resource.id, { locationId, isOffShift }).catch(() => {});
 
             this._myDownloads[resource.id] = new Date().toISOString();
+
+            // Update viewer action footer if currently open
+            const viewerAction = document.getElementById('doc-viewer-action');
+            if (viewerAction) {
+                const dateStr = Fmt.dateShort(this._myDownloads[resource.id]);
+                const btnBase = 'display:inline-flex;align-items:center;gap:6px;padding:8px 20px;border-radius:20px;font-size:.875rem;font-weight:500;cursor:pointer;transition:background var(--transition),color var(--transition)';
+                const reDownload = resource.download_allowed
+                    ? `<button onclick="ResourcesPage.downloadTracked('${resource.id}')"
+                            style="${btnBase};border:1.5px solid var(--border);background:transparent;color:var(--text-muted)"
+                            onmouseenter="this.style.background='var(--bg-raised)'"
+                            onmouseleave="this.style.background='transparent'">⬇ Завантажити повторно</button>`
+                    : '';
+                viewerAction.style.cssText = 'flex-shrink:0;display:inline-flex;align-items:center;gap:.6rem';
+                viewerAction.innerHTML = `<span style="display:inline-flex;align-items:center;gap:.3rem;color:#10b981;font-weight:500;font-size:.85rem;white-space:nowrap">✅ ${this._ackLabel()} ${dateStr}</span>${reDownload}`;
+            }
+
             // Refresh status badge in list
             const listEl = document.getElementById('resource-list');
             if (listEl) {
                 const { data } = await API.resources.getAll({ trackedOnly: true, pageSize: this._pageSize, page: this._page,
                     search: this._search || undefined, category: this._category || undefined }).catch(() => ({ data: [] }));
-                const filtered = AppState.isStaff() ? data : data.filter(r => AccessGroupsPage.checkAccess(r.access_group));
+                const filtered = AppState.canSchedule() ? data : data.filter(r => AccessGroupsPage.checkAccess(r.access_group));
                 listEl.innerHTML = filtered.map(r => this._renderResourceItem(r)).join('');
             }
         } catch (e) {
@@ -713,7 +743,7 @@ const ResourcesPage = {
 
 const ResourceViewPage = {
 
-    async init(container, { id } = {}) {
+    async init(container, { id, from } = {}) {
         if (!id) { Router.back(); return; }
 
         UI.setBreadcrumb([{ label: 'Перегляд ресурсу' }]);
@@ -726,7 +756,12 @@ const ResourceViewPage = {
         try {
             const resource = await API.resources.getById(id);
             const url      = await this._getUrl(resource);
-            this._render(container, resource, url);
+            let dlStatus = null;
+            if (from === 'documents') {
+                const map = await API.documentDownloads.getMyLatest([id]).catch(() => ({}));
+                dlStatus = map[id] || null;
+            }
+            this._render(container, resource, url, from, dlStatus);
         } catch (e) {
             container.innerHTML = `
                 <div class="empty-state">
@@ -743,7 +778,7 @@ const ResourceViewPage = {
         throw new Error('Файл не знайдено');
     },
 
-    _render(container, resource, url) {
+    _render(container, resource, url, from, dlStatus) {
         const ext = resource.storage_path
             ? resource.storage_path.split('.').pop().toLowerCase()
             : (resource.file_type?.split('/').pop() || '');
@@ -816,13 +851,7 @@ const ResourceViewPage = {
                         </div>
                         ${resource.description ? `<p style="margin:.6rem 0 0;color:var(--text-muted);font-size:.875rem">${resource.description}</p>` : ''}
                     </div>
-                    ${resource.download_allowed !== false && !isPdf ? `
-                    <button onclick="ResourcesPage.downloadResource('${resource.id}')"
-                            style="flex-shrink:0;display:inline-flex;align-items:center;gap:5px;padding:5px 14px;border-radius:20px;border:1.5px solid var(--primary);background:transparent;color:var(--primary);font-size:.85rem;font-weight:500;cursor:pointer;transition:background var(--transition),color var(--transition)"
-                            onmouseenter="this.style.background='var(--primary)';this.style.color='#fff'"
-                            onmouseleave="this.style.background='transparent';this.style.color='var(--primary)'">
-                        ⬇ Завантажити
-                    </button>` : ''}
+                    ${this._buildActionFooter(resource, from, dlStatus, isPdf)}
                     ${AppState.isStaff() ? `
                     <button title="Редагувати" onclick="ResourcesPage.openEdit('${resource.id}')"
                             style="flex-shrink:0;width:40px;height:40px;border-radius:50%;border:2px solid var(--border);background:var(--bg-raised);color:var(--text-primary);font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background var(--transition),border-color var(--transition)"
@@ -836,5 +865,47 @@ const ResourceViewPage = {
                 ${viewerHtml}
 
             </div>`;
+    },
+
+    _buildActionFooter(resource, from, dlStatus, isPdf) {
+        const id = resource.id;
+        const btnBase = 'flex-shrink:0;display:inline-flex;align-items:center;gap:6px;padding:5px 14px;border-radius:20px;font-size:.85rem;font-weight:500;cursor:pointer;transition:background var(--transition),color var(--transition)';
+
+        if (from === 'documents') {
+            if (dlStatus) {
+                const reDownload = resource.download_allowed
+                    ? `<button onclick="ResourcesPage.downloadTracked('${id}')"
+                            style="${btnBase};border:1.5px solid var(--border);background:transparent;color:var(--text-muted)"
+                            onmouseenter="this.style.background='var(--bg-raised)'"
+                            onmouseleave="this.style.background='transparent'">⬇ Завантажити повторно</button>`
+                    : '';
+                return `<div id="doc-viewer-action" style="flex-shrink:0;display:inline-flex;align-items:center;gap:.6rem">
+                    <span style="display:inline-flex;align-items:center;gap:.3rem;color:#10b981;font-weight:500;font-size:.85rem;white-space:nowrap">✅ ${ResourcesPage._ackLabel()} ${Fmt.dateShort(dlStatus)}</span>
+                    ${reDownload}
+                </div>`;
+            }
+            const ackBtn = `<button onclick="ResourcesPage.acknowledgeDoc('${id}')"
+                    style="${btnBase};border:1.5px solid #10b981;background:transparent;color:#10b981"
+                    onmouseenter="this.style.background='#10b981';this.style.color='#fff'"
+                    onmouseleave="this.style.background='transparent';this.style.color='#10b981'">✅ Ознайомлений</button>`;
+            const dlBtn = resource.download_allowed
+                ? `<button onclick="ResourcesPage.downloadTracked('${id}')"
+                        style="${btnBase};border:1.5px solid var(--primary);background:transparent;color:var(--primary)"
+                        onmouseenter="this.style.background='var(--primary)';this.style.color='#fff'"
+                        onmouseleave="this.style.background='transparent';this.style.color='var(--primary)'">⬇ Завантажити</button>`
+                : '';
+            return `<div id="doc-viewer-action" style="flex-shrink:0;display:inline-flex;align-items:center;gap:.5rem">
+                ${dlBtn}${ackBtn}
+            </div>`;
+        }
+
+        if (resource.download_allowed !== false && !isPdf) {
+            return `<button onclick="ResourcesPage.downloadResource('${id}')"
+                    style="${btnBase};border:1.5px solid var(--primary);background:transparent;color:var(--primary)"
+                    onmouseenter="this.style.background='var(--primary)';this.style.color='#fff'"
+                    onmouseleave="this.style.background='transparent';this.style.color='var(--primary)'">⬇ Завантажити</button>`;
+        }
+
+        return '';
     }
 };

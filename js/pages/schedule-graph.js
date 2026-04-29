@@ -1615,7 +1615,7 @@ ${this._styles()}`;
                 } else {
                     e = (this._entriesByLoc?.[a.locId] || {})[`${a.user_id}_${dateStr}`] || null;
                 }
-                if (e?.shift_type === 'day_off') subCount[a.user_id] = (subCount[a.user_id] || 0) + 1;
+                if (e?.shift_type === 'day_off' || (!a.is_primary && e?.shift_type === 'work')) subCount[a.user_id] = (subCount[a.user_id] || 0) + 1;
             });
         }
         const getSubGroup = uid => { const n = subCount[uid] || 0; return n <= 1 ? 0 : n <= 3 ? 1 : 2; };
@@ -1625,14 +1625,16 @@ ${this._styles()}`;
         this._allAssignments.forEach(a => {
             if (!a.user_id || seenUids.has(a.user_id)) return;
             seenUids.add(a.user_id);
-            let entry;
-            if (isAllLocs) {
-                entry = this._allEntries[`${a.locId}_${a.user_id}_${sd}`];
-            } else {
-                const locEntries = this._entriesByLoc?.[a.locId] || {};
-                entry = locEntries[`${a.user_id}_${sd}`] || null;
-            }
-            (_isRealShift(entry) ? busyList : freeList).push(a);
+            // Check all locations for this user — busy if has a real shift anywhere that day
+            const isBusy = this._allAssignments
+                .filter(a2 => a2.user_id === a.user_id)
+                .some(a2 => {
+                    const e = this._allEntries[`${a2.locId}_${a2.user_id}_${sd}`]
+                        || (this._entriesByLoc?.[a2.locId] || {})[`${a2.user_id}_${sd}`]
+                        || null;
+                    return _isRealShift(e);
+                });
+            (isBusy ? busyList : freeList).push(a);
         });
 
         const sortBySubCount = list => list.slice().sort((a, b) => getSubGroup(a.user_id) - getSubGroup(b.user_id));
@@ -1647,7 +1649,8 @@ ${this._styles()}`;
                 const locEntries = this._entriesByLoc?.[a.locId] || {};
                 entry = locEntries[`${a.user_id}_${sd}`] || null;
             }
-            const shift        = entry ? getShiftTypes()[entry.shift_type] : null;
+            const dispShiftType = entry && !a.is_primary && entry.shift_type === 'work' ? 'day_off' : entry?.shift_type;
+            const shift        = entry ? getShiftTypes()[dispShiftType] : null;
             const wantsSub     = entry?.notes === '__sub__';
             const needsSub     = entry?.notes === '__needsub__';
             const isPartner    = !!a.isPartner;

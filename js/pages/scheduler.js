@@ -182,6 +182,16 @@ const SchedulerPage = {
             showMySchedule = (count || 0) > 0;
         }
 
+        // Load calendars shared with current user
+        const { data: sharedCals } = await supabase
+            .from('personal_cal_viewers')
+            .select('owner_id, profiles:owner_id(id, full_name)')
+            .eq('viewer_id', AppState.user.id);
+        const sharedCalendars = (sharedCals || []).map(r => ({
+            id:   r.owner_id,
+            name: r.profiles?.full_name || '—',
+        }));
+
         container.innerHTML = `
 <div class="planner-hub">
     <div class="planner-hub-hero">
@@ -205,20 +215,36 @@ const SchedulerPage = {
             <div class="planner-hub-card-desc">Перегляд власного розкладу роботи</div>
         </button>` : ''}
         ${isManager ? `
+        <button class="planner-hub-card" onclick="Router.go('my-calendar')">
+            <div class="planner-hub-card-ico" style="background:rgba(16,185,129,.12);color:#10b981">📅</div>
+            <div class="planner-hub-card-title">Мій календар</div>
+            <div class="planner-hub-card-desc">Особисті події та нагадування</div>
+        </button>
         <button class="planner-hub-card" onclick="Router.go('scheduler?view=notifications')">
             <div class="planner-hub-card-ico" style="background:rgba(245,158,11,.12);color:#f59e0b">🔔</div>
             <div class="planner-hub-card-title">Планувальник сповіщень</div>
             <div class="planner-hub-card-desc">Розсилки та заплановані повідомлення</div>
         </button>` : ''}
+        
         <button class="planner-hub-card" onclick="Router.go('schedule-view')">
             <div class="planner-hub-card-ico" style="background:rgba(99,102,241,.12);color:#6366f1">👁</div>
             <div class="planner-hub-card-title">Огляд</div>
             <div class="planner-hub-card-desc">Перегляд графіків, до яких надано доступ</div>
         </button>
     </div>
+    ${sharedCalendars.length ? `
+    <div class="planner-hub-section-title">📅 Спільні календарі</div>
+    <div class="planner-hub-cards">
+        ${sharedCalendars.map(c => `
+        <button class="planner-hub-card" onclick="Router.go('my-calendar?owner=${c.id}')">
+            <div class="planner-hub-card-ico" style="background:rgba(16,185,129,.1);color:#10b981">📆</div>
+            <div class="planner-hub-card-title">${c.name}</div>
+            <div class="planner-hub-card-desc">Перегляд календаря</div>
+        </button>`).join('')}
+    </div>` : ''}
 </div>
 <style>
-.planner-hub { max-width:720px;padding:8px 0;animation:fadeSlideUp .3s cubic-bezier(.16,1,.3,1); }
+.planner-hub { max-width:auto;padding:8px 0;animation:fadeSlideUp .3s cubic-bezier(.16,1,.3,1); }
 .planner-hub-hero {
     display:flex;align-items:center;gap:20px;
     background:linear-gradient(135deg,#1a2744,#1e3a5f);
@@ -244,6 +270,7 @@ const SchedulerPage = {
 }
 .planner-hub-card-title { font-size:1rem;font-weight:700;color:var(--text-primary);margin:0; }
 .planner-hub-card-desc { font-size:.8rem;color:var(--text-muted);line-height:1.45;margin:0; }
+.planner-hub-section-title { font-size:.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin:20px 0 8px; }
 </style>`;
     },
 

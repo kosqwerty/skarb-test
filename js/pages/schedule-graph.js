@@ -1873,6 +1873,20 @@ ${this._styles()}`;
         }
 
         const loc = this._locations.find(l => l.id === locId);
+
+        if (isForeign) {
+            const dateLabel = this._substDate
+                ? new Date(this._substDate + 'T00:00:00').toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' })
+                : '';
+            await supabase.from('notifications').insert({
+                user_id:    userId,
+                title:      '📅 Вас додано до графіку',
+                message:    `${AppState.profile?.full_name || 'Керівник'} додав вас як підміну до локації «${loc?.name || ''}»${dateLabel ? ` на ${dateLabel}` : ''}.`,
+                type:       'general',
+                created_by: AppState.user.id,
+            }).catch(() => {});
+        }
+
         Toast.success(`${prof?.full_name || 'Співробітника'} додано до "${loc?.name || 'локації'}"`);
 
         await this._loadAllData();
@@ -2862,6 +2876,18 @@ ${this._styles()}`;
         if (error) { Toast.error('Помилка', error.message); return; }
 
         this._assignments.push({ id: data.id, user_id: data.user_id, original_user_id: data.original_user_id, employee_name: data.employee_name, is_primary: isPrimary, profile: prof });
+
+        if (isForeign) {
+            const loc = this._locations.find(l => l.id === this._locId);
+            await supabase.from('notifications').insert({
+                user_id:    userId,
+                title:      '📅 Вас додано до графіку',
+                message:    `${AppState.profile?.full_name || 'Керівник'} додав вас до локації «${loc?.name || ''}».`,
+                type:       'general',
+                created_by: AppState.user.id,
+            }).catch(() => {});
+        }
+
         this._render(this._container);
         Toast.success('Додано до графіку');
     },

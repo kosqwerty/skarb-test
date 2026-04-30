@@ -27,7 +27,7 @@ const ContactsPage = {
             const [{ data: users, error }, { data: reminders }] = await Promise.all([
                 supabase
                     .from('profiles')
-                    .select('id,full_name,email,phone,job_position,subdivision,city,role,avatar_url,birth_date,is_hidden,is_active')
+                    .select('id,full_name,phone,job_position,subdivision,city,role,avatar_url,birth_date,is_hidden,is_active,manager_id')
                     .eq('is_hidden', false)
                     .eq('is_active', true)
                     .order('full_name', { ascending: true }),
@@ -39,6 +39,7 @@ const ContactsPage = {
 
             if (error) throw error;
             this._users = users || [];
+            this._nameMap = Object.fromEntries(this._users.map(u => [u.id, u.full_name]));
 
             this._reminders = {};
             for (const r of (reminders || [])) this._reminders[r.target_id] = r;
@@ -61,7 +62,7 @@ const ContactsPage = {
         <p class="ct-subtitle">Контактна інформація співробітників</p>
         <div class="ct-search-row">
             <div class="ct-search-wrap">
-                <input id="ct-search" class="ct-search" type="search" placeholder="Пошук за ім'ям, посадою, містом, email…"
+                <input id="ct-search" class="ct-search" type="search" placeholder="Пошук за ім'ям, посадою, містом, телефоном…"
                        oninput="ContactsPage._search(this.value)">
             </div>
             <div id="ct-count" class="ct-count">${this._users.length} співробітників</div>
@@ -146,17 +147,14 @@ const ContactsPage = {
                </div>`
             : '';
 
-        const emailField = u.email ? `
+        const phoneField = u.phone ? `
         <div class="ct-field">
-            <span>✉️</span>
-            <span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${u.email}</span>
-            <button class="ct-copy-btn" title="Копіювати email"
-                onclick="ContactsPage._copyEmail(this,'${u.email.replace(/'/g,"\\'")}')">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-            </button>
+            <span>📞</span>
+            <a href="tel:${u.phone}" style="color:var(--primary);text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${u.phone}</a>
         </div>` : '';
 
         const loc = [u.city, u.subdivision].filter(Boolean).join(' · ');
+        const managerName = u.manager_id ? (this._nameMap[u.manager_id] || null) : null;
 
         return `
 <div class="ct-card" data-uid="${u.id}">
@@ -170,10 +168,10 @@ const ContactsPage = {
         </div>
     </div>
     <div class="ct-fields">
-        ${field('📞', u.phone)}
-        ${emailField}
+        ${phoneField}
         ${field('💼', u.job_position)}
         ${field('🏙️', loc)}
+        ${field('👤', managerName ? `Керівник: ${managerName}` : null)}
         ${hasBd ? `
         <div class="ct-field ct-bd-row">
             <span>🎂</span>
@@ -193,12 +191,12 @@ const ContactsPage = {
     _search(q) {
         const lq = q.toLowerCase().trim();
         const filtered = lq ? this._users.filter(u =>
-            (u.full_name    || '').toLowerCase().includes(lq) ||
-            (u.email        || '').toLowerCase().includes(lq) ||
-            (u.phone        || '').toLowerCase().includes(lq) ||
-            (u.job_position || '').toLowerCase().includes(lq) ||
-            (u.city         || '').toLowerCase().includes(lq) ||
-            (u.subdivision  || '').toLowerCase().includes(lq)
+            (u.full_name          || '').toLowerCase().includes(lq) ||
+            (u.phone              || '').toLowerCase().includes(lq) ||
+            (u.job_position       || '').toLowerCase().includes(lq) ||
+            (u.city               || '').toLowerCase().includes(lq) ||
+            (u.subdivision        || '').toLowerCase().includes(lq) ||
+            (u.manager_id ? (this._nameMap[u.manager_id] || '') : '').toLowerCase().includes(lq)
         ) : this._users;
 
         const grid  = document.getElementById('ct-grid');
@@ -286,17 +284,6 @@ const ContactsPage = {
             }
         } catch(e) { Toast.error('Помилка', e.message); }
         finally { Loader.hide(); }
-    },
-
-    _copyEmail(btn, email) {
-        navigator.clipboard.writeText(email).then(() => {
-            btn.classList.add('copied');
-            btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
-            setTimeout(() => {
-                btn.classList.remove('copied');
-                btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
-            }, 2000);
-        });
     },
 
     async _removeBdReminder(userId) {

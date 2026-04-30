@@ -255,7 +255,7 @@ const API = {
             if (studentOnly) q = q.is('course_id', null);
             if (trackedOnly) q = q.eq('is_tracked_download', true);
             // docs section: exclude video, link, scorm — keep pdf/file/image/doc types
-            if (docsOnly) q = q.not('type', 'in', '("video","link","scorm")');
+            if (docsOnly) q = q.neq('type', 'video').neq('type', 'link').neq('type', 'scorm');
             q = q.order('created_at', { ascending: false })
                  .range(page * pageSize, (page + 1) * pageSize - 1);
             const { data, error, count } = await q;
@@ -280,7 +280,7 @@ const API = {
                 .select('category', { distinct: true })
                 .order('category', { ascending: true });
             if (trackedOnly) q = q.eq('is_tracked_download', true);
-            if (docsOnly) q = q.not('type', 'in', '("video","link","scorm")');
+            if (docsOnly) q = q.neq('type', 'video').neq('type', 'link').neq('type', 'scorm');
             const { data, error } = await q;
             if (error) throw error;
             return (data || []).map(r => r.category).filter(Boolean);
@@ -983,24 +983,6 @@ const API = {
                 user_id:     AppState.user.id
             }));
             await supabase.from('doc_deadline_reminders').insert(reminderRows).catch(() => {});
-
-            // Notify managers about this employee's overdue
-            const managerTitle = `⚠️ Співробітник не ознайомився з документом`;
-            const userName = AppState.user.user_metadata?.full_name || AppState.profile?.full_name || 'Співробітник';
-            const { data: managers } = await supabase.from('profiles')
-                .select('id').in('role', ['manager', 'admin', 'owner']).catch(() => ({ data: [] }));
-            if (managers?.length) {
-                const mgrNotifs = managers.flatMap(m =>
-                    resources.map(r => ({
-                        user_id:    m.id,
-                        title:      managerTitle,
-                        message:    `${userName} не ознайомився з «${r.title}». Дедлайн минув.`,
-                        type:       'general',
-                        created_by: AppState.user.id
-                    }))
-                );
-                await supabase.from('notifications').insert(mgrNotifs).catch(() => {});
-            }
         },
 
         // Send notifications to all users who have access to a document

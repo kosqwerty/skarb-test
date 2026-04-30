@@ -171,7 +171,7 @@ const App = {
         }
 
         // Show personal calendar reminder after initial page renders
-        setTimeout(() => MyCalendarPage.showTodayReminder(), 800);
+        setTimeout(() => typeof MyCalendarPage !== 'undefined' && MyCalendarPage.showTodayReminder(), 800);
     },
 
     // ── Results Page (quick inline) ───────────────────────────────

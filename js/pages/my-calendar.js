@@ -89,12 +89,16 @@ const MyCalendarPage = {
         if (!this._isReadOnly()) {
             const { data: vw } = await supabase
                 .from('personal_cal_viewers')
-                .select('viewer_id, profiles:viewer_id(id, full_name, avatar_url)')
+                .select('viewer_id')
                 .eq('owner_id', AppState.user.id);
-            this._viewers = (vw || []).map(r => ({
-                id:   r.viewer_id,
-                name: r.profiles?.full_name || '—',
-            }));
+            const viewerIds = (vw || []).map(r => r.viewer_id);
+            if (viewerIds.length) {
+                const { data: viewerProfs } = await supabase
+                    .from('profiles').select('id, full_name').in('id', viewerIds);
+                this._viewers = (viewerProfs || []).map(p => ({ id: p.id, name: p.full_name || '—' }));
+            } else {
+                this._viewers = [];
+            }
         }
     },
 

@@ -185,12 +185,15 @@ const SchedulerPage = {
         // Load calendars shared with current user
         const { data: sharedCals } = await supabase
             .from('personal_cal_viewers')
-            .select('owner_id, profiles:owner_id(id, full_name)')
+            .select('owner_id')
             .eq('viewer_id', AppState.user.id);
-        const sharedCalendars = (sharedCals || []).map(r => ({
-            id:   r.owner_id,
-            name: r.profiles?.full_name || '—',
-        }));
+        const ownerIds = (sharedCals || []).map(r => r.owner_id);
+        let sharedCalendars = [];
+        if (ownerIds.length) {
+            const { data: ownerProfs } = await supabase
+                .from('profiles').select('id, full_name').in('id', ownerIds);
+            sharedCalendars = (ownerProfs || []).map(p => ({ id: p.id, name: p.full_name || '—' }));
+        }
 
         container.innerHTML = `
 <div class="planner-hub">

@@ -36,6 +36,28 @@ const ResourcesPage = {
             return;
         }
 
+        if (view === 'kb' && !AccessRestrictions.canAccess('knowledge-base')) {
+            UI.setBreadcrumb([{ label: 'База знань' }]);
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-icon">🔒</div>
+                    <h3>Доступ обмежено</h3>
+                    <p>У вас немає доступу до розділу «База знань».</p>
+                </div>`;
+            return;
+        }
+
+        if (view === 'docs' && !AccessRestrictions.canAccess('documents')) {
+            UI.setBreadcrumb([{ label: 'Документи' }]);
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-icon">🔒</div>
+                    <h3>Доступ обмежено</h3>
+                    <p>У вас немає доступу до розділу «Документи».</p>
+                </div>`;
+            return;
+        }
+
         if (view === 'docs') {
             UI.setBreadcrumb([{ label: 'Документи' }]);
             const isManager = AppState.canSchedule();

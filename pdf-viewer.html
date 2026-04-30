@@ -160,11 +160,11 @@ canvas { display: block; }
   <select id="zoom-select" title="Масштаб">
     <option value="0.5">50%</option>
     <option value="0.75">75%</option>
-    <option value="1"   selected>100%</option>
+    <option value="1">100%</option>
     <option value="1.25">125%</option>
     <option value="1.5">150%</option>
     <option value="2">200%</option>
-    <option value="fit">По ширині</option>
+    <option value="fit" selected>По ширині</option>
   </select>
   <button class="tb-btn" id="btn-zoom-in"  title="Збільшити (+)">+</button>
 
@@ -210,7 +210,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
 let pdfDoc     = null;
 let totalPages = 0;
 let currentPage = 1;
-let scale      = 1.0;
+let scale      = 'fit';
 let rotation   = 0;
 let rendering  = false;
 
@@ -292,6 +292,14 @@ function setScale(val) {
 }
 
 // ── Scroll → page tracker ──────────────────────────────────────────────────
+let scrollEndSent = false;
+
+function notifyScrollEnd() {
+  if (scrollEndSent) return;
+  scrollEndSent = true;
+  window.parent.postMessage({ type: 'pdf-scroll-end' }, '*');
+}
+
 const io = new IntersectionObserver(entries => {
   entries.forEach(e => {
     if (e.isIntersecting && e.intersectionRatio >= 0.4) {
@@ -301,12 +309,15 @@ const io = new IntersectionObserver(entries => {
         pageInput.value = p;
         updateNav();
       }
+      if (p === totalPages) notifyScrollEnd();
     }
   });
 }, { threshold: 0.4 });
 
 function observePages() {
   wrap.querySelectorAll('.page-wrap').forEach(el => io.observe(el));
+  // Single-page docs: notify immediately after render
+  if (totalPages === 1) notifyScrollEnd();
 }
 
 // ── Load ───────────────────────────────────────────────────────────────────
@@ -322,32 +333,7 @@ async function loadPDF() {
 
     document.getElementById('loading-msg')?.remove();
 
-    if (canDownload) {
-      const btn = document.getElementById('download-btn');
-      btn.style.display = 'flex';
-      btn.addEventListener('click', async () => {
-        btn.disabled = true;
-        btn.textContent = 'Завантаження…';
-        try {
-          const res = await fetch(fileUrl);
-          if (!res.ok) throw new Error('Помилка завантаження');
-          const blob = await res.blob();
-          const blobUrl = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = blobUrl;
-          a.download = title.endsWith('.pdf') ? title : title + '.pdf';
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
-        } catch (e) {
-          alert('Не вдалося завантажити файл: ' + e.message);
-        } finally {
-          btn.disabled = false;
-          btn.innerHTML = '⬇ Завантажити';
-        }
-      });
-    }
+    document.getElementById('download-btn').style.display = 'none';
   } catch (e) {
     wrap.innerHTML = `<div id="error-msg">Помилка завантаження PDF:<br>${e.message}</div>`;
   }

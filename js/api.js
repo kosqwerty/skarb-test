@@ -240,7 +240,7 @@ const API = {
             if (error) throw error;
         },
 
-        async getAll({ courseId, search, category, page = 0, pageSize = 20, includeLessonResources = false, studentOnly = false, trackedOnly = false } = {}) {
+        async getAll({ courseId, search, category, page = 0, pageSize = 20, includeLessonResources = false, studentOnly = false, trackedOnly = false, docsOnly = false } = {}) {
             let q = supabase.from('resources')
                 .select(`*, course:courses(id,title), creator:profiles!created_by(full_name),
                     access_group:access_groups(id,name,is_public,
@@ -254,6 +254,8 @@ const API = {
             if (search) q = q.or(`title.ilike.%${search}%,description.ilike.%${search}%`);
             if (studentOnly) q = q.is('course_id', null);
             if (trackedOnly) q = q.eq('is_tracked_download', true);
+            // docs section: exclude video, link, scorm — keep pdf/file/image/doc types
+            if (docsOnly) q = q.not('type', 'in', '("video","link","scorm")');
             q = q.order('created_at', { ascending: false })
                  .range(page * pageSize, (page + 1) * pageSize - 1);
             const { data, error, count } = await q;
@@ -273,10 +275,13 @@ const API = {
             return data;
         },
 
-        async getCategories() {
-            const { data, error } = await supabase.from('resources')
+        async getCategories({ trackedOnly = false, docsOnly = false } = {}) {
+            let q = supabase.from('resources')
                 .select('category', { distinct: true })
                 .order('category', { ascending: true });
+            if (trackedOnly) q = q.eq('is_tracked_download', true);
+            if (docsOnly) q = q.not('type', 'in', '("video","link","scorm")');
+            const { data, error } = await q;
             if (error) throw error;
             return (data || []).map(r => r.category).filter(Boolean);
         },
@@ -859,28 +864,172 @@ const API = {
 
     // ── Document Downloads ───────────────────────────────────────────
     documentDownloads: {
-        async track(resourceId, { locationId = null, isOffShift = false } = {}) {
+        async track(resourceId, { locationId = null, isOffShift = false, docVersion = 1 } = {}) {
             const { error } = await supabase.from('document_downloads').insert({
                 resource_id:  resourceId,
                 user_id:      AppState.user.id,
                 location_id:  locationId,
-                is_off_shift: isOffShift
+                is_off_shift: isOffShift,
+                doc_version:  docVersion
             });
             if (error) throw error;
         },
 
-        // Returns map { resourceId → latest downloaded_at }
+        // Returns map { resourceId → { at, version } }
         async getMyLatest(resourceIds) {
             if (!resourceIds.length) return {};
             const { data, error } = await supabase.from('document_downloads')
-                .select('resource_id, downloaded_at')
+                .select('resource_id, downloaded_at, doc_version')
                 .eq('user_id', AppState.user.id)
                 .in('resource_id', resourceIds)
                 .order('downloaded_at', { ascending: false });
             if (error) throw error;
             const map = {};
-            (data || []).forEach(d => { if (!map[d.resource_id]) map[d.resource_id] = d.downloaded_at; });
+            (data || []).forEach(d => {
+                if (!map[d.resource_id]) map[d.resource_id] = { at: d.downloaded_at, version: d.doc_version || 1 };
+            });
             return map;
+        },
+
+        // Per-document status for manager/admin: { resourceId → [{ userId, fullName, at, version }] }
+        async getAckStatus(resourceIds) {
+            if (!resourceIds.length) return {};
+            const { data, error } = await supabase.from('document_downloads')
+                .select('resource_id, user_id, downloaded_at, doc_version')
+                .in('resource_id', resourceIds)
+                .order('downloaded_at', { ascending: false });
+            if (error) throw error;
+            const rows = data || [];
+            const userIds = [...new Set(rows.map(r => r.user_id))];
+            let profileMap = {};
+            if (userIds.length) {
+                const { data: profiles } = await supabase.from('profiles')
+                    .select('id, full_name, job_position').in('id', userIds);
+                profileMap = Object.fromEntries((profiles || []).map(p => [p.id, p]));
+            }
+            const result = {};
+            rows.forEach(d => {
+                if (!result[d.resource_id]) result[d.resource_id] = [];
+                if (!result[d.resource_id].find(x => x.userId === d.user_id)) {
+                    const p = profileMap[d.user_id] || {};
+                    result[d.resource_id].push({
+                        userId:   d.user_id,
+                        fullName: p.full_name || '—',
+                        position: p.job_position || '',
+                        at:       d.downloaded_at,
+                        version:  d.doc_version || 1
+                    });
+                }
+            });
+            return result;
+        },
+
+        // Returns Set of user_ids assigned to given locations (for manager's employee filter)
+        async getEmployeeIdsForLocations(locationIds) {
+            if (!locationIds.length) return new Set();
+            const { data, error } = await supabase.from('schedule_assignments')
+                .select('user_id').in('location_id', locationIds);
+            if (error) throw error;
+            return new Set((data || []).map(r => r.user_id));
+        },
+
+        // Returns all employee profiles (for "who hasn't acknowledged" calculation)
+        async getAllEmployees() {
+            const { data, error } = await supabase.from('profiles')
+                .select('id, full_name, job_position, role')
+                .in('role', ['user', 'teacher', 'smm', 'manager'])
+                .order('full_name');
+            if (error) throw error;
+            return data || [];
+        },
+
+        // Check overdue docs for current user, send notifications if not yet sent
+        async checkAndSendReminders(trackedResources) {
+            if (!trackedResources.length) return;
+            const today = new Date();
+            const overdueIds = trackedResources
+                .filter(r => {
+                    if (!r.deadline_days || !r.created_at) return false;
+                    const deadline = new Date(new Date(r.created_at).getTime() + r.deadline_days * 86400000);
+                    return deadline < today;
+                })
+                .map(r => r.id);
+            if (!overdueIds.length) return;
+
+            // Check which ones already have reminders sent
+            const { data: existing } = await supabase.from('doc_deadline_reminders')
+                .select('resource_id')
+                .eq('user_id', AppState.user.id)
+                .in('resource_id', overdueIds);
+            const alreadySent = new Set((existing || []).map(r => r.resource_id));
+            const toNotify = overdueIds.filter(id => !alreadySent.has(id));
+            if (!toNotify.length) return;
+
+            const resources = trackedResources.filter(r => toNotify.includes(r.id));
+
+            // Send notification to user
+            const ntfRows = resources.map(r => ({
+                user_id:    AppState.user.id,
+                title:      '⏰ Прострочений документ',
+                message:    `Термін ознайомлення з документом «${r.title}» закінчився. Будь ласка, ознайомтесь якнайшвидше.`,
+                type:       'general',
+                created_by: AppState.user.id
+            }));
+            await supabase.from('notifications').insert(ntfRows).catch(() => {});
+
+            // Mark as notified
+            const reminderRows = toNotify.map(rid => ({
+                resource_id: rid,
+                user_id:     AppState.user.id
+            }));
+            await supabase.from('doc_deadline_reminders').insert(reminderRows).catch(() => {});
+
+            // Notify managers about this employee's overdue
+            const managerTitle = `⚠️ Співробітник не ознайомився з документом`;
+            const userName = AppState.user.user_metadata?.full_name || AppState.profile?.full_name || 'Співробітник';
+            const { data: managers } = await supabase.from('profiles')
+                .select('id').in('role', ['manager', 'admin', 'owner']).catch(() => ({ data: [] }));
+            if (managers?.length) {
+                const mgrNotifs = managers.flatMap(m =>
+                    resources.map(r => ({
+                        user_id:    m.id,
+                        title:      managerTitle,
+                        message:    `${userName} не ознайомився з «${r.title}». Дедлайн минув.`,
+                        type:       'general',
+                        created_by: AppState.user.id
+                    }))
+                );
+                await supabase.from('notifications').insert(mgrNotifs).catch(() => {});
+            }
+        },
+
+        // Send notifications to all users who have access to a document
+        async notifyOnPublish(resource) {
+            let userIds = [];
+            if (resource.access_group) {
+                const ag = resource.access_group;
+                let q = supabase.from('profiles').select('id');
+                if (!ag.is_public) {
+                    if (ag.cities?.length)     q = q.in('city', ag.cities.map(c => c.city));
+                    if (ag.positions?.length)  q = q.in('job_position', ag.positions.map(p => p.position));
+                    if (ag.departments?.length) q = q.in('subdivision', ag.departments.map(d => d.department));
+                    if (ag.labels?.length)     q = q.in('label', ag.labels.map(l => l.label));
+                }
+                const { data } = await q.catch(() => ({ data: [] }));
+                userIds = (data || []).map(p => p.id);
+            } else {
+                const { data } = await supabase.from('profiles').select('id').catch(() => ({ data: [] }));
+                userIds = (data || []).map(p => p.id);
+            }
+            if (!userIds.length) return;
+            const rows = userIds.map(uid => ({
+                user_id:    uid,
+                title:      '📋 Новий документ для ознайомлення',
+                message:    `З'явився новий документ «${resource.title}», який потребує вашого ознайомлення.${resource.deadline_days ? ` Термін: ${resource.deadline_days} дн.` : ''}`,
+                type:       'general',
+                created_by: AppState.user.id
+            }));
+            await supabase.from('notifications').insert(rows).catch(() => {});
         },
 
         // Tries to find today's active shift location for current user

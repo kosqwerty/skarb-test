@@ -2354,9 +2354,7 @@ select {
 
 /* ── Resource List ──────────────────────────────────────────────── */
 .resource-list { display: flex; flex-direction: column; gap: 0.5rem; }
-.resource-list-docs { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem; }
-.resource-list-docs .resource-item { flex-wrap: wrap; }
-.resource-list-docs .resource-item > div:last-child { width: 100%; justify-content: flex-start; margin-top: .25rem; }
+.resource-list-docs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
 @media (max-width: 700px) { .resource-list-docs { grid-template-columns: 1fr; } }
 .resource-item {
     display: flex;

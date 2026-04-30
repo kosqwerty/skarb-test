@@ -249,6 +249,7 @@ const CoursesPage = {
         try {
             let course = id ? await API.courses.update(id, fields) : await API.courses.create(fields);
             if (this._thumbFile) await API.courses.uploadThumbnail(course.id, this._thumbFile);
+            AuditLog.write(id ? 'course_update' : 'course_create', 'course', title);
             Toast.success('Збережено!', `Курс "${title}" ${id ? 'оновлено' : 'створено'}`);
             Modal.close();
             await this.load();
@@ -267,6 +268,7 @@ const CoursesPage = {
         Loader.show();
         try {
             await API.courses.delete(id);
+            AuditLog.write('course_delete', 'course', title);
             Toast.success('Видалено', `Курс "${title}" видалено`);
             await this.load();
         } catch(e) { Toast.error('Помилка', e.message); }

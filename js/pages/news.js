@@ -736,6 +736,7 @@ const NewsPage = {
                 await API.news.update(news.id, { thumbnail_url: imgUrl });
             }
 
+            AuditLog.write(id ? 'news_update' : 'news_create', 'news', title);
             Toast.success('Успішно!', `Новина "${title}" ${id ? 'оновлена' : 'додана'}`);
             const target = `#/news/${news.id}`;
             if (location.hash === target) {
@@ -759,6 +760,7 @@ const NewsPage = {
         Loader.show();
         try {
             await API.news.delete(id);
+            AuditLog.write('news_delete', 'news', title);
             Toast.success('Новина видалина');
             Router.go('news');
         } catch(e) { Toast.error('Помилка', e.message); }

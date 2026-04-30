@@ -31,6 +31,7 @@ const AdminPage = {
                 <button class="tab" onclick="AdminPage.switchTab('enrollments', this)">🎓 Записи</button>
                 ${canManageUsers ? `<button class="tab" onclick="AdminPage.switchTab('access-groups', this)">🔐 Групи доступу</button>` : ''}
                 ${AppState.isOwner() ? `<button class="tab" onclick="AdminPage.switchTab('trash', this)">🗑 Кошик</button>` : ''}
+                ${AppState.isOwner() ? `<button class="tab" onclick="AdminPage.switchTab('logs', this)">📋 Логи</button>` : ''}
             </div>
 
             <div id="admin-content"></div>`;
@@ -64,6 +65,7 @@ const AdminPage = {
                 case 'enrollments': await this._renderEnrollments(el); break;
                 case 'access-groups': await AccessGroupsPage.renderTab(el);         break;
                 case 'trash':         await this._renderTrash(el);                  break;
+                case 'logs':          await this._renderLogs(el);                   break;
             }
         } catch(e) {
             el.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>${e.message}</h3></div>`;
@@ -119,6 +121,12 @@ const AdminPage = {
         }
         this._pageCurrent = 1;
         this._applyPagination();
+        // persist sort alongside filters
+        try {
+            const saved = JSON.parse(localStorage.getItem('lms_admin_user_filters') || '{}');
+            saved._sort = { field: s.field, dir: s.dir };
+            localStorage.setItem('lms_admin_user_filters', JSON.stringify(saved));
+        } catch(_) {}
     },
 
     _renderUsers(el) {
@@ -459,14 +467,14 @@ const AdminPage = {
 
     async changeRole(userId, role) {
         if (role === 'owner') {
-            // Owner can only be set via Transfer Ownership button
             Toast.error('Помилка', 'Для передачі прав власника скористайтесь кнопкою 👑');
-            this._renderUsers(document.getElementById('admin-content'));
             return;
         }
         try {
             await API.profiles.updateRole(userId, role);
+            AuditLog.write('role_change', 'user', userId, { role });
             Toast.success('Роль змінено');
+            this._renderUsersList(document.getElementById('admin-content'));
         } catch(e) { Toast.error('Помилка', e.message); }
     },
 
@@ -483,9 +491,10 @@ const AdminPage = {
             await API.profiles.updateRole(toUserId, 'owner');
             // DB trigger enforce_single_owner automatically demotes previous owner to admin
             await Auth._loadProfile(); // refresh own profile
+            AuditLog.write('ownership_transfer', 'user', toUserName);
             Toast.success('Права власника передано', toUserName);
             UI.renderNavigation(AppState.profile?.role);
-            this._renderUsers(document.getElementById('admin-content'));
+            this._renderUsersList(document.getElementById('admin-content'));
         } catch(e) {
             Toast.error('Помилка', e.message);
         } finally { Loader.hide(); }
@@ -510,7 +519,7 @@ const AdminPage = {
             });
             if (error) throw error;
             Toast.success(isActive ? 'Заблоковано — сесію анульовано' : 'Розблоковано');
-            this._renderUsers(document.getElementById('admin-content'));
+            this._renderUsersList(document.getElementById('admin-content'));
         } catch(e) { Toast.error('Помилка', e.message); }
         finally { Loader.hide(); }
     },
@@ -1066,8 +1075,10 @@ const AdminPage = {
             if (labelVal && data?.id) {
                 await supabase.from('profiles').update({ label_set_by: AppState.profile?.role }).eq('id', data.id);
             }
+            const fullName = [lastName, firstName, patronymic].filter(Boolean).join(' ');
+            AuditLog.write('user_create', 'user', fullName, { role });
             Toast.success('Користувача створено');
-            this._renderUsers(document.getElementById('admin-content'));
+            this._renderUsersList(document.getElementById('admin-content'));
         } catch(e) {
             Toast.error('Помилка', e.message);
         } finally { Loader.hide(); }
@@ -1204,6 +1215,8 @@ const AdminPage = {
         ['uf-date','uf-activity'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
         ['uf-role','uf-status'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
         ['uf-name','uf-job','uf-city','uf-subdivision','uf-label'].forEach(id => MultiSelect.clear(id));
+        this._sortState = { field: null, dir: 1 };
+        document.querySelectorAll('.sort-arrow').forEach(el => el.classList.remove('active'));
         localStorage.removeItem('lms_admin_user_filters');
         this._applyUserFilters();
     },
@@ -1224,6 +1237,7 @@ const AdminPage = {
             if (Array.isArray(f.subdivision) && f.subdivision.length) MultiSelect.setValues('uf-subdivision', f.subdivision);
             if (Array.isArray(f.label)       && f.label.length)       MultiSelect.setValues('uf-label',       f.label);
             this._applyUserFilters();
+            if (f._sort?.field) this._sortUsers(f._sort.field, f._sort.dir);
         } catch(_) {}
     },
 
@@ -1332,9 +1346,10 @@ const AdminPage = {
                 API.profiles.update(u.id, { is_active: false })
                     .then(() => supabase.rpc('admin_set_user_banned', { p_user_id: u.id, p_banned: true }))
             ));
+            AuditLog.write('user_block', 'users', users.map(u => u.full_name).join(', '), { count: users.length });
             Toast.success(`Заблоковано: ${users.length} — сесії анульовано`);
             this._clearSelection();
-            await this._renderUsers(document.getElementById('admin-content'));
+            await this._renderUsersList(document.getElementById('admin-content'));
         } catch(e) { Toast.error('Помилка', e.message); } finally { Loader.hide(); }
     },
 
@@ -1347,9 +1362,10 @@ const AdminPage = {
                 API.profiles.update(u.id, { is_active: true })
                     .then(() => supabase.rpc('admin_set_user_banned', { p_user_id: u.id, p_banned: false }))
             ));
+            AuditLog.write('user_unblock', 'users', users.map(u => u.full_name).join(', '), { count: users.length });
             Toast.success(`Розблоковано: ${users.length}`);
             this._clearSelection();
-            await this._renderUsers(document.getElementById('admin-content'));
+            await this._renderUsersList(document.getElementById('admin-content'));
         } catch(e) { Toast.error('Помилка', e.message); } finally { Loader.hide(); }
     },
 
@@ -1384,9 +1400,10 @@ const AdminPage = {
         Loader.show();
         try {
             await Promise.all(ids.map(id => API.profiles.update(id, { role })));
+            AuditLog.write('role_change', 'users', `${ids.length} користувачів`, { role, count: ids.length });
             Toast.success(`Роль змінено для ${ids.length} користувачів`);
             this._clearSelection();
-            await this._renderUsers(document.getElementById('admin-content'));
+            await this._renderUsersList(document.getElementById('admin-content'));
         } catch(e) { Toast.error('Помилка', e.message); } finally { Loader.hide(); }
     },
 
@@ -1437,7 +1454,10 @@ const AdminPage = {
         }
         Loader.hide();
 
-        if (done)   Toast.success('Видалено', `${done} користувач(ів) видалено`);
+        if (done) {
+            AuditLog.write('user_delete', 'users', toDelete.map(u => u.full_name).join(', '), { count: done });
+            Toast.success('Видалено', `${done} користувач(ів) видалено`);
+        }
         if (failed) Toast.error('Помилки', `${failed} не вдалося видалити`);
         this._renderUsersList(document.getElementById('admin-content'));
     },
@@ -1944,6 +1964,116 @@ const AdminPage = {
             await this._renderDirectories(document.getElementById('admin-content'));
         } catch(e) { Toast.error('Помилка', e.message); }
         finally { Loader.hide(); }
+    },
+
+    // ── Логи дій персоналу (тільки власник) ──────────────────────
+    async _renderLogs(el) {
+        if (!AppState.isOwner()) {
+            el.innerHTML = `<div class="empty-state"><div class="empty-icon">🔒</div><h3>Доступ лише для власника</h3></div>`;
+            return;
+        }
+        el.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
+
+        const { data: logs, error } = await supabase
+            .from('activity_logs')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(300);
+
+        if (error) {
+            el.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>${error.message}</h3></div>`;
+            return;
+        }
+
+        const actionLabel = {
+            user_create:        'Створив користувача',
+            user_delete:        'Видалив користувача',
+            user_block:         'Заблокував',
+            user_unblock:       'Розблокував',
+            role_change:        'Змінив роль',
+            ownership_transfer: 'Передав права власника',
+            course_create:      'Створив курс',
+            course_update:      'Оновив курс',
+            course_delete:      'Видалив курс',
+            news_create:        'Створив новину',
+            news_update:        'Оновив новину',
+            news_delete:        'Видалив новину',
+            test_create:        'Створив тест',
+            test_update:        'Оновив тест',
+            test_delete:        'Видалив тест',
+        };
+
+        const roleColors = { owner: '#f59e0b', admin: '#6366f1', smm: '#10b981' };
+        const roleLabels = { owner: 'Власник', admin: 'Адмін', smm: 'SMM' };
+
+        const uniqueRoles   = [...new Set(logs.map(l => l.actor_role).filter(Boolean))];
+        const uniqueActions = [...new Set(logs.map(l => l.action).filter(Boolean))];
+
+        el.innerHTML = `
+            <div style="display:flex;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap;align-items:center">
+                <select id="log-filter-role" onchange="AdminPage._filterLogs()" style="min-width:130px">
+                    <option value="">Всі ролі</option>
+                    ${uniqueRoles.map(r => `<option value="${r}">${roleLabels[r]||r}</option>`).join('')}
+                </select>
+                <select id="log-filter-action" onchange="AdminPage._filterLogs()" style="min-width:200px">
+                    <option value="">Всі дії</option>
+                    ${uniqueActions.map(a => `<option value="${a}">${actionLabel[a]||a}</option>`).join('')}
+                </select>
+                <input id="log-filter-search" type="text" placeholder="Пошук за ПІБ або об'єктом..."
+                       style="flex:1;min-width:200px" oninput="AdminPage._filterLogs()">
+                <span id="log-count" style="font-size:.8rem;color:var(--text-muted)"></span>
+            </div>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width:150px">Час</th>
+                            <th>Хто</th>
+                            <th>Дія</th>
+                            <th>Об'єкт</th>
+                            <th>Деталі</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logs-tbody">
+                        ${logs.map(l => {
+                            const color = roleColors[l.actor_role] || 'var(--text-muted)';
+                            const meta  = l.meta ? Object.entries(l.meta).map(([k,v]) => `<span style="color:var(--text-muted)">${k}:</span> ${v}`).join(' &nbsp;') : '';
+                            return `<tr data-role="${l.actor_role||''}" data-action="${l.action||''}" data-search="${(l.actor_name||'').toLowerCase()} ${(l.entity_name||'').toLowerCase()}">
+                                <td style="font-size:.78rem;color:var(--text-muted);white-space:nowrap">${Fmt.datetime(l.created_at)}</td>
+                                <td>
+                                    <div style="font-weight:600;font-size:.875rem">${l.actor_name||'—'}</div>
+                                    <span style="font-size:.72rem;font-weight:600;color:${color}">${roleLabels[l.actor_role]||l.actor_role||''}</span>
+                                </td>
+                                <td style="font-size:.875rem">${actionLabel[l.action]||l.action||'—'}</td>
+                                <td style="font-size:.875rem">
+                                    ${l.entity_type ? `<span style="font-size:.72rem;color:var(--text-muted)">${l.entity_type}</span><br>` : ''}
+                                    ${l.entity_name||'—'}
+                                </td>
+                                <td style="font-size:.78rem">${meta}</td>
+                            </tr>`;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>`;
+
+        this._filterLogs();
+    },
+
+    _filterLogs() {
+        const role   = document.getElementById('log-filter-role')?.value   || '';
+        const action = document.getElementById('log-filter-action')?.value || '';
+        const search = (document.getElementById('log-filter-search')?.value || '').toLowerCase();
+        const rows   = [...document.querySelectorAll('#logs-tbody tr')];
+        let count = 0;
+        rows.forEach(r => {
+            const match = (!role   || r.dataset.role   === role)
+                       && (!action || r.dataset.action === action)
+                       && (!search || r.dataset.search.includes(search));
+            r.style.display = match ? '' : 'none';
+            if (match) count++;
+        });
+        const el = document.getElementById('log-count');
+        if (el) el.textContent = `Показано: ${count}`;
     },
 
     // ── Кошик (тільки власник) ────────────────────────────────────

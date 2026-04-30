@@ -1039,3 +1039,23 @@ const Excel = {
         XLSX.writeFile(wb, `${filename}_${new Date().toISOString().slice(0,10)}.xlsx`);
     }
 };
+
+const AuditLog = {
+    async write(action, entityType, entityName, meta = {}) {
+        const p = AppState.profile;
+        if (!p || !['owner','admin','smm'].includes(p.role)) return;
+        try {
+            await supabase.from('activity_logs').insert({
+                user_id:     AppState.user.id,
+                actor_name:  p.full_name,
+                actor_role:  p.role,
+                action,
+                entity_type: entityType,
+                entity_name: String(entityName || ''),
+                meta: Object.keys(meta).length ? meta : null
+            });
+        } catch(e) {
+            console.warn('AuditLog.write failed:', e.message);
+        }
+    }
+};

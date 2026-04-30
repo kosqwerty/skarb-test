@@ -432,6 +432,7 @@ const TestsPage = {
         Loader.show();
         try {
             let test = id ? await API.tests.update(id, fields) : await API.tests.create(fields);
+            AuditLog.write(id ? 'test_update' : 'test_create', 'test', title);
             Toast.success('Збережено!');
             Modal.close();
             if (!id) this.openQuestionEditor(test.id);
@@ -444,7 +445,7 @@ const TestsPage = {
         const ok = await Modal.confirm({ title: 'Видалити тест', message: `Видалити тест "${title}"?`, confirmText: 'Видалити', danger: true });
         if (!ok) return;
         Loader.show();
-        try { await API.tests.delete(id); Toast.success('Тест видалено'); history.back(); }
+        try { await API.tests.delete(id); AuditLog.write('test_delete', 'test', title); Toast.success('Тест видалено'); history.back(); }
         catch(e) { Toast.error('Помилка', e.message); }
         finally { Loader.hide(); }
     },

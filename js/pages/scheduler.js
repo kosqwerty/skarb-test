@@ -237,7 +237,7 @@ const SchedulerPage = {
     </div>
     ${sharedCalendars.length ? `
     <div class="planner-hub-section-title">📅 Спільні календарі</div>
-    <div class="planner-hub-cards">
+    <div class="planner-hub-cards" style="grid-template-columns:repeat(2,1fr)">
         ${sharedCalendars.map(c => `
         <button class="planner-hub-card" onclick="Router.go('my-calendar?owner=${c.id}')">
             <div class="planner-hub-card-ico" style="background:rgba(16,185,129,.1);color:#10b981">📆</div>

@@ -155,6 +155,10 @@ const App = {
 
             'schedule-view': async ({ container }) => {
                 await ScheduleViewPage.init(container);
+            },
+
+            'my-calendar': async ({ container, params }) => {
+                await MyCalendarPage.init(container, params);
             }
         });
 
@@ -165,6 +169,9 @@ const App = {
         if (!location.hash || location.hash === '#' || location.hash === '#/') {
             Router.go('dashboard');
         }
+
+        // Show personal calendar reminder after initial page renders
+        setTimeout(() => MyCalendarPage.showTodayReminder(), 800);
     },
 
     // ── Results Page (quick inline) ───────────────────────────────

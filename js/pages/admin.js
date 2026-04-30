@@ -1222,24 +1222,41 @@ const AdminPage = {
     },
 
     _restoreUserFilters() {
-        try {
-            const saved = localStorage.getItem('lms_admin_user_filters');
-            if (!saved) return;
-            const f = JSON.parse(saved);
-            const set = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
-            set('uf-role',    f.role);
-            set('uf-date',    f.date);
-            set('uf-activity',f.activity);
-            set('uf-status',  f.status);
-            if (Array.isArray(f.name)        && f.name.length)        MultiSelect.setValues('uf-name',        f.name);
-            if (Array.isArray(f.job)         && f.job.length)         MultiSelect.setValues('uf-job',         f.job);
-            if (Array.isArray(f.city)        && f.city.length)        MultiSelect.setValues('uf-city',        f.city);
-            if (Array.isArray(f.subdivision) && f.subdivision.length) MultiSelect.setValues('uf-subdivision', f.subdivision);
-            if (Array.isArray(f.label)       && f.label.length)       MultiSelect.setValues('uf-label',       f.label);
-            this._applyUserFilters();
-            if (f._sort?.field) this._sortUsers(f._sort.field, f._sort.dir);
-        } catch(_) {}
-    },
+    try {
+        const saved = localStorage.getItem('lms_admin_user_filters');
+        if (!saved) return;
+        const f = JSON.parse(saved);
+        const set = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
+        set('uf-role',     f.role);
+        set('uf-date',     f.date);
+        set('uf-activity', f.activity);
+        set('uf-status',   f.status);
+        if (Array.isArray(f.name)        && f.name.length)        MultiSelect.setValues('uf-name',        f.name);
+        if (Array.isArray(f.job)         && f.job.length)         MultiSelect.setValues('uf-job',         f.job);
+        if (Array.isArray(f.city)        && f.city.length)        MultiSelect.setValues('uf-city',        f.city);
+        if (Array.isArray(f.subdivision) && f.subdivision.length) MultiSelect.setValues('uf-subdivision', f.subdivision);
+        if (Array.isArray(f.label)       && f.label.length)       MultiSelect.setValues('uf-label',       f.label);
+
+        // ── Відновлюємо сортування до застосування фільтрів ──
+        if (f._sort?.field) {
+            const s = this._sortState;
+            s.field = f._sort.field;
+            s.dir   = f._sort.dir;
+            // Підсвічуємо стрілку
+            const btn = document.querySelector(`#sort-btns-${s.field} .sort-${s.dir === 1 ? 'up' : 'down'}`);
+            if (btn) btn.classList.add('active');
+            // Сортуємо рядки напряму, без виклику _sortUsers (щоб не було скидання)
+            const tbody = document.getElementById('users-tbody');
+            if (tbody) {
+                const rows = [...tbody.querySelectorAll('tr')];
+                rows.sort((a, b) => (a.dataset[s.field] || '').localeCompare(b.dataset[s.field] || '', 'uk') * s.dir);
+                rows.forEach(r => tbody.appendChild(r));
+            }
+        }
+
+        this._applyUserFilters();
+    } catch(_) {}
+},
 
     // ── Bulk selection ────────────────────────────────────────────
     _onUserCheckbox(cb) {

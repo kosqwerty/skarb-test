@@ -136,7 +136,7 @@ const SchedulerPage = {
                 return;
             }
             UI.setBreadcrumb([
-                { label: 'Планувальник', route: 'scheduler' },
+                { label: 'Розділ планування', route: 'scheduler' },
                 { label: 'Планувальник сповіщень' }
             ]);
             if (this._presetRecipients) {
@@ -164,7 +164,7 @@ const SchedulerPage = {
     // ── Hub ──────────────────────────────────────────────────────
 
     async _renderHub(container) {
-        UI.setBreadcrumb([{ label: 'Планувальник' }]);
+        UI.setBreadcrumb([{ label: 'Розділ планування' }]);
         const uid = AppState.user.id;
         const isManager = AppState.isManager() || AppState.isAdmin() || AppState.isOwner();
 
@@ -187,7 +187,7 @@ const SchedulerPage = {
     <div class="planner-hub-hero">
         <div class="planner-hub-ico">📅</div>
         <div>
-            <h1 class="planner-hub-title">Планувальник</h1>
+            <h1 class="planner-hub-title">Розділ планування</h1>
             <p class="planner-hub-sub">Оберіть розділ</p>
         </div>
     </div>
@@ -195,7 +195,7 @@ const SchedulerPage = {
         ${isManager ? `
         <button class="planner-hub-card" onclick="Router.go('schedule-graph')">
             <div class="planner-hub-card-ico" style="background:rgba(99,102,241,.12);color:#6366f1">🗓</div>
-            <div class="planner-hub-card-title">Графік роботи</div>
+            <div class="planner-hub-card-title">Графік роботи ломбарду</div>
             <div class="planner-hub-card-desc">Управління розкладом співробітників по локаціях</div>
         </button>` : ''}
         ${showMySchedule ? `

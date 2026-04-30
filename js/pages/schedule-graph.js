@@ -1,5 +1,5 @@
 // ================================================================
-// EduFlow LMS — Графік роботи
+// EduFlow LMS — Графік роботи ломбарду
 // Manager: locations, employees, schedule matrix, change log
 // Employee: view + edit own schedule
 //
@@ -175,7 +175,7 @@ const ScheduleGraphPage = {
 
         UI.setBreadcrumb([
             { label: 'Планувальник', route: 'scheduler' },
-            { label: 'Графік роботи' }
+            { label: 'Графік роботи ломбарду' }
         ]);
         container.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
 
@@ -537,7 +537,7 @@ ${this._styles()}`;
     <div class="sg-hero-inner">
         <div class="sg-hero-ico">📅</div>
         <div style="flex:1">
-            <h1 class="sg-hero-title">Графік роботи</h1>
+            <h1 class="sg-hero-title">Графік роботи ломбарду</h1>
             <p class="sg-hero-sub">Керуйте розкладом співробітників по локаціях</p>
         </div>
         ${this._isAssignedAsEmployee ? `
@@ -1171,8 +1171,19 @@ ${this._styles()}`;
             const ids = [...new Set(pAssignRows.map(a => a.user_id).filter(Boolean))];
             if (ids.length) {
                 const { data: pd } = await supabase.from('profiles')
-                    .select('id, full_name, avatar_url, role, job_position').in('id', ids);
+                    .select('id, full_name, avatar_url, role, job_position, manager_id').in('id', ids);
                 pProfiles = pd || [];
+
+                const { data: pDovData } = await supabase
+                    .from('profile_dovirenosti')
+                    .select('profile_id, dovirenosti(name)')
+                    .in('profile_id', ids);
+                const pDovByUser = {};
+                (pDovData || []).forEach(r => {
+                    if (!pDovByUser[r.profile_id]) pDovByUser[r.profile_id] = [];
+                    if (r.dovirenosti?.name) pDovByUser[r.profile_id].push(r.dovirenosti.name);
+                });
+                pProfiles.forEach(p => { p._dovirenosti = pDovByUser[p.id] || []; });
             }
         }
 
@@ -1674,10 +1685,11 @@ ${this._styles()}`;
             `;
 
             if (isFree) {
+                const onclick = isPartner
+                    ? `ScheduleGraphPage._confirmPartnerSubstitute('${a.user_id}','${(name).replace(/'/g,"\\'")}')`
+                    : `ScheduleGraphPage._assignSubstitute('${a.user_id}')`;
                 return `<div class="sg-subst-person sg-subst-free-card${wantsSub?' sg-subst-wants-sub':''}${isPartner?' sg-subst-partner':''}"
-                    ${isPartner
-                        ? `title="${a.partnerOwnerLabel||'Керівник'}: ${a.partnerOwnerName}"`
-                        : `onclick="ScheduleGraphPage._assignSubstitute('${a.user_id}')" title="Натисніть щоб призначити на підміну"`}>
+                    onclick="${onclick}" title="Натисніть щоб призначити на підміну">
                     <div class="sg-av sm">${initials}</div>
                     <div style="flex:1;min-width:0">
                         <div class="sg-subst-name">${name}</div>
@@ -1687,7 +1699,7 @@ ${this._styles()}`;
                     </div>
                     ${cntBadge}
                     ${badge}
-                    ${isPartner ? '' : `<span class="sg-subst-add-btn">+</span>`}
+                    <span class="sg-subst-add-btn">+</span>
                 </div>`;
             }
             return `<div class="sg-subst-person busy${needsSub?' sg-subst-needs-sub':''}${isPartner?' sg-subst-partner':''}">
@@ -1726,7 +1738,18 @@ ${this._styles()}`;
     </div>
     <div class="sg-subst-tab-content" id="sg-stab-content-free">
         <div class="sg-subst-scroll sg-subst-modal-scroll">
-            ${freeList.length ? freeList.map(a => renderPerson(a, true)).join('') : '<div class="sg-subst-empty">Немає вільних співробітників</div>'}
+            ${(() => {
+                const own     = freeList.filter(a => !a.isPartner);
+                const partner = freeList.filter(a =>  a.isPartner);
+                if (!freeList.length) return '<div class="sg-subst-empty">Немає вільних співробітників</div>';
+                return [
+                    ...own.map(a => renderPerson(a, true)),
+                    ...(partner.length ? [
+                        `<div class="sg-subst-section-sep">🤝 Партнери — узгодьте заміну у їх керівника</div>`,
+                        ...partner.map(a => renderPerson(a, true))
+                    ] : [])
+                ].join('');
+            })()}
         </div>
     </div>
     <div class="sg-subst-tab-content" id="sg-stab-content-busy" style="display:none">
@@ -1752,6 +1775,43 @@ ${this._styles()}`;
             return;
         }
         this._showSubstModal(userId, userName, available);
+    },
+
+    _confirmPartnerSubstitute(userId, name) {
+        const a            = this._allAssignments.find(x => x.user_id === userId);
+        const managerLabel = a?.partnerOwnerLabel || 'Керівник';
+        const managerName  = a?.partnerOwnerName  || '';
+        const dovirenosti  = a?.profile?._dovirenosti || [];
+        document.getElementById('sg-partner-confirm-modal')?.remove();
+        const el = document.createElement('div');
+        el.id = 'sg-partner-confirm-modal';
+        el.className = 'sg-overlay';
+        el.innerHTML = `
+<div class="sg-modal" style="max-width:400px;height:auto">
+    <div class="sg-mhdr">
+        <h3 style="margin:0;font-size:1rem">⚠️ Підтвердження</h3>
+        <button class="sg-mclose" onclick="document.getElementById('sg-partner-confirm-modal').remove()">✕</button>
+    </div>
+    <p style="font-size:.88rem;line-height:1.55;margin:0 0 6px">
+        Ви додаєте <strong>${name}</strong> до свого графіку.
+    </p>
+    <p style="font-size:.82rem;color:var(--text-muted);line-height:1.5;margin:0 0 ${dovirenosti.length ? '10px' : '20px'}">
+        Цей співробітник належить до іншої локації.
+        ${managerName ? `<br>${managerLabel}: <strong style="color:var(--text)">${managerName}</strong>.` : ''}
+        <br>Переконайтесь, що ви попередньо погодили це з його керівником.
+    </p>
+    ${dovirenosti.length ? `
+    <div style="font-size:.78rem;margin:0 0 20px;display:flex;flex-wrap:wrap;gap:5px">
+        <span style="color:var(--text-muted);align-self:center">Довіреності:</span>
+        ${dovirenosti.map(d => `<span style="background:rgba(99,102,241,.12);color:#818cf8;border:1px solid rgba(99,102,241,.25);border-radius:6px;padding:2px 8px">${d}</span>`).join('')}
+    </div>` : ''}
+    <div class="sg-modal-actions">
+        <button class="sg-btn-save" onclick="document.getElementById('sg-partner-confirm-modal').remove();ScheduleGraphPage._assignSubstitute('${userId}')">Додати</button>
+        <button class="sg-btn-cancel" onclick="document.getElementById('sg-partner-confirm-modal').remove()">Скасувати</button>
+    </div>
+</div>`;
+        document.body.appendChild(el);
+        el.addEventListener('click', e => { if (e.target === el) el.remove(); });
     },
 
     _showSubstModal(userId, userName, locations) {
@@ -1794,12 +1854,25 @@ ${this._styles()}`;
 
     async _confirmSubstitute(userId, locId) {
         document.getElementById('sg-subst-modal')?.remove();
+        const prof      = this._allAssignments.find(a => a.user_id === userId)?.profile;
+        const isForeign = prof?.manager_id && prof.manager_id !== AppState.user.id;
+
         const { error } = await supabase.from('schedule_assignments')
-            .insert({ location_id: locId, user_id: userId, created_by: AppState.user.id });
+            .insert({ location_id: locId, user_id: userId, created_by: AppState.user.id, is_primary: !isForeign });
         if (error) { Toast.error('Помилка', error.message); return; }
 
-        const loc  = this._locations.find(l => l.id === locId);
-        const prof = this._allAssignments.find(a => a.user_id === userId)?.profile;
+        if (isForeign && this._substDate) {
+            await supabase.from('schedule_entries').upsert({
+                location_id: locId,
+                user_id:     userId,
+                date:        this._substDate,
+                shift_type:  'day_off',
+                updated_by:  AppState.user.id,
+                updated_at:  new Date().toISOString(),
+            }, { onConflict: 'location_id,user_id,date' });
+        }
+
+        const loc = this._locations.find(l => l.id === locId);
         Toast.success(`${prof?.full_name || 'Співробітника'} додано до "${loc?.name || 'локації'}"`);
 
         await this._loadAllData();
@@ -2505,10 +2578,12 @@ ${this._styles()}`;
         if (actions) actions.before(el);
     },
 
-    _whKey(locId) { return `sg_wh_${locId}`; },
-
     _getWorkHours(locId) {
-        try { return JSON.parse(localStorage.getItem(this._whKey(locId)) || '{}'); } catch { return {}; }
+        const loc = this._locations.find(l => l.id === locId);
+        if (!loc) return {};
+        return (loc.work_start && loc.work_end)
+            ? { start: loc.work_start.slice(0, 5), end: loc.work_end.slice(0, 5) }
+            : {};
     },
 
     _editWorkHours() {
@@ -2528,13 +2603,18 @@ ${this._styles()}`;
         document.getElementById('sg-wh-inputs').style.display = 'none';
     },
 
-    _saveWorkHours() {
+    async _saveWorkHours() {
         const start = document.getElementById('sg-wh-start')?.value;
         const end   = document.getElementById('sg-wh-end')?.value;
         if (!start || !end) return;
-        localStorage.setItem(this._whKey(this._locId), JSON.stringify({ start, end }));
+        const { error } = await supabase.from('schedule_locations')
+            .update({ work_start: start, work_end: end })
+            .eq('id', this._locId);
+        if (error) { Toast.error('Помилка збереження'); return; }
+        const loc = this._locations.find(l => l.id === this._locId);
+        if (loc) { loc.work_start = start; loc.work_end = end; }
         this._cancelWorkHours();
-        document.getElementById('sg-wh-display').textContent = `${start} — ${end}`;
+        this._render(this._container);
         Toast.success('Час роботи збережено');
     },
 
@@ -2768,17 +2848,20 @@ ${this._styles()}`;
     async _confirmAddEmployee(userId) {
         document.getElementById('sg-emp-modal')?.remove();
         const { data: prof } = await supabase.from('profiles')
-            .select('id, full_name, avatar_url, role, label')
+            .select('id, full_name, avatar_url, role, label, manager_id')
             .eq('id', userId)
             .single();
 
+        const isForeign = prof?.manager_id && prof.manager_id !== AppState.user.id;
+        const isPrimary = !isForeign;
+
         const { data, error } = await supabase.from('schedule_assignments')
-            .insert({ location_id: this._locId, user_id: userId, original_user_id: userId, created_by: AppState.user.id, employee_name: prof?.full_name || null, is_primary: true })
+            .insert({ location_id: this._locId, user_id: userId, original_user_id: userId, created_by: AppState.user.id, employee_name: prof?.full_name || null, is_primary: isPrimary })
             .select('id, user_id, original_user_id, employee_name, is_primary')
             .single();
         if (error) { Toast.error('Помилка', error.message); return; }
 
-        this._assignments.push({ id: data.id, user_id: data.user_id, original_user_id: data.original_user_id, employee_name: data.employee_name, is_primary: true, profile: prof });
+        this._assignments.push({ id: data.id, user_id: data.user_id, original_user_id: data.original_user_id, employee_name: data.employee_name, is_primary: isPrimary, profile: prof });
         this._render(this._container);
         Toast.success('Додано до графіку');
     },
@@ -3830,6 +3913,12 @@ ${this._styles()}`;
     background:rgba(99,102,241,.05) !important;
     border-left:3px solid rgba(99,102,241,.35);
     cursor:default !important;
+    opacity:.85;
+}
+.sg-subst-section-sep {
+    font-size:.72rem;color:var(--text-muted);font-style:italic;
+    padding:8px 4px 4px;margin-top:6px;
+    border-top:1px solid var(--border);
 }
 
 /* Viewers modal */
@@ -4678,15 +4767,20 @@ const ScheduleGraphEmployee = {
 
         const locIds = assignRows.map(a => a.location_id);
         const { data: lData } = await supabase.from('schedule_locations')
-            .select('id, name, locked')
+            .select('id, name, locked, work_start, work_end')
             .in('id', locIds);
         const locs = lData || [];
 
-        this._assignments = assignRows.map(a => ({
-            locId:   a.location_id,
-            locName: locs.find(l => l.id === a.location_id)?.name || 'Локація',
-            locked:  locs.find(l => l.id === a.location_id)?.locked || false
-        }));
+        this._assignments = assignRows.map(a => {
+            const loc = locs.find(l => l.id === a.location_id) || {};
+            return {
+                locId:      a.location_id,
+                locName:    loc.name || 'Локація',
+                locked:     loc.locked || false,
+                work_start: loc.work_start || null,
+                work_end:   loc.work_end   || null,
+            };
+        });
 
         if (!this._locId || !this._assignments.find(a => a.locId === this._locId))
             this._locId = this._assignments[0].locId;
@@ -4870,8 +4964,9 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
 
     _empHero(locName, locId) {
         const isManager = AppState.isManager?.() || AppState.isAdmin?.() || AppState.isOwner?.();
-        const wh = locId ? ScheduleGraphPage._getWorkHours(locId) : {};
-        const whText = (wh.start && wh.end) ? `${wh.start} — ${wh.end}` : '';
+        const asgn = locId ? this._assignments.find(a => a.locId === locId) : null;
+        const whText = (asgn?.work_start && asgn?.work_end)
+            ? `${asgn.work_start.slice(0,5)} — ${asgn.work_end.slice(0,5)}` : '';
         return `
 <div class="sg-hero" style="margin-bottom:20px">
     <div class="sg-hero-inner">

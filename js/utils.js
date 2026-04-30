@@ -192,7 +192,7 @@ const UI = {
                 { title: 'Навчання', items: contentItems },
                 { title: 'Управління', items: [
                     { icon: '📊', label: 'Аналітика',         route: 'analytics' },
-                    { icon: '📅', label: 'Планувальник',       route: 'scheduler' },
+                    { icon: '📅', label: 'Розділ планування',       route: 'scheduler' },
                     { icon: '⚙️', label: 'Адміністрування',   route: 'admin' },
                     { icon: '🔒', label: 'Обмеження доступу', route: 'label-access', noStar: true }
                 ]},
@@ -209,7 +209,7 @@ const UI = {
             return [
                 { title: 'Навчання', items: managerNav },
                 { title: 'Управління', items: [
-                    { icon: '📅', label: 'Планувальник', route: 'scheduler' }
+                    { icon: '📅', label: 'Розділ планування', route: 'scheduler' }
                 ]},
                 { title: 'Особисте', items: [ contactsItem, bmItem, ntfItem ] }
             ];
@@ -220,7 +220,7 @@ const UI = {
                 { title: 'Управління', items: [
                     { icon: '📊', label: 'Аналітика',   route: 'analytics' },
                     { icon: '⚙️', label: 'Контент',     route: 'admin' },
-                    { icon: '📅', label: 'Планувальник', route: 'scheduler', noStar: true }
+                    { icon: '📅', label: 'Розділ планування', route: 'scheduler', noStar: true }
                 ]},
                 { title: 'Особисте', items: [ contactsItem, bmItem, ntfItem ] }
             ];
@@ -230,7 +230,7 @@ const UI = {
                 { title: 'Навчання', items: contentItems },
                 { title: 'Управління', items: [
                     { icon: '📊', label: 'Аналітика',   route: 'analytics' },
-                    { icon: '📅', label: 'Планувальник', route: 'scheduler', noStar: true }
+                    { icon: '📅', label: 'Розділ планування', route: 'scheduler', noStar: true }
                 ]},
                 { title: 'Особисте', items: [ contactsItem, bmItem, ntfItem ] }
             ];
@@ -245,7 +245,7 @@ const UI = {
             { title: 'Особисте', items: [
                 contactsItem,
                 { icon: '🏆', label: 'Мої результати', route: 'results' },
-                { icon: '📅', label: 'Планувальник',    route: 'scheduler', noStar: true },
+                { icon: '📅', label: 'Розділ планування',    route: 'scheduler', noStar: true },
                 bmItem,
                 { icon: '🔔', label: 'Сповіщення', route: 'notifications', badge: null, badgeId: 'nav-ntf-badge' }
             ]}

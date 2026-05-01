@@ -589,7 +589,9 @@ const AdminPage = {
         el.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
         const { cities, positions, subdivisions, users } = await this._loadRefData();
 
-        const mgItems = users.map(u => ({ value: u.id, label: u.full_name + (u.job_position ? ' · ' + u.job_position : '') }));
+        const mgItems = users
+            .filter(u => u.role === 'manager')
+            .map(u => ({ value: u.id, label: u.full_name + (u.job_position ? ' · ' + u.job_position : '') }));
         el.innerHTML = `
     <div class="user-create-container">
         <!-- Хедер -->

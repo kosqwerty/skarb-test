@@ -131,7 +131,7 @@ const ResourcesPage = {
 
     switchTab(tab, el) {
         this._activeTab = tab;
-        document.querySelectorAll('[id^="docs-tab-"]').forEach(btn => {
+        document.querySelectorAll('button[id^="docs-tab-"]').forEach(btn => {
             btn.className = btn.id === `docs-tab-${tab}` ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm';
         });
         const content = document.getElementById('docs-tab-content');
@@ -241,7 +241,7 @@ const ResourcesPage = {
             }).join('');
 
             if (token !== this._renderToken) return;
-            content.innerHTML = `<div style="display:flex;flex-direction:column;gap:.625rem">${cards}</div>`;
+            content.innerHTML = `<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.625rem">${cards}</div>`;
 
             // Автооновлення кожні 30 секунд поки вкладка активна
             clearInterval(ResourcesPage._statusRefreshTimer);

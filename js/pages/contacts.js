@@ -27,7 +27,7 @@ const ContactsPage = {
             const [{ data: users, error }, { data: reminders }] = await Promise.all([
                 supabase
                     .from('profiles')
-                    .select('id,full_name,phone,job_position,subdivision,city,role,avatar_url,birth_date,is_hidden,is_active,manager_id')
+                    .select('id,full_name,phone,job_position,subdivision,city,role,avatar_url,birth_date,is_hidden,is_active,manager_id,hired_at,position_since')
                     .eq('is_hidden', false)
                     .eq('is_active', true)
                     .order('full_name', { ascending: true }),
@@ -172,6 +172,8 @@ const ContactsPage = {
         ${field('💼', u.job_position)}
         ${field('🏙️', loc)}
         ${field('👤', managerName ? `Керівник: ${managerName}` : null)}
+        ${field('📅', u.hired_at ? `В компанії з ${Fmt.dateShort(u.hired_at)}` : null)}
+        ${field('🗓️', u.position_since ? `На посаді з ${Fmt.dateShort(u.position_since)}` : null)}
         ${hasBd ? `
         <div class="ct-field ct-bd-row">
             <span>🎂</span>

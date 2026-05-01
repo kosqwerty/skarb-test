@@ -318,6 +318,8 @@ const App = {
             ${fieldStyled('📁 Підрозділ', profile?.subdivision)}
             ${fieldStyled('🎂 Дата народження', profile?.birth_date ? Fmt.date(profile.birth_date) : '')}
             ${fieldStyled('👔 Керівник', manager ? `${manager.full_name} ${manager.job_position ? '· ' + manager.job_position : ''}` : '')}
+            ${fieldStyled('📅 В компанії з', profile?.hired_at ? Fmt.date(profile.hired_at) : '')}
+            ${fieldStyled('🗓️ На посаді з', profile?.position_since ? Fmt.date(profile.position_since) : '')}
         </div>
     </div>
 

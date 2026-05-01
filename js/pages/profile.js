@@ -179,6 +179,10 @@ const ProfilePage = {
                     <label class="input-label"><span>Підрозділ</span>${CreatableSelect.html('pe-subdivision', 'subdivisions', subdivisions.map(i=>i.name), user.subdivision||'')}</label>
                     <label class="input-label"><span>Посада</span>${CreatableSelect.html('pe-job-position', 'positions', positions.map(i=>i.name), user.job_position||'')}</label>
                     <label class="input-label"><span>Керівник</span>${SearchSelect.html('pe-manager', mgItems, user.manager_id||'')}</label>
+                    <div class="input-row-2col">
+                        <label class="input-label"><span>Дата оформлення</span><input id="pe-hired-at" type="date" value="${user.hired_at || ''}" onpaste="Fmt.parseDatePaste(event,this)"></label>
+                        <label class="input-label"><span>На посаді з</span><input id="pe-position-since" type="date" value="${user.position_since || ''}" onpaste="Fmt.parseDatePaste(event,this)"></label>
+                    </div>
                     ${isAdminEdit ? `<label class="input-label"><span>Довіреність</span>${CreatableMultiSelect.html('pe-dovirenosti')}</label>` : ''}
                     ` : `
                     <label class="input-label"><span>Підрозділ</span><input type="text" value="${user.subdivision || ''}" readonly style="opacity:.6;cursor:not-allowed"></label>
@@ -323,9 +327,11 @@ const ProfilePage = {
 
             if (canExtended) {
                 payload.login        = Dom.val('pe-login').trim() || null;
-                payload.subdivision  = Dom.val('pe-subdivision') || null;
-                payload.job_position = Dom.val('pe-job-position') || null;
-                payload.manager_id   = Dom.val('pe-manager') || null;
+                payload.subdivision     = Dom.val('pe-subdivision') || null;
+                payload.job_position   = Dom.val('pe-job-position') || null;
+                payload.manager_id     = Dom.val('pe-manager') || null;
+                payload.hired_at       = Dom.val('pe-hired-at') || null;
+                payload.position_since = Dom.val('pe-position-since') || null;
             }
             if (canRole)  payload.role  = Dom.val('pe-role');
             if (canLabel) {

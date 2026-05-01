@@ -722,6 +722,10 @@ const AdminPage = {
                         <span>Керівник</span>
                         ${SearchSelect.html('cu-manager', mgItems, '')}
                     </label>
+                    <div class="input-row-2col">
+                        <label class="input-label"><span>Дата оформлення</span><input id="cu-hired-at" type="date" onpaste="Fmt.parseDatePaste(event,this)"></label>
+                        <label class="input-label"><span>На посаді з</span><input id="cu-position-since" type="date" onpaste="Fmt.parseDatePaste(event,this)"></label>
+                    </div>
                     <label class="input-label">
                         <span>Мітка</span>
                         <input id="cu-label" type="text" placeholder="Наприклад: Блок, Валюта">
@@ -1070,11 +1074,15 @@ const AdminPage = {
                 p_label:        Dom.val('cu-label').trim()     || null,
             });
             if (error) throw error;
-            // Track who set the label
+            // Set fields not supported by admin_user_create RPC
+            const extraFields = {
+                manager_id:     Dom.val('cu-manager')        || null,
+                hired_at:       Dom.val('cu-hired-at')       || null,
+                position_since: Dom.val('cu-position-since') || null,
+            };
             const labelVal = Dom.val('cu-label').trim();
-            if (labelVal && data?.id) {
-                await supabase.from('profiles').update({ label_set_by: AppState.profile?.role }).eq('id', data.id);
-            }
+            if (labelVal) extraFields.label_set_by = AppState.profile?.role;
+            await supabase.from('profiles').update(extraFields).eq('id', userId);
             const fullName = [lastName, firstName, patronymic].filter(Boolean).join(' ');
             AuditLog.write('user_create', 'user', fullName, { role });
             Toast.success('Користувача створено');

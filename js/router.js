@@ -83,6 +83,7 @@ const Router = {
         UI.updateActiveNav(segments[0]);
 
         const container = document.getElementById('page-content');
+        window.scrollTo({ top: 0, behavior: 'instant' });
         container.innerHTML = `
             <div style="display:flex;align-items:center;justify-content:center;min-height:300px">
                 <div class="spinner"></div>

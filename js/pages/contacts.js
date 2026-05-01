@@ -91,7 +91,7 @@ const ContactsPage = {
 .ct-search { width:100%;padding:11px 16px;background:var(--bg-raised);border:1.5px solid var(--border);border-radius:16px;font-size:.95rem;color:var(--text-primary);outline:none;transition:border-color .15s;box-sizing:border-box; }
 .ct-search:focus { border-color:var(--primary); }
 .ct-count { flex-shrink:0;font-size:.82rem;color:var(--text-muted);white-space:nowrap; }
-.ct-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;margin-top:1rem; }
+.ct-grid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:1rem; }
 .ct-card { background:var(--bg-surface);border:1px solid var(--border);border-radius:20px;padding:18px;box-shadow:var(--shadow-sm);transition:box-shadow .15s,border-color .15s;display:flex;flex-direction:column;gap:14px; }
 .ct-card:hover { box-shadow:var(--shadow-md);border-color:var(--border-light); }
 .ct-card-head { display:flex;align-items:center;gap:12px; }

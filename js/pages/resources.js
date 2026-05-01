@@ -172,9 +172,10 @@ const ResourcesPage = {
             }
 
             let employees = allEmps;
-            if (!isOwner && this._myLocations.length) {
-                const locEmpIds = await API.documentDownloads.getEmployeeIdsForLocations(this._myLocations.map(l => l.id));
-                if (locEmpIds.size) employees = allEmps.filter(e => locEmpIds.has(e.id));
+            if (!isOwner) {
+                const myId = AppState.user.id;
+                const subordinates = allEmps.filter(e => e.manager_id === myId);
+                if (subordinates.length) employees = subordinates;
             }
 
             if (!employees.length) {
@@ -183,7 +184,7 @@ const ResourcesPage = {
             }
 
             const ackMap = await API.documentDownloads.getAckStatus(docs.map(d => d.id));
-            this._statusCache = { docs, employees, ackMap };
+            this._statusCache = { docs, employees, allEmps, ackMap };
 
             const cards = docs.map(doc => {
                 const acks = ackMap[doc.id] || [];
@@ -271,7 +272,7 @@ const ResourcesPage = {
 
     _buildStatusModalBody() {
         const { docId, filter, search, page } = this._modalState;
-        const { docs, employees, ackMap } = this._statusCache;
+        const { docs, employees, allEmps, ackMap } = this._statusCache;
         const doc = docs.find(d => d.id === docId);
         const acks = ackMap[docId] || [];
         const ackedMap = {};
@@ -282,26 +283,24 @@ const ResourcesPage = {
             ? new Date(doc.created_at).getTime() + doc.deadline_days * 86400000
             : null;
 
-        // Build rows with status
-        const rows = employees.map(e => {
-            const ack = ackedMap[e.id];
+        const ackedRows = employees.filter(e => ackedMap[e.id])
+            .map(e => ({ ...e, ack: ackedMap[e.id], status: 'acked', sortKey: 0 }));
+
+        const notAckedRows = employees.filter(e => !ackedMap[e.id]).map(e => {
             let status, sortKey;
-            if (ack) {
-                status = 'acked';
-                sortKey = 0;
-            } else if (deadlineMs && deadlineMs < Date.now()) {
-                status = 'overdue';
-                sortKey = 1;
+            if (deadlineMs && deadlineMs < Date.now()) {
+                status = 'overdue'; sortKey = 1;
             } else if (deadlineMs) {
                 const d = Math.ceil((deadlineMs - Date.now()) / 86400000);
                 status = d <= 3 ? 'soon' : 'pending';
                 sortKey = d <= 3 ? 2 : 3;
             } else {
-                status = 'pending';
-                sortKey = 3;
+                status = 'pending'; sortKey = 3;
             }
-            return { ...e, ack, status, sortKey };
+            return { ...e, ack: null, status, sortKey };
         });
+
+        const rows = [...ackedRows, ...notAckedRows];
 
         // Counts for filter tabs
         const counts = { all: rows.length, acked: 0, pending: 0, overdue: 0 };

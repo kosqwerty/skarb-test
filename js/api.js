@@ -936,7 +936,7 @@ const API = {
         // Returns all employee profiles (for "who hasn't acknowledged" calculation)
         async getAllEmployees() {
             const { data, error } = await supabase.from('profiles')
-                .select('id, full_name, job_position, role')
+                .select('id, full_name, job_position, role, manager_id')
                 .in('role', ['user', 'teacher', 'smm', 'manager'])
                 .order('full_name');
             if (error) throw error;

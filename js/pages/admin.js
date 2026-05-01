@@ -1088,7 +1088,8 @@ const AdminPage = {
             const fullName = [lastName, firstName, patronymic].filter(Boolean).join(' ');
             AuditLog.write('user_create', 'user', fullName, { role });
             Toast.success('Користувача створено');
-            this._renderUsersList(document.getElementById('admin-content'));
+            const adminEl = document.getElementById('admin-content');
+            if (adminEl) await this._renderUsersList(adminEl);
         } catch(e) {
             Toast.error('Помилка', e.message);
         } finally { Loader.hide(); }

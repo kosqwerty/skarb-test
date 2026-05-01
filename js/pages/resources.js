@@ -154,8 +154,10 @@ const ResourcesPage = {
     _statusCache: null, // { docs, employees, ackMap }
     _modalState: { docId: null, filter: 'all', search: '', page: 0 },
     _modalPageSize: 25,
+    _renderToken: 0,
 
     async _renderStatusTab(content) {
+        const token = ++this._renderToken;
         content.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
         try {
             const isOwner = AppState.isOwner();
@@ -166,6 +168,7 @@ const ResourcesPage = {
             const allDocs = docsRes.data || [];
             const docs = AppState.canSchedule() ? allDocs : allDocs.filter(r => AccessGroupsPage.checkAccess(r.access_group));
 
+            if (token !== this._renderToken) return;
             if (!docs.length) {
                 content.innerHTML = `<div class="empty-state"><div class="empty-icon">📊</div><h3>Немає відстежуваних документів</h3></div>`;
                 return;
@@ -237,6 +240,7 @@ const ResourcesPage = {
                 </div>`;
             }).join('');
 
+            if (token !== this._renderToken) return;
             content.innerHTML = `<div style="display:flex;flex-direction:column;gap:.625rem">${cards}</div>`;
 
             // Автооновлення кожні 30 секунд поки вкладка активна
@@ -408,10 +412,12 @@ const ResourcesPage = {
     },
 
     async _renderOffShiftTab(content) {
+        const token = ++this._renderToken;
         content.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
         try {
             const locationIds = this._myLocations.map(l => l.id);
             const downloads = await API.documentDownloads.getOffShiftForLocations(locationIds);
+            if (token !== this._renderToken) return;
             if (!downloads.length) {
                 content.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>Завантажень поза зміною не знайдено</h3></div>`;
                 return;

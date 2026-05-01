@@ -152,7 +152,7 @@
 /* ── Reset & Base ───────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-html { font-size: 16px; scroll-behavior: smooth; }
+html { font-size: 16px; scroll-behavior: smooth; scrollbar-gutter: stable; }
 
 body {
     font-family: 'Fixel Display', sans-serif;
@@ -161,6 +161,7 @@ body {
     line-height: 1.6;
     min-height: 100vh;
     overflow-x: auto;
+    scrollbar-gutter: stable;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;

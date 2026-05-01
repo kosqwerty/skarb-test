@@ -136,12 +136,15 @@ const ResourcesPage = {
         });
         const content = document.getElementById('docs-tab-content');
         if (!content) return;
+        clearInterval(this._statusRefreshTimer);
+
         if (tab === 'list') {
             content.innerHTML = `
                 <div id="resource-list" class="resource-list-docs"></div>
                 <div id="resources-pagination" style="display:flex;justify-content:center;gap:.5rem;margin-top:1.5rem"></div>`;
             this.load();
         } else if (tab === 'status') {
+            this._statusCache = null;
             this._renderStatusTab(content);
         } else if (tab === 'offshift') {
             this._renderOffShiftTab(content);
@@ -234,10 +237,24 @@ const ResourcesPage = {
             }).join('');
 
             content.innerHTML = `<div style="display:flex;flex-direction:column;gap:.625rem">${cards}</div>`;
+
+            // Автооновлення кожні 30 секунд поки вкладка активна
+            clearInterval(ResourcesPage._statusRefreshTimer);
+            ResourcesPage._statusRefreshTimer = setInterval(() => {
+                const el = document.getElementById('docs-tab-content');
+                if (el && ResourcesPage._activeTab === 'status') {
+                    ResourcesPage._renderStatusTab(el);
+                } else {
+                    clearInterval(ResourcesPage._statusRefreshTimer);
+                }
+            }, 30000);
+
         } catch (e) {
             content.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>${e.message}</h3></div>`;
         }
     },
+
+    _statusRefreshTimer: null,
 
     _openStatusModal(docId) {
         if (!this._statusCache) return;

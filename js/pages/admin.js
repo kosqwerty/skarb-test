@@ -1097,7 +1097,7 @@ const AdminPage = {
 
     async openEditUser(user) {
         const el = document.getElementById('admin-content');
-        await ProfilePage.openAsAdmin(el, user, () => this._renderUsers(el));
+        await ProfilePage.openAsAdmin(el, user, () => this._renderUsersList(el));
     },
 
     // ── Пагінація ─────────────────────────────────────────────────

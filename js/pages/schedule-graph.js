@@ -164,6 +164,7 @@ const ScheduleGraphPage = {
     _viewers:             [],
     _filteredUserId:      null,
     _collapsedLocs:       new Set(),
+    _pastMonthUnlocked:   false,
 
     async init(container) {
         this._container = container;
@@ -180,6 +181,7 @@ const ScheduleGraphPage = {
         container.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
 
         await this._loadLocations();
+        await this._autoLockForNewMonth();
         const myLocIds = this._locations.map(l => l.id);
         const [empCheck] = await Promise.all([
             myLocIds.length
@@ -213,6 +215,29 @@ const ScheduleGraphPage = {
         const { data } = await query;
         this._locations = data || [];
         this._applyLocOrder();
+    },
+
+    async _autoLockForNewMonth() {
+        const now = new Date();
+        const currentKey = `${now.getFullYear()}-${now.getMonth()}`;
+        const storageKey = `sg_autolock_${AppState.user.id}`;
+        if (localStorage.getItem(storageKey) === currentKey) return;
+        const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const prevMonthKey = this._monthKey(prev.getFullYear(), prev.getMonth());
+        const tolock = this._locations.filter(l =>
+            l.created_by === AppState.user.id &&
+            !(l.locked_months || []).includes(prevMonthKey)
+        );
+        if (tolock.length) {
+            await Promise.all(tolock.map(l => {
+                const newMonths = [...(l.locked_months || []), prevMonthKey];
+                return supabase.from('schedule_locations')
+                    .update({ locked_months: newMonths })
+                    .eq('id', l.id)
+                    .then(() => { l.locked_months = newMonths; });
+            }));
+        }
+        localStorage.setItem(storageKey, currentKey);
     },
 
     _isViewOnlyLoc(locId) {
@@ -490,7 +515,16 @@ const ScheduleGraphPage = {
                     <button class="sg-mnav" onclick="ScheduleGraphPage._prevMonth()">‹</button>
                     <span class="sg-mlabel">
                         ${MONTHS_UA[this._month]} ${this._year}
-                        ${this._isPastMonth() ? '<span class="sg-past-badge">🔒 завершено</span>' : ''}
+                        ${(() => {
+                            const now = new Date();
+                            const isPast = this._year < now.getFullYear() ||
+                                (this._year === now.getFullYear() && this._month < now.getMonth());
+                            if (!isPast) return '';
+                            if (this._pastMonthUnlocked) {
+                                return `<button class="sg-past-unlock-btn sg-past-unlock-active" onclick="ScheduleGraphPage._togglePastMonthUnlock()" title="Заблокувати редагування">🔓 розблоковано</button>`;
+                            }
+                            return `<span class="sg-past-badge">🔒 завершено</span><button class="sg-past-unlock-btn" onclick="ScheduleGraphPage._togglePastMonthUnlock()" title="Розблокувати редагування минулого графіку">Розблокувати</button>`;
+                        })()}
                     </span>
                     <button class="sg-mnav" onclick="ScheduleGraphPage._nextMonth()">›</button>
                 </div>
@@ -993,6 +1027,7 @@ ${this._styles()}`;
         this._substDate = null;
         this._filteredUserId = null;
         this._showPartnerLocs = false;
+        this._pastMonthUnlocked = false;
         const content   = this._container.querySelector('.sg-content');
         if (content) content.innerHTML = '<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>';
         const load = id === 'all' ? this._loadAllData() : this._loadPageData();
@@ -1001,12 +1036,14 @@ ${this._styles()}`;
 
     _prevMonth() {
         if (this._month === 0) { this._month = 11; this._year--; } else this._month--;
+        this._pastMonthUnlocked = false;
         const load = this._locId === 'all' ? this._loadAllData() : this._loadPageData();
         load.then(() => this._render(this._container));
     },
 
     _nextMonth() {
         if (this._month === 11) { this._month = 0; this._year++; } else this._month++;
+        this._pastMonthUnlocked = false;
         const load = this._locId === 'all' ? this._loadAllData() : this._loadPageData();
         load.then(() => this._render(this._container));
     },
@@ -1595,7 +1632,11 @@ ${this._styles()}`;
 </div>`;
     },
 
-    _selectSubstDate(date) {
+    _selectSubstDate(date, locId) {
+        if (date) {
+            if (this._isPastMonth()) { Toast.error('Місяць завершено', 'Редагування минулих місяців заблоковано'); return; }
+            if (this._isLockedForLoc(locId || this._locId)) { Toast.error('Графік заблоковано', 'Розблокуйте графік перед редагуванням'); return; }
+        }
         this._substDate = date;
         document.getElementById('sg-subst-modal')?.remove();
         if (date) this._openSubstModal(date);
@@ -2440,7 +2481,7 @@ ${this._styles()}`;
                             const _noWork = !datesWithAnyWork.has(_date);
                             return `<td class="sg-th-day${_we?' we':''}${_isSd?' sg-sd-col':''}${_noWork?' sg-th-no-work':''}"
                                 style="cursor:pointer" title="Клік — пошук підміни"
-                                onclick="ScheduleGraphPage._selectSubstDate('${_date}')">
+                                onclick="ScheduleGraphPage._selectSubstDate('${_date}','${locId}')">
                                 <div class="sg-day-num">${d}</div>
                                 <div class="sg-day-dow">${DAYS_SHORT[_dow]}</div>
                             </td>`;
@@ -2518,6 +2559,7 @@ ${this._styles()}`;
         if (this._partnerLocations?.some(l => l.id === locId)) return;
         if (this._isViewOnlyLoc(locId)) return;
         if (this._isPastMonth()) { Toast.error('Місяць завершено', 'Редагування минулих місяців заблоковано'); return; }
+        if (this._isLockedForLoc(locId)) { Toast.error('Графік заблоковано', 'Розблокуйте графік перед редагуванням'); return; }
         if (this._quickType) {
             this._quickSaveAll(locId, userId, date, this._quickType);
             return;
@@ -2536,6 +2578,7 @@ ${this._styles()}`;
     async _quickSaveAll(locId, userId, date, type) {
         if (!userId || userId === 'null') return;
         if (this._partnerLocations?.some(l => l.id === locId)) return;
+        if (this._isLockedForLoc(locId)) { Toast.error('Графік заблоковано', 'Розблокуйте графік перед редагуванням'); return; }
         const key    = `${locId}_${userId}_${date}`;
         const oldEnt = this._allEntries[key];
         if (oldEnt?.shift_type === type) {
@@ -2632,28 +2675,55 @@ ${this._styles()}`;
         Toast.success('Час роботи збережено');
     },
 
+    _monthKey(year, month) {
+        return `${year}-${String(month + 1).padStart(2, '0')}`;
+    },
+
+    _isLockedForLoc(locId) {
+        const loc = this._locations.find(l => l.id === locId);
+        if (!loc) return false;
+        if (Array.isArray(loc.locked_months)) {
+            return loc.locked_months.includes(this._monthKey(this._year, this._month));
+        }
+        return loc.locked || false;
+    },
+
     _isLocked() {
-        return this._locations.find(l => l.id === this._locId)?.locked || false;
+        return this._isLockedForLoc(this._locId);
     },
 
     _isPastMonth() {
+        if (this._pastMonthUnlocked) return false;
         const now = new Date();
         return this._year < now.getFullYear() ||
                (this._year === now.getFullYear() && this._month < now.getMonth());
     },
 
+    _togglePastMonthUnlock() {
+        this._pastMonthUnlocked = !this._pastMonthUnlocked;
+        this._render(this._container);
+        if (this._pastMonthUnlocked) {
+            Toast.success('🔓 Місяць розблоковано', 'Ви можете редагувати минулий графік');
+        } else {
+            Toast.success('🔒 Місяць заблоковано', 'Редагування минулого графіку вимкнено');
+        }
+    },
+
     async _toggleLock() {
         const loc = this._locations.find(l => l.id === this._locId);
         if (!loc) return;
-        const newLocked = !loc.locked;
+        const key = this._monthKey(this._year, this._month);
+        const months = loc.locked_months || [];
+        const isLocked = months.includes(key);
+        const newMonths = isLocked ? months.filter(m => m !== key) : [...months, key];
         const { error } = await supabase.from('schedule_locations')
-            .update({ locked: newLocked })
+            .update({ locked_months: newMonths })
             .eq('id', this._locId);
         if (error) { Toast.error('Помилка', error.message); return; }
-        loc.locked = newLocked;
+        loc.locked_months = newMonths;
         this._render(this._container);
-        Toast.success(newLocked ? '🔒 Графік заблоковано' : '🔓 Графік розблоковано',
-            newLocked ? 'Співробітники не можуть вносити зміни' : 'Співробітники знову можуть редагувати');
+        Toast.success(!isLocked ? '🔒 Графік заблоковано' : '🔓 Графік розблоковано',
+            !isLocked ? 'Співробітники не можуть вносити зміни' : 'Співробітники знову можуть редагувати');
     },
 
     async _showViewersModal() {
@@ -2906,6 +2976,7 @@ ${this._styles()}`;
     _openCell(userId, date) {
         if (this._isViewOnlyLoc(this._locId)) return;
         if (this._isPastMonth()) { Toast.error('Місяць завершено', 'Редагування минулих місяців заблоковано'); return; }
+        if (this._isLocked()) { Toast.error('Графік заблоковано', 'Розблокуйте графік перед редагуванням'); return; }
         if (this._quickType) {
             this._quickSave(userId, date, this._quickType);
             return;
@@ -2921,6 +2992,7 @@ ${this._styles()}`;
 
     async _quickSave(userId, date, type) {
         if (this._isPastMonth()) { Toast.error('Місяць завершено', 'Редагування минулих місяців заблоковано'); return; }
+        if (this._isLocked()) { Toast.error('Графік заблоковано', 'Розблокуйте графік перед редагуванням'); return; }
         const key    = `${userId}_${date}`;
         const oldEnt = this._entries[key];
 
@@ -3675,6 +3747,10 @@ ${this._styles()}`;
 .sg-mnav:hover { border-color:var(--primary);color:var(--primary); }
 .sg-mlabel { font-size:1.1rem;font-weight:700;color:var(--text-primary);min-width:160px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:2px; }
 .sg-past-badge { font-size:.65rem;font-weight:700;color:#ef4444;letter-spacing:.03em;opacity:.8; }
+.sg-past-unlock-btn { font-size:.65rem;font-weight:600;padding:2px 7px;border-radius:8px;border:1px solid #ef4444;color:#ef4444;background:transparent;cursor:pointer;transition:all .15s; }
+.sg-past-unlock-btn:hover { background:#ef4444;color:#fff; }
+.sg-past-unlock-btn.sg-past-unlock-active { border-color:#16a34a;color:#16a34a; }
+.sg-past-unlock-btn.sg-past-unlock-active:hover { background:#16a34a;color:#fff; }
 .sg-tabs { display:flex;gap:4px;background:var(--bg-raised);border-radius:12px;padding:4px; }
 .sg-tab {
     padding:7px 18px;border-radius:9px;border:none;background:transparent;
@@ -4793,18 +4869,18 @@ const ScheduleGraphEmployee = {
 
         const locIds = assignRows.map(a => a.location_id);
         const { data: lData } = await supabase.from('schedule_locations')
-            .select('id, name, locked, work_start, work_end')
+            .select('id, name, locked_months, work_start, work_end')
             .in('id', locIds);
         const locs = lData || [];
 
         this._assignments = assignRows.map(a => {
             const loc = locs.find(l => l.id === a.location_id) || {};
             return {
-                locId:      a.location_id,
-                locName:    loc.name || 'Локація',
-                locked:     loc.locked || false,
-                work_start: loc.work_start || null,
-                work_end:   loc.work_end   || null,
+                locId:         a.location_id,
+                locName:       loc.name || 'Локація',
+                locked_months: loc.locked_months || [],
+                work_start:    loc.work_start || null,
+                work_end:      loc.work_end   || null,
             };
         });
 
@@ -4955,10 +5031,15 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
         </div>
     </div>
 
-    ${this._assignments.find(a => a.locId === this._locId)?.locked ? `
+    ${(() => {
+        const _loc = this._assignments.find(a => a.locId === this._locId);
+        const _mk  = `${this._year}-${String(this._month + 1).padStart(2, '0')}`;
+        const _ban = Array.isArray(_loc?.locked_months) ? _loc.locked_months.includes(_mk) : (_loc?.locked || false);
+        return _ban ? `
     <div class="sg-locked-banner">
         🔒 <strong>Графік заблоковано.</strong> Зміни вносить тільки керівник.
-    </div>` : ''}
+    </div>` : '';
+    })()}
 
     <div class="sg-section sge-cal-section">
         <div class="sge-legend-bar">
@@ -5160,7 +5241,11 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
             return;
         }
         const currentLoc = this._assignments.find(a => a.locId === this._locId);
-        if (currentLoc?.locked) {
+        const _mk = `${this._year}-${String(this._month + 1).padStart(2, '0')}`;
+        const _empLocked = Array.isArray(currentLoc?.locked_months)
+            ? currentLoc.locked_months.includes(_mk)
+            : (currentLoc?.locked || false);
+        if (_empLocked) {
             Toast.error('Графік заблоковано', 'Зміни вносить тільки керівник');
             return;
         }

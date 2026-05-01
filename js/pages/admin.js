@@ -1179,7 +1179,15 @@ const AdminPage = {
         const subLC  = f.subdivision.map(x => x.toLowerCase());
         const lblLC  = f.label.map(x => x.toLowerCase());
 
-        localStorage.setItem('lms_admin_user_filters', JSON.stringify(f));
+        // Зберігаємо фільтри, зберігаючи існуючий _sort щоб не затирати його
+        try {
+            const existing = JSON.parse(localStorage.getItem('lms_admin_user_filters') || '{}');
+            const toSave = { ...f };
+            if (existing._sort) toSave._sort = existing._sort;
+            localStorage.setItem('lms_admin_user_filters', JSON.stringify(toSave));
+        } catch(_) {
+            localStorage.setItem('lms_admin_user_filters', JSON.stringify(f));
+        }
 
         let shown = 0;
         document.querySelectorAll('#users-tbody tr').forEach(row => {

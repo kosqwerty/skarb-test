@@ -830,7 +830,7 @@ const ResourcesPage = {
                 document.body.removeChild(a);
             }
 
-            await API.documentDownloads.track(resource.id, { locationId, isOffShift, docVersion: resource.doc_version || 1 }).catch(() => {});
+            await API.documentDownloads.track(resource.id, { locationId, isOffShift, docVersion: resource.doc_version || 1 });
 
             this._myDownloads[resource.id] = { at: new Date().toISOString(), version: resource.doc_version || 1 };
 

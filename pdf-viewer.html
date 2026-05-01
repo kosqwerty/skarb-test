@@ -268,6 +268,7 @@ function goTo(num) {
   pageInput.value = num;
   scrollToPage(num);
   updateNav();
+  if (num === totalPages) setTimeout(notifyScrollEnd, 600);
 }
 
 function updateNav() {
@@ -302,7 +303,7 @@ function notifyScrollEnd() {
 
 const io = new IntersectionObserver(entries => {
   entries.forEach(e => {
-    if (e.isIntersecting && e.intersectionRatio >= 0.4) {
+    if (e.isIntersecting && e.intersectionRatio >= 0.1) {
       const p = parseInt(e.target.dataset.page);
       if (p !== currentPage) {
         currentPage = p;
@@ -312,12 +313,14 @@ const io = new IntersectionObserver(entries => {
       if (p === totalPages) notifyScrollEnd();
     }
   });
-}, { threshold: 0.4 });
+}, { threshold: [0.1, 0.4] });
 
 function observePages() {
   wrap.querySelectorAll('.page-wrap').forEach(el => io.observe(el));
-  // Single-page docs: notify immediately after render
   if (totalPages === 1) notifyScrollEnd();
+  wrap.addEventListener('scroll', () => {
+    if (wrap.scrollTop + wrap.clientHeight >= wrap.scrollHeight - 80) notifyScrollEnd();
+  }, { passive: true });
 }
 
 // ── Load ───────────────────────────────────────────────────────────────────

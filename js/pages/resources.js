@@ -798,7 +798,7 @@ const ResourcesPage = {
         if (shiftLoc) {
             await this._doTrackedDownload(resource, shiftLoc.id, false, downloadFile);
         } else {
-            this._showLocationModal(resource, downloadFile);
+            await this._doTrackedDownload(resource, null, true, downloadFile);
         }
     },
 
@@ -1166,7 +1166,7 @@ const ResourceViewPage = {
         if (isPdf) {
             const dl = resource.download_allowed !== false ? '1' : '0';
             const viewerUrl = `pdf-viewer.html?file=${encodeURIComponent(url)}&title=${encodeURIComponent(resource.title || 'PDF')}&download=${dl}`;
-            viewerHtml = `<iframe src="${viewerUrl}" style="width:100%;height:calc(100vh - 220px);min-height:500px;border:none;display:block"></iframe>`;
+            viewerHtml = `<iframe src="${viewerUrl}" style="width:90%;height:calc(90vh - 198px);min-height:450px;border:none;display:block"></iframe>`;
 
         } else if (isVideo) {
             const noDownload = resource.download_allowed === false ? 'controlsList="nodownload"' : '';
@@ -1244,7 +1244,6 @@ const ResourceViewPage = {
                         </div>
                         ${resource.description ? `<p style="margin:.6rem 0 0;color:var(--text-muted);font-size:.875rem">${resource.description}</p>` : ''}
                     </div>
-                    ${this._buildActionFooter(resource, from, dlStatus, isPdf)}
                     ${AppState.isStaff() ? `
                     <button title="Редагувати" onclick="ResourcesPage.openEdit('${resource.id}')"
                             style="flex-shrink:0;width:40px;height:40px;border-radius:50%;border:2px solid var(--border);background:var(--bg-raised);color:var(--text-primary);font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background var(--transition),border-color var(--transition)"
@@ -1252,6 +1251,11 @@ const ResourceViewPage = {
                             onmouseleave="this.style.background='var(--bg-raised)';this.style.borderColor='var(--border)'">
                         ✏️
                     </button>` : ''}
+                </div>
+
+                <!-- Action footer (centered, tracked docs only) -->
+                <div style="display:flex;justify-content:center">
+                    ${this._buildActionFooter(resource, from, dlStatus, isPdf)}
                 </div>
 
                 <!-- Download bar (above viewer, for all downloadable files) -->
@@ -1307,16 +1311,27 @@ const ResourceViewPage = {
             const ackBtn = `<button class="doc-unlock-btn" onclick="ResourcesPage.acknowledgeDoc('${id}')"
                     style="${btnBase};display:none;border:1.5px solid #10b981;background:transparent;color:#10b981"
                     onmouseenter="this.style.background='#10b981';this.style.color='#fff'"
-                    onmouseleave="this.style.background='transparent';this.style.color='#10b981'">✅ ${ResourcesPage._ackLabel()}</button>`;
-            const dlBtn = resource.download_allowed
-                ? `<button class="doc-unlock-btn" onclick="ResourcesPage.downloadTracked('${id}')"
-                        style="${btnBase};display:none;border:1.5px solid var(--primary);background:transparent;color:var(--primary)"
-                        onmouseenter="this.style.background='var(--primary)';this.style.color='#fff'"
-                        onmouseleave="this.style.background='transparent';this.style.color='var(--primary)'">⬇ Завантажити</button>`
-                : '';
+                    onmouseleave="this.style.background='transparent';this.style.color='#10b981'">✅ Підтвердити ознайомлення</button>`;
             return `<div id="doc-viewer-action" style="flex-shrink:0;display:inline-flex;align-items:center;gap:.5rem">
-                <span id="doc-viewer-lock" style="font-size:.8rem;color:var(--text-muted);white-space:nowrap">${lockHint}</span>
-                ${dlBtn}${ackBtn}
+                <style>
+                @keyframes doc-lock-pulse {
+                    0%,100%{opacity:1;transform:scale(1)}
+                    50%{opacity:.55;transform:scale(.97)}
+                }
+                @keyframes doc-lock-glow {
+                    0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,0)}
+                    50%{box-shadow:0 0 0 6px rgba(245,158,11,.18)}
+                }
+                #doc-viewer-lock {
+                    animation:doc-lock-pulse 2s ease-in-out infinite,doc-lock-glow 2s ease-in-out infinite;
+                    display:inline-flex;align-items:center;gap:6px;
+                    padding:5px 14px;border-radius:20px;
+                    background:rgba(245,158,11,.1);border:1.5px solid rgba(245,158,11,.35);
+                    color:#f59e0b;font-weight:600;font-size:.82rem;white-space:nowrap;
+                }
+                </style>
+                <span id="doc-viewer-lock">${lockHint}</span>
+                ${ackBtn}
             </div>`;
         }
 

@@ -464,9 +464,10 @@ const TestsManagerPage = {
 .te-add-q-wrap{position:relative}
 .te-add-q-btn{width:100%;padding:9px;border-radius:12px;border:1.5px dashed var(--border);background:transparent;color:var(--primary);font-size:.85rem;font-weight:600;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:6px}
 .te-add-q-btn:hover{border-color:var(--primary);background:var(--primary-glow)}
-.te-type-dropdown{position:absolute;bottom:calc(100% + 4px);left:0;right:0;background:var(--bg-surface);border:1.5px solid var(--border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.15);z-index:100;overflow:hidden;display:none}
-.te-type-dropdown.open{display:block}
-.te-type-opt{padding:10px 14px;font-size:.85rem;color:var(--text-primary);cursor:pointer;display:flex;align-items:center;gap:8px;transition:background .1s}
+.te-type-dropdown{position:absolute;bottom:calc(100% + 4px);left:50%;transform:translateX(-50%);width:max-content;background:var(--bg-surface);border:1.5px solid var(--border);border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.18);z-index:100;overflow:hidden;display:none;padding:6px}
+.te-type-dropdown.open{display:flex;gap:4px}
+.te-type-opt{padding:8px 12px;font-size:.8rem;color:var(--text-primary);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;transition:background .1s;border-radius:10px;white-space:nowrap;min-width:72px}
+.te-type-opt span:first-child{font-size:1.2rem}
 .te-type-opt:hover{background:var(--bg-raised)}
 
 .te-empty-q{display:flex;flex-direction:column;align-items:center;padding:2rem 1rem;text-align:center;color:var(--text-muted);font-size:.85rem}

@@ -159,6 +159,14 @@ const App = {
 
             'my-calendar': async ({ container, params }) => {
                 await MyCalendarPage.init(container, params);
+            },
+
+            'tests-manager': async ({ container }) => {
+                await TestsManagerPage.init(container);
+            },
+
+            'my-tests': async ({ container }) => {
+                await MyTestsPage.init(container);
             }
         });
 

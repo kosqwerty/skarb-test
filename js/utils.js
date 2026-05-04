@@ -192,6 +192,7 @@ const UI = {
                 { title: 'Навчання', items: contentItems },
                 { title: 'Управління', items: [
                     { icon: '📊', label: 'Аналітика',         route: 'analytics' },
+                    { icon: '📝', label: 'Тести',             route: 'tests-manager' },
                     { icon: '📅', label: 'Розділ планування',       route: 'scheduler' },
                     { icon: '⚙️', label: 'Адміністрування',   route: 'admin' },
                     { icon: '🔒', label: 'Обмеження доступу', route: 'label-access', noStar: true }
@@ -209,6 +210,7 @@ const UI = {
             return [
                 { title: 'Навчання', items: managerNav },
                 { title: 'Управління', items: [
+                    { icon: '📝', label: 'Тести',             route: 'tests-manager' },
                     { icon: '📅', label: 'Розділ планування', route: 'scheduler' }
                 ]},
                 { title: 'Особисте', items: [ contactsItem, bmItem, ntfItem ] }
@@ -222,7 +224,7 @@ const UI = {
                     { icon: '⚙️', label: 'Контент',     route: 'admin' },
                     { icon: '📅', label: 'Розділ планування', route: 'scheduler', noStar: true }
                 ]},
-                { title: 'Особисте', items: [ contactsItem, bmItem, ntfItem ] }
+                { title: 'Особисте', items: [ contactsItem, { icon: '📝', label: 'Мої тести', route: 'my-tests' }, bmItem, ntfItem ] }
             ];
         }
         if (role === 'teacher') {
@@ -232,7 +234,7 @@ const UI = {
                     { icon: '📊', label: 'Аналітика',   route: 'analytics' },
                     { icon: '📅', label: 'Розділ планування', route: 'scheduler', noStar: true }
                 ]},
-                { title: 'Особисте', items: [ contactsItem, bmItem, ntfItem ] }
+                { title: 'Особисте', items: [ contactsItem, { icon: '📝', label: 'Мої тести', route: 'my-tests' }, bmItem, ntfItem ] }
             ];
         }
         return [
@@ -244,6 +246,7 @@ const UI = {
             ]},
             { title: 'Особисте', items: [
                 contactsItem,
+                { icon: '📝', label: 'Мої тести',     route: 'my-tests' },
                 { icon: '🏆', label: 'Мої результати', route: 'results' },
                 { icon: '📅', label: 'Розділ планування',    route: 'scheduler', noStar: true },
                 bmItem,

@@ -1,0 +1,1036 @@
+// ================================================================
+// LMS — Управління тестами (адмін/менеджер) + Мої тести (користувач)
+//
+// SQL (run once in Supabase):
+// CREATE TABLE IF NOT EXISTS test_assignments (
+//     id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+//     test_id     uuid NOT NULL REFERENCES tests(id) ON DELETE CASCADE,
+//     user_id     uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+//     assigned_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+//     deadline_at timestamptz,
+//     created_at  timestamptz DEFAULT now(),
+//     UNIQUE(test_id, user_id)
+// );
+// ALTER TABLE test_assignments ENABLE ROW LEVEL SECURITY;
+// CREATE POLICY "ta_select" ON test_assignments FOR SELECT USING (auth.uid() IS NOT NULL);
+// CREATE POLICY "ta_insert" ON test_assignments FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+// CREATE POLICY "ta_delete" ON test_assignments FOR DELETE USING (auth.uid() IS NOT NULL);
+//
+// ALTER TABLE tests ADD COLUMN IF NOT EXISTS is_standalone boolean DEFAULT false;
+// ALTER TABLE tests ADD COLUMN IF NOT EXISTS pass_score    integer DEFAULT 70;
+// ALTER TABLE questions ADD COLUMN IF NOT EXISTS extra_data jsonb DEFAULT '{}';
+// ================================================================
+
+// ── API extensions ────────────────────────────────────────────────
+const TestsManagerAPI = {
+    async getAllStandalone() {
+        const { data, error } = await supabase.from('tests')
+            .select('*, creator:profiles!created_by(full_name)')
+            .eq('is_standalone', true)
+            .order('created_at', { ascending: false });
+        if (error) throw error;
+        return data || [];
+    },
+
+    async getMyAssignments() {
+        const { data, error } = await supabase.from('test_assignments')
+            .select(`*, test:tests(id,title,description,time_limit_minutes,max_attempts,pass_score,randomize_questions,
+                questions(id))`)
+            .eq('user_id', AppState.user.id)
+            .order('created_at', { ascending: false });
+        if (error) throw error;
+        return data || [];
+    },
+
+    async getAssignments(testId) {
+        const { data, error } = await supabase.from('test_assignments')
+            .select('*, user:profiles!user_id(id,full_name,email,job_position)')
+            .eq('test_id', testId);
+        if (error) throw error;
+        return data || [];
+    },
+
+    async assign(testId, userIds, deadlineAt) {
+        const rows = userIds.map(uid => ({
+            test_id: testId, user_id: uid,
+            assigned_by: AppState.user.id,
+            deadline_at: deadlineAt || null
+        }));
+        const { error } = await supabase.from('test_assignments')
+            .upsert(rows, { onConflict: 'test_id,user_id', ignoreDuplicates: true });
+        if (error) throw error;
+    },
+
+    async unassign(testId, userId) {
+        const { error } = await supabase.from('test_assignments')
+            .delete().eq('test_id', testId).eq('user_id', userId);
+        if (error) throw error;
+    },
+
+    async getAllResults(testId) {
+        const { data, error } = await supabase.from('test_attempts')
+            .select('*, user:profiles!user_id(full_name,email,job_position)')
+            .eq('test_id', testId)
+            .not('completed_at', 'is', null)
+            .order('completed_at', { ascending: false });
+        if (error) throw error;
+        return data || [];
+    },
+
+    async getAllEmployees() {
+        const { data, error } = await supabase.from('profiles')
+            .select('id, full_name, email, job_position')
+            .order('full_name');
+        if (error) throw error;
+        return data || [];
+    }
+};
+
+// ================================================================
+// TestsManagerPage — адмін / менеджер
+// ================================================================
+const TestsManagerPage = {
+    _tests:     [],
+    _curTest:   null,
+    _questions: [],
+    _activeIdx: -1,
+    _quill:     null,
+    _opts:      [],
+    _qType:     'single',
+    _dirty:     false,
+
+    async init(container, params = {}) {
+        if (!AppState.canSchedule() && !AppState.isStaff()) {
+            Router.go('dashboard'); return;
+        }
+        UI.setBreadcrumb([{ label: 'Тести' }]);
+        const testId = params.test;
+        if (testId) await this._openEditorById(container, testId);
+        else         await this._renderList(container);
+    },
+
+    // ── List ─────────────────────────────────────────────────────
+
+    async _renderList(container) {
+        this._curTest   = null;
+        this._questions = [];
+        this._activeIdx = -1;
+        container.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
+        try {
+            this._tests = await TestsManagerAPI.getAllStandalone();
+        } catch(e) { this._tests = []; }
+
+        container.innerHTML = `
+<style>
+.tm-page{max-width:1200px}
+.tm-hero{border-radius:22px;padding:32px 36px;margin-bottom:24px;background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 60%,#1e40af 100%);position:relative;overflow:hidden}
+.tm-hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 60% 80% at 80% 20%,rgba(201,162,39,.18),transparent);pointer-events:none}
+.tm-hero-inner{position:relative;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.tm-hero-left{display:flex;align-items:center;gap:18px}
+.tm-hero-icon{width:60px;height:60px;border-radius:18px;background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:1.9rem;flex-shrink:0}
+.tm-hero-title{margin:0;font-size:1.7rem;font-weight:800;color:#fff;letter-spacing:-.03em}
+.tm-hero-sub{margin:4px 0 0;color:rgba(255,255,255,.65);font-size:.88rem}
+.tm-btn-new{display:inline-flex;align-items:center;gap:8px;padding:10px 22px;border-radius:12px;background:#C9A227;border:none;color:#fff;font-size:.9rem;font-weight:700;cursor:pointer;transition:background .15s;flex-shrink:0}
+.tm-btn-new:hover{background:#b8911f}
+
+.tm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;animation:tm-in .3s ease}
+@keyframes tm-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.tm-card{background:var(--bg-surface);border:1px solid var(--border);border-radius:20px;overflow:hidden;display:flex;flex-direction:column;transition:box-shadow .2s,transform .2s;cursor:pointer}
+.tm-card:hover{box-shadow:0 8px 28px rgba(0,0,0,.12);transform:translateY(-2px)}
+.tm-card-top{height:4px;background:linear-gradient(90deg,#C9A227,#f59e0b)}
+.tm-card-body{padding:20px;flex:1}
+.tm-card-title{font-weight:700;font-size:1rem;color:var(--text-primary);margin-bottom:8px}
+.tm-card-meta{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.tm-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 10px;border-radius:20px;font-size:.72rem;font-weight:600}
+.tm-chip-q{background:rgba(99,102,241,.12);color:#6366f1}
+.tm-chip-time{background:rgba(245,158,11,.12);color:#f59e0b}
+.tm-chip-score{background:rgba(16,185,129,.12);color:#10b981}
+.tm-chip-draft{background:var(--bg-raised);color:var(--text-muted);border:1px solid var(--border)}
+.tm-chip-pub{background:rgba(16,185,129,.12);color:#10b981}
+.tm-card-footer{padding:12px 20px;border-top:1px solid var(--border);background:var(--bg-raised);display:flex;gap:8px;align-items:center}
+.tm-btn-edit{flex:1;padding:7px;border-radius:10px;border:1.5px solid var(--primary);background:transparent;color:var(--primary);font-size:.82rem;font-weight:600;cursor:pointer;transition:all .15s;text-align:center}
+.tm-btn-edit:hover{background:var(--primary);color:#fff}
+.tm-btn-assign{padding:7px 14px;border-radius:10px;border:1.5px solid #C9A227;background:transparent;color:#C9A227;font-size:.82rem;font-weight:600;cursor:pointer;transition:all .15s}
+.tm-btn-assign:hover{background:#C9A227;color:#fff}
+.tm-btn-results{padding:7px;border-radius:10px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:.82rem;cursor:pointer;transition:all .15s}
+.tm-btn-results:hover{border-color:var(--primary);color:var(--primary)}
+.tm-btn-del{padding:7px 10px;border-radius:10px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:.82rem;cursor:pointer;transition:all .15s}
+.tm-btn-del:hover{border-color:var(--danger);color:var(--danger);background:rgba(239,68,68,.06)}
+
+.tm-empty{display:flex;flex-direction:column;align-items:center;padding:5rem 2rem;text-align:center;grid-column:1/-1}
+.tm-empty-ico{font-size:4rem;margin-bottom:1rem;opacity:.3}
+.tm-empty-head{font-size:1.2rem;font-weight:700;color:var(--text-primary);margin-bottom:.5rem}
+.tm-empty-txt{font-size:.875rem;color:var(--text-muted);max-width:360px;line-height:1.6;margin-bottom:1.5rem}
+</style>
+
+<div class="tm-page">
+    <div class="tm-hero">
+        <div class="tm-hero-inner">
+            <div class="tm-hero-left">
+                <div class="tm-hero-icon">📝</div>
+                <div>
+                    <h1 class="tm-hero-title">Управління тестами</h1>
+                    <p class="tm-hero-sub">Створюйте тести та призначайте співробітникам</p>
+                </div>
+            </div>
+            <button class="tm-btn-new" onclick="TestsManagerPage.openCreateModal()">＋ Новий тест</button>
+        </div>
+    </div>
+
+    <div class="tm-grid" id="tm-grid">
+        ${this._tests.length ? this._tests.map(t => this._cardHtml(t)).join('') : `
+            <div class="tm-empty">
+                <div class="tm-empty-ico">📋</div>
+                <div class="tm-empty-head">Тестів ще немає</div>
+                <div class="tm-empty-txt">Створіть перший тест та призначте його співробітникам для перевірки знань</div>
+                <button class="tm-btn-new" onclick="TestsManagerPage.openCreateModal()">＋ Створити перший тест</button>
+            </div>`}
+    </div>
+</div>`;
+    },
+
+    _cardHtml(t) {
+        const qCount = t.questions?.length ?? '—';
+        return `
+<div class="tm-card">
+    <div class="tm-card-top"></div>
+    <div class="tm-card-body">
+        <div class="tm-card-title">${t.title}</div>
+        ${t.description ? `<div style="font-size:.82rem;color:var(--text-muted);margin-bottom:10px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${t.description}</div>` : ''}
+        <div class="tm-card-meta">
+            <span class="tm-chip tm-chip-q">❓ ${qCount} питань</span>
+            ${t.time_limit_minutes ? `<span class="tm-chip tm-chip-time">⏱ ${t.time_limit_minutes} хв</span>` : ''}
+            <span class="tm-chip tm-chip-score">🎯 ${t.pass_score||70}%</span>
+            <span class="tm-chip ${t.is_published ? 'tm-chip-pub' : 'tm-chip-draft'}">${t.is_published ? '✓ Опубліковано' : 'Чернетка'}</span>
+        </div>
+        <div style="font-size:.75rem;color:var(--text-muted)">${Fmt.date(t.created_at)} · ${t.creator?.full_name||'—'}</div>
+    </div>
+    <div class="tm-card-footer" onclick="event.stopPropagation()">
+        <button class="tm-btn-edit" onclick="TestsManagerPage.openEditor('${t.id}')">✏️ Редагувати</button>
+        <button class="tm-btn-assign" onclick="TestsManagerPage.openAssignModal('${t.id}')">👥</button>
+        <button class="tm-btn-results" onclick="TestsManagerPage.openResultsModal('${t.id}')">📊</button>
+        <button class="tm-btn-del" onclick="TestsManagerPage.deleteTest('${t.id}','${t.title.replace(/'/g,"\\'")}')">🗑</button>
+    </div>
+</div>`;
+    },
+
+    // ── Create / Edit meta modal ──────────────────────────────────
+
+    openCreateModal() { this._openMetaModal(null); },
+
+    async _openMetaModal(test) {
+        const isEdit = !!test;
+        Modal.open({
+            title: isEdit ? '⚙️ Налаштування тесту' : '＋ Новий тест',
+            size: 'md',
+            body: `
+<div class="form-group"><label>Назва тесту *</label>
+    <input id="tm-title" type="text" placeholder="Введіть назву" value="${test?.title||''}"></div>
+<div class="form-group"><label>Опис</label>
+    <textarea id="tm-desc" rows="2" placeholder="Короткий опис (необов'язково)">${test?.description||''}</textarea></div>
+<div class="form-row">
+    <div class="form-group"><label>Ліміт часу (хвилин)</label>
+        <input id="tm-time" type="number" min="1" max="300" placeholder="Без ліміту" value="${test?.time_limit_minutes||''}"></div>
+    <div class="form-group"><label>Макс. спроб</label>
+        <input id="tm-attempts" type="number" min="1" max="10" placeholder="1" value="${test?.max_attempts||1}"></div>
+</div>
+<div class="form-row">
+    <div class="form-group"><label>Прохідний бал (%)</label>
+        <input id="tm-score" type="number" min="1" max="100" value="${test?.pass_score||70}"></div>
+    <div class="form-group" style="display:flex;align-items:center;gap:10px;padding-top:28px">
+        <input type="checkbox" id="tm-shuffle" ${test?.randomize_questions?'checked':''} style="width:18px;height:18px;cursor:pointer">
+        <label for="tm-shuffle" style="cursor:pointer;font-weight:500">Перемішати питання</label>
+    </div>
+</div>
+<div style="display:flex;align-items:center;gap:10px">
+    <input type="checkbox" id="tm-pub" ${test?.is_published?'checked':''} style="width:18px;height:18px;cursor:pointer">
+    <label for="tm-pub" style="cursor:pointer;font-weight:500">Опубліковано (доступний для проходження)</label>
+</div>`,
+            footer: `
+<button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
+<button class="btn btn-primary" onclick="TestsManagerPage._saveMeta(${isEdit ? `'${test.id}'` : 'null'})">${isEdit ? 'Зберегти' : 'Створити'}</button>`
+        });
+    },
+
+    async _saveMeta(testId) {
+        const title = Dom.val('tm-title').trim();
+        if (!title) { Toast.error('Помилка', 'Введіть назву тесту'); return; }
+        const payload = {
+            title,
+            description:         Dom.val('tm-desc').trim() || null,
+            time_limit_minutes:  parseInt(Dom.val('tm-time')) || null,
+            max_attempts:        parseInt(Dom.val('tm-attempts')) || 1,
+            pass_score:          parseInt(Dom.val('tm-score')) || 70,
+            randomize_questions: document.getElementById('tm-shuffle')?.checked || false,
+            is_published:        document.getElementById('tm-pub')?.checked || false,
+            is_standalone:       true,
+            created_by:          AppState.user.id
+        };
+        Loader.show();
+        try {
+            let test;
+            if (testId) {
+                test = await API.tests.update(testId, payload);
+                Toast.success('Збережено');
+            } else {
+                test = await API.tests.create(payload);
+                Toast.success('Тест створено');
+            }
+            Modal.close();
+            const container = document.getElementById('page-content');
+            await this.openEditor(test.id, container);
+        } catch(e) { Toast.error('Помилка', e.message); }
+        finally { Loader.hide(); }
+    },
+
+    // ── Editor ───────────────────────────────────────────────────
+
+    async openEditor(testId) {
+        const container = document.getElementById('page-content');
+        await this._openEditorById(container, testId);
+    },
+
+    async _openEditorById(container, testId) {
+        container.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
+        try {
+            const test = await API.tests.getById(testId);
+            this._curTest   = test;
+            this._questions = [...(test.questions || [])].sort((a,b) => a.order_index - b.order_index);
+            UI.setBreadcrumb([{ label: 'Тести', route: 'tests-manager' }, { label: test.title }]);
+            this._renderEditor(container);
+        } catch(e) {
+            Toast.error('Помилка', e.message);
+            await this._renderList(container);
+        }
+    },
+
+    _renderEditor(container) {
+        container.innerHTML = `
+<style>
+.te-wrap{display:flex;flex-direction:column;height:calc(100vh - 120px);min-height:600px}
+.te-topbar{display:flex;align-items:center;gap:12px;padding-bottom:14px;border-bottom:1px solid var(--border);margin-bottom:0;flex-shrink:0}
+.te-back{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);font-size:.83rem;font-weight:500;cursor:pointer;transition:all .15s;text-decoration:none}
+.te-back:hover{border-color:var(--primary);color:var(--primary)}
+.te-test-title{font-size:1.1rem;font-weight:700;color:var(--text-primary);flex:1}
+.te-body{display:flex;flex:1;gap:0;overflow:hidden;margin-top:16px;border:1px solid var(--border);border-radius:18px;overflow:hidden}
+
+/* Left panel */
+.te-left{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--border)}
+.te-left-toolbar{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0;background:var(--bg-raised)}
+.te-type-sel{padding:6px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.83rem;font-weight:500;outline:none;cursor:pointer}
+.te-pts-wrap{display:flex;align-items:center;gap:6px;margin-left:auto}
+.te-pts-lbl{font-size:.8rem;color:var(--text-muted)}
+.te-pts-inp{width:60px;padding:5px 10px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);text-align:center;font-size:.85rem;outline:none}
+.te-left-content{flex:1;overflow-y:auto;padding:18px}
+.te-lbl{font-size:.78rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
+.te-quill-wrap{border:1.5px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:18px}
+.te-quill-wrap .ql-toolbar{border:none;border-bottom:1px solid var(--border);padding:8px 12px;background:var(--bg-raised)}
+.te-quill-wrap .ql-container{border:none;font-size:.92rem;min-height:90px}
+.te-quill-wrap .ql-editor{padding:12px 14px;min-height:90px;color:var(--text-primary)}
+
+/* Options */
+.te-options{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
+.te-opt{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:12px;border:1.5px solid var(--border);background:var(--bg-surface);transition:border-color .15s}
+.te-opt.correct{border-color:#10b981;background:rgba(16,185,129,.06)}
+.te-opt-handle{color:var(--text-muted);cursor:grab;font-size:1rem;flex-shrink:0}
+.te-opt-marker{width:18px;height:18px;border-radius:50%;border:2px solid var(--border);flex-shrink:0}
+.te-opt.correct .te-opt-marker{border-color:#10b981;background:#10b981}
+.te-opt-inp{flex:1;border:none;background:transparent;color:var(--text-primary);font-size:.88rem;outline:none}
+.te-opt-inp::placeholder{color:var(--text-muted)}
+.te-opt-correct-btn{padding:4px 10px;border-radius:8px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:.75rem;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap;flex-shrink:0}
+.te-opt-correct-btn.on{border-color:#10b981;color:#10b981;background:rgba(16,185,129,.1)}
+.te-opt-del{width:28px;height:28px;border-radius:8px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.85rem;transition:all .15s;flex-shrink:0}
+.te-opt-del:hover{border-color:var(--danger);color:var(--danger)}
+.te-add-opt{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:10px;border:1.5px dashed var(--border);background:transparent;color:var(--text-muted);font-size:.82rem;cursor:pointer;transition:all .15s}
+.te-add-opt:hover{border-color:var(--primary);color:var(--primary)}
+
+/* Matching */
+.te-match-row{display:grid;grid-template-columns:1fr auto 1fr auto;align-items:center;gap:8px;margin-bottom:8px}
+.te-match-inp{padding:8px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.85rem;outline:none;width:100%;box-sizing:border-box}
+.te-match-inp:focus{border-color:var(--primary)}
+.te-match-arrow{color:var(--text-muted);font-size:1.1rem;flex-shrink:0}
+
+/* Ordering */
+.te-order-item{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:12px;border:1.5px solid var(--border);background:var(--bg-surface);margin-bottom:8px;cursor:grab}
+.te-order-num{width:24px;height:24px;border-radius:50%;background:var(--primary);color:#fff;font-size:.75rem;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+
+.te-save-btn{width:100%;padding:10px;border-radius:12px;background:var(--primary);border:none;color:#fff;font-size:.9rem;font-weight:700;cursor:pointer;transition:background .15s;margin-top:4px}
+.te-save-btn:hover{background:var(--primary-dark,#1d4ed8)}
+
+.te-text-hint{padding:16px;border-radius:12px;border:1.5px solid rgba(99,102,241,.25);background:rgba(99,102,241,.07);color:var(--text-secondary);font-size:.85rem;line-height:1.6;margin-bottom:14px}
+
+/* Right panel */
+.te-right{width:280px;flex-shrink:0;display:flex;flex-direction:column;overflow:hidden;background:var(--bg-raised)}
+.te-right-header{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.te-right-title{font-size:.82rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em}
+.te-right-count{font-size:.78rem;color:var(--text-muted)}
+.te-qlist{flex:1;overflow-y:auto;padding:8px}
+.te-qitem{display:flex;align-items:flex-start;gap:8px;padding:10px 12px;border-radius:12px;border:1.5px solid transparent;background:var(--bg-surface);margin-bottom:6px;cursor:pointer;transition:all .15s}
+.te-qitem:hover{border-color:var(--border-light)}
+.te-qitem.active{border-color:var(--primary);background:var(--primary-glow)}
+.te-qitem-num{width:22px;height:22px;border-radius:50%;background:var(--bg-raised);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;color:var(--text-muted);flex-shrink:0;margin-top:1px}
+.te-qitem.active .te-qitem-num{background:var(--primary);border-color:var(--primary);color:#fff}
+.te-qitem-body{flex:1;min-width:0}
+.te-qitem-text{font-size:.82rem;font-weight:500;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}
+.te-qitem-type{font-size:.7rem;color:var(--text-muted)}
+.te-qitem-del{width:24px;height:24px;border-radius:7px;border:none;background:transparent;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.8rem;flex-shrink:0;transition:all .15s}
+.te-qitem-del:hover{background:rgba(239,68,68,.1);color:var(--danger)}
+.te-right-footer{padding:12px;border-top:1px solid var(--border);flex-shrink:0}
+.te-add-q-wrap{position:relative}
+.te-add-q-btn{width:100%;padding:9px;border-radius:12px;border:1.5px dashed var(--border);background:transparent;color:var(--primary);font-size:.85rem;font-weight:600;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:6px}
+.te-add-q-btn:hover{border-color:var(--primary);background:var(--primary-glow)}
+.te-type-dropdown{position:absolute;bottom:calc(100% + 4px);left:0;right:0;background:var(--bg-surface);border:1.5px solid var(--border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.15);z-index:100;overflow:hidden;display:none}
+.te-type-dropdown.open{display:block}
+.te-type-opt{padding:10px 14px;font-size:.85rem;color:var(--text-primary);cursor:pointer;display:flex;align-items:center;gap:8px;transition:background .1s}
+.te-type-opt:hover{background:var(--bg-raised)}
+
+.te-empty-q{display:flex;flex-direction:column;align-items:center;padding:2rem 1rem;text-align:center;color:var(--text-muted);font-size:.85rem}
+.te-empty-q-ico{font-size:2.5rem;margin-bottom:.75rem;opacity:.4}
+</style>
+
+<div class="te-wrap">
+    <div class="te-topbar">
+        <button class="te-back" onclick="Router.go('tests-manager')">← Тести</button>
+        <span class="te-test-title">${this._curTest.title}</span>
+        <button class="btn btn-ghost btn-sm" onclick="TestsManagerPage._openMetaModal(TestsManagerPage._curTest)">⚙️ Налаштування</button>
+        <button class="btn btn-sm" style="background:#C9A227;color:#fff;border:none;border-radius:10px;padding:7px 16px;font-weight:600;cursor:pointer" onclick="TestsManagerPage.openAssignModal('${this._curTest.id}')">👥 Призначити</button>
+        <button class="btn btn-ghost btn-sm" onclick="TestsManagerPage.openResultsModal('${this._curTest.id}')">📊 Результати</button>
+    </div>
+    <div class="te-body">
+        <div class="te-left">
+            <div class="te-left-toolbar" id="te-toolbar">
+                ${this._questions.length ? this._toolbarHtml() : '<span style="color:var(--text-muted);font-size:.85rem">Оберіть або додайте питання</span>'}
+            </div>
+            <div class="te-left-content" id="te-left-content">
+                ${this._questions.length ? '' : `
+                    <div class="te-empty-q">
+                        <div class="te-empty-q-ico">✏️</div>
+                        <div>Додайте питання у правій панелі</div>
+                    </div>`}
+            </div>
+        </div>
+        <div class="te-right">
+            <div class="te-right-header">
+                <span class="te-right-title">Питання</span>
+                <span class="te-right-count" id="te-qcount">${this._questions.length}</span>
+            </div>
+            <div class="te-qlist" id="te-qlist">
+                ${this._renderQList()}
+            </div>
+            <div class="te-right-footer">
+                <div class="te-add-q-wrap" id="te-addq-wrap">
+                    <button class="te-add-q-btn" onclick="TestsManagerPage._toggleAddMenu()">＋ Додати питання</button>
+                    <div class="te-type-dropdown" id="te-type-dd">
+                        ${[
+                            ['single','⭕','Одиночний вибір'],
+                            ['multiple','☑️','Множинний вибір'],
+                            ['text','✍️','Вільна відповідь'],
+                            ['matching','↔️','Співставлення'],
+                            ['ordering','🔢','Упорядкування']
+                        ].map(([t,ic,lb]) => `
+                            <div class="te-type-opt" onclick="TestsManagerPage.addQuestion('${t}')">
+                                <span>${ic}</span><span>${lb}</span>
+                            </div>`).join('')}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>`;
+
+        if (this._questions.length) {
+            this._selectQuestion(0);
+        }
+
+        document.addEventListener('click', this._closeAddMenuHandler = (e) => {
+            if (!document.getElementById('te-addq-wrap')?.contains(e.target)) {
+                document.getElementById('te-type-dd')?.classList.remove('open');
+            }
+        });
+    },
+
+    _toolbarHtml() {
+        const q = this._questions[this._activeIdx];
+        const type = q?.question_type || this._qType;
+        const pts  = q?.points || 1;
+        return `
+<select class="te-type-sel" id="te-type-sel" onchange="TestsManagerPage._onTypeChange(this.value)">
+    <option value="single"   ${type==='single'   ?'selected':''}>⭕ Одиночний вибір</option>
+    <option value="multiple" ${type==='multiple' ?'selected':''}>☑️ Множинний вибір</option>
+    <option value="text"     ${type==='text'     ?'selected':''}>✍️ Вільна відповідь</option>
+    <option value="matching" ${type==='matching' ?'selected':''}>↔️ Співставлення</option>
+    <option value="ordering" ${type==='ordering' ?'selected':''}>🔢 Упорядкування</option>
+</select>
+<div class="te-pts-wrap">
+    <span class="te-pts-lbl">Балів:</span>
+    <input class="te-pts-inp" type="number" id="te-pts" min="1" max="100" value="${pts}">
+</div>`;
+    },
+
+    _renderQList() {
+        if (!this._questions.length) return `
+            <div style="padding:1.5rem;text-align:center;color:var(--text-muted);font-size:.82rem">Питань поки немає</div>`;
+        const typeLabels = {single:'Одиночне',multiple:'Множинне',text:'Вільна відповідь',matching:'Співставлення',ordering:'Упорядкування'};
+        return this._questions.map((q, i) => {
+            const rawText = q.question_text || q.body || '';
+            const text = rawText.replace(/<[^>]*>/g,'').trim() || 'Питання ' + (i+1);
+            return `
+<div class="te-qitem${i===this._activeIdx?' active':''}" onclick="TestsManagerPage._selectQuestion(${i})">
+    <div class="te-qitem-num">${i+1}</div>
+    <div class="te-qitem-body">
+        <div class="te-qitem-text">${text}</div>
+        <div class="te-qitem-type">${typeLabels[q.question_type]||q.question_type}</div>
+    </div>
+    <button class="te-qitem-del" title="Видалити" onclick="event.stopPropagation();TestsManagerPage.deleteQuestion('${q.id}')">✕</button>
+</div>`;
+        }).join('');
+    },
+
+    _selectQuestion(idx) {
+        this._activeIdx = idx;
+        const q = this._questions[idx];
+        if (!q) return;
+        this._qType = q.question_type;
+
+        // Build options from existing answers
+        if (q.question_type === 'matching') {
+            this._opts = (q.answers||[]).map(a => {
+                const parts = (a.answer_text||'').split('|||');
+                return { left: parts[0]||'', right: parts[1]||'' };
+            });
+        } else if (q.question_type === 'ordering') {
+            this._opts = [...(q.answers||[])].sort((a,b) => a.order_index - b.order_index).map(a => ({ text: a.answer_text||'' }));
+        } else {
+            this._opts = (q.answers||[]).map(a => ({ id: a.id, text: a.answer_text, correct: a.is_correct }));
+        }
+
+        // Update toolbar
+        const toolbar = document.getElementById('te-toolbar');
+        if (toolbar) toolbar.innerHTML = this._toolbarHtml();
+
+        // Update question list highlight
+        document.querySelectorAll('.te-qitem').forEach((el,i) => el.classList.toggle('active', i===idx));
+
+        // Render editor
+        this._renderQuestionEditor();
+    },
+
+    _renderQuestionEditor() {
+        const q = this._questions[this._activeIdx];
+        if (!q) return;
+        const content = document.getElementById('te-left-content');
+        if (!content) return;
+
+        content.innerHTML = `
+<div class="te-lbl">Текст питання</div>
+<div class="te-quill-wrap"><div id="te-quill"></div></div>
+<div class="te-lbl">Варіанти відповідей</div>
+<div id="te-options-area">${this._optionsHtml()}</div>
+<button class="te-save-btn" onclick="TestsManagerPage.saveCurrentQuestion()">💾 Зберегти питання</button>`;
+
+        // Init Quill
+        if (this._quill) { try { this._quill = null; } catch{} }
+        setTimeout(() => {
+            const el = document.getElementById('te-quill');
+            if (!el) return;
+            this._quill = new Quill('#te-quill', {
+                theme: 'snow',
+                modules: { toolbar: [['bold','italic','underline'],['link'],['clean']] }
+            });
+            const text = q.question_text || q.body || '';
+            if (text) this._quill.clipboard.dangerouslyPasteHTML(text);
+        }, 50);
+    },
+
+    _optionsHtml() {
+        const type = this._qType;
+        if (type === 'text') {
+            return `<div class="te-text-hint">✍️ Користувач введе текстову відповідь. Перевірка відбувається вручну адміністратором у розділі «Результати».</div>`;
+        }
+        if (type === 'matching') {
+            const pairs = this._opts.length ? this._opts : [{left:'',right:''},{left:'',right:''}];
+            return `
+<div id="te-match-list">
+${pairs.map((p,i) => `
+<div class="te-match-row">
+    <input class="te-match-inp" placeholder="Ліва частина..." value="${p.left||''}" oninput="TestsManagerPage._opts[${i}].left=this.value">
+    <span class="te-match-arrow">↔</span>
+    <input class="te-match-inp" placeholder="Права частина..." value="${p.right||''}" oninput="TestsManagerPage._opts[${i}].right=this.value">
+    <button class="te-opt-del" onclick="TestsManagerPage.removeOption(${i})">✕</button>
+</div>`).join('')}
+</div>
+<button class="te-add-opt" onclick="TestsManagerPage.addOption()">＋ Додати пару</button>`;
+        }
+        if (type === 'ordering') {
+            const items = this._opts.length ? this._opts : [{text:''},{text:''}];
+            return `
+<div id="te-order-list">
+<p style="font-size:.78rem;color:var(--text-muted);margin-bottom:10px">Введіть елементи у правильному порядку ↓</p>
+${items.map((it,i) => `
+<div class="te-order-item">
+    <span class="te-opt-handle">⠿</span>
+    <div class="te-order-num">${i+1}</div>
+    <input class="te-opt-inp" placeholder="Елемент ${i+1}..." value="${it.text||''}" oninput="TestsManagerPage._opts[${i}].text=this.value">
+    <button class="te-opt-del" onclick="TestsManagerPage.removeOption(${i})">✕</button>
+</div>`).join('')}
+</div>
+<button class="te-add-opt" onclick="TestsManagerPage.addOption()">＋ Додати елемент</button>`;
+        }
+        // single / multiple
+        const isMulti = type === 'multiple';
+        const opts = this._opts.length ? this._opts : [{text:'',correct:false},{text:'',correct:false}];
+        return `
+<div class="te-options" id="te-opts-list">
+${opts.map((o,i) => `
+<div class="te-opt${o.correct?' correct':''}">
+    <span class="te-opt-handle">⠿</span>
+    <div class="te-opt-marker" style="${isMulti?'border-radius:4px':''}"></div>
+    <input class="te-opt-inp" placeholder="Варіант ${i+1}..." value="${(o.text||'').replace(/"/g,'&quot;')}" oninput="TestsManagerPage._opts[${i}].text=this.value">
+    <button class="te-opt-correct-btn${o.correct?' on':''}" onclick="TestsManagerPage.toggleCorrect(${i})">${o.correct?'✓ Правильна':'Правильна?'}</button>
+    <button class="te-opt-del" onclick="TestsManagerPage.removeOption(${i})">✕</button>
+</div>`).join('')}
+</div>
+<button class="te-add-opt" onclick="TestsManagerPage.addOption()">＋ Додати варіант</button>`;
+    },
+
+    _onTypeChange(val) {
+        this._qType = val;
+        this._opts  = [];
+        document.getElementById('te-options-area').innerHTML = this._optionsHtml();
+    },
+
+    addOption() {
+        const type = this._qType;
+        if (type === 'matching') this._opts.push({ left:'', right:'' });
+        else if (type === 'ordering') this._opts.push({ text:'' });
+        else this._opts.push({ text:'', correct: false });
+        document.getElementById('te-options-area').innerHTML = this._optionsHtml();
+    },
+
+    removeOption(idx) {
+        this._opts.splice(idx, 1);
+        document.getElementById('te-options-area').innerHTML = this._optionsHtml();
+    },
+
+    toggleCorrect(idx) {
+        if (this._qType === 'single') {
+            this._opts.forEach((o,i) => o.correct = i === idx);
+        } else {
+            this._opts[idx].correct = !this._opts[idx].correct;
+        }
+        document.getElementById('te-options-area').innerHTML = this._optionsHtml();
+    },
+
+    async saveCurrentQuestion() {
+        const q = this._questions[this._activeIdx];
+        if (!q) return;
+        const questionText = this._quill ? this._quill.root.innerHTML : (q.question_text||q.body||'');
+        const pts = parseInt(document.getElementById('te-pts')?.value) || 1;
+        const type = document.getElementById('te-type-sel')?.value || this._qType;
+
+        Loader.show();
+        try {
+            await API.questions.update(q.id, {
+                question_text: questionText,
+                question_type: type,
+                points: pts,
+                order_index: this._activeIdx
+            });
+
+            // Save answers
+            let answers = [];
+            if (type === 'single' || type === 'multiple') {
+                answers = this._opts.filter(o => o.text?.trim()).map(o => ({ text: o.text.trim(), is_correct: o.correct }));
+            } else if (type === 'matching') {
+                answers = this._opts.filter(o => o.left?.trim()).map(o => ({ text: o.left.trim() + '|||' + (o.right||'').trim(), is_correct: true }));
+            } else if (type === 'ordering') {
+                answers = this._opts.filter(o => o.text?.trim()).map(o => ({ text: o.text.trim(), is_correct: true }));
+            }
+            await API.questions.upsertAnswers(q.id, answers);
+
+            // Refresh local
+            q.question_type = type;
+            q.question_text = questionText;
+            q.points = pts;
+            document.getElementById('te-qlist').innerHTML = this._renderQList();
+            Toast.success('Збережено');
+        } catch(e) { Toast.error('Помилка', e.message); }
+        finally { Loader.hide(); }
+    },
+
+    async addQuestion(type) {
+        document.getElementById('te-type-dd')?.classList.remove('open');
+        const test = this._curTest;
+        Loader.show();
+        try {
+            const q = await API.questions.create({
+                test_id:       test.id,
+                question_text: '',
+                question_type: type,
+                points:        1,
+                order_index:   this._questions.length
+            });
+            q.answers = [];
+            this._questions.push(q);
+            document.getElementById('te-qlist').innerHTML   = this._renderQList();
+            document.getElementById('te-qcount').textContent = this._questions.length;
+            document.getElementById('te-toolbar').innerHTML  = this._toolbarHtml();
+            this._selectQuestion(this._questions.length - 1);
+        } catch(e) { Toast.error('Помилка', e.message); }
+        finally { Loader.hide(); }
+    },
+
+    async deleteQuestion(id) {
+        if (!confirm('Видалити питання?')) return;
+        Loader.show();
+        try {
+            await API.questions.delete(id);
+            const idx = this._questions.findIndex(q => q.id === id);
+            this._questions.splice(idx, 1);
+            const newIdx = Math.min(this._activeIdx, this._questions.length - 1);
+            this._activeIdx = -1;
+            document.getElementById('te-qlist').innerHTML    = this._renderQList();
+            document.getElementById('te-qcount').textContent = this._questions.length;
+            if (this._questions.length) this._selectQuestion(newIdx);
+            else {
+                document.getElementById('te-toolbar').innerHTML = '<span style="color:var(--text-muted);font-size:.85rem">Оберіть або додайте питання</span>';
+                document.getElementById('te-left-content').innerHTML = `<div class="te-empty-q"><div class="te-empty-q-ico">✏️</div><div>Додайте питання у правій панелі</div></div>`;
+            }
+        } catch(e) { Toast.error('Помилка', e.message); }
+        finally { Loader.hide(); }
+    },
+
+    async deleteTest(id, title) {
+        if (!confirm(`Видалити тест «${title}»? Це незворотньо.`)) return;
+        Loader.show();
+        try {
+            await API.tests.delete(id);
+            Toast.success('Тест видалено');
+            await this._renderList(document.getElementById('page-content'));
+        } catch(e) { Toast.error('Помилка', e.message); }
+        finally { Loader.hide(); }
+    },
+
+    _toggleAddMenu() {
+        document.getElementById('te-type-dd')?.classList.toggle('open');
+    },
+
+    // ── Assign modal ──────────────────────────────────────────────
+
+    async openAssignModal(testId) {
+        Loader.show();
+        let employees = [], assigned = [];
+        try {
+            [employees, assigned] = await Promise.all([
+                TestsManagerAPI.getAllEmployees(),
+                TestsManagerAPI.getAssignments(testId)
+            ]);
+        } catch(e) { Toast.error('Помилка', e.message); Loader.hide(); return; }
+        Loader.hide();
+
+        const assignedIds = new Set(assigned.map(a => a.user_id));
+        Modal.open({
+            title: '👥 Призначити тест',
+            size: 'md',
+            body: `
+<p style="color:var(--text-muted);font-size:.85rem;margin-bottom:12px">Оберіть співробітників та вкажіть дедлайн (необов'язково)</p>
+<div class="form-group">
+    <label>Дедлайн</label>
+    <input type="datetime-local" id="tm-deadline">
+</div>
+<div style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:12px">
+    ${employees.map(e => `
+    <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s" onmouseenter="this.style.background='var(--bg-raised)'" onmouseleave="this.style.background=''">
+        <input type="checkbox" value="${e.id}" ${assignedIds.has(e.id)?'checked':''} style="width:16px;height:16px;cursor:pointer">
+        <div>
+            <div style="font-weight:600;font-size:.88rem">${e.full_name||e.email}</div>
+            ${e.job_position?`<div style="font-size:.75rem;color:var(--text-muted)">${e.job_position}</div>`:''}
+        </div>
+        ${assignedIds.has(e.id)?'<span style="margin-left:auto;font-size:.72rem;color:#10b981;font-weight:600">✓ Призначено</span>':''}
+    </label>`).join('')}
+</div>`,
+            footer: `
+<button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
+<button class="btn btn-primary" onclick="TestsManagerPage._doAssign('${testId}')">Зберегти</button>`
+        });
+    },
+
+    async _doAssign(testId) {
+        const checkboxes = document.querySelectorAll('#modal-body input[type=checkbox]');
+        const selected   = [...checkboxes].filter(c => c.checked).map(c => c.value);
+        const deadline   = Dom.val('tm-deadline') || null;
+        if (!selected.length) { Toast.info('Оберіть хоча б одного співробітника'); return; }
+        Loader.show();
+        try {
+            await TestsManagerAPI.assign(testId, selected, deadline ? new Date(deadline).toISOString() : null);
+            Toast.success('Призначено', `${selected.length} співробітників`);
+            Modal.close();
+        } catch(e) { Toast.error('Помилка', e.message); }
+        finally { Loader.hide(); }
+    },
+
+    // ── Results modal ─────────────────────────────────────────────
+
+    async openResultsModal(testId) {
+        Loader.show();
+        let results = [], test;
+        try {
+            [results, test] = await Promise.all([
+                TestsManagerAPI.getAllResults(testId),
+                API.tests.getById(testId)
+            ]);
+        } catch(e) { Toast.error('Помилка', e.message); Loader.hide(); return; }
+        Loader.hide();
+
+        const passed  = results.filter(r => r.passed).length;
+        const avgPct  = results.length ? Math.round(results.reduce((s,r) => s+(r.percentage||0), 0) / results.length) : 0;
+
+        Modal.open({
+            title: `📊 Результати — ${test.title}`,
+            size: 'lg',
+            body: `
+<div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+    ${[
+        ['👥', results.length, 'Спроб'],
+        ['✅', passed, 'Пройшли'],
+        ['❌', results.length-passed, 'Не пройшли'],
+        ['📊', avgPct+'%', 'Середній бал']
+    ].map(([ic,v,l]) => `
+    <div style="flex:1;min-width:100px;padding:12px 16px;border-radius:14px;border:1px solid var(--border);background:var(--bg-raised);text-align:center">
+        <div style="font-size:1.5rem">${ic}</div>
+        <div style="font-size:1.3rem;font-weight:800;color:var(--text-primary)">${v}</div>
+        <div style="font-size:.72rem;color:var(--text-muted)">${l}</div>
+    </div>`).join('')}
+</div>
+${results.length ? `
+<div style="border:1px solid var(--border);border-radius:12px;overflow:hidden">
+    <table style="width:100%;border-collapse:collapse;font-size:.85rem">
+        <thead>
+            <tr style="background:var(--bg-raised)">
+                <th style="padding:10px 14px;text-align:left;font-weight:600;color:var(--text-muted)">Співробітник</th>
+                <th style="padding:10px 14px;text-align:left;font-weight:600;color:var(--text-muted)">Дата</th>
+                <th style="padding:10px 14px;text-align:center;font-weight:600;color:var(--text-muted)">Бал</th>
+                <th style="padding:10px 14px;text-align:center;font-weight:600;color:var(--text-muted)">Статус</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${results.map(r => `
+            <tr style="border-top:1px solid var(--border)">
+                <td style="padding:10px 14px">
+                    <div style="font-weight:600">${r.user?.full_name||r.user?.email||'—'}</div>
+                    ${r.user?.job_position?`<div style="font-size:.72rem;color:var(--text-muted)">${r.user.job_position}</div>`:''}
+                </td>
+                <td style="padding:10px 14px;color:var(--text-muted)">${Fmt.dateShort(r.completed_at)}</td>
+                <td style="padding:10px 14px;text-align:center;font-weight:700;font-size:1rem;color:${r.passed?'#10b981':'#ef4444'}">${Math.round(r.percentage||0)}%</td>
+                <td style="padding:10px 14px;text-align:center">
+                    <span style="display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:.72rem;font-weight:700;${r.passed?'background:rgba(16,185,129,.12);color:#10b981':'background:rgba(239,68,68,.1);color:#ef4444'}">
+                        ${r.passed ? '✓ Пройшов' : '✗ Не пройшов'}
+                    </span>
+                </td>
+            </tr>`).join('')}
+        </tbody>
+    </table>
+</div>` : '<div style="text-align:center;padding:2rem;color:var(--text-muted)">Результатів поки немає</div>'}`,
+            footer: `<button class="btn btn-secondary" onclick="Modal.close()">Закрити</button>`
+        });
+    }
+};
+
+// ================================================================
+// MyTestsPage — користувач
+// ================================================================
+const MyTestsPage = {
+    _tab: 'pending',
+
+    async init(container) {
+        UI.setBreadcrumb([{ label: 'Мої тести' }]);
+        container.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
+        this._tab = 'pending';
+        await this._render(container);
+    },
+
+    async _render(container) {
+        let assignments = [], attempts = [];
+        try {
+            [assignments, attempts] = await Promise.all([
+                TestsManagerAPI.getMyAssignments(),
+                supabase.from('test_attempts')
+                    .select('*, test:tests(id,title,pass_score)')
+                    .eq('user_id', AppState.user.id)
+                    .not('completed_at', 'is', null)
+                    .order('completed_at', { ascending: false })
+                    .then(({ data }) => data || [])
+            ]);
+        } catch(e) { assignments = []; attempts = []; }
+
+        const completedTestIds = new Set(attempts.filter(a => a.passed).map(a => a.test_id));
+
+        container.innerHTML = `
+<style>
+.mt-page{max-width:900px}
+.mt-hero{border-radius:22px;padding:30px 36px;margin-bottom:24px;background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 60%,#1e40af 100%);position:relative;overflow:hidden}
+.mt-hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 60% 80% at 80% 20%,rgba(201,162,39,.15),transparent);pointer-events:none}
+.mt-hero-inner{position:relative;display:flex;align-items:center;gap:18px}
+.mt-hero-icon{width:56px;height:56px;border-radius:16px;background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:1.8rem;flex-shrink:0}
+.mt-hero-title{margin:0;font-size:1.6rem;font-weight:800;color:#fff;letter-spacing:-.03em}
+.mt-hero-sub{margin:4px 0 0;color:rgba(255,255,255,.65);font-size:.87rem}
+
+.mt-tabs{display:flex;gap:6px;margin-bottom:20px;border-bottom:1px solid var(--border);padding-bottom:0}
+.mt-tab{padding:10px 20px;border:none;background:transparent;color:var(--text-muted);font-size:.88rem;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;margin-bottom:-1px}
+.mt-tab.active{color:var(--primary);border-bottom-color:var(--primary);font-weight:700}
+.mt-tab:hover:not(.active){color:var(--text-primary)}
+
+.mt-list{display:flex;flex-direction:column;gap:10px;animation:mt-in .3s ease}
+@keyframes mt-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.mt-card{background:var(--bg-surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;display:flex;transition:box-shadow .2s,border-color .2s}
+.mt-card:hover{box-shadow:0 4px 20px rgba(0,0,0,.1);border-color:var(--border-light)}
+.mt-card-bar{width:4px;flex-shrink:0}
+.mt-card-bar.pending{background:linear-gradient(180deg,#f59e0b,#f97316)}
+.mt-card-bar.overdue{background:linear-gradient(180deg,#ef4444,#dc2626)}
+.mt-card-bar.done{background:linear-gradient(180deg,#10b981,#059669)}
+.mt-card-body{padding:16px 18px;flex:1;display:flex;align-items:center;gap:14px}
+.mt-card-info{flex:1;min-width:0}
+.mt-card-title{font-weight:700;font-size:.95rem;color:var(--text-primary);margin-bottom:5px}
+.mt-card-meta{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.mt-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:20px;font-size:.7rem;font-weight:600}
+.mt-badge-pending{background:rgba(245,158,11,.12);color:#f59e0b}
+.mt-badge-overdue{background:rgba(239,68,68,.1);color:#ef4444}
+.mt-badge-done{background:rgba(16,185,129,.12);color:#10b981}
+.mt-badge-fail{background:rgba(239,68,68,.1);color:#ef4444}
+.mt-badge-info{background:var(--bg-raised);color:var(--text-muted);border:1px solid var(--border)}
+.mt-btn-start{padding:8px 20px;border-radius:12px;border:none;background:var(--primary);color:#fff;font-size:.85rem;font-weight:700;cursor:pointer;transition:background .15s;white-space:nowrap;flex-shrink:0}
+.mt-btn-start:hover{background:var(--primary-dark,#1d4ed8)}
+.mt-btn-view{padding:8px 16px;border-radius:12px;border:1.5px solid var(--border);background:transparent;color:var(--text-secondary);font-size:.83rem;font-weight:500;cursor:pointer;transition:all .15s;white-space:nowrap;flex-shrink:0}
+.mt-btn-view:hover{border-color:var(--primary);color:var(--primary)}
+.mt-score-circle{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.82rem;font-weight:800;flex-shrink:0}
+
+.mt-empty{display:flex;flex-direction:column;align-items:center;padding:5rem 2rem;text-align:center}
+.mt-empty-ico{font-size:3.5rem;margin-bottom:1rem;opacity:.3}
+.mt-empty-head{font-size:1.1rem;font-weight:700;color:var(--text-primary);margin-bottom:.4rem}
+.mt-empty-txt{font-size:.85rem;color:var(--text-muted)}
+</style>
+
+<div class="mt-page">
+    <div class="mt-hero">
+        <div class="mt-hero-inner">
+            <div class="mt-hero-icon">🎯</div>
+            <div>
+                <h1 class="mt-hero-title">Мої тести</h1>
+                <p class="mt-hero-sub">Призначені тести та ваша історія проходжень</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-tabs">
+        <button class="mt-tab${this._tab==='pending'?' active':''}" onclick="MyTestsPage._switchTab('pending',this)">
+            📋 Призначені ${assignments.length ? `<span style="background:var(--primary);color:#fff;border-radius:20px;padding:1px 8px;font-size:.7rem;margin-left:4px">${assignments.filter(a => !completedTestIds.has(a.test_id)).length}</span>` : ''}
+        </button>
+        <button class="mt-tab${this._tab==='history'?' active':''}" onclick="MyTestsPage._switchTab('history',this)">
+            🏆 Пройдені (${attempts.length})
+        </button>
+    </div>
+
+    <div id="mt-content">
+        ${this._tab === 'pending' ? this._pendingHtml(assignments, completedTestIds) : this._historyHtml(attempts)}
+    </div>
+</div>`;
+    },
+
+    _switchTab(tab, btn) {
+        this._tab = tab;
+        document.querySelectorAll('.mt-tab').forEach(t => t.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('mt-content').innerHTML =
+            tab === 'pending'
+                ? '<div style="display:flex;justify-content:center;padding:2rem"><div class="spinner"></div></div>'
+                : '<div style="display:flex;justify-content:center;padding:2rem"><div class="spinner"></div></div>';
+        MyTestsPage.init(document.getElementById('page-content'));
+    },
+
+    _pendingHtml(assignments, completedTestIds) {
+        if (!assignments.length) return `
+<div class="mt-empty">
+    <div class="mt-empty-ico">📋</div>
+    <div class="mt-empty-head">Немає призначених тестів</div>
+    <div class="mt-empty-txt">Коли керівник призначить вам тест — він з'явиться тут</div>
+</div>`;
+
+        const sorted = [...assignments].sort((a,b) => {
+            const aDone = completedTestIds.has(a.test_id);
+            const bDone = completedTestIds.has(b.test_id);
+            if (aDone !== bDone) return aDone ? 1 : -1;
+            if (a.deadline_at && b.deadline_at) return new Date(a.deadline_at) - new Date(b.deadline_at);
+            if (a.deadline_at) return -1;
+            if (b.deadline_at) return 1;
+            return new Date(b.created_at) - new Date(a.created_at);
+        });
+
+        return `<div class="mt-list">${sorted.map(a => {
+            const test = a.test;
+            if (!test) return '';
+            const isDone    = completedTestIds.has(a.test_id);
+            const isOverdue = !isDone && a.deadline_at && new Date(a.deadline_at) < new Date();
+            const qCount    = test.questions?.length || 0;
+            const barCls    = isDone ? 'done' : isOverdue ? 'overdue' : 'pending';
+            let deadlineTxt = '';
+            if (a.deadline_at) {
+                const dl = new Date(a.deadline_at);
+                const daysLeft = Math.ceil((dl - Date.now()) / 86400000);
+                deadlineTxt = isOverdue
+                    ? `<span class="mt-badge mt-badge-overdue">🔴 Прострочено</span>`
+                    : daysLeft <= 3
+                        ? `<span class="mt-badge mt-badge-overdue">⏰ ${daysLeft} дн.</span>`
+                        : `<span class="mt-badge mt-badge-info">📅 до ${Fmt.dateShort(dl)}</span>`;
+            }
+            return `
+<div class="mt-card">
+    <div class="mt-card-bar ${barCls}"></div>
+    <div class="mt-card-body">
+        <div class="mt-card-info">
+            <div class="mt-card-title">${test.title}</div>
+            <div class="mt-card-meta">
+                <span class="mt-badge mt-badge-info">❓ ${qCount} питань</span>
+                ${test.time_limit_minutes ? `<span class="mt-badge mt-badge-info">⏱ ${test.time_limit_minutes} хв</span>` : ''}
+                <span class="mt-badge mt-badge-info">🎯 ${test.pass_score||70}% прохідний</span>
+                ${isDone ? `<span class="mt-badge mt-badge-done">✓ Пройдено</span>` : deadlineTxt}
+            </div>
+        </div>
+        ${isDone
+            ? `<button class="mt-btn-view" onclick="Router.go('tests/${test.id}')">Переглянути</button>`
+            : `<button class="mt-btn-start" onclick="Router.go('tests/${test.id}')">Пройти тест →</button>`}
+    </div>
+</div>`;
+        }).join('')}</div>`;
+    },
+
+    _historyHtml(attempts) {
+        if (!attempts.length) return `
+<div class="mt-empty">
+    <div class="mt-empty-ico">🏆</div>
+    <div class="mt-empty-head">Ви ще не проходили тестів</div>
+    <div class="mt-empty-txt">Результати пройдених тестів будуть відображатись тут</div>
+</div>`;
+
+        return `<div class="mt-list">${attempts.map(a => {
+            const pct = Math.round(a.percentage || 0);
+            return `
+<div class="mt-card">
+    <div class="mt-card-bar ${a.passed ? 'done' : 'overdue'}"></div>
+    <div class="mt-card-body">
+        <div class="mt-card-info">
+            <div class="mt-card-title">${a.test?.title || 'Тест'}</div>
+            <div class="mt-card-meta">
+                <span class="mt-badge mt-badge-info">${Fmt.datetime(a.completed_at)}</span>
+                ${a.time_spent_seconds ? `<span class="mt-badge mt-badge-info">⏱ ${Math.floor(a.time_spent_seconds/60)} хв</span>` : ''}
+                <span class="mt-badge ${a.passed ? 'mt-badge-done' : 'mt-badge-fail'}">${a.passed ? '✓ Зараховано' : '✗ Не зараховано'}</span>
+            </div>
+        </div>
+        <div class="mt-score-circle" style="background:${a.passed?'rgba(16,185,129,.12)':'rgba(239,68,68,.1)'};color:${a.passed?'#10b981':'#ef4444'}">
+            ${pct}%
+        </div>
+        <button class="mt-btn-view" onclick="Router.go('tests/${a.test_id}')">Деталі</button>
+    </div>
+</div>`;
+        }).join('')}</div>`;
+    }
+};

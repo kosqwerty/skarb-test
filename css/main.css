@@ -1048,7 +1048,7 @@ input#uf-select-all {
     content: '';
     position: absolute;
     inset: -40px;
-    background: url('/bg.png') center center / cover no-repeat;
+    background: url('/BG.png') center center / cover no-repeat;
     filter: blur(3px);
     z-index: 0;
 }

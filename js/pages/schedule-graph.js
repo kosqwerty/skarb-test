@@ -613,7 +613,7 @@ ${this._styles()}`;
             <button class="sg-loc-item ${isActive ? 'active' : ''}${hasHelp ? ' has-help' : ''}"
                 onclick="ScheduleGraphPage._selectLocation('${l.id}')">
                 <span class="sg-loc-item-ico">${viewOnly ? '👁' : '🏪'}</span>
-                <span class="sg-loc-item-name">${l.name}</span>
+                <span class="sg-loc-item-name" title="${l.name}">${l.name.slice(0,3)}</span>
                 <span class="sg-loc-item-meta">
                     ${whText ? `<span class="sg-loc-item-wh">${whText}</span>` : ''}
                     ${hasHelp ? `<span class="sg-loc-item-helpdot"></span>` : ''}

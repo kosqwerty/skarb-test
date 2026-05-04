@@ -460,15 +460,11 @@ const TestsManagerPage = {
 .te-qitem-type{font-size:.7rem;color:var(--text-muted)}
 .te-qitem-del{width:24px;height:24px;border-radius:7px;border:none;background:transparent;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.8rem;flex-shrink:0;transition:all .15s}
 .te-qitem-del:hover{background:rgba(239,68,68,.1);color:var(--danger)}
-.te-right-footer{padding:12px;border-top:1px solid var(--border);flex-shrink:0}
-.te-add-q-wrap{position:relative}
-.te-add-q-btn{width:100%;padding:9px;border-radius:12px;border:1.5px dashed var(--border);background:transparent;color:var(--primary);font-size:.85rem;font-weight:600;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:6px}
-.te-add-q-btn:hover{border-color:var(--primary);background:var(--primary-glow)}
-.te-type-dropdown{position:absolute;bottom:calc(100% + 4px);left:50%;transform:translateX(-50%);width:max-content;background:var(--bg-surface);border:1.5px solid var(--border);border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.18);z-index:100;overflow:hidden;display:none;padding:6px}
-.te-type-dropdown.open{display:flex;gap:4px}
-.te-type-opt{padding:8px 12px;font-size:.8rem;color:var(--text-primary);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;transition:background .1s;border-radius:10px;white-space:nowrap;min-width:72px}
-.te-type-opt span:first-child{font-size:1.2rem}
-.te-type-opt:hover{background:var(--bg-raised)}
+.te-right-footer{padding:10px;border-top:1px solid var(--border);flex-shrink:0}
+.te-type-row{display:flex;gap:4px}
+.te-type-btn{flex:1;padding:6px 2px;border-radius:10px;border:1.5px solid var(--border);background:transparent;color:var(--text-secondary);font-size:.68rem;font-weight:600;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;transition:all .15s;line-height:1.2}
+.te-type-btn span:first-child{font-size:1.1rem}
+.te-type-btn:hover{border-color:var(--primary);color:var(--primary);background:var(--primary-glow,rgba(99,102,241,.07))}
 
 .te-empty-q{display:flex;flex-direction:column;align-items:center;padding:2rem 1rem;text-align:center;color:var(--text-muted);font-size:.85rem}
 .te-empty-q-ico{font-size:2.5rem;margin-bottom:.75rem;opacity:.4}
@@ -504,20 +500,17 @@ const TestsManagerPage = {
                 ${this._renderQList()}
             </div>
             <div class="te-right-footer">
-                <div class="te-add-q-wrap" id="te-addq-wrap">
-                    <button class="te-add-q-btn" onclick="TestsManagerPage._toggleAddMenu()">＋ Додати питання</button>
-                    <div class="te-type-dropdown" id="te-type-dd">
-                        ${[
-                            ['single','⭕','Одиночний вибір'],
-                            ['multiple','☑️','Множинний вибір'],
-                            ['text','✍️','Вільна відповідь'],
-                            ['matching','↔️','Співставлення'],
-                            ['ordering','🔢','Упорядкування']
-                        ].map(([t,ic,lb]) => `
-                            <div class="te-type-opt" onclick="TestsManagerPage.addQuestion('${t}')">
-                                <span>${ic}</span><span>${lb}</span>
-                            </div>`).join('')}
-                    </div>
+                <div class="te-type-row">
+                    ${[
+                        ['single','⭕','Одиночний'],
+                        ['multiple','☑️','Множинний'],
+                        ['text','✍️','Текст'],
+                        ['matching','↔️','Пари'],
+                        ['ordering','🔢','Порядок']
+                    ].map(([t,ic,lb]) => `
+                        <button class="te-type-btn" title="${lb}" onclick="TestsManagerPage.addQuestion('${t}')">
+                            <span>${ic}</span><span>${lb}</span>
+                        </button>`).join('')}
                 </div>
             </div>
         </div>
@@ -528,11 +521,6 @@ const TestsManagerPage = {
             this._selectQuestion(0);
         }
 
-        document.addEventListener('click', this._closeAddMenuHandler = (e) => {
-            if (!document.getElementById('te-addq-wrap')?.contains(e.target)) {
-                document.getElementById('te-type-dd')?.classList.remove('open');
-            }
-        });
     },
 
     _toolbarHtml() {
@@ -795,10 +783,6 @@ ${opts.map((o,i) => `
             await this._renderList(document.getElementById('page-content'));
         } catch(e) { Toast.error('Помилка', e.message); }
         finally { Loader.hide(); }
-    },
-
-    _toggleAddMenu() {
-        document.getElementById('te-type-dd')?.classList.toggle('open');
     },
 
     // ── Assign modal ──────────────────────────────────────────────

@@ -1,31 +1,116 @@
 // ================================================================
 // LMS — Управління тестами (адмін/менеджер) + Мої тести (користувач)
 //
-// SQL (run once in Supabase):
-// CREATE TABLE IF NOT EXISTS test_assignments (
-//     id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-//     test_id     uuid NOT NULL REFERENCES tests(id) ON DELETE CASCADE,
-//     user_id     uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-//     assigned_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+// Повна схема БД (запускати при чистому розгортанні):
+//
+// DROP TABLE IF EXISTS attempt_answers  CASCADE;
+// DROP TABLE IF EXISTS test_assignments CASCADE;
+// DROP TABLE IF EXISTS test_attempts    CASCADE;
+// DROP TABLE IF EXISTS answers          CASCADE;
+// DROP TABLE IF EXISTS questions        CASCADE;
+// DROP TABLE IF EXISTS tests            CASCADE;
+//
+// CREATE TABLE tests (
+//     id                  uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+//     course_id           uuid        REFERENCES courses(id) ON DELETE CASCADE,
+//     title               text        NOT NULL,
+//     description         text,
+//     instructions        text,
+//     passing_score       integer     NOT NULL DEFAULT 70,
+//     max_attempts        integer     DEFAULT 3,
+//     time_limit_minutes  integer,
+//     order_index         integer     DEFAULT 0,
+//     is_published        boolean     DEFAULT false,
+//     randomize_questions boolean     DEFAULT false,
+//     show_results        boolean     DEFAULT true,
+//     created_by          uuid        REFERENCES auth.users(id) ON DELETE SET NULL,
+//     created_at          timestamptz DEFAULT now()
+// );
+// ALTER TABLE tests ENABLE ROW LEVEL SECURITY;
+// CREATE POLICY "tests_select" ON tests FOR SELECT USING (true);
+// CREATE POLICY "tests_insert" ON tests FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+// CREATE POLICY "tests_update" ON tests FOR UPDATE USING (auth.uid() IS NOT NULL);
+// CREATE POLICY "tests_delete" ON tests FOR DELETE USING (auth.uid() IS NOT NULL);
+//
+// CREATE TABLE questions (
+//     id            uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+//     test_id       uuid        NOT NULL REFERENCES tests(id) ON DELETE CASCADE,
+//     question_text text        NOT NULL DEFAULT '',
+//     question_type text        NOT NULL DEFAULT 'single',
+//     points        integer     NOT NULL DEFAULT 1,
+//     order_index   integer     DEFAULT 0,
+//     explanation   text,
+//     created_at    timestamptz DEFAULT now()
+// );
+// ALTER TABLE questions ENABLE ROW LEVEL SECURITY;
+// CREATE POLICY "questions_select" ON questions FOR SELECT USING (true);
+// CREATE POLICY "questions_insert" ON questions FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+// CREATE POLICY "questions_update" ON questions FOR UPDATE USING (auth.uid() IS NOT NULL);
+// CREATE POLICY "questions_delete" ON questions FOR DELETE USING (auth.uid() IS NOT NULL);
+//
+// CREATE TABLE answers (
+//     id          uuid    PRIMARY KEY DEFAULT gen_random_uuid(),
+//     question_id uuid    NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
+//     answer_text text    NOT NULL DEFAULT '',
+//     is_correct  boolean DEFAULT false,
+//     order_index integer DEFAULT 0
+// );
+// ALTER TABLE answers ENABLE ROW LEVEL SECURITY;
+// CREATE POLICY "answers_select" ON answers FOR SELECT USING (true);
+// CREATE POLICY "answers_insert" ON answers FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+// CREATE POLICY "answers_update" ON answers FOR UPDATE USING (auth.uid() IS NOT NULL);
+// CREATE POLICY "answers_delete" ON answers FOR DELETE USING (auth.uid() IS NOT NULL);
+//
+// CREATE TABLE test_attempts (
+//     id                 uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+//     test_id            uuid        NOT NULL REFERENCES tests(id) ON DELETE CASCADE,
+//     user_id            uuid        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+//     attempt_number     integer     DEFAULT 1,
+//     score              numeric     DEFAULT 0,
+//     max_score          numeric     DEFAULT 0,
+//     percentage         numeric     DEFAULT 0,
+//     passed             boolean     DEFAULT false,
+//     time_spent_seconds integer,
+//     started_at         timestamptz DEFAULT now(),
+//     completed_at       timestamptz
+// );
+// ALTER TABLE test_attempts ENABLE ROW LEVEL SECURITY;
+// CREATE POLICY "tattempts_select" ON test_attempts FOR SELECT USING (auth.uid() IS NOT NULL);
+// CREATE POLICY "tattempts_insert" ON test_attempts FOR INSERT WITH CHECK (auth.uid() = user_id);
+// CREATE POLICY "tattempts_update" ON test_attempts FOR UPDATE USING (auth.uid() = user_id);
+//
+// CREATE TABLE attempt_answers (
+//     id                  uuid    PRIMARY KEY DEFAULT gen_random_uuid(),
+//     attempt_id          uuid    NOT NULL REFERENCES test_attempts(id) ON DELETE CASCADE,
+//     question_id         uuid    NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
+//     selected_answer_ids uuid[]  DEFAULT '{}',
+//     is_correct          boolean DEFAULT false,
+//     points_earned       numeric DEFAULT 0
+// );
+// ALTER TABLE attempt_answers ENABLE ROW LEVEL SECURITY;
+// CREATE POLICY "aansw_select" ON attempt_answers FOR SELECT USING (auth.uid() IS NOT NULL);
+// CREATE POLICY "aansw_insert" ON attempt_answers FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+//
+// CREATE TABLE test_assignments (
+//     id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+//     test_id     uuid        NOT NULL REFERENCES tests(id) ON DELETE CASCADE,
+//     user_id     uuid        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+//     assigned_by uuid        REFERENCES auth.users(id) ON DELETE SET NULL,
 //     deadline_at timestamptz,
 //     created_at  timestamptz DEFAULT now(),
 //     UNIQUE(test_id, user_id)
 // );
 // ALTER TABLE test_assignments ENABLE ROW LEVEL SECURITY;
-// CREATE POLICY "ta_select" ON test_assignments FOR SELECT USING (auth.uid() IS NOT NULL);
-// CREATE POLICY "ta_insert" ON test_assignments FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
-// CREATE POLICY "ta_delete" ON test_assignments FOR DELETE USING (auth.uid() IS NOT NULL);
-//
-// ALTER TABLE tests ADD COLUMN IF NOT EXISTS is_standalone boolean DEFAULT false;
-// ALTER TABLE tests ADD COLUMN IF NOT EXISTS passing_score    integer DEFAULT 70;
-// ALTER TABLE questions ADD COLUMN IF NOT EXISTS extra_data jsonb DEFAULT '{}';
+// CREATE POLICY "tassign_select" ON test_assignments FOR SELECT USING (auth.uid() IS NOT NULL);
+// CREATE POLICY "tassign_insert" ON test_assignments FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+// CREATE POLICY "tassign_delete" ON test_assignments FOR DELETE USING (auth.uid() IS NOT NULL);
 // ================================================================
 
 // ── API extensions ────────────────────────────────────────────────
 const TestsManagerAPI = {
     async getAllStandalone() {
         const { data, error } = await supabase.from('tests')
-            .select('*, creator:profiles!created_by(full_name)')
+            .select('*')
             .is('course_id', null)
             .order('created_at', { ascending: false });
         if (error) throw error;
@@ -203,7 +288,7 @@ const TestsManagerPage = {
             <span class="tm-chip tm-chip-score">🎯 ${t.passing_score||70}%</span>
             <span class="tm-chip ${t.is_published ? 'tm-chip-pub' : 'tm-chip-draft'}">${t.is_published ? '✓ Опубліковано' : 'Чернетка'}</span>
         </div>
-        <div style="font-size:.75rem;color:var(--text-muted)">${Fmt.date(t.created_at)} · ${t.creator?.full_name||'—'}</div>
+        <div style="font-size:.75rem;color:var(--text-muted)">${Fmt.date(t.created_at)}</div>
     </div>
     <div class="tm-card-footer" onclick="event.stopPropagation()">
         <button class="tm-btn-edit" onclick="TestsManagerPage.openEditor('${t.id}')">✏️ Редагувати</button>

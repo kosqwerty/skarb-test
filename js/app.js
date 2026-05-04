@@ -87,7 +87,7 @@ const App = {
             },
 
             'resources': async ({ container, params }) => {
-                await ResourcesPage.init(container, { view: 'admin' });
+                Router.go('knowledge-base');
             },
 
             'knowledge-base': async ({ container, params }) => {

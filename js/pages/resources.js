@@ -119,7 +119,7 @@ const ResourcesPage = {
                             <option value="">Всі курси</option>
                         </select>
                     </div>
-                    ${view === 'admin' ? '<button class="btn btn-primary" onclick="ResourcesPage.openForm()">+ Додати ресурс</button>' : ''}
+                    ${(view === 'admin' || AppState.isStaff()) ? '<button class="btn btn-primary" onclick="ResourcesPage.openForm()">+ Додати ресурс</button>' : ''}
                 </div>
             </div>
             <div id="resource-list" class="resource-list"></div>

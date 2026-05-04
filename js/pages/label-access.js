@@ -25,7 +25,6 @@ const RESTRICTION_SECTIONS = [
     { route: 'news',            label: 'Новини',         icon: '📰' },
     { route: 'knowledge-base',  label: 'База знань',     icon: '📚' },
     { route: 'documents',       label: 'Документи',      icon: '📋' },
-    { route: 'resources',       label: 'Ресурси',        icon: '📂' },
     { route: 'collections',     label: 'Меню порталу',   icon: '🖥' },
     { route: 'analytics',       label: 'Аналітика',      icon: '📊' },
     { route: 'bookmarks',       label: 'Закладки',       icon: '⭐' },

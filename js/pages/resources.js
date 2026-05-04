@@ -18,6 +18,10 @@ const ResourcesPage = {
     _activeTab: 'list',
     _pendingResource: null,
     _pendingDownloadFile: false,
+    _kbViewMode: localStorage.getItem('kb_view') || 'grid',
+    _kbSort: 'newest',
+    _kbTypeFilter: 'all',
+    _kbAllItems: [],
 
     async init(container, { view = 'kb' } = {}) {
         this._page = 0;
@@ -95,35 +99,167 @@ const ResourcesPage = {
             return;
         }
 
-        const title = view === 'admin' ? 'Ресурси' : 'База знань';
-        const subtitle = view === 'admin'
-            ? 'Керуйте файлами навчальної бібліотеки та ресурсів.'
-            : 'Переглядайте доступні навчальні файли та довідкові матеріали.';
-
-        UI.setBreadcrumb([{ label: title }]);
+        UI.setBreadcrumb([{ label: 'База знань' }]);
+        this._kbTypeFilter = 'all';
+        this._kbSort = 'newest';
 
         container.innerHTML = `
-            <div class="page-header">
-                <div class="page-title">
-                    <h1>📂 ${title}</h1>
-                    <p>${subtitle}</p>
-                </div>
-                <div class="page-actions">
-                    <div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:center">
-                        <input type="text" id="resource-search" placeholder="Пошук ресурсів..." value="${this._search}"
-                               style="width:220px" onkeyup="ResourcesPage.onSearch(event)">
-                        <select id="resource-category" onchange="ResourcesPage.applyFilters()" style="width:auto">
-                            <option value="">Всі категорії</option>
-                        </select>
-                        <select id="resource-course" onchange="ResourcesPage.applyFilters()" style="width:auto">
-                            <option value="">Всі курси</option>
-                        </select>
-                    </div>
-                    ${(view === 'admin' || AppState.isStaff()) ? '<button class="btn btn-primary" onclick="ResourcesPage.openForm()">+ Додати ресурс</button>' : ''}
-                </div>
+<style>
+/* ── KB Hero ── */
+.kb-hero{position:relative;overflow:hidden;border-radius:24px;padding:36px 40px 32px;margin-bottom:28px;background:linear-gradient(135deg,var(--primary) 0%,#1e40af 60%,#4f46e5 100%)}
+.kb-hero-glow{position:absolute;inset:0;background:radial-gradient(ellipse 70% 80% at 10% 40%,rgba(255,255,255,.13),transparent),radial-gradient(ellipse 50% 60% at 90% 10%,rgba(255,255,255,.08),transparent);pointer-events:none}
+.kb-hero-inner{position:relative;display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap}
+.kb-hero-left{display:flex;align-items:center;gap:20px}
+.kb-hero-icon{width:64px;height:64px;border-radius:20px;background:rgba(255,255,255,.18);backdrop-filter:blur(10px);border:1.5px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;font-size:2rem;flex-shrink:0}
+.kb-hero-title{margin:0;font-size:1.85rem;font-weight:800;color:#fff;letter-spacing:-.03em;line-height:1.1}
+.kb-hero-sub{margin:6px 0 0;color:rgba(255,255,255,.72);font-size:.9rem}
+.kb-search-wrap{position:relative;flex:1;min-width:260px;max-width:400px}
+.kb-search-wrap input{width:100%;padding:12px 18px 12px 44px;border-radius:14px;border:1.5px solid rgba(255,255,255,.25);background:rgba(255,255,255,.15);backdrop-filter:blur(8px);color:#fff;font-size:.95rem;outline:none;transition:border-color .2s,background .2s;box-sizing:border-box}
+.kb-search-wrap input::placeholder{color:rgba(255,255,255,.55)}
+.kb-search-wrap input:focus{border-color:rgba(255,255,255,.55);background:rgba(255,255,255,.22)}
+.kb-search-icon{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:rgba(255,255,255,.6);pointer-events:none;font-size:1.05rem}
+
+/* ── KB Toolbar ── */
+.kb-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:20px}
+.kb-type-chips{display:flex;gap:6px;flex-wrap:wrap}
+.kb-type-chip{display:inline-flex;align-items:center;gap:6px;padding:7px 15px;border-radius:40px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);font-size:.82rem;font-weight:500;cursor:pointer;transition:all .15s;white-space:nowrap}
+.kb-type-chip:hover{border-color:var(--primary);color:var(--primary)}
+.kb-type-chip.active{background:var(--primary);border-color:var(--primary);color:#fff}
+.kb-type-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+
+.kb-toolbar-right{display:flex;align-items:center;gap:8px}
+.kb-sort-select{padding:7px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);font-size:.82rem;cursor:pointer;outline:none}
+.kb-view-toggle{display:flex;border:1.5px solid var(--border);border-radius:10px;overflow:hidden}
+.kb-view-btn{padding:7px 11px;background:var(--bg-surface);border:none;cursor:pointer;color:var(--text-muted);font-size:1rem;transition:background .15s,color .15s;line-height:1}
+.kb-view-btn.active{background:var(--primary);color:#fff}
+
+/* ── KB Secondary toolbar ── */
+.kb-filters-row{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap}
+.kb-filter-sel{padding:7px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);font-size:.82rem;outline:none;cursor:pointer}
+.kb-add-btn{margin-left:auto}
+
+/* ── Grid ── */
+.kb-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:16px;animation:kb-in .3s ease}
+@keyframes kb-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+.kb-card{background:var(--bg-surface);border:1px solid var(--border);border-radius:20px;overflow:hidden;display:flex;flex-direction:column;transition:box-shadow .2s,transform .2s,border-color .2s;cursor:pointer;position:relative}
+.kb-card:hover{box-shadow:0 8px 32px rgba(0,0,0,.12);transform:translateY(-3px);border-color:var(--border-light)}
+.kb-card-accent{height:3px;width:100%;flex-shrink:0}
+.kb-card-body{padding:18px 18px 12px;flex:1;display:flex;flex-direction:column;gap:10px}
+.kb-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.kb-card-type-box{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.4rem;flex-shrink:0}
+.kb-card-badges{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
+.kb-card-title{font-weight:700;font-size:.95rem;color:var(--text-primary);line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.kb-card-meta{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.kb-badge{display:inline-flex;align-items:center;padding:2px 9px;border-radius:20px;font-size:.7rem;font-weight:600;white-space:nowrap}
+.kb-badge-new{background:rgba(16,185,129,.15);color:#10b981;border:1px solid rgba(16,185,129,.25)}
+.kb-badge-cat{background:var(--bg-raised);color:var(--text-muted);border:1px solid var(--border)}
+.kb-badge-course{background:rgba(99,102,241,.1);color:#6366f1;border:1px solid rgba(99,102,241,.2)}
+.kb-badge-type{font-weight:700;font-size:.65rem;letter-spacing:.04em}
+.kb-card-footer{padding:10px 18px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:1px solid var(--border);margin-top:auto}
+.kb-card-actions{display:flex;gap:6px;align-items:center}
+.kb-btn-open{display:inline-flex;align-items:center;gap:5px;padding:6px 14px;border-radius:10px;border:1.5px solid var(--primary);background:transparent;color:var(--primary);font-size:.8rem;font-weight:600;cursor:pointer;transition:background .15s,color .15s}
+.kb-btn-open:hover{background:var(--primary);color:#fff}
+.kb-btn-dl{display:inline-flex;align-items:center;padding:7px 9px;border-radius:10px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:.85rem;cursor:pointer;transition:background .15s,border-color .15s,color .15s}
+.kb-btn-dl:hover{border-color:var(--primary);color:var(--primary)}
+.kb-btn-edit{display:inline-flex;align-items:center;padding:7px 9px;border-radius:10px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:.82rem;cursor:pointer;transition:all .15s}
+.kb-btn-edit:hover{border-color:var(--primary);color:var(--primary)}
+.kb-star{width:32px;height:32px;border-radius:10px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:1rem;transition:all .15s;flex-shrink:0}
+.kb-star:hover,.kb-star.active{border-color:#f59e0b;color:#f59e0b;background:rgba(245,158,11,.1)}
+
+/* ── List ── */
+.kb-list{display:flex;flex-direction:column;gap:8px;animation:kb-in .3s ease}
+.kb-row{background:var(--bg-surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:14px;transition:box-shadow .15s,border-color .15s,transform .15s;cursor:pointer}
+.kb-row:hover{box-shadow:0 4px 16px rgba(0,0,0,.08);border-color:var(--border-light);transform:translateX(2px)}
+.kb-row-icon{width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.3rem;flex-shrink:0}
+.kb-row-info{flex:1;min-width:0}
+.kb-row-title{font-weight:600;font-size:.92rem;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kb-row-meta{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:3px}
+.kb-row-actions{display:flex;gap:6px;align-items:center;flex-shrink:0}
+
+/* ── Type colors ── */
+.kb-t-pdf   .kb-card-accent,.kb-t-pdf   .kb-row-left-bar{background:linear-gradient(90deg,#f97316,#fb923c)}
+.kb-t-video .kb-card-accent,.kb-t-video .kb-row-left-bar{background:linear-gradient(90deg,#a855f7,#8b5cf6)}
+.kb-t-image .kb-card-accent,.kb-t-image .kb-row-left-bar{background:linear-gradient(90deg,#06b6d4,#0891b2)}
+.kb-t-link  .kb-card-accent,.kb-t-link  .kb-row-left-bar{background:linear-gradient(90deg,#3b82f6,#2563eb)}
+.kb-t-scorm .kb-card-accent,.kb-t-scorm .kb-row-left-bar{background:linear-gradient(90deg,#10b981,#059669)}
+.kb-t-file  .kb-card-accent,.kb-t-file  .kb-row-left-bar{background:linear-gradient(90deg,#64748b,#94a3b8)}
+.kb-t-pdf   .kb-card-type-box,.kb-t-pdf   .kb-row-icon{background:rgba(249,115,22,.12)}
+.kb-t-video .kb-card-type-box,.kb-t-video .kb-row-icon{background:rgba(168,85,247,.12)}
+.kb-t-image .kb-card-type-box,.kb-t-image .kb-row-icon{background:rgba(6,182,212,.12)}
+.kb-t-link  .kb-card-type-box,.kb-t-link  .kb-row-icon{background:rgba(59,130,246,.12)}
+.kb-t-scorm .kb-card-type-box,.kb-t-scorm .kb-row-icon{background:rgba(16,185,129,.12)}
+.kb-t-file  .kb-card-type-box,.kb-t-file  .kb-row-icon{background:rgba(100,116,139,.1)}
+
+.kb-dot-pdf{background:#f97316}.kb-dot-video{background:#a855f7}.kb-dot-image{background:#06b6d4}
+.kb-dot-link{background:#3b82f6}.kb-dot-scorm{background:#10b981}.kb-dot-file{background:#64748b}
+
+.kb-badge-pdf{background:rgba(249,115,22,.12);color:#f97316}
+.kb-badge-video{background:rgba(168,85,247,.12);color:#a855f7}
+.kb-badge-image{background:rgba(6,182,212,.12);color:#0891b2}
+.kb-badge-link{background:rgba(59,130,246,.12);color:#3b82f6}
+.kb-badge-scorm{background:rgba(16,185,129,.12);color:#10b981}
+.kb-badge-file{background:rgba(100,116,139,.1);color:#64748b}
+
+.kb-empty{display:flex;flex-direction:column;align-items:center;padding:5rem 2rem;text-align:center;grid-column:1/-1}
+.kb-empty-ico{font-size:4rem;margin-bottom:1rem;opacity:.35}
+.kb-empty-head{font-size:1.2rem;font-weight:700;color:var(--text-primary);margin-bottom:.5rem}
+.kb-empty-txt{font-size:.875rem;color:var(--text-muted);max-width:360px;line-height:1.6}
+
+@media(max-width:640px){
+  .kb-hero{padding:22px 20px 20px}.kb-hero-title{font-size:1.4rem}
+  .kb-hero-icon{width:48px;height:48px;font-size:1.5rem}
+  .kb-grid{grid-template-columns:1fr}
+}
+</style>
+
+<div class="kb-hero">
+    <div class="kb-hero-glow"></div>
+    <div class="kb-hero-inner">
+        <div class="kb-hero-left">
+            <div class="kb-hero-icon">📚</div>
+            <div>
+                <h1 class="kb-hero-title">База знань</h1>
+                <p class="kb-hero-sub">Навчальні матеріали та довідкові ресурси</p>
             </div>
-            <div id="resource-list" class="resource-list"></div>
-            <div id="resources-pagination" style="display:flex;justify-content:center;gap:.5rem;margin-top:1.5rem"></div>`;
+        </div>
+        <div class="kb-search-wrap">
+            <span class="kb-search-icon">🔍</span>
+            <input type="text" id="resource-search" placeholder="Пошук матеріалів..." value="${this._search}" oninput="ResourcesPage.onSearch(event)">
+        </div>
+    </div>
+</div>
+
+<div class="kb-toolbar">
+    <div class="kb-type-chips" id="kb-type-chips">
+        ${this._kbTypeChips()}
+    </div>
+    <div class="kb-toolbar-right">
+        <select class="kb-sort-select" id="kb-sort" onchange="ResourcesPage._kbSetSort(this.value)">
+            <option value="newest">↓ Новіші</option>
+            <option value="oldest">↑ Старіші</option>
+            <option value="name_az">A → Z</option>
+            <option value="name_za">Z → A</option>
+        </select>
+        <div class="kb-view-toggle">
+            <button class="kb-view-btn${this._kbViewMode==='grid'?' active':''}" title="Сітка" onclick="ResourcesPage._kbSetView('grid',this)">▦</button>
+            <button class="kb-view-btn${this._kbViewMode==='list'?' active':''}" title="Список" onclick="ResourcesPage._kbSetView('list',this)">≡</button>
+        </div>
+    </div>
+</div>
+
+<div class="kb-filters-row">
+    <select id="resource-category" class="kb-filter-sel" onchange="ResourcesPage.applyFilters()">
+        <option value="">Всі категорії</option>
+    </select>
+    <select id="resource-course" class="kb-filter-sel" onchange="ResourcesPage.applyFilters()">
+        <option value="">Всі курси</option>
+    </select>
+    ${AppState.isStaff() ? '<button class="btn btn-primary kb-add-btn" onclick="ResourcesPage.openForm()">+ Додати ресурс</button>' : ''}
+</div>
+
+<div id="resource-list"></div>
+<div id="resources-pagination" style="display:flex;justify-content:center;gap:.5rem;margin-top:1.5rem"></div>`;
 
         await this._loadFilters();
         await this.load();
@@ -479,6 +615,159 @@ const ResourcesPage = {
         }
     },
 
+    // ── KB helpers ───────────────────────────────────────────────────
+
+    _kbTypeKey(resource) {
+        const t = resource.type || '';
+        const ext = (resource.storage_path || '').split('.').pop().toLowerCase();
+        if (t === 'pdf' || ext === 'pdf') return 'pdf';
+        if (t === 'video' || ['mp4','webm','ogg','avi','mov'].includes(ext)) return 'video';
+        if (t === 'image' || ['jpg','jpeg','png','gif','svg','webp'].includes(ext)) return 'image';
+        if (t === 'link') return 'link';
+        if (t === 'scorm') return 'scorm';
+        return 'file';
+    },
+
+    _kbTypeLabel(key) {
+        return { pdf:'PDF', video:'Відео', image:'Зображення', link:'Посилання', scorm:'SCORM', file:'Файл' }[key] || 'Файл';
+    },
+
+    _kbTypeIcon(key) {
+        return { pdf:'📄', video:'🎬', image:'🖼', link:'🔗', scorm:'🧩', file:'📎' }[key] || '📎';
+    },
+
+    _isNew(resource) {
+        if (!resource.created_at) return false;
+        return (Date.now() - new Date(resource.created_at).getTime()) < 7 * 86400000;
+    },
+
+    _kbTypeChips() {
+        const types = [
+            { key:'all',   label:'Всі',         dot:'' },
+            { key:'pdf',   label:'PDF',         dot:'kb-dot-pdf' },
+            { key:'video', label:'Відео',        dot:'kb-dot-video' },
+            { key:'image', label:'Зображення',   dot:'kb-dot-image' },
+            { key:'link',  label:'Посилання',    dot:'kb-dot-link' },
+            { key:'scorm', label:'SCORM',        dot:'kb-dot-scorm' },
+            { key:'file',  label:'Файл',         dot:'kb-dot-file' },
+        ];
+        return types.map(t => `
+            <button class="kb-type-chip${this._kbTypeFilter===t.key?' active':''}"
+                onclick="ResourcesPage._kbSetType('${t.key}',this)">
+                ${t.dot ? `<span class="kb-type-dot ${t.dot}"></span>` : ''}${t.label}
+            </button>`).join('');
+    },
+
+    _kbSetType(key, btn) {
+        this._kbTypeFilter = key;
+        document.querySelectorAll('.kb-type-chip').forEach(c => c.classList.remove('active'));
+        btn.classList.add('active');
+        this._page = 0;
+        this._kbRerender();
+    },
+
+    _kbSetSort(val) {
+        this._kbSort = val;
+        this._kbRerender();
+    },
+
+    _kbSetView(mode, btn) {
+        this._kbViewMode = mode;
+        localStorage.setItem('kb_view', mode);
+        document.querySelectorAll('.kb-view-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this._kbRerender();
+    },
+
+    _kbRerender() {
+        const list = document.getElementById('resource-list');
+        if (!list || !this._kbAllItems) return;
+        let items = this._kbAllItems;
+        if (this._kbTypeFilter !== 'all') {
+            items = items.filter(r => this._kbTypeKey(r) === this._kbTypeFilter);
+        }
+        const sorts = {
+            newest:  (a,b) => new Date(b.created_at) - new Date(a.created_at),
+            oldest:  (a,b) => new Date(a.created_at) - new Date(b.created_at),
+            name_az: (a,b) => (a.title||'').localeCompare(b.title||'', 'uk'),
+            name_za: (a,b) => (b.title||'').localeCompare(a.title||'', 'uk'),
+        };
+        items = [...items].sort(sorts[this._kbSort] || sorts.newest);
+        list.className = this._kbViewMode === 'list' ? 'kb-list' : 'kb-grid';
+        list.innerHTML = items.length
+            ? items.map(r => this._renderResourceItem(r)).join('')
+            : `<div class="kb-empty"><div class="kb-empty-ico">🔍</div><div class="kb-empty-head">Нічого не знайдено</div><div class="kb-empty-txt">Спробуйте інший фільтр або пошуковий запит</div></div>`;
+    },
+
+    _kbCardHtml(resource, icon) {
+        const tkey = this._kbTypeKey(resource);
+        const isNew = this._isNew(resource);
+        const isBm = Bookmarks.isBookmarked('resource/'+resource.id);
+        const safeTitle = resource.title.replace(/'/g,"\\'");
+        const safeIcon = icon.replace(/'/g,"\\'");
+        const safeCat = (resource.category||'').replace(/'/g,"\\'");
+        return `
+<div class="kb-card kb-t-${tkey}" onclick="ResourcesPage.openViewer('${resource.id}')">
+    <div class="kb-card-accent"></div>
+    <div class="kb-card-body">
+        <div class="kb-card-top">
+            <div class="kb-card-type-box">${this._kbTypeIcon(tkey)}</div>
+            <div class="kb-card-badges">
+                ${isNew ? '<span class="kb-badge kb-badge-new">✦ Нове</span>' : ''}
+                <span class="kb-badge kb-badge-type kb-badge-${tkey}">${this._kbTypeLabel(tkey)}</span>
+            </div>
+        </div>
+        <div class="kb-card-title">${resource.title}</div>
+        <div class="kb-card-meta">
+            ${resource.category ? `<span class="kb-badge kb-badge-cat">${resource.category}</span>` : ''}
+            ${resource.course?.title ? `<span class="kb-badge kb-badge-course">📚 ${resource.course.title}</span>` : ''}
+        </div>
+    </div>
+    <div class="kb-card-footer" onclick="event.stopPropagation()">
+        <div class="kb-card-actions">
+            <button class="kb-btn-open" onclick="ResourcesPage.openViewer('${resource.id}')">Відкрити →</button>
+            ${resource.download_allowed ? `<button class="kb-btn-dl" title="Завантажити" onclick="ResourcesPage.downloadResource('${resource.id}')">⬇</button>` : ''}
+            ${AppState.isStaff() ? `<button class="kb-btn-edit" title="Редагувати" onclick="ResourcesPage.openEdit('${resource.id}')">✏️</button>` : ''}
+        </div>
+        <button class="kb-star res-star-btn${isBm?' active':''}"
+            data-bm-route="resource/${resource.id}"
+            title="${isBm?'Видалити з закладок':'Зберегти в закладки'}"
+            onclick="Bookmarks.toggleResource('${resource.id}','${safeTitle}','${safeIcon}','${safeCat}')">★</button>
+    </div>
+</div>`;
+    },
+
+    _kbRowHtml(resource, icon) {
+        const tkey = this._kbTypeKey(resource);
+        const isNew = this._isNew(resource);
+        const isBm = Bookmarks.isBookmarked('resource/'+resource.id);
+        const safeTitle = resource.title.replace(/'/g,"\\'");
+        const safeIcon = icon.replace(/'/g,"\\'");
+        const safeCat = (resource.category||'').replace(/'/g,"\\'");
+        return `
+<div class="kb-row kb-t-${tkey}" onclick="ResourcesPage.openViewer('${resource.id}')">
+    <div class="kb-row-icon">${this._kbTypeIcon(tkey)}</div>
+    <div class="kb-row-info">
+        <div class="kb-row-title">${resource.title}</div>
+        <div class="kb-row-meta">
+            <span class="kb-badge kb-badge-type kb-badge-${tkey}">${this._kbTypeLabel(tkey)}</span>
+            ${resource.category ? `<span class="kb-badge kb-badge-cat">${resource.category}</span>` : ''}
+            ${resource.course?.title ? `<span class="kb-badge kb-badge-course">📚 ${resource.course.title}</span>` : ''}
+            ${isNew ? '<span class="kb-badge kb-badge-new">✦ Нове</span>' : ''}
+        </div>
+    </div>
+    <div class="kb-row-actions" onclick="event.stopPropagation()">
+        <button class="kb-btn-open" onclick="ResourcesPage.openViewer('${resource.id}')">Відкрити →</button>
+        ${resource.download_allowed ? `<button class="kb-btn-dl" title="Завантажити" onclick="ResourcesPage.downloadResource('${resource.id}')">⬇</button>` : ''}
+        ${AppState.isStaff() ? `<button class="kb-btn-edit" title="Редагувати" onclick="ResourcesPage.openEdit('${resource.id}')">✏️</button>` : ''}
+        <button class="kb-star res-star-btn${isBm?' active':''}"
+            data-bm-route="resource/${resource.id}"
+            title="${isBm?'Видалити з закладок':'Зберегти в закладки'}"
+            onclick="Bookmarks.toggleResource('${resource.id}','${safeTitle}','${safeIcon}','${safeCat}')">★</button>
+    </div>
+</div>`;
+    },
+
     onSearch(e) {
         this._search = e.target.value.trim();
         this._page = 0;
@@ -533,13 +822,22 @@ const ResourcesPage = {
             }
 
             if (!filtered || !filtered.length) {
+                list.className = '';
                 list.innerHTML = `
-                    <div class="empty-state" style="grid-column:1/-1">
-                        <div class="empty-icon">${this._view === 'docs' ? '📋' : '📂'}</div>
-                        <h3>${this._view === 'docs' ? 'Документів не знайдено' : 'Ресурси не знайдено'}</h3>
-                        <p>Спробуйте змінити пошук або фільтри.</p>
+                    <div class="${this._view === 'kb' ? 'kb-empty' : 'empty-state'}" style="${this._view!=='kb'?'grid-column:1/-1':''}">
+                        <div class="${this._view==='kb'?'kb-empty-ico':'empty-icon'}">${this._view === 'docs' ? '📋' : '📚'}</div>
+                        ${this._view==='kb'
+                            ? `<div class="kb-empty-head">Матеріали не знайдені</div><div class="kb-empty-txt">Спробуйте змінити пошук або фільтри</div>`
+                            : `<h3>Документів не знайдено</h3><p>Спробуйте змінити пошук або фільтри.</p>`}
                     </div>`;
                 document.getElementById('resources-pagination').innerHTML = '';
+                return;
+            }
+
+            if (this._view === 'kb') {
+                this._kbAllItems = filtered;
+                this._kbRerender();
+                this._renderPagination(count);
                 return;
             }
 
@@ -609,33 +907,9 @@ const ResourcesPage = {
                 </div>`;
         }
 
-        const isBookmarked = Bookmarks.isBookmarked('resource/'+resource.id);
-        return `
-            <div class="resource-item${isBookmarked ? ' bookmarked' : ''}" onclick="ResourcesPage.openViewer('${resource.id}')" style="cursor:pointer">
-                <div class="resource-icon ${resource.type || 'file'}">${icon}</div>
-                <div class="resource-info">
-                    <div class="resource-title">${resource.title}</div>
-                    <div class="resource-meta">
-                        ${resource.category ? `Категорія: ${resource.category}` : ''}
-                        ${courseLabel ? ` · ${courseLabel}` : ''}
-                        <span style="font-size:.72rem;font-weight:600;background:var(--bg-base);border:1px solid var(--border);border-radius:4px;padding:1px 5px;margin-left:.3rem;color:var(--text-muted)">${this._fileLabel(resource)}</span>
-                        ${resource.download_allowed === false ? ' · тільки перегляд' : ''}
-                        ${resource.access_group
-                            ? ` · <span style="color:var(--primary);font-weight:500">${resource.access_group.is_public ? '🌐' : '🔐'} ${resource.access_group.name}</span>`
-                            : (this._view === 'admin' ? ' · <span style="color:var(--text-muted)">публічний</span>' : '')}
-                    </div>
-                    ${adminMeta ? `<div class="resource-meta" style="margin-top:.2rem;opacity:.7">${adminMeta}</div>` : ''}
-                </div>
-                <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center" onclick="event.stopPropagation()">
-                    <button class="btn btn-ghost btn-sm" onclick="ResourcesPage.openViewer('${resource.id}')">Відкрити</button>
-                    ${resource.download_allowed ? `<button onclick="ResourcesPage.downloadResource('${resource.id}')" style="display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:20px;border:1.5px solid var(--primary);background:transparent;color:var(--primary);font-size:.8rem;font-weight:500;cursor:pointer;transition:background var(--transition),color var(--transition)" onmouseenter="this.style.background='var(--primary)';this.style.color='#fff'" onmouseleave="this.style.background='transparent';this.style.color='var(--primary)'">⬇ Завантажити</button>` : ''}
-                    ${this._view === 'admin' ? `<button class="btn btn-ghost btn-sm" onclick="ResourcesPage.openEdit('${resource.id}')">✏️</button>` : ''}
-                    <button class="res-star-btn${Bookmarks.isBookmarked('resource/'+resource.id) ? ' active' : ''}"
-                        data-bm-route="resource/${resource.id}"
-                        title="${Bookmarks.isBookmarked('resource/'+resource.id) ? 'Видалити з закладок' : 'Зберегти в закладки'}"
-                        onclick="Bookmarks.toggleResource('${resource.id}','${resource.title.replace(/'/g,"\\'")}','${icon}','${(resource.category||'').replace(/'/g,"\\'")}')">★</button>
-                </div>
-            </div>`;
+        return this._kbViewMode === 'list'
+            ? this._kbRowHtml(resource, icon)
+            : this._kbCardHtml(resource, icon);
     },
 
     _ackLabel() {

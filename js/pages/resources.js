@@ -600,8 +600,9 @@ const ResourcesPage = {
                 </div>`;
         }
 
+        const isBookmarked = Bookmarks.isBookmarked('resource/'+resource.id);
         return `
-            <div class="resource-item" onclick="ResourcesPage.openViewer('${resource.id}')" style="cursor:pointer">
+            <div class="resource-item${isBookmarked ? ' bookmarked' : ''}" onclick="ResourcesPage.openViewer('${resource.id}')" style="cursor:pointer">
                 <div class="resource-icon ${resource.type || 'file'}">${icon}</div>
                 <div class="resource-info">
                     <div class="resource-title">${resource.title}</div>

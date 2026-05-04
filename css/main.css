@@ -1582,6 +1582,14 @@ input#uf-select-all {
 .res-star-btn:hover { border-color: #f59e0b; color: #f59e0b; background: rgba(245,158,11,.1); }
 .res-star-btn.active { border-color: #f59e0b; color: #f59e0b; background: rgba(245,158,11,.12); }
 
+.resource-item.bookmarked {
+    border-left: 3px solid #C9A227;
+    background: rgba(201,162,39,0.06);
+}
+.resource-item.bookmarked .resource-title {
+    color: #C9A227;
+}
+
 .nav-badge {
     background: var(--primary);
     color: #fff;

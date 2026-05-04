@@ -131,7 +131,7 @@ const LessonViewPage = {
             <h3 style="margin-bottom:1rem">📎 Матеріали уроку</h3>
             <div class="resource-list">
                 ${resources.map(r => `
-                    <div class="resource-item" onclick="LessonViewPage.openResource(${JSON.stringify({ id:r.id, type:r.type, title:r.title, url:r.url, storage_path:r.storage_path, scorm_packages:r.scorm_packages }).replace(/"/g,'&quot;')})">
+                    <div class="resource-item${Bookmarks.isBookmarked('resource/'+r.id) ? ' bookmarked' : ''}" onclick="LessonViewPage.openResource(${JSON.stringify({ id:r.id, type:r.type, title:r.title, url:r.url, storage_path:r.storage_path, scorm_packages:r.scorm_packages }).replace(/"/g,'&quot;')})">
                         <div class="resource-icon ${r.type}">${typeIcons[r.type] || '📄'}</div>
                         <div class="resource-info">
                             <div class="resource-title">${r.title}</div>

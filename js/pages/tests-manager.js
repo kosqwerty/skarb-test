@@ -26,7 +26,6 @@ const TestsManagerAPI = {
     async getAllStandalone() {
         const { data, error } = await supabase.from('tests')
             .select('*, creator:profiles!created_by(full_name)')
-            .eq('is_standalone', true)
             .order('created_at', { ascending: false });
         if (error) throw error;
         return data || [];
@@ -34,7 +33,7 @@ const TestsManagerAPI = {
 
     async getMyAssignments() {
         const { data, error } = await supabase.from('test_assignments')
-            .select(`*, test:tests(id,title,description,time_limit_minutes,max_attempts,pass_score,randomize_questions,
+            .select(`*, test:tests(id,title,description,time_limit_minutes,max_attempts,randomize_questions,
                 questions(id))`)
             .eq('user_id', AppState.user.id)
             .order('created_at', { ascending: false });
@@ -260,10 +259,8 @@ const TestsManagerPage = {
             description:         Dom.val('tm-desc').trim() || null,
             time_limit_minutes:  parseInt(Dom.val('tm-time')) || null,
             max_attempts:        parseInt(Dom.val('tm-attempts')) || 1,
-            pass_score:          parseInt(Dom.val('tm-score')) || 70,
             randomize_questions: document.getElementById('tm-shuffle')?.checked || false,
             is_published:        document.getElementById('tm-pub')?.checked || false,
-            is_standalone:       true,
             created_by:          AppState.user.id
         };
         Loader.show();
@@ -855,7 +852,7 @@ const MyTestsPage = {
             [assignments, attempts] = await Promise.all([
                 TestsManagerAPI.getMyAssignments(),
                 supabase.from('test_attempts')
-                    .select('*, test:tests(id,title,pass_score)')
+                    .select('*, test:tests(id,title)')
                     .eq('user_id', AppState.user.id)
                     .not('completed_at', 'is', null)
                     .order('completed_at', { ascending: false })

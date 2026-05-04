@@ -175,7 +175,7 @@ const ScheduleGraphPage = {
         }
 
         UI.setBreadcrumb([
-            { label: 'Планувальник', route: 'scheduler' },
+            { label: 'Розділ планування', route: 'scheduler' },
             { label: 'Графік роботи ломбарду' }
         ]);
         container.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;

@@ -479,7 +479,7 @@ const TestsManagerPage = {
 
 <div class="te-wrap">
     <div class="te-topbar">
-        <button class="te-back" onclick="Router.go('tests-manager')">← Тести</button>
+        <button class="te-back" onclick="TestsManagerPage._renderList(document.getElementById('page-content'))">← Тести</button>
         <span class="te-test-title">${this._curTest.title}</span>
         <button class="btn btn-ghost btn-sm" onclick="TestsManagerPage._openMetaModal(TestsManagerPage._curTest)">⚙️ Налаштування</button>
         <button class="btn btn-sm" style="background:#C9A227;color:#fff;border:none;border-radius:10px;padding:7px 16px;font-weight:600;cursor:pointer" onclick="TestsManagerPage.openAssignModal('${this._curTest.id}')">👥 Призначити</button>

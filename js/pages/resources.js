@@ -22,6 +22,7 @@ const ResourcesPage = {
     _kbSort: 'newest',
     _kbTypeFilter: 'all',
     _kbAllItems: [],
+    _docsSort: 'priority',
 
     async init(container, { view = 'kb' } = {}) {
         this._page = 0;
@@ -77,6 +78,12 @@ const ResourcesPage = {
                                    style="width:200px" onkeyup="ResourcesPage.onSearch(event)">
                             <select id="resource-category" onchange="ResourcesPage.applyFilters()" style="width:auto">
                                 <option value="">Всі категорії</option>
+                            </select>
+                            <select id="docs-sort-sel" onchange="ResourcesPage._docsSetSort(this.value)" style="width:auto">
+                                <option value="priority">🔴 Нові / оновлені першими</option>
+                                <option value="newest">↓ Дата додавання</option>
+                                <option value="name_az">A → Я назва</option>
+                                <option value="status_asc">✅ Ознайомлені першими</option>
                             </select>
                         </div>
                         ${AppState.isStaff() ? '<button class="btn btn-primary" onclick="ResourcesPage.openForm()">+ Додати</button>' : ''}
@@ -619,6 +626,39 @@ const ResourcesPage = {
         }
     },
 
+    // ── Docs sort ────────────────────────────────────────────────────
+
+    _docsSetSort(val) {
+        this._docsSort = val;
+        this.load();
+    },
+
+    _docsPriority(resource) {
+        const dl = this._myDownloads[resource.id];
+        const isNewVersion = dl && resource.doc_version > (dl.version || 1);
+        if (!dl || isNewVersion) return 0;   // потребує ознайомлення / оновлено
+        return 1;                             // вже ознайомлено
+    },
+
+    _sortDocs(items) {
+        const dl = this._myDownloads;
+        const sorts = {
+            priority: (a, b) => {
+                const pa = this._docsPriority(a), pb = this._docsPriority(b);
+                if (pa !== pb) return pa - pb;
+                return new Date(b.created_at) - new Date(a.created_at);
+            },
+            newest:   (a, b) => new Date(b.created_at) - new Date(a.created_at),
+            name_az:  (a, b) => (a.title || '').localeCompare(b.title || '', 'uk'),
+            status_asc: (a, b) => {
+                const pa = this._docsPriority(a), pb = this._docsPriority(b);
+                if (pa !== pb) return pb - pa; // ознайомлені першими
+                return new Date(b.created_at) - new Date(a.created_at);
+            },
+        };
+        return [...items].sort(sorts[this._docsSort] || sorts.priority);
+    },
+
     // ── KB helpers ───────────────────────────────────────────────────
 
     _kbTypeKey(resource) {
@@ -843,6 +883,10 @@ const ResourcesPage = {
                 this._kbRerender();
                 this._renderPagination(count);
                 return;
+            }
+
+            if (this._view === 'docs') {
+                filtered = this._sortDocs(filtered);
             }
 
             list.innerHTML = filtered.map(resource => this._renderResourceItem(resource)).join('');

@@ -400,7 +400,7 @@ const TestsManagerPage = {
 .te-body{display:flex;flex:1;gap:0;overflow:hidden;margin-top:16px;border:1px solid var(--border);border-radius:18px;overflow:hidden}
 
 /* Left panel */
-.te-left{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--border)}
+.te-left{flex:1 1 50%;min-width:0;display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--border)}
 .te-left-toolbar{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0;background:var(--bg-raised)}
 .te-type-sel{padding:6px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.83rem;font-weight:500;outline:none;cursor:pointer}
 .te-pts-wrap{display:flex;align-items:center;gap:6px;margin-left:auto}
@@ -445,7 +445,7 @@ const TestsManagerPage = {
 .te-text-hint{padding:16px;border-radius:12px;border:1.5px solid rgba(99,102,241,.25);background:rgba(99,102,241,.07);color:var(--text-secondary);font-size:.85rem;line-height:1.6;margin-bottom:14px}
 
 /* Right panel */
-.te-right{width:280px;flex-shrink:0;display:flex;flex-direction:column;overflow:hidden;background:var(--bg-raised)}
+.te-right{flex:1 1 50%;min-width:0;display:flex;flex-direction:column;overflow:hidden;background:var(--bg-raised)}
 .te-right-header{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
 .te-right-title{font-size:.82rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em}
 .te-right-count{font-size:.78rem;color:var(--text-muted)}
@@ -456,7 +456,7 @@ const TestsManagerPage = {
 .te-qitem-num{width:22px;height:22px;border-radius:50%;background:var(--bg-raised);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;color:var(--text-muted);flex-shrink:0;margin-top:1px}
 .te-qitem.active .te-qitem-num{background:var(--primary);border-color:var(--primary);color:#fff}
 .te-qitem-body{flex:1;min-width:0}
-.te-qitem-text{font-size:.82rem;font-weight:500;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}
+.te-qitem-text{font-size:.82rem;font-weight:500;color:var(--text-primary);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:3px;line-height:1.4}
 .te-qitem-type{font-size:.7rem;color:var(--text-muted)}
 .te-qitem-del{width:24px;height:24px;border-radius:7px;border:none;background:transparent;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.8rem;flex-shrink:0;transition:all .15s}
 .te-qitem-del:hover{background:rgba(239,68,68,.1);color:var(--danger)}

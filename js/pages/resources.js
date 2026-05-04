@@ -579,8 +579,12 @@ const ResourcesPage = {
 
             const deadlineBadge = this._deadlineBadge(resource, dlStatus);
 
+            const docClass = resource.is_tracked_download
+                ? (dlAt && !isNewVersion ? 'doc-acked' : 'doc-needs-ack')
+                : '';
+
             return `
-                <div class="resource-item" onclick="ResourcesPage.openViewer('${resource.id}')" style="cursor:pointer">
+                <div class="resource-item ${docClass}" onclick="ResourcesPage.openViewer('${resource.id}')" style="cursor:pointer">
                     <div class="resource-icon ${resource.type || 'file'}">${icon}</div>
                     <div class="resource-info">
                         <div class="resource-title">${resource.title}</div>

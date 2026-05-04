@@ -1590,6 +1590,24 @@ input#uf-select-all {
     color: #C9A227;
 }
 
+/* Docs acknowledgment status */
+.resource-item.doc-needs-ack {
+    border-left: 3px solid #ef4444;
+    background: rgba(239,68,68,0.06);
+    box-shadow: 0 0 12px rgba(239,68,68,0.15);
+}
+.resource-item.doc-needs-ack .resource-title {
+    color: #f87171;
+}
+.resource-item.doc-acked {
+    border-left: 3px solid #10b981;
+    background: rgba(16,185,129,0.06);
+    box-shadow: 0 0 12px rgba(16,185,129,0.12);
+}
+.resource-item.doc-acked .resource-title {
+    color: #34d399;
+}
+
 .nav-badge {
     background: var(--primary);
     color: #fff;

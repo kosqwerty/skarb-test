@@ -17,7 +17,7 @@
 // CREATE POLICY "ta_delete" ON test_assignments FOR DELETE USING (auth.uid() IS NOT NULL);
 //
 // ALTER TABLE tests ADD COLUMN IF NOT EXISTS is_standalone boolean DEFAULT false;
-// ALTER TABLE tests ADD COLUMN IF NOT EXISTS pass_score    integer DEFAULT 70;
+// ALTER TABLE tests ADD COLUMN IF NOT EXISTS passing_score    integer DEFAULT 70;
 // ALTER TABLE questions ADD COLUMN IF NOT EXISTS extra_data jsonb DEFAULT '{}';
 // ================================================================
 
@@ -26,6 +26,7 @@ const TestsManagerAPI = {
     async getAllStandalone() {
         const { data, error } = await supabase.from('tests')
             .select('*, creator:profiles!created_by(full_name)')
+            .is('course_id', null)
             .order('created_at', { ascending: false });
         if (error) throw error;
         return data || [];
@@ -199,7 +200,7 @@ const TestsManagerPage = {
         <div class="tm-card-meta">
             <span class="tm-chip tm-chip-q">❓ ${qCount} питань</span>
             ${t.time_limit_minutes ? `<span class="tm-chip tm-chip-time">⏱ ${t.time_limit_minutes} хв</span>` : ''}
-            <span class="tm-chip tm-chip-score">🎯 ${t.pass_score||70}%</span>
+            <span class="tm-chip tm-chip-score">🎯 ${t.passing_score||70}%</span>
             <span class="tm-chip ${t.is_published ? 'tm-chip-pub' : 'tm-chip-draft'}">${t.is_published ? '✓ Опубліковано' : 'Чернетка'}</span>
         </div>
         <div style="font-size:.75rem;color:var(--text-muted)">${Fmt.date(t.created_at)} · ${t.creator?.full_name||'—'}</div>
@@ -235,7 +236,7 @@ const TestsManagerPage = {
 </div>
 <div class="form-row">
     <div class="form-group"><label>Прохідний бал (%)</label>
-        <input id="tm-score" type="number" min="1" max="100" value="${test?.pass_score||70}"></div>
+        <input id="tm-score" type="number" min="1" max="100" value="${test?.passing_score||70}"></div>
     <div class="form-group" style="display:flex;align-items:center;gap:10px;padding-top:28px">
         <input type="checkbox" id="tm-shuffle" ${test?.randomize_questions?'checked':''} style="width:18px;height:18px;cursor:pointer">
         <label for="tm-shuffle" style="cursor:pointer;font-weight:500">Перемішати питання</label>
@@ -259,8 +260,10 @@ const TestsManagerPage = {
             description:         Dom.val('tm-desc').trim() || null,
             time_limit_minutes:  parseInt(Dom.val('tm-time')) || null,
             max_attempts:        parseInt(Dom.val('tm-attempts')) || 1,
+            passing_score:       parseInt(Dom.val('tm-score')) || 70,
             randomize_questions: document.getElementById('tm-shuffle')?.checked || false,
             is_published:        document.getElementById('tm-pub')?.checked || false,
+            course_id:           null,
             created_by:          AppState.user.id
         };
         Loader.show();
@@ -988,7 +991,7 @@ const MyTestsPage = {
             <div class="mt-card-meta">
                 <span class="mt-badge mt-badge-info">❓ ${qCount} питань</span>
                 ${test.time_limit_minutes ? `<span class="mt-badge mt-badge-info">⏱ ${test.time_limit_minutes} хв</span>` : ''}
-                <span class="mt-badge mt-badge-info">🎯 ${test.pass_score||70}% прохідний</span>
+                <span class="mt-badge mt-badge-info">🎯 ${test.passing_score||70}% прохідний</span>
                 ${isDone ? `<span class="mt-badge mt-badge-done">✓ Пройдено</span>` : deadlineTxt}
             </div>
         </div>

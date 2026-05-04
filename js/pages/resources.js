@@ -113,8 +113,8 @@ const ResourcesPage = {
 .kb-hero-icon{width:64px;height:64px;border-radius:20px;background:rgba(255,255,255,.18);backdrop-filter:blur(10px);border:1.5px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;font-size:2rem;flex-shrink:0}
 .kb-hero-title{margin:0;font-size:1.85rem;font-weight:800;color:#fff;letter-spacing:-.03em;line-height:1.1}
 .kb-hero-sub{margin:6px 0 0;color:rgba(255,255,255,.72);font-size:.9rem}
-.kb-search-bar{margin-bottom:20px}
-.kb-search-wrap{position:relative;width:100%}
+.kb-search-bar{margin-bottom:20px;display:flex;justify-content:center}
+.kb-search-wrap{position:relative;width:100%;max-width:560px}
 .kb-search-wrap input{width:100%;padding:14px 20px 14px 50px;border-radius:16px;border:2px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:1rem;font-weight:500;outline:none;transition:border-color .2s,box-shadow .2s;box-sizing:border-box;box-shadow:0 2px 8px rgba(0,0,0,.06)}
 .kb-search-wrap input::placeholder{color:var(--text-muted);font-weight:400}
 .kb-search-wrap input:focus{border-color:var(--primary);box-shadow:0 2px 16px rgba(0,0,0,.1),0 0 0 3px var(--primary-glow)}

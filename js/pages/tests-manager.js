@@ -401,8 +401,11 @@ const TestsManagerPage = {
 
 /* Left panel */
 .te-left{flex:1 1 50%;min-width:0;display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--border)}
-.te-left-toolbar{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0;background:var(--bg-raised)}
-.te-type-sel{padding:6px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.83rem;font-weight:500;outline:none;cursor:pointer}
+.te-left-toolbar{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0;background:var(--bg-raised);flex-wrap:wrap}
+.te-type-chips{display:flex;gap:4px;flex-wrap:nowrap}
+.te-type-chip{padding:5px 10px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:.75rem;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap}
+.te-type-chip.active{border-color:var(--primary);color:var(--primary);background:var(--primary-glow,rgba(99,102,241,.1))}
+.te-type-chip:hover:not(.active){border-color:var(--border-light);color:var(--text-primary)}
 .te-pts-wrap{display:flex;align-items:center;gap:6px;margin-left:auto}
 .te-pts-lbl{font-size:.8rem;color:var(--text-muted)}
 .te-pts-inp{width:60px;padding:5px 10px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);text-align:center;font-size:.85rem;outline:none}
@@ -460,11 +463,15 @@ const TestsManagerPage = {
 .te-qitem-type{font-size:.7rem;color:var(--text-muted)}
 .te-qitem-del{width:24px;height:24px;border-radius:7px;border:none;background:transparent;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.8rem;flex-shrink:0;transition:all .15s}
 .te-qitem-del:hover{background:rgba(239,68,68,.1);color:var(--danger)}
-.te-right-footer{padding:10px;border-top:1px solid var(--border);flex-shrink:0}
-.te-type-row{display:flex;gap:4px}
-.te-type-btn{flex:1;padding:6px 2px;border-radius:10px;border:1.5px solid var(--border);background:transparent;color:var(--text-secondary);font-size:.68rem;font-weight:600;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;transition:all .15s;line-height:1.2}
-.te-type-btn span:first-child{font-size:1.1rem}
-.te-type-btn:hover{border-color:var(--primary);color:var(--primary);background:var(--primary-glow,rgba(99,102,241,.07))}
+.te-right-footer{padding:12px;border-top:1px solid var(--border);flex-shrink:0}
+.te-add-q-wrap{position:relative}
+.te-add-q-btn{width:100%;padding:9px;border-radius:12px;border:1.5px dashed var(--border);background:transparent;color:var(--primary);font-size:.85rem;font-weight:600;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:6px}
+.te-add-q-btn:hover{border-color:var(--primary);background:var(--primary-glow,rgba(99,102,241,.07))}
+.te-type-dropdown{position:absolute;bottom:calc(100% + 4px);left:0;right:0;background:var(--bg-surface);border:1.5px solid var(--border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.15);z-index:100;overflow:hidden;display:none;padding:6px}
+.te-type-dropdown.open{display:flex;gap:4px}
+.te-type-opt{flex:1;padding:8px 4px;font-size:.72rem;color:var(--text-primary);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;transition:background .1s;border-radius:8px;white-space:nowrap}
+.te-type-opt span:first-child{font-size:1.1rem}
+.te-type-opt:hover{background:var(--bg-raised)}
 
 .te-empty-q{display:flex;flex-direction:column;align-items:center;padding:2rem 1rem;text-align:center;color:var(--text-muted);font-size:.85rem}
 .te-empty-q-ico{font-size:2.5rem;margin-bottom:.75rem;opacity:.4}
@@ -500,17 +507,20 @@ const TestsManagerPage = {
                 ${this._renderQList()}
             </div>
             <div class="te-right-footer">
-                <div class="te-type-row">
-                    ${[
-                        ['single','⭕','Одиночний'],
-                        ['multiple','☑️','Множинний'],
-                        ['text','✍️','Текст'],
-                        ['matching','↔️','Пари'],
-                        ['ordering','🔢','Порядок']
-                    ].map(([t,ic,lb]) => `
-                        <button class="te-type-btn" title="${lb}" onclick="TestsManagerPage.addQuestion('${t}')">
-                            <span>${ic}</span><span>${lb}</span>
-                        </button>`).join('')}
+                <div class="te-add-q-wrap" id="te-addq-wrap">
+                    <button class="te-add-q-btn" onclick="TestsManagerPage._toggleAddMenu()">＋ Додати питання</button>
+                    <div class="te-type-dropdown" id="te-type-dd">
+                        ${[
+                            ['single','⭕','Одиночний'],
+                            ['multiple','☑️','Множинний'],
+                            ['text','✍️','Текст'],
+                            ['matching','↔️','Пари'],
+                            ['ordering','🔢','Порядок']
+                        ].map(([t,ic,lb]) => `
+                            <div class="te-type-opt" onclick="TestsManagerPage.addQuestion('${t}')">
+                                <span>${ic}</span><span>${lb}</span>
+                            </div>`).join('')}
+                    </div>
                 </div>
             </div>
         </div>
@@ -521,6 +531,12 @@ const TestsManagerPage = {
             this._selectQuestion(0);
         }
 
+        document.addEventListener('click', this._closeAddMenuHandler = (e) => {
+            if (!document.getElementById('te-addq-wrap')?.contains(e.target)) {
+                document.getElementById('te-type-dd')?.classList.remove('open');
+            }
+        });
+
     },
 
     _toolbarHtml() {
@@ -528,13 +544,10 @@ const TestsManagerPage = {
         const type = q?.question_type || this._qType;
         const pts  = q?.points || 1;
         return `
-<select class="te-type-sel" id="te-type-sel" onchange="TestsManagerPage._onTypeChange(this.value)">
-    <option value="single"   ${type==='single'   ?'selected':''}>⭕ Одиночний вибір</option>
-    <option value="multiple" ${type==='multiple' ?'selected':''}>☑️ Множинний вибір</option>
-    <option value="text"     ${type==='text'     ?'selected':''}>✍️ Вільна відповідь</option>
-    <option value="matching" ${type==='matching' ?'selected':''}>↔️ Співставлення</option>
-    <option value="ordering" ${type==='ordering' ?'selected':''}>🔢 Упорядкування</option>
-</select>
+<div class="te-type-chips">
+    ${[['single','⭕','Одиночний'],['multiple','☑️','Множинний'],['text','✍️','Текст'],['matching','↔️','Пари'],['ordering','🔢','Порядок']]
+        .map(([t,ic,lb]) => `<button class="te-type-chip${type===t?' active':''}" onclick="TestsManagerPage._onTypeChange('${t}')">${ic} ${lb}</button>`).join('')}
+</div>
 <div class="te-pts-wrap">
     <span class="te-pts-lbl">Балів:</span>
     <input class="te-pts-inp" type="number" id="te-pts" min="1" max="100" value="${pts}">
@@ -670,6 +683,7 @@ ${opts.map((o,i) => `
     _onTypeChange(val) {
         this._qType = val;
         this._opts  = [];
+        document.querySelectorAll('.te-type-chip').forEach(el => el.classList.toggle('active', el.textContent.trim().startsWith(['⭕','☑️','✍️','↔️','🔢'][['single','multiple','text','matching','ordering'].indexOf(val)])));
         document.getElementById('te-options-area').innerHTML = this._optionsHtml();
     },
 
@@ -783,6 +797,10 @@ ${opts.map((o,i) => `
             await this._renderList(document.getElementById('page-content'));
         } catch(e) { Toast.error('Помилка', e.message); }
         finally { Loader.hide(); }
+    },
+
+    _toggleAddMenu() {
+        document.getElementById('te-type-dd')?.classList.toggle('open');
     },
 
     // ── Assign modal ──────────────────────────────────────────────

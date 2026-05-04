@@ -1049,7 +1049,7 @@ input#uf-select-all {
     content: '';
     position: absolute;
     inset: 0;
-    background: url('/bg.png') center center / cover no-repeat;
+    background: url('/BG.png') center center / cover no-repeat;
     z-index: 0;
 }
 .auth-bg {

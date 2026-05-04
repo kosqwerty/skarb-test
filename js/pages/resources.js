@@ -516,6 +516,11 @@ const ResourcesPage = {
                 filtered = data.filter(r => AccessGroupsPage.checkAccess(r.access_group));
             }
 
+            // В розділі документів показувати тільки відстежувані (is_tracked_download)
+            if (this._view === 'docs') {
+                filtered = filtered.filter(r => r.is_tracked_download);
+            }
+
             // Load per-user download state for docs view
             if (this._view === 'docs' && filtered.length) {
                 this._myDownloads = await API.documentDownloads

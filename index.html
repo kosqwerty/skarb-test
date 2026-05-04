@@ -25,35 +25,102 @@
 ================================================ -->
 <div id="auth-screen" class="auth-screen hidden">
     <button class="theme-toggle-btn auth-theme-btn" onclick="Theme.toggle()" title="Світла тема">☀️</button>
-    <div class="auth-bg">
-        <div class="auth-blob b1"></div>
-        <div class="auth-blob b2"></div>
-        <div class="auth-blob b3"></div>
-    </div>
-    <div class="auth-card">
-        <div class="auth-logo">
-            <div class="login-icon"><img src="/ava-login.png"></div>
-            <h1>LMS СКАРБНИЦЯ</h1>
-            <p></p>
-        </div>
+    <div class="auth-bg"></div>
 
-        <!-- Форма входу -->
-        <div id="login-form">
-            
-            <div class="form-group">
-                <label>Ваш Логін</label>
-                <input type="text" id="login-username" placeholder="Логін (не email)" autocomplete="username">
-            </div>
-            <div class="form-group">
-                <label>Пароль</label>
-                <div class="input-with-icon">
-                    <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password">
-                    <button type="button" class="toggle-pwd" onclick="togglePassword('login-password',this)">👁</button>
+    <div class="auth-layout">
+        <!-- Ліва колонка -->
+        <div class="auth-left">
+            <div class="auth-brand">
+                <div class="auth-brand-icon">
+                    <img src="/icons/diamand.png" alt="Скарбниця" style="width:48px;height:auto;">
+                </div>
+                <div class="auth-brand-text">
+                    <div class="auth-brand-name">СКАРБНИЦЯ</div>
+                    <div class="auth-brand-sub">ЛОМБАРД</div>
                 </div>
             </div>
-            <button id="login-btn" class="btn-login" onclick="Auth.login()">
-                <span>Увійти</span>
-            </button>
+
+            <div class="auth-card">
+                <div class="auth-header">
+                    <span class="auth-system-label">LMS СИСТЕМА</span>
+                    <h1 class="auth-title">Ласкаво просимо</h1>
+                    <p class="auth-subtitle-text">Вхід до системи навчання</p>
+                </div>
+                <div id="login-form">
+                    <div class="form-group">
+                        <label>Логін / Email</label>
+                        <div class="auth-input-wrap">
+                            <span class="auth-input-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
+                            <input type="text" id="login-username" placeholder="Введіть логін або email" autocomplete="username">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Пароль</label>
+                        <div class="auth-input-wrap">
+                            <span class="auth-input-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+                            <input type="password" id="login-password" placeholder="Введіть пароль" autocomplete="current-password">
+                            <button type="button" class="toggle-pwd" onclick="togglePassword('login-password',this)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+                        </div>
+                    </div>
+
+                    <button id="login-btn" class="btn-login" onclick="Auth.login()">
+                        <span>Увійти в систему</span>
+                        <span class="btn-login-arrow">→</span>
+                    </button>
+                    <div class="auth-divider"></div>
+                    <div class="auth-security-box">
+                        <div class="auth-security-icon-wrap"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+                        <div>
+                            <div class="auth-security-title">Ваші дані захищені</div>
+                            <div class="auth-security-desc">Ми використовуємо сучасне шифрування та дотримуємося стандартів безпеки</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Права колонка -->
+        <div class="auth-right">
+            <h2 class="auth-promo-title">Система навчання <span class="auth-promo-accent">Ломбард Скарбниця</span></h2>
+            <p class="auth-promo-sub">Ваш шлях до професійного зростання</p>
+            <div class="auth-features">
+                <div class="auth-feature-item">
+                    <div class="auth-feature-icon">
+                        <img src="/icons/diamand.png" alt="" width="24" height="20">
+                    </div>
+                    <div>
+                        <div class="auth-feature-title">Професійний розвиток</div>
+                        <div class="auth-feature-desc">Сучасні курси та програми для вашого зростання</div>
+                    </div>
+                </div>
+                <div class="auth-feature-item">
+                    <div class="auth-feature-icon">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#C9A227" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    </div>
+                    <div>
+                        <div class="auth-feature-title">Надійність та безпека</div>
+                        <div class="auth-feature-desc">Захищена платформа і конфіденційність даних</div>
+                    </div>
+                </div>
+                <div class="auth-feature-item">
+                    <div class="auth-feature-icon">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#C9A227" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                    </div>
+                    <div>
+                        <div class="auth-feature-title">Зручність та доступність</div>
+                        <div class="auth-feature-desc">Навчайтеся коли зручно</div>
+                    </div>
+                </div>
+                <div class="auth-feature-item">
+                    <div class="auth-feature-icon">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#C9A227" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                    </div>
+                    <div>
+                        <div class="auth-feature-title">Якість та експертність</div>
+                        <div class="auth-feature-desc">Контент від провідних експертів ломбардної галузі</div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -162,8 +229,10 @@ document.write([
 <script>
 function togglePassword(id, btn) {
     const input = document.getElementById(id);
-    if (input.type === 'password') { input.type = 'text'; btn.textContent = '🙈'; }
-    else { input.type = 'password'; btn.textContent = '👁'; }
+    const eyeOpen = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+    const eyeOff  = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+    if (input.type === 'password') { input.type = 'text'; btn.innerHTML = eyeOff; }
+    else { input.type = 'password'; btn.innerHTML = eyeOpen; }
 }
 document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('login-password')?.addEventListener('keydown', e => {

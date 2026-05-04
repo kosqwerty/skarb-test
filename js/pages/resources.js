@@ -108,16 +108,16 @@ const ResourcesPage = {
 /* ── KB Hero ── */
 .kb-hero{position:relative;overflow:hidden;border-radius:24px;padding:36px 40px 32px;margin-bottom:28px;background:linear-gradient(135deg,var(--primary) 0%,#1e40af 60%,#4f46e5 100%)}
 .kb-hero-glow{position:absolute;inset:0;background:radial-gradient(ellipse 70% 80% at 10% 40%,rgba(255,255,255,.13),transparent),radial-gradient(ellipse 50% 60% at 90% 10%,rgba(255,255,255,.08),transparent);pointer-events:none}
-.kb-hero-inner{position:relative;display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap}
+.kb-hero-inner{position:relative;display:flex;align-items:center;gap:20px}
 .kb-hero-left{display:flex;align-items:center;gap:20px}
 .kb-hero-icon{width:64px;height:64px;border-radius:20px;background:rgba(255,255,255,.18);backdrop-filter:blur(10px);border:1.5px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;font-size:2rem;flex-shrink:0}
 .kb-hero-title{margin:0;font-size:1.85rem;font-weight:800;color:#fff;letter-spacing:-.03em;line-height:1.1}
 .kb-hero-sub{margin:6px 0 0;color:rgba(255,255,255,.72);font-size:.9rem}
-.kb-search-wrap{position:relative;flex:1;min-width:260px;max-width:400px}
-.kb-search-wrap input{width:100%;padding:12px 18px 12px 44px;border-radius:14px;border:1.5px solid rgba(255,255,255,.25);background:rgba(255,255,255,.15);backdrop-filter:blur(8px);color:#fff;font-size:.95rem;outline:none;transition:border-color .2s,background .2s;box-sizing:border-box}
-.kb-search-wrap input::placeholder{color:rgba(255,255,255,.55)}
-.kb-search-wrap input:focus{border-color:rgba(255,255,255,.55);background:rgba(255,255,255,.22)}
-.kb-search-icon{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:rgba(255,255,255,.6);pointer-events:none;font-size:1.05rem}
+.kb-search-wrap{position:relative;width:100%;max-width:520px;margin:20px auto 0}
+.kb-search-wrap input{width:100%;padding:14px 20px 14px 50px;border-radius:16px;border:2px solid rgba(255,255,255,.4);background:rgba(255,255,255,.95);backdrop-filter:blur(12px);color:#1e293b;font-size:1rem;font-weight:500;outline:none;transition:border-color .2s,box-shadow .2s;box-sizing:border-box;box-shadow:0 4px 24px rgba(0,0,0,.18)}
+.kb-search-wrap input::placeholder{color:#94a3b8;font-weight:400}
+.kb-search-wrap input:focus{border-color:#fff;box-shadow:0 4px 32px rgba(0,0,0,.25),0 0 0 3px rgba(255,255,255,.3)}
+.kb-search-icon{position:absolute;left:16px;top:50%;transform:translateY(-50%);color:#64748b;pointer-events:none;font-size:1.1rem}
 
 /* ── KB Toolbar ── */
 .kb-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:20px}
@@ -134,8 +134,8 @@ const ResourcesPage = {
 .kb-view-btn.active{background:var(--primary);color:#fff}
 
 /* ── KB Secondary toolbar ── */
-.kb-filters-row{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap}
-.kb-filter-sel{padding:7px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);font-size:.82rem;outline:none;cursor:pointer}
+.kb-filters-row{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;align-items:center}
+.kb-filter-sel{padding:7px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);font-size:.82rem;outline:none;cursor:pointer;width:auto;max-width:200px}
 .kb-add-btn{margin-left:auto}
 
 /* ── Grid ── */
@@ -223,10 +223,10 @@ const ResourcesPage = {
                 <p class="kb-hero-sub">Навчальні матеріали та довідкові ресурси</p>
             </div>
         </div>
-        <div class="kb-search-wrap">
-            <span class="kb-search-icon">🔍</span>
-            <input type="text" id="resource-search" placeholder="Пошук матеріалів..." value="${this._search}" oninput="ResourcesPage.onSearch(event)">
-        </div>
+    </div>
+    <div class="kb-search-wrap">
+        <span class="kb-search-icon">🔍</span>
+        <input type="text" id="resource-search" placeholder="Пошук матеріалів..." value="${this._search}" oninput="ResourcesPage.onSearch(event)">
     </div>
 </div>
 

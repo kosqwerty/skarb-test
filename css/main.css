@@ -1582,6 +1582,20 @@ input#uf-select-all {
 .res-star-btn:hover { border-color: #f59e0b; color: #f59e0b; background: rgba(245,158,11,.1); }
 .res-star-btn.active { border-color: #f59e0b; color: #f59e0b; background: rgba(245,158,11,.12); }
 
+@keyframes doc-ack-pulse {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgba(16,185,129,0.7);
+        transform: scale(1);
+    }
+    50% {
+        box-shadow: 0 0 0 8px rgba(16,185,129,0);
+        transform: scale(1.04);
+    }
+}
+.doc-ack-pulse {
+    animation: doc-ack-pulse 1.4s ease-in-out infinite;
+}
+
 .resource-item.bookmarked {
     border-left: 3px solid #C9A227;
     background: rgba(201,162,39,0.06);

@@ -1378,6 +1378,7 @@ const ResourceViewPage = {
             if (lock) lock.style.display = 'none';
             document.querySelectorAll('#doc-viewer-action .doc-unlock-btn').forEach(btn => {
                 btn.style.display = 'inline-flex';
+                btn.classList.add('doc-ack-pulse');
             });
         };
 

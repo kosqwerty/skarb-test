@@ -324,7 +324,7 @@ const TestsManagerPage = {
             title: isEdit ? '⚙️ Налаштування тесту' : '＋ Новий тест',
             size: 'xl',
             body: `
-<div style="display:grid;grid-template-columns:1fr 260px;gap:20px;align-items:start">
+<div style="display:grid;grid-template-columns:1fr 360px;gap:20px;align-items:start">
 <div>
 <div class="form-group"><label>Назва тесту *</label>
     <input id="tm-title" type="text" placeholder="Введіть назву" value="${test?.title||''}"></div>
@@ -461,15 +461,14 @@ const TestsManagerPage = {
     },
 
     async _runAutoAssign(testId) {
+        // Read positions from UI checkboxes (user may not have saved yet)
+        const positions = [...document.querySelectorAll('input[name="tm-pos"]:checked')].map(c => c.value);
+        if (!positions.length) {
+            Toast.info('Немає посад', 'Вкажіть посади в розділі Автоматизація');
+            return;
+        }
         Loader.show();
         try {
-            const { data: t } = await supabase.from('tests')
-                .select('auto_assign_positions').eq('id', testId).single();
-            const positions = t?.auto_assign_positions || [];
-            if (!positions.length) {
-                Toast.info('Немає посад', 'Вкажіть посади в розділі Автоматизація');
-                return;
-            }
             const [{ data: emps }, { data: already }] = await Promise.all([
                 supabase.from('profiles').select('id')
                     .in('role', ['user','teacher','smm','manager'])

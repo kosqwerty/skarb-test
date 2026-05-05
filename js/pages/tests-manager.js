@@ -169,6 +169,16 @@ const TestsManagerAPI = {
             .order('full_name');
         if (error) throw error;
         return data || [];
+    },
+
+    async getPositions() {
+        const { data, error } = await supabase.from('profiles')
+            .select('job_position')
+            .in('role', ['user', 'teacher', 'smm', 'manager'])
+            .not('job_position', 'is', null)
+            .neq('job_position', '');
+        if (error) throw error;
+        return [...new Set((data || []).map(p => p.job_position))].sort();
     }
 };
 
@@ -306,6 +316,10 @@ const TestsManagerPage = {
 
     async _openMetaModal(test) {
         const isEdit = !!test;
+        let allPositions = [];
+        try { allPositions = await TestsManagerAPI.getPositions(); } catch(_) {}
+        const selectedPos = test?.auto_assign_positions || [];
+
         Modal.open({
             title: isEdit ? '⚙️ Налаштування тесту' : '＋ Новий тест',
             size: 'md',
@@ -328,9 +342,23 @@ const TestsManagerPage = {
         <label for="tm-shuffle" style="cursor:pointer;font-weight:500">Перемішати питання</label>
     </div>
 </div>
-<div style="display:flex;align-items:center;gap:10px">
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
     <input type="checkbox" id="tm-pub" ${test?.is_published?'checked':''} style="width:18px;height:18px;cursor:pointer">
     <label for="tm-pub" style="cursor:pointer;font-weight:500">Опубліковано (доступний для проходження)</label>
+</div>
+<div style="padding:14px;border-radius:12px;border:1.5px solid var(--border);background:var(--bg-raised)">
+    <div style="font-weight:700;font-size:.88rem;margin-bottom:4px">🤖 Автоматизація</div>
+    <div style="font-size:.78rem;color:var(--text-muted);margin-bottom:10px">Тест призначається автоматично новим співробітникам з вибраних посад</div>
+    ${allPositions.length ? `
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:${isEdit?'12':'0'}px">
+        ${allPositions.map(p => {
+            const on = selectedPos.includes(p);
+            return `<label style="display:inline-flex;align-items:center;padding:4px 12px;border-radius:20px;border:1.5px solid ${on?'var(--primary)':'var(--border)'};color:${on?'var(--primary)':'var(--text-muted)'};background:${on?'rgba(99,102,241,.08)':'transparent'};cursor:pointer;font-size:.78rem;font-weight:600;transition:all .15s">
+                <input type="checkbox" name="tm-pos" value="${p}" ${on?'checked':''} style="display:none"
+                    onchange="TestsManagerPage._togglePosLabel(this.closest('label'),this.checked)">${p}</label>`;
+        }).join('')}
+    </div>` : `<div style="font-size:.8rem;color:var(--text-muted)">Посади не знайдено — заповніть профілі співробітників</div>`}
+    ${isEdit ? `<button type="button" class="btn btn-ghost btn-sm" onclick="TestsManagerPage._runAutoAssign('${test.id}')">▶ Запустити зараз</button>` : ''}
 </div>`,
             footer: `
 <button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
@@ -341,16 +369,18 @@ const TestsManagerPage = {
     async _saveMeta(testId) {
         const title = Dom.val('tm-title').trim();
         if (!title) { Toast.error('Помилка', 'Введіть назву тесту'); return; }
+        const autoPositions = [...document.querySelectorAll('input[name="tm-pos"]:checked')].map(c => c.value);
         const payload = {
             title,
-            description:         Dom.val('tm-desc').trim() || null,
-            time_limit_minutes:  parseInt(Dom.val('tm-time')) || null,
-            max_attempts:        parseInt(Dom.val('tm-attempts')) || 1,
-            passing_score:       parseInt(Dom.val('tm-score')) || 70,
-            randomize_questions: document.getElementById('tm-shuffle')?.checked || false,
-            is_published:        document.getElementById('tm-pub')?.checked || false,
-            course_id:           null,
-            created_by:          AppState.user.id
+            description:            Dom.val('tm-desc').trim() || null,
+            time_limit_minutes:     parseInt(Dom.val('tm-time')) || null,
+            max_attempts:           parseInt(Dom.val('tm-attempts')) || 1,
+            passing_score:          parseInt(Dom.val('tm-score')) || 70,
+            randomize_questions:    document.getElementById('tm-shuffle')?.checked || false,
+            is_published:           document.getElementById('tm-pub')?.checked || false,
+            auto_assign_positions:  autoPositions,
+            course_id:              null,
+            created_by:             AppState.user.id
         };
         Loader.show();
         try {
@@ -365,6 +395,40 @@ const TestsManagerPage = {
             Modal.close();
             const container = document.getElementById('page-content');
             await this.openEditor(test.id, container);
+        } catch(e) { Toast.error('Помилка', e.message); }
+        finally { Loader.hide(); }
+    },
+
+    _togglePosLabel(lbl, checked) {
+        lbl.style.borderColor = checked ? 'var(--primary)' : 'var(--border)';
+        lbl.style.color       = checked ? 'var(--primary)' : 'var(--text-muted)';
+        lbl.style.background  = checked ? 'rgba(99,102,241,.08)' : 'transparent';
+    },
+
+    async _runAutoAssign(testId) {
+        Loader.show();
+        try {
+            const { data: t } = await supabase.from('tests')
+                .select('auto_assign_positions').eq('id', testId).single();
+            const positions = t?.auto_assign_positions || [];
+            if (!positions.length) {
+                Toast.info('Немає посад', 'Вкажіть посади в розділі Автоматизація');
+                return;
+            }
+            const [{ data: emps }, { data: already }] = await Promise.all([
+                supabase.from('profiles').select('id')
+                    .in('role', ['user','teacher','smm','manager'])
+                    .in('job_position', positions),
+                supabase.from('test_assignments').select('user_id').eq('test_id', testId)
+            ]);
+            const assignedIds = new Set((already || []).map(a => a.user_id));
+            const toAssign    = (emps || []).filter(e => !assignedIds.has(e.id));
+            if (!toAssign.length) {
+                Toast.info('Вже призначено', 'Всі відповідні співробітники вже мають цей тест');
+                return;
+            }
+            await TestsManagerAPI.assign(testId, toAssign.map(e => e.id), null);
+            Toast.success('Готово', `Призначено ${toAssign.length} співробітникам`);
         } catch(e) { Toast.error('Помилка', e.message); }
         finally { Loader.hide(); }
     },
@@ -812,12 +876,11 @@ ${this._opts.map((o,i) => `
 
     async openAssignModal(testId) {
         Loader.show();
-        let allEmployees = [], assigned = [], testMeta = {};
+        let allEmployees = [], assigned = [];
         try {
-            [allEmployees, assigned, testMeta] = await Promise.all([
+            [allEmployees, assigned] = await Promise.all([
                 TestsManagerAPI.getAllEmployees(),
-                TestsManagerAPI.getAssignments(testId),
-                supabase.from('tests').select('id,auto_assign').eq('id', testId).single().then(r => r.data || {})
+                TestsManagerAPI.getAssignments(testId)
             ]);
         } catch(e) { Toast.error('Помилка', e.message); Loader.hide(); return; }
         Loader.hide();
@@ -896,14 +959,7 @@ ${this._opts.map((o,i) => `
     </label>`;
     }).join('')}
 </div>
-<div style="margin-top:12px;padding:12px 14px;border-radius:12px;border:1.5px solid var(--border);background:var(--bg-raised);display:flex;align-items:flex-start;gap:10px">
-    <input type="checkbox" id="tm-auto-assign" ${testMeta.auto_assign?'checked':''}
-        style="width:16px;height:16px;cursor:pointer;flex-shrink:0;margin-top:2px">
-    <div>
-        <label for="tm-auto-assign" style="cursor:pointer;font-weight:600;font-size:.88rem;display:block">Автоматично призначати новим співробітникам</label>
-        <div style="font-size:.75rem;color:var(--text-muted);margin-top:2px">При створенні нового користувача цей тест буде призначено автоматично</div>
-    </div>
-</div>`,
+`,
             footer: `
 <button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
 <button class="btn btn-primary" onclick="TestsManagerPage._doAssign('${testId}')">Зберегти</button>`
@@ -946,10 +1002,8 @@ ${this._opts.map((o,i) => `
         const selected   = checkboxes.filter(c => c.checked).map(c => c.value);
         const toUnassign = checkboxes.filter(c => !c.checked && c.dataset.wasAssigned === 'true').map(c => c.value);
         const deadline   = Dom.val('tm-deadline') || null;
-        const autoAssign = document.getElementById('tm-auto-assign')?.checked ?? false;
         Loader.show();
         try {
-            await API.tests.update(testId, { auto_assign: autoAssign });
             if (selected.length) {
                 await TestsManagerAPI.assign(testId, selected, deadline ? new Date(deadline).toISOString() : null);
             }

@@ -1086,14 +1086,22 @@ const AdminPage = {
             if (labelVal) extraFields.label_set_by = AppState.profile?.role;
             await supabase.from('profiles').update(extraFields).eq('id', userId);
 
-            // Auto-assign tests marked for new employees
-            const { data: autoTests } = await supabase.from('tests')
-                .select('id').eq('auto_assign', true).is('course_id', null);
-            if (autoTests?.length) {
-                await supabase.from('test_assignments').upsert(
-                    autoTests.map(t => ({ test_id: t.id, user_id: userId, assigned_by: AppState.user.id, deadline_at: null })),
-                    { onConflict: 'test_id,user_id', ignoreDuplicates: true }
+            // Auto-assign tests by job_position
+            const newPosition = Dom.val('cu-job-position').trim();
+            if (newPosition) {
+                const { data: autoTests } = await supabase.from('tests')
+                    .select('id, auto_assign_positions')
+                    .is('course_id', null)
+                    .not('auto_assign_positions', 'eq', '{}');
+                const matching = (autoTests || []).filter(t =>
+                    Array.isArray(t.auto_assign_positions) && t.auto_assign_positions.includes(newPosition)
                 );
+                if (matching.length) {
+                    await supabase.from('test_assignments').upsert(
+                        matching.map(t => ({ test_id: t.id, user_id: userId, assigned_by: AppState.user.id, deadline_at: null })),
+                        { onConflict: 'test_id,user_id', ignoreDuplicates: true }
+                    );
+                }
             }
 
             const fullName = [lastName, firstName, patronymic].filter(Boolean).join(' ');

@@ -1,3 +1,8 @@
--- Auto-assign flag: tests with this flag are automatically assigned to new employees
+-- Replace simple auto_assign boolean with positions-based automation.
+-- Tests will auto-assign to new employees whose job_position matches any entry in the array.
+
 ALTER TABLE public.tests
-    ADD COLUMN IF NOT EXISTS auto_assign boolean DEFAULT false;
+    DROP COLUMN IF EXISTS auto_assign;
+
+ALTER TABLE public.tests
+    ADD COLUMN IF NOT EXISTS auto_assign_positions text[] DEFAULT '{}';

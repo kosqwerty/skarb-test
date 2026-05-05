@@ -738,12 +738,13 @@ ${this._opts.map((o,i) => `
             } else if (type === 'ordering') {
                 answers = this._opts.filter(o => o.text?.trim()).map(o => ({ text: o.text.trim(), is_correct: true }));
             }
-            await API.questions.upsertAnswers(q.id, answers);
+            const savedAnswers = await API.questions.upsertAnswers(q.id, answers);
 
             // Refresh local
             q.question_type = type;
             q.question_text = questionText;
-            q.points = pts;
+            q.points        = pts;
+            q.answers       = savedAnswers;
             document.getElementById('te-qlist').innerHTML = this._renderQList();
             Toast.success('Збережено');
         } catch(e) { Toast.error('Помилка', e.message); }

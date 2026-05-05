@@ -482,16 +482,17 @@ const API = {
 
         async upsertAnswers(questionId, answers) {
             await supabase.from('answers').delete().eq('question_id', questionId);
-            if (!answers.length) return;
-            const { error } = await supabase.from('answers').insert(
+            if (!answers.length) return [];
+            const { data, error } = await supabase.from('answers').insert(
                 answers.map((a, i) => ({
                     question_id: questionId,
                     answer_text: a.text,
                     is_correct: a.is_correct,
                     order_index: i
                 }))
-            );
+            ).select();
             if (error) throw error;
+            return data || [];
         }
     },
 

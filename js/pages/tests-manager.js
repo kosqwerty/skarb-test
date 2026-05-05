@@ -349,15 +349,32 @@ const TestsManagerPage = {
 <div style="padding:14px;border-radius:12px;border:1.5px solid var(--border);background:var(--bg-raised)">
     <div style="font-weight:700;font-size:.88rem;margin-bottom:4px">🤖 Автоматизація</div>
     <div style="font-size:.78rem;color:var(--text-muted);margin-bottom:10px">Тест призначається автоматично новим співробітникам з вибраних посад</div>
+    <div id="tm-pos-tags" style="display:flex;flex-wrap:wrap;gap:5px;min-height:28px;margin-bottom:8px">
+        ${selectedPos.length
+            ? selectedPos.map(p => {
+                const js = p.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+                return `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px 3px 12px;border-radius:20px;background:rgba(99,102,241,.1);border:1.5px solid var(--primary);color:var(--primary);font-size:.75rem;font-weight:600">${p}<button type="button" onclick="TestsManagerPage._removePosTag('${js}')" style="background:none;border:none;cursor:pointer;color:var(--primary);padding:0;margin:0 0 0 2px;font-size:.8rem;line-height:1">✕</button></span>`;
+            }).join('')
+            : `<span style="font-size:.78rem;color:var(--text-muted);line-height:28px">Посади не вибрано — тест призначається тільки вручну</span>`
+        }
+    </div>
     ${allPositions.length ? `
-    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:${isEdit?'12':'0'}px">
+    <input id="tm-pos-search" type="text" placeholder="🔍 Пошук посади..."
+        style="width:100%;box-sizing:border-box;padding:7px 10px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.83rem;outline:none;margin-bottom:4px"
+        oninput="TestsManagerPage._filterPosSearch(this.value)">
+    <div id="tm-pos-list" style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:4px;margin-bottom:${isEdit?'10':'0'}px">
         ${allPositions.map(p => {
             const on = selectedPos.includes(p);
-            return `<label style="display:inline-flex;align-items:center;padding:4px 12px;border-radius:20px;border:1.5px solid ${on?'var(--primary)':'var(--border)'};color:${on?'var(--primary)':'var(--text-muted)'};background:${on?'rgba(99,102,241,.08)':'transparent'};cursor:pointer;font-size:.78rem;font-weight:600;transition:all .15s">
-                <input type="checkbox" name="tm-pos" value="${p}" ${on?'checked':''} style="display:none"
-                    onchange="TestsManagerPage._togglePosLabel(this.closest('label'),this.checked)">${p}</label>`;
+            return `<label style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:8px;cursor:pointer;background:${on?'rgba(99,102,241,.06)':''};transition:background .12s"
+                onmouseenter="this.style.background=this.querySelector('input').checked?'rgba(99,102,241,.06)':'var(--bg-raised)'"
+                onmouseleave="this.style.background=this.querySelector('input').checked?'rgba(99,102,241,.06)':''">
+                <input type="checkbox" name="tm-pos" value="${p}" ${on?'checked':''}
+                    style="width:15px;height:15px;cursor:pointer;accent-color:var(--primary);flex-shrink:0"
+                    onchange="TestsManagerPage._togglePosLabel(this.closest('label'),this.checked)">
+                <span style="font-size:.85rem;color:var(--text-primary)">${p}</span>
+            </label>`;
         }).join('')}
-    </div>` : `<div style="font-size:.8rem;color:var(--text-muted)">Посади не знайдено — заповніть профілі співробітників</div>`}
+    </div>` : `<div style="font-size:.8rem;color:var(--text-muted);margin-bottom:${isEdit?'10':'0'}px">Посади не знайдено — заповніть профілі співробітників</div>`}
     ${isEdit ? `<button type="button" class="btn btn-ghost btn-sm" onclick="TestsManagerPage._runAutoAssign('${test.id}')">▶ Запустити зараз</button>` : ''}
 </div>`,
             footer: `
@@ -400,9 +417,41 @@ const TestsManagerPage = {
     },
 
     _togglePosLabel(lbl, checked) {
-        lbl.style.borderColor = checked ? 'var(--primary)' : 'var(--border)';
-        lbl.style.color       = checked ? 'var(--primary)' : 'var(--text-muted)';
-        lbl.style.background  = checked ? 'rgba(99,102,241,.08)' : 'transparent';
+        lbl.style.background = checked ? 'rgba(99,102,241,.06)' : '';
+        this._updatePosTags();
+    },
+
+    _updatePosTags() {
+        const el = document.getElementById('tm-pos-tags');
+        if (!el) return;
+        const checked = [...document.querySelectorAll('input[name="tm-pos"]:checked')];
+        if (!checked.length) {
+            el.innerHTML = '<span style="font-size:.78rem;color:var(--text-muted);line-height:28px">Посади не вибрано — тест призначається тільки вручну</span>';
+            return;
+        }
+        el.innerHTML = checked.map(cb => {
+            const p  = cb.value;
+            const js = p.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+            return `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px 3px 12px;border-radius:20px;background:rgba(99,102,241,.1);border:1.5px solid var(--primary);color:var(--primary);font-size:.75rem;font-weight:600">${p}<button type="button" onclick="TestsManagerPage._removePosTag('${js}')" style="background:none;border:none;cursor:pointer;color:var(--primary);padding:0;margin:0 0 0 2px;font-size:.8rem;line-height:1">✕</button></span>`;
+        }).join('');
+    },
+
+    _removePosTag(val) {
+        document.querySelectorAll('input[name="tm-pos"]').forEach(cb => {
+            if (cb.value === val) {
+                cb.checked = false;
+                const lbl = cb.closest('label');
+                if (lbl) lbl.style.background = '';
+            }
+        });
+        this._updatePosTags();
+    },
+
+    _filterPosSearch(query) {
+        const q = query.trim().toLowerCase();
+        document.querySelectorAll('#tm-pos-list label').forEach(lbl => {
+            lbl.style.display = !q || lbl.textContent.trim().toLowerCase().includes(q) ? '' : 'none';
+        });
     },
 
     async _runAutoAssign(testId) {

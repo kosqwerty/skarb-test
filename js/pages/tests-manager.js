@@ -110,7 +110,7 @@
 const TestsManagerAPI = {
     async getAllStandalone() {
         const { data, error } = await supabase.from('tests')
-            .select('*')
+            .select('*, questions(id)')
             .is('course_id', null)
             .order('created_at', { ascending: false });
         if (error) throw error;
@@ -165,6 +165,7 @@ const TestsManagerAPI = {
     async getAllEmployees() {
         const { data, error } = await supabase.from('profiles')
             .select('id, full_name, email, job_position')
+            .in('role', ['user', 'teacher', 'smm', 'manager'])
             .order('full_name');
         if (error) throw error;
         return data || [];
@@ -531,6 +532,9 @@ const TestsManagerPage = {
             this._selectQuestion(0);
         }
 
+        if (this._closeAddMenuHandler) {
+            document.removeEventListener('click', this._closeAddMenuHandler);
+        }
         document.addEventListener('click', this._closeAddMenuHandler = (e) => {
             if (!document.getElementById('te-addq-wrap')?.contains(e.target)) {
                 document.getElementById('te-type-dd')?.classList.remove('open');
@@ -635,10 +639,10 @@ const TestsManagerPage = {
             return `<div class="te-text-hint">✍️ Користувач введе текстову відповідь. Перевірка відбувається вручну адміністратором у розділі «Результати».</div>`;
         }
         if (type === 'matching') {
-            const pairs = this._opts.length ? this._opts : [{left:'',right:''},{left:'',right:''}];
+            if (!this._opts.length) this._opts = [{left:'',right:''},{left:'',right:''}];
             return `
 <div id="te-match-list">
-${pairs.map((p,i) => `
+${this._opts.map((p,i) => `
 <div class="te-match-row">
     <input class="te-match-inp" placeholder="Ліва частина..." value="${p.left||''}" oninput="TestsManagerPage._opts[${i}].left=this.value">
     <span class="te-match-arrow">↔</span>
@@ -649,11 +653,11 @@ ${pairs.map((p,i) => `
 <button class="te-add-opt" onclick="TestsManagerPage.addOption()">＋ Додати пару</button>`;
         }
         if (type === 'ordering') {
-            const items = this._opts.length ? this._opts : [{text:''},{text:''}];
+            if (!this._opts.length) this._opts = [{text:''},{text:''}];
             return `
 <div id="te-order-list">
 <p style="font-size:.78rem;color:var(--text-muted);margin-bottom:10px">Введіть елементи у правильному порядку ↓</p>
-${items.map((it,i) => `
+${this._opts.map((it,i) => `
 <div class="te-order-item">
     <span class="te-opt-handle">⠿</span>
     <div class="te-order-num">${i+1}</div>
@@ -665,10 +669,10 @@ ${items.map((it,i) => `
         }
         // single / multiple
         const isMulti = type === 'multiple';
-        const opts = this._opts.length ? this._opts : [{text:'',correct:false},{text:'',correct:false}];
+        if (!this._opts.length) this._opts = [{text:'',correct:false},{text:'',correct:false}];
         return `
 <div class="te-options" id="te-opts-list">
-${opts.map((o,i) => `
+${this._opts.map((o,i) => `
 <div class="te-opt${o.correct?' correct':''}">
     <span class="te-opt-handle">⠿</span>
     <div class="te-opt-marker" style="${isMulti?'border-radius:4px':''}"></div>
@@ -714,7 +718,7 @@ ${opts.map((o,i) => `
         if (!q) return;
         const questionText = this._quill ? this._quill.root.innerHTML : (q.question_text||q.body||'');
         const pts = parseInt(document.getElementById('te-pts')?.value) || 1;
-        const type = document.getElementById('te-type-sel')?.value || this._qType;
+        const type = this._qType;
 
         Loader.show();
         try {
@@ -829,7 +833,7 @@ ${opts.map((o,i) => `
 <div style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:12px">
     ${employees.map(e => `
     <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s" onmouseenter="this.style.background='var(--bg-raised)'" onmouseleave="this.style.background=''">
-        <input type="checkbox" value="${e.id}" ${assignedIds.has(e.id)?'checked':''} style="width:16px;height:16px;cursor:pointer">
+        <input type="checkbox" value="${e.id}" ${assignedIds.has(e.id)?'checked':''} data-was-assigned="${assignedIds.has(e.id)}" style="width:16px;height:16px;cursor:pointer">
         <div>
             <div style="font-weight:600;font-size:.88rem">${e.full_name||e.email}</div>
             ${e.job_position?`<div style="font-size:.75rem;color:var(--text-muted)">${e.job_position}</div>`:''}
@@ -844,14 +848,20 @@ ${opts.map((o,i) => `
     },
 
     async _doAssign(testId) {
-        const checkboxes = document.querySelectorAll('#modal-body input[type=checkbox]');
-        const selected   = [...checkboxes].filter(c => c.checked).map(c => c.value);
+        const checkboxes = [...document.querySelectorAll('#modal-body input[type=checkbox]')];
+        const selected   = checkboxes.filter(c => c.checked).map(c => c.value);
+        const toUnassign = checkboxes.filter(c => !c.checked && c.dataset.wasAssigned === 'true').map(c => c.value);
         const deadline   = Dom.val('tm-deadline') || null;
-        if (!selected.length) { Toast.info('Оберіть хоча б одного співробітника'); return; }
+        if (!selected.length && !toUnassign.length) { Toast.info('Нічого не змінено'); return; }
         Loader.show();
         try {
-            await TestsManagerAPI.assign(testId, selected, deadline ? new Date(deadline).toISOString() : null);
-            Toast.success('Призначено', `${selected.length} співробітників`);
+            if (selected.length) {
+                await TestsManagerAPI.assign(testId, selected, deadline ? new Date(deadline).toISOString() : null);
+            }
+            for (const uid of toUnassign) {
+                await TestsManagerAPI.unassign(testId, uid);
+            }
+            Toast.success('Збережено');
             Modal.close();
         } catch(e) { Toast.error('Помилка', e.message); }
         finally { Loader.hide(); }

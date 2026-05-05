@@ -161,8 +161,8 @@ const App = {
                 await MyCalendarPage.init(container, params);
             },
 
-            'tests-manager': async ({ container }) => {
-                await TestsManagerPage.init(container);
+            'tests-manager': async ({ container, params }) => {
+                await TestsManagerPage.init(container, params);
             },
 
             'my-tests': async ({ container }) => {

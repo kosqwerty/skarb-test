@@ -322,8 +322,10 @@ const TestsManagerPage = {
 
         Modal.open({
             title: isEdit ? '⚙️ Налаштування тесту' : '＋ Новий тест',
-            size: 'md',
+            size: 'lg',
             body: `
+<div style="display:grid;grid-template-columns:1fr 260px;gap:20px;align-items:start">
+<div>
 <div class="form-group"><label>Назва тесту *</label>
     <input id="tm-title" type="text" placeholder="Введіть назву" value="${test?.title||''}"></div>
 <div class="form-group"><label>Опис</label>
@@ -342,40 +344,44 @@ const TestsManagerPage = {
         <label for="tm-shuffle" style="cursor:pointer;font-weight:500">Перемішати питання</label>
     </div>
 </div>
-<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+<div style="display:flex;align-items:center;gap:10px">
     <input type="checkbox" id="tm-pub" ${test?.is_published?'checked':''} style="width:18px;height:18px;cursor:pointer">
     <label for="tm-pub" style="cursor:pointer;font-weight:500">Опубліковано (доступний для проходження)</label>
 </div>
-<div style="padding:14px;border-radius:12px;border:1.5px solid var(--border);background:var(--bg-raised)">
-    <div style="font-weight:700;font-size:.88rem;margin-bottom:4px">🤖 Автоматизація</div>
-    <div style="font-size:.78rem;color:var(--text-muted);margin-bottom:10px">Тест призначається автоматично новим співробітникам з вибраних посад</div>
-    <div id="tm-pos-tags" style="display:flex;flex-wrap:wrap;gap:5px;min-height:28px;margin-bottom:8px">
+</div>
+<div style="padding:14px;border-radius:12px;border:1.5px solid var(--border);background:var(--bg-raised);display:flex;flex-direction:column;gap:8px">
+    <div>
+        <div style="font-weight:700;font-size:.88rem;margin-bottom:2px">🤖 Автоматизація</div>
+        <div style="font-size:.75rem;color:var(--text-muted)">Автоназначення новим співробітникам за посадою</div>
+    </div>
+    <div id="tm-pos-tags" style="display:flex;flex-wrap:wrap;gap:4px;min-height:24px">
         ${selectedPos.length
             ? selectedPos.map(p => {
                 const js = p.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-                return `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px 3px 12px;border-radius:20px;background:rgba(99,102,241,.1);border:1.5px solid var(--primary);color:var(--primary);font-size:.75rem;font-weight:600">${p}<button type="button" onclick="TestsManagerPage._removePosTag('${js}')" style="background:none;border:none;cursor:pointer;color:var(--primary);padding:0;margin:0 0 0 2px;font-size:.8rem;line-height:1">✕</button></span>`;
+                return `<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px 2px 10px;border-radius:20px;background:rgba(99,102,241,.1);border:1.5px solid var(--primary);color:var(--primary);font-size:.72rem;font-weight:600">${p}<button type="button" onclick="TestsManagerPage._removePosTag('${js}')" style="background:none;border:none;cursor:pointer;color:var(--primary);padding:0;margin:0 0 0 2px;font-size:.75rem;line-height:1">✕</button></span>`;
             }).join('')
-            : `<span style="font-size:.78rem;color:var(--text-muted);line-height:28px">Посади не вибрано — тест призначається тільки вручну</span>`
+            : `<span style="font-size:.75rem;color:var(--text-muted)">Не вибрано — тільки вручну</span>`
         }
     </div>
     ${allPositions.length ? `
     <input id="tm-pos-search" type="text" placeholder="🔍 Пошук посади..."
-        style="width:100%;box-sizing:border-box;padding:7px 10px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.83rem;outline:none;margin-bottom:4px"
+        style="width:100%;box-sizing:border-box;padding:6px 10px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.82rem;outline:none"
         oninput="TestsManagerPage._filterPosSearch(this.value)">
-    <div id="tm-pos-list" style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:4px;margin-bottom:${isEdit?'10':'0'}px">
+    <div id="tm-pos-list" style="flex:1;max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:3px">
         ${allPositions.map(p => {
             const on = selectedPos.includes(p);
-            return `<label style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:8px;cursor:pointer;background:${on?'rgba(99,102,241,.06)':''};transition:background .12s"
+            return `<label style="display:flex;align-items:center;gap:7px;padding:5px 8px;border-radius:7px;cursor:pointer;background:${on?'rgba(99,102,241,.06)':''};transition:background .12s"
                 onmouseenter="this.style.background=this.querySelector('input').checked?'rgba(99,102,241,.06)':'var(--bg-raised)'"
                 onmouseleave="this.style.background=this.querySelector('input').checked?'rgba(99,102,241,.06)':''">
                 <input type="checkbox" name="tm-pos" value="${p}" ${on?'checked':''}
-                    style="width:15px;height:15px;cursor:pointer;accent-color:var(--primary);flex-shrink:0"
+                    style="width:14px;height:14px;cursor:pointer;accent-color:var(--primary);flex-shrink:0"
                     onchange="TestsManagerPage._togglePosLabel(this.closest('label'),this.checked)">
-                <span style="font-size:.85rem;color:var(--text-primary)">${p}</span>
+                <span style="font-size:.82rem;color:var(--text-primary)">${p}</span>
             </label>`;
         }).join('')}
-    </div>` : `<div style="font-size:.8rem;color:var(--text-muted);margin-bottom:${isEdit?'10':'0'}px">Посади не знайдено — заповніть профілі співробітників</div>`}
-    ${isEdit ? `<button type="button" class="btn btn-ghost btn-sm" onclick="TestsManagerPage._runAutoAssign('${test.id}')">▶ Запустити зараз</button>` : ''}
+    </div>` : `<div style="font-size:.78rem;color:var(--text-muted)">Посади не знайдено — заповніть профілі співробітників</div>`}
+    ${isEdit ? `<button type="button" class="btn btn-ghost btn-sm" style="margin-top:auto" onclick="TestsManagerPage._runAutoAssign('${test.id}')">▶ Запустити зараз</button>` : ''}
+</div>
 </div>`,
             footer: `
 <button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>

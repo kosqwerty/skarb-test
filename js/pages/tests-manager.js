@@ -142,7 +142,7 @@ const TestsManagerAPI = {
             deadline_at: deadlineAt || null
         }));
         const { error } = await supabase.from('test_assignments')
-            .upsert(rows, { onConflict: 'test_id,user_id', ignoreDuplicates: true });
+            .upsert(rows, { onConflict: 'test_id,user_id', ignoreDuplicates: false });
         if (error) throw error;
     },
 
@@ -164,7 +164,7 @@ const TestsManagerAPI = {
 
     async getAllEmployees() {
         const { data, error } = await supabase.from('profiles')
-            .select('id, full_name, email, job_position')
+            .select('id, full_name, email, job_position, manager_id')
             .in('role', ['user', 'teacher', 'smm', 'manager'])
             .order('full_name');
         if (error) throw error;
@@ -812,40 +812,93 @@ ${this._opts.map((o,i) => `
 
     async openAssignModal(testId) {
         Loader.show();
-        let employees = [], assigned = [];
+        let allEmployees = [], assigned = [];
         try {
-            [employees, assigned] = await Promise.all([
+            [allEmployees, assigned] = await Promise.all([
                 TestsManagerAPI.getAllEmployees(),
                 TestsManagerAPI.getAssignments(testId)
             ]);
         } catch(e) { Toast.error('Помилка', e.message); Loader.hide(); return; }
         Loader.hide();
 
-        const assignedIds = new Set(assigned.map(a => a.user_id));
+        // Manager sees only subordinates
+        let employees = allEmployees;
+        if (!AppState.isAdmin()) {
+            const subs = allEmployees.filter(e => e.manager_id === AppState.user.id);
+            if (subs.length) employees = subs;
+        }
+
+        const assignedMap  = new Map(assigned.map(a => [a.user_id, a]));
+        const deadlines    = assigned.map(a => a.deadline_at).filter(Boolean);
+        const commonDl     = deadlines.length && deadlines.every(d => d === deadlines[0])
+            ? new Date(deadlines[0]).toISOString().slice(0, 16) : '';
+
         Modal.open({
             title: '👥 Призначити тест',
             size: 'md',
             body: `
-<p style="color:var(--text-muted);font-size:.85rem;margin-bottom:12px">Оберіть співробітників та вкажіть дедлайн (необов'язково)</p>
-<div class="form-group">
-    <label>Дедлайн</label>
-    <input type="datetime-local" id="tm-deadline">
+<div style="display:flex;gap:8px;margin-bottom:12px">
+    <input id="tm-search" type="text" placeholder="🔍 Пошук за іменем..." style="flex:1;padding:8px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.85rem;outline:none"
+        oninput="TestsManagerPage._filterAssignList(this.value)">
+    <button class="btn btn-ghost btn-sm" onclick="TestsManagerPage._selectAllFiltered(true)" title="Вибрати всіх відфільтрованих">☑ Всіх</button>
+    <button class="btn btn-ghost btn-sm" onclick="TestsManagerPage._selectAllFiltered(false)" title="Зняти всіх відфільтрованих">☐ Жодного</button>
 </div>
-<div style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:12px">
-    ${employees.map(e => `
-    <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s" onmouseenter="this.style.background='var(--bg-raised)'" onmouseleave="this.style.background=''">
-        <input type="checkbox" value="${e.id}" ${assignedIds.has(e.id)?'checked':''} data-was-assigned="${assignedIds.has(e.id)}" style="width:16px;height:16px;cursor:pointer">
-        <div>
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+    <span id="tm-assign-count" style="font-size:.78rem;color:var(--text-muted)"></span>
+    <div style="display:flex;align-items:center;gap:8px">
+        <label style="font-size:.82rem;color:var(--text-muted)">Дедлайн:</label>
+        <input type="datetime-local" id="tm-deadline" value="${commonDl}" style="padding:5px 10px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.82rem;outline:none">
+    </div>
+</div>
+<div id="tm-assign-list" style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:12px">
+    ${employees.map(e => {
+        const a = assignedMap.get(e.id);
+        const dlTxt = a?.deadline_at ? `до ${Fmt.dateShort(a.deadline_at)}` : '';
+        return `
+    <label class="tm-assign-item" data-name="${(e.full_name||e.email||'').toLowerCase()}"
+        style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s"
+        onmouseenter="this.style.background='var(--bg-raised)'" onmouseleave="this.style.background=''">
+        <input type="checkbox" value="${e.id}" ${a?'checked':''} data-was-assigned="${!!a}"
+            style="width:16px;height:16px;cursor:pointer;flex-shrink:0"
+            onchange="TestsManagerPage._updateAssignCount()">
+        <div style="flex:1;min-width:0">
             <div style="font-weight:600;font-size:.88rem">${e.full_name||e.email}</div>
             ${e.job_position?`<div style="font-size:.75rem;color:var(--text-muted)">${e.job_position}</div>`:''}
         </div>
-        ${assignedIds.has(e.id)?'<span style="margin-left:auto;font-size:.72rem;color:#10b981;font-weight:600">✓ Призначено</span>':''}
-    </label>`).join('')}
+        ${a ? `<span style="font-size:.72rem;color:#10b981;font-weight:600;white-space:nowrap">✓ ${dlTxt}</span>` : ''}
+    </label>`;
+    }).join('')}
 </div>`,
             footer: `
 <button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
 <button class="btn btn-primary" onclick="TestsManagerPage._doAssign('${testId}')">Зберегти</button>`
         });
+        this._updateAssignCount();
+    },
+
+    _filterAssignList(query) {
+        const q = query.trim().toLowerCase();
+        document.querySelectorAll('.tm-assign-item').forEach(el => {
+            el.style.display = !q || el.dataset.name.includes(q) ? '' : 'none';
+        });
+        this._updateAssignCount();
+    },
+
+    _selectAllFiltered(checked) {
+        document.querySelectorAll('.tm-assign-item').forEach(el => {
+            if (el.style.display === 'none') return;
+            const cb = el.querySelector('input[type=checkbox]');
+            if (cb) cb.checked = checked;
+        });
+        this._updateAssignCount();
+    },
+
+    _updateAssignCount() {
+        const all      = [...document.querySelectorAll('.tm-assign-item input[type=checkbox]')];
+        const visible  = all.filter(c => c.closest('.tm-assign-item').style.display !== 'none');
+        const selected = visible.filter(c => c.checked).length;
+        const el = document.getElementById('tm-assign-count');
+        if (el) el.textContent = `Вибрано: ${selected} з ${visible.length}`;
     },
 
     async _doAssign(testId) {

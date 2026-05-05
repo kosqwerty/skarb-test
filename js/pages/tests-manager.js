@@ -322,7 +322,7 @@ const TestsManagerPage = {
 
         Modal.open({
             title: isEdit ? '⚙️ Налаштування тесту' : '＋ Новий тест',
-            size: 'lg',
+            size: 'xl',
             body: `
 <div style="display:grid;grid-template-columns:1fr 260px;gap:20px;align-items:start">
 <div>

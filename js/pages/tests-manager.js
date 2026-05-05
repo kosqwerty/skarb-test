@@ -812,11 +812,12 @@ ${this._opts.map((o,i) => `
 
     async openAssignModal(testId) {
         Loader.show();
-        let allEmployees = [], assigned = [];
+        let allEmployees = [], assigned = [], testMeta = {};
         try {
-            [allEmployees, assigned] = await Promise.all([
+            [allEmployees, assigned, testMeta] = await Promise.all([
                 TestsManagerAPI.getAllEmployees(),
-                TestsManagerAPI.getAssignments(testId)
+                TestsManagerAPI.getAssignments(testId),
+                supabase.from('tests').select('id,auto_assign').eq('id', testId).single().then(r => r.data || {})
             ]);
         } catch(e) { Toast.error('Помилка', e.message); Loader.hide(); return; }
         Loader.hide();
@@ -828,34 +829,60 @@ ${this._opts.map((o,i) => `
             if (subs.length) employees = subs;
         }
 
-        const assignedMap  = new Map(assigned.map(a => [a.user_id, a]));
-        const deadlines    = assigned.map(a => a.deadline_at).filter(Boolean);
-        const commonDl     = deadlines.length && deadlines.every(d => d === deadlines[0])
+        const assignedMap = new Map(assigned.map(a => [a.user_id, a]));
+        const deadlines   = assigned.map(a => a.deadline_at).filter(Boolean);
+        const commonDl    = deadlines.length && deadlines.every(d => d === deadlines[0])
             ? new Date(deadlines[0]).toISOString().slice(0, 16) : '';
+
+        const positions     = [...new Set(employees.map(e => e.job_position).filter(Boolean))].sort();
+        const mgrIds        = [...new Set(employees.map(e => e.manager_id).filter(Boolean))];
+        const managers      = mgrIds.map(mid => allEmployees.find(e => e.id === mid)).filter(Boolean);
+        const showMgrFilter = AppState.isAdmin() && managers.length > 0;
+
+        const filterRowCols = 1 + (positions.length ? 1 : 0) + (showMgrFilter ? 1 : 0);
 
         Modal.open({
             title: '👥 Призначити тест',
-            size: 'md',
+            size: 'lg',
             body: `
-<div style="display:flex;gap:8px;margin-bottom:12px">
-    <input id="tm-search" type="text" placeholder="🔍 Пошук за іменем..." style="flex:1;padding:8px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.85rem;outline:none"
-        oninput="TestsManagerPage._filterAssignList(this.value)">
-    <button class="btn btn-ghost btn-sm" onclick="TestsManagerPage._selectAllFiltered(true)" title="Вибрати всіх відфільтрованих">☑ Всіх</button>
-    <button class="btn btn-ghost btn-sm" onclick="TestsManagerPage._selectAllFiltered(false)" title="Зняти всіх відфільтрованих">☐ Жодного</button>
+<div style="display:grid;grid-template-columns:repeat(${filterRowCols},1fr);gap:8px;margin-bottom:10px">
+    <input id="tm-search" type="text" placeholder="🔍 Пошук за іменем..."
+        style="padding:8px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.85rem;outline:none"
+        oninput="TestsManagerPage._applyAssignFilters()">
+    ${positions.length ? `
+    <select id="tm-filter-pos" onchange="TestsManagerPage._applyAssignFilters()"
+        style="padding:8px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.85rem;outline:none">
+        <option value="">Всі посади</option>
+        ${positions.map(p => `<option value="${p.toLowerCase()}">${p}</option>`).join('')}
+    </select>` : ''}
+    ${showMgrFilter ? `
+    <select id="tm-filter-mgr" onchange="TestsManagerPage._applyAssignFilters()"
+        style="padding:8px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.85rem;outline:none">
+        <option value="">Всі керівники</option>
+        ${managers.map(m => `<option value="${m.id}">${m.full_name}</option>`).join('')}
+    </select>` : ''}
 </div>
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-    <span id="tm-assign-count" style="font-size:.78rem;color:var(--text-muted)"></span>
+    <div style="display:flex;align-items:center;gap:6px">
+        <button type="button" class="btn btn-ghost btn-sm" onclick="TestsManagerPage._selectAllFiltered(true)">☑ Вибрати всіх</button>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="TestsManagerPage._selectAllFiltered(false)">☐ Скинути</button>
+        <span id="tm-assign-count" style="font-size:.78rem;color:var(--text-muted);padding-left:4px"></span>
+    </div>
     <div style="display:flex;align-items:center;gap:8px">
-        <label style="font-size:.82rem;color:var(--text-muted)">Дедлайн:</label>
-        <input type="datetime-local" id="tm-deadline" value="${commonDl}" style="padding:5px 10px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.82rem;outline:none">
+        <label style="font-size:.82rem;color:var(--text-muted);white-space:nowrap">Дедлайн:</label>
+        <input type="datetime-local" id="tm-deadline" value="${commonDl}"
+            style="padding:5px 10px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.82rem;outline:none">
     </div>
 </div>
-<div id="tm-assign-list" style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:12px">
+<div id="tm-assign-list" style="max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:12px">
     ${employees.map(e => {
-        const a = assignedMap.get(e.id);
+        const a     = assignedMap.get(e.id);
         const dlTxt = a?.deadline_at ? `до ${Fmt.dateShort(a.deadline_at)}` : '';
         return `
-    <label class="tm-assign-item" data-name="${(e.full_name||e.email||'').toLowerCase()}"
+    <label class="tm-assign-item"
+        data-name="${(e.full_name||e.email||'').toLowerCase()}"
+        data-pos="${(e.job_position||'').toLowerCase()}"
+        data-mgr="${e.manager_id||''}"
         style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s"
         onmouseenter="this.style.background='var(--bg-raised)'" onmouseleave="this.style.background=''">
         <input type="checkbox" value="${e.id}" ${a?'checked':''} data-was-assigned="${!!a}"
@@ -868,6 +895,14 @@ ${this._opts.map((o,i) => `
         ${a ? `<span style="font-size:.72rem;color:#10b981;font-weight:600;white-space:nowrap">✓ ${dlTxt}</span>` : ''}
     </label>`;
     }).join('')}
+</div>
+<div style="margin-top:12px;padding:12px 14px;border-radius:12px;border:1.5px solid var(--border);background:var(--bg-raised);display:flex;align-items:flex-start;gap:10px">
+    <input type="checkbox" id="tm-auto-assign" ${testMeta.auto_assign?'checked':''}
+        style="width:16px;height:16px;cursor:pointer;flex-shrink:0;margin-top:2px">
+    <div>
+        <label for="tm-auto-assign" style="cursor:pointer;font-weight:600;font-size:.88rem;display:block">Автоматично призначати новим співробітникам</label>
+        <div style="font-size:.75rem;color:var(--text-muted);margin-top:2px">При створенні нового користувача цей тест буде призначено автоматично</div>
+    </div>
 </div>`,
             footer: `
 <button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
@@ -876,10 +911,15 @@ ${this._opts.map((o,i) => `
         this._updateAssignCount();
     },
 
-    _filterAssignList(query) {
-        const q = query.trim().toLowerCase();
+    _applyAssignFilters() {
+        const query = (document.getElementById('tm-search')?.value    || '').trim().toLowerCase();
+        const pos   = (document.getElementById('tm-filter-pos')?.value || '');
+        const mgr   =  document.getElementById('tm-filter-mgr')?.value || '';
         document.querySelectorAll('.tm-assign-item').forEach(el => {
-            el.style.display = !q || el.dataset.name.includes(q) ? '' : 'none';
+            const ok = (!query || el.dataset.name.includes(query))
+                    && (!pos   || el.dataset.pos  === pos)
+                    && (!mgr   || el.dataset.mgr  === mgr);
+            el.style.display = ok ? '' : 'none';
         });
         this._updateAssignCount();
     },
@@ -894,21 +934,22 @@ ${this._opts.map((o,i) => `
     },
 
     _updateAssignCount() {
-        const all      = [...document.querySelectorAll('.tm-assign-item input[type=checkbox]')];
-        const visible  = all.filter(c => c.closest('.tm-assign-item').style.display !== 'none');
-        const selected = visible.filter(c => c.checked).length;
+        const all     = [...document.querySelectorAll('.tm-assign-item input[type=checkbox]')];
+        const visible = all.filter(c => c.closest('.tm-assign-item').style.display !== 'none');
+        const sel     = visible.filter(c => c.checked).length;
         const el = document.getElementById('tm-assign-count');
-        if (el) el.textContent = `Вибрано: ${selected} з ${visible.length}`;
+        if (el) el.textContent = `Вибрано: ${sel} з ${visible.length}`;
     },
 
     async _doAssign(testId) {
-        const checkboxes = [...document.querySelectorAll('#modal-body input[type=checkbox]')];
+        const checkboxes = [...document.querySelectorAll('.tm-assign-item input[type=checkbox]')];
         const selected   = checkboxes.filter(c => c.checked).map(c => c.value);
         const toUnassign = checkboxes.filter(c => !c.checked && c.dataset.wasAssigned === 'true').map(c => c.value);
         const deadline   = Dom.val('tm-deadline') || null;
-        if (!selected.length && !toUnassign.length) { Toast.info('Нічого не змінено'); return; }
+        const autoAssign = document.getElementById('tm-auto-assign')?.checked ?? false;
         Loader.show();
         try {
+            await API.tests.update(testId, { auto_assign: autoAssign });
             if (selected.length) {
                 await TestsManagerAPI.assign(testId, selected, deadline ? new Date(deadline).toISOString() : null);
             }

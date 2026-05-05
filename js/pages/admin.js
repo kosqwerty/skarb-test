@@ -1085,6 +1085,17 @@ const AdminPage = {
             const labelVal = Dom.val('cu-label').trim();
             if (labelVal) extraFields.label_set_by = AppState.profile?.role;
             await supabase.from('profiles').update(extraFields).eq('id', userId);
+
+            // Auto-assign tests marked for new employees
+            const { data: autoTests } = await supabase.from('tests')
+                .select('id').eq('auto_assign', true).is('course_id', null);
+            if (autoTests?.length) {
+                await supabase.from('test_assignments').upsert(
+                    autoTests.map(t => ({ test_id: t.id, user_id: userId, assigned_by: AppState.user.id, deadline_at: null })),
+                    { onConflict: 'test_id,user_id', ignoreDuplicates: true }
+                );
+            }
+
             const fullName = [lastName, firstName, patronymic].filter(Boolean).join(' ');
             AuditLog.write('user_create', 'user', fullName, { role });
             Toast.success('Користувача створено');

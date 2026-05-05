@@ -461,7 +461,10 @@ const TestsManagerPage = {
     },
 
     async _runAutoAssign(testId) {
-        // Read positions from UI checkboxes (user may not have saved yet)
+        if (!document.getElementById('tm-pub')?.checked) {
+            Toast.error('Тест не опубліковано', 'Опублікуйте тест перед запуском автоматизації');
+            return;
+        }
         const positions = [...document.querySelectorAll('input[name="tm-pos"]:checked')].map(c => c.value);
         if (!positions.length) {
             Toast.info('Немає посад', 'Вкажіть посади в розділі Автоматизація');

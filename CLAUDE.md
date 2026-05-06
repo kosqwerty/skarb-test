@@ -89,8 +89,9 @@ All Supabase calls live here, grouped by domain: `API.profiles`, `API.courses`, 
 - `quill.root.innerHTML = text` to load content (not `dangerouslyPasteHTML` — it strips inline styles).
 - Image resize/alignment overlays attach to `.ql-container` (parent), not `.ql-editor`, to avoid Quill's MutationObserver errors.
 - AbortController pattern: `_initImageResize(quill)` returns an `AbortController`; call `ac.abort()` to remove all listeners when switching questions.
-- Table insert uses `document.execCommand('insertHTML')` — Quill's Delta system doesn't handle `<table>` tags.
 - Font/size use `attributors/style/*` (inline styles), not the default class-based attributors.
+- Toolbar font/size labels need CSS `content: attr(data-value)` overrides — Quill's Snow theme only has built-in labels for its own preset values.
+- answer_text for single/multiple questions stores Quill HTML — render with `innerHTML`, not as plain text.
 
 ## Storage buckets
 

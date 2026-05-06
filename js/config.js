@@ -33,9 +33,10 @@ const APP_CONFIG = {
         thumbnails: 'course-thumbnails',
         resources:  'lesson-resources',
         scorm:      'scorm-packages',
-        newsImages: 'news-images',
-        avatars:    'avatars',
-        pageFiles:  'page-files'
+        newsImages:  'news-images',
+        avatars:     'avatars',
+        pageFiles:   'page-files',
+        testImages:  'test-images'
     },
 
     roles: {

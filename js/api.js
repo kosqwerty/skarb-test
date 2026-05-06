@@ -487,12 +487,72 @@ const API = {
                 answers.map((a, i) => ({
                     question_id: questionId,
                     answer_text: a.text,
-                    is_correct: a.is_correct,
+                    is_correct:  a.is_correct,
+                    image_url:   a.image_url   || null,
+                    image_align: a.image_align || 'left',
                     order_index: i
                 }))
             ).select();
             if (error) throw error;
             return data || [];
+        }
+    },
+
+    // ── Test Images (Storage) ────────────────────────────────────────
+    testImages: {
+        async upload(file, testId, questionId) {
+            const ext  = file.name.split('.').pop().toLowerCase();
+            const path = `${testId}/${questionId}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+            const opts = { upsert: false };
+            if (file.type) opts.contentType = file.type;
+            const { error } = await supabase.storage
+                .from(APP_CONFIG.buckets.testImages)
+                .upload(path, file, opts);
+            if (error) throw error;
+            const url = `${APP_CONFIG.storagePublicUrl}/${APP_CONFIG.buckets.testImages}/${path}`;
+            return { url, path };
+        },
+
+        async remove(url) {
+            const prefix = `${APP_CONFIG.storagePublicUrl}/${APP_CONFIG.buckets.testImages}/`;
+            const path   = url.startsWith(prefix) ? url.slice(prefix.length) : null;
+            if (!path) return;
+            await supabase.storage.from(APP_CONFIG.buckets.testImages).remove([path]);
+        }
+    },
+
+    // ── Notifications ────────────────────────────────────────────────
+    notifications: {
+        async getMine() {
+            const { data, error } = await supabase.from('notifications')
+                .select('*')
+                .eq('user_id', AppState.user.id)
+                .order('created_at', { ascending: false })
+                .limit(50);
+            if (error) throw error;
+            return data || [];
+        },
+
+        async getUnreadCount() {
+            const { count, error } = await supabase.from('notifications')
+                .select('id', { count: 'exact', head: true })
+                .eq('user_id', AppState.user.id)
+                .is('read_at', null);
+            if (error) return 0;
+            return count || 0;
+        },
+
+        async markRead(id) {
+            await supabase.from('notifications')
+                .update({ read_at: new Date().toISOString() })
+                .eq('id', id).eq('user_id', AppState.user.id);
+        },
+
+        async markAllRead() {
+            await supabase.from('notifications')
+                .update({ read_at: new Date().toISOString() })
+                .eq('user_id', AppState.user.id)
+                .is('read_at', null);
         }
     },
 

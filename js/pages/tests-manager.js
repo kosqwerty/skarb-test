@@ -179,6 +179,20 @@ const TestsManagerAPI = {
             .neq('job_position', '');
         if (error) throw error;
         return [...new Set((data || []).map(p => p.job_position))].sort();
+    },
+
+    async getAttemptsSummary(testId) {
+        const { data, error } = await supabase.from('test_attempts')
+            .select('user_id, passed, completed_at')
+            .eq('test_id', testId)
+            .not('completed_at', 'is', null)
+            .order('completed_at', { ascending: false });
+        if (error) return new Map();
+        const map = new Map();
+        for (const a of (data || [])) {
+            if (!map.has(a.user_id)) map.set(a.user_id, a);
+        }
+        return map;
     }
 };
 
@@ -194,6 +208,7 @@ const TestsManagerPage = {
     _opts:      [],
     _qType:     'single',
     _dirty:     false,
+    _quillSetupDone: false,
 
     async init(container, params = {}) {
         if (!AppState.canSchedule() && !AppState.isStaff()) {
@@ -208,6 +223,7 @@ const TestsManagerPage = {
     // ── List ─────────────────────────────────────────────────────
 
     async _renderList(container) {
+        this._prevView  = 'list';
         this._curTest   = null;
         this._questions = [];
         this._activeIdx = -1;
@@ -250,9 +266,17 @@ const TestsManagerPage = {
 .tm-btn-assign:hover{background:#C9A227;color:#fff}
 .tm-btn-results{padding:7px;border-radius:10px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:.82rem;cursor:pointer;transition:all .15s}
 .tm-btn-results:hover{border-color:var(--primary);color:var(--primary)}
+.tm-btn-settings{padding:7px;border-radius:10px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:.82rem;cursor:pointer;transition:all .15s}
+.tm-btn-settings:hover{border-color:#8b5cf6;color:#8b5cf6}
 .tm-btn-del{padding:7px 10px;border-radius:10px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:.82rem;cursor:pointer;transition:all .15s}
 .tm-btn-del:hover{border-color:var(--danger);color:var(--danger);background:rgba(239,68,68,.06)}
+.tm-assign-item:last-child{border-bottom:none}
 
+.tm-search-inp{padding:8px 14px;border-radius:10px;border:1.5px solid rgba(255,255,255,.25);background:rgba(255,255,255,.12);color:#fff;font-size:.85rem;outline:none;width:220px}
+.tm-search-inp::placeholder{color:rgba(255,255,255,.5)}
+.tm-search-inp:focus{border-color:rgba(255,255,255,.5)}
+.tm-btn-dupe{padding:7px 10px;border-radius:10px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:.82rem;cursor:pointer;transition:all .15s}
+.tm-btn-dupe:hover{border-color:#8b5cf6;color:#8b5cf6}
 .tm-empty{display:flex;flex-direction:column;align-items:center;padding:5rem 2rem;text-align:center;grid-column:1/-1}
 .tm-empty-ico{font-size:4rem;margin-bottom:1rem;opacity:.3}
 .tm-empty-head{font-size:1.2rem;font-weight:700;color:var(--text-primary);margin-bottom:.5rem}
@@ -269,7 +293,10 @@ const TestsManagerPage = {
                     <p class="tm-hero-sub">Створюйте тести та призначайте співробітникам</p>
                 </div>
             </div>
-            <button class="tm-btn-new" onclick="TestsManagerPage.openCreateModal()">＋ Новий тест</button>
+            <div style="display:flex;align-items:center;gap:10px">
+                <input class="tm-search-inp" type="text" placeholder="🔍 Пошук тесту..." oninput="TestsManagerPage._filterTests(this.value)">
+                <button class="tm-btn-new" onclick="TestsManagerPage.openCreateModal()">＋ Новий тест</button>
+            </div>
         </div>
     </div>
 
@@ -303,8 +330,10 @@ const TestsManagerPage = {
     </div>
     <div class="tm-card-footer" onclick="event.stopPropagation()">
         <button class="tm-btn-edit" onclick="TestsManagerPage.openEditor('${t.id}')">✏️ Редагувати</button>
+        <button class="tm-btn-settings" onclick="TestsManagerPage.openSettings('${t.id}')" title="Налаштувати">⚙️</button>
         <button class="tm-btn-assign" onclick="TestsManagerPage.openAssignModal('${t.id}')">👥</button>
         <button class="tm-btn-results" onclick="TestsManagerPage.openResultsModal('${t.id}')">📊</button>
+        <button class="tm-btn-dupe" onclick="TestsManagerPage.duplicateTest('${t.id}')" title="Дублювати тест">⎘</button>
         <button class="tm-btn-del" onclick="TestsManagerPage.deleteTest('${t.id}','${t.title.replace(/'/g,"\\'")}')">🗑</button>
     </div>
 </div>`;
@@ -312,81 +341,104 @@ const TestsManagerPage = {
 
     // ── Create / Edit meta modal ──────────────────────────────────
 
-    openCreateModal() { this._openMetaModal(null); },
+    openCreateModal() {
+        const c = document.getElementById('page-content');
+        this._renderSettings(c, null);
+    },
 
-    async _openMetaModal(test) {
+    openSettings(testId) {
+        const t = this._tests.find(x => x.id === testId);
+        if (!t) return;
+        const c = document.getElementById('page-content');
+        this._renderSettings(c, t);
+    },
+
+    _goBack(container) {
+        if (this._prevView === 'editor' && this._curTest) this._renderEditor(container);
+        else this._renderList(container);
+    },
+
+    async _renderSettings(container, test) {
+        container.innerHTML = '<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>';
         const isEdit = !!test;
         let allPositions = [];
         try { allPositions = await TestsManagerAPI.getPositions(); } catch(_) {}
         const selectedPos = test?.auto_assign_positions || [];
 
-        Modal.open({
-            title: isEdit ? '⚙️ Налаштування тесту' : '＋ Новий тест',
-            size: 'xl',
-            body: `
-<div style="display:grid;grid-template-columns:1fr 360px;gap:20px;align-items:start">
-<div>
-<div class="form-group"><label>Назва тесту *</label>
-    <input id="tm-title" type="text" placeholder="Введіть назву" value="${test?.title||''}"></div>
-<div class="form-group"><label>Опис</label>
-    <textarea id="tm-desc" rows="2" placeholder="Короткий опис (необов'язково)">${test?.description||''}</textarea></div>
-<div class="form-row">
-    <div class="form-group"><label>Ліміт часу (хвилин)</label>
-        <input id="tm-time" type="number" min="1" max="300" placeholder="Без ліміту" value="${test?.time_limit_minutes||''}"></div>
-    <div class="form-group"><label>Макс. спроб</label>
-        <input id="tm-attempts" type="number" min="1" max="10" placeholder="1" value="${test?.max_attempts||1}"></div>
-</div>
-<div class="form-row">
-    <div class="form-group"><label>Прохідний бал (%)</label>
-        <input id="tm-score" type="number" min="1" max="100" value="${test?.passing_score||70}"></div>
-    <div class="form-group" style="display:flex;align-items:center;gap:10px;padding-top:28px">
-        <input type="checkbox" id="tm-shuffle" ${test?.randomize_questions?'checked':''} style="width:18px;height:18px;cursor:pointer">
-        <label for="tm-shuffle" style="cursor:pointer;font-weight:500">Перемішати питання</label>
+        container.innerHTML = `<style>
+.tset-page{max-width:900px}
+.tset-topbar{display:flex;align-items:center;gap:12px;padding-bottom:16px;border-bottom:1px solid var(--border);margin-bottom:28px}
+.tset-back{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);font-size:.83rem;font-weight:500;cursor:pointer;transition:all .15s}
+.tset-back:hover{border-color:var(--primary);color:var(--primary)}
+.tset-grid{display:grid;grid-template-columns:1fr 360px;gap:24px;align-items:start}
+@media(max-width:700px){.tset-grid{grid-template-columns:1fr}}
+</style>
+<div class="tset-page">
+    <div class="tset-topbar">
+        <button class="tset-back" onclick="TestsManagerPage._goBack(document.getElementById('page-content'))">← Назад</button>
+        <span style="font-size:1.1rem;font-weight:700;color:var(--text-primary);flex:1">${isEdit ? '⚙️ ' + test.title : '＋ Новий тест'}</span>
+        <button class="btn btn-primary" onclick="TestsManagerPage._saveMeta(${isEdit ? `'${test.id}'` : 'null'})">${isEdit ? 'Зберегти' : 'Створити'}</button>
     </div>
-</div>
-<div style="display:flex;align-items:center;gap:10px">
-    <input type="checkbox" id="tm-pub" ${test?.is_published?'checked':''} style="width:18px;height:18px;cursor:pointer">
-    <label for="tm-pub" style="cursor:pointer;font-weight:500">Опубліковано (доступний для проходження)</label>
-</div>
-</div>
-<div style="padding:14px;border-radius:12px;border:1.5px solid var(--border);background:var(--bg-raised);display:flex;flex-direction:column;gap:8px">
-    <div>
-        <div style="font-weight:700;font-size:.88rem;margin-bottom:2px">🤖 Автоматизація</div>
-        <div style="font-size:.75rem;color:var(--text-muted)">Автоназначення новим співробітникам за посадою</div>
+    <div class="tset-grid">
+        <div>
+            <div class="form-group"><label>Назва тесту *</label>
+                <input id="tm-title" type="text" placeholder="Введіть назву" value="${test?.title||''}"></div>
+            <div class="form-group"><label>Опис</label>
+                <textarea id="tm-desc" rows="2" placeholder="Короткий опис (необов'язково)">${test?.description||''}</textarea></div>
+            <div class="form-row">
+                <div class="form-group"><label>Ліміт часу (хвилин)</label>
+                    <input id="tm-time" type="number" min="1" max="300" placeholder="Без ліміту" value="${test?.time_limit_minutes||''}"></div>
+                <div class="form-group"><label>Макс. спроб</label>
+                    <input id="tm-attempts" type="number" min="1" max="10" placeholder="1" value="${test?.max_attempts||1}"></div>
+            </div>
+            <div class="form-row">
+                <div class="form-group"><label>Прохідний бал (%)</label>
+                    <input id="tm-score" type="number" min="1" max="100" value="${test?.passing_score||70}"></div>
+                <div class="form-group" style="display:flex;align-items:center;gap:10px;padding-top:28px">
+                    <input type="checkbox" id="tm-shuffle" ${test?.randomize_questions?'checked':''} style="width:18px;height:18px;cursor:pointer">
+                    <label for="tm-shuffle" style="cursor:pointer;font-weight:500">Перемішати питання</label>
+                </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+                <input type="checkbox" id="tm-pub" ${test?.is_published?'checked':''} style="width:18px;height:18px;cursor:pointer">
+                <label for="tm-pub" style="cursor:pointer;font-weight:500">Опубліковано (доступний для проходження)</label>
+            </div>
+        </div>
+        <div style="padding:14px;border-radius:12px;border:1.5px solid var(--border);background:var(--bg-raised);display:flex;flex-direction:column;gap:8px">
+            <div>
+                <div style="font-weight:700;font-size:.88rem;margin-bottom:2px">🤖 Автоматизація</div>
+                <div style="font-size:.75rem;color:var(--text-muted)">Автоназначення новим співробітникам за посадою</div>
+            </div>
+            <div id="tm-pos-tags" style="display:flex;flex-wrap:wrap;gap:4px;min-height:24px">
+                ${selectedPos.length
+                    ? selectedPos.map(p => {
+                        const js = p.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+                        return `<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px 2px 10px;border-radius:20px;background:rgba(99,102,241,.1);border:1.5px solid var(--primary);color:var(--primary);font-size:.72rem;font-weight:600">${p}<button type="button" onclick="TestsManagerPage._removePosTag('${js}')" style="background:none;border:none;cursor:pointer;color:var(--primary);padding:0;margin:0 0 0 2px;font-size:.75rem;line-height:1">✕</button></span>`;
+                    }).join('')
+                    : `<span style="font-size:.75rem;color:var(--text-muted)">Не вибрано — тільки вручну</span>`
+                }
+            </div>
+            ${allPositions.length ? `
+            <input id="tm-pos-search" type="text" placeholder="🔍 Пошук посади..."
+                style="width:100%;box-sizing:border-box;padding:6px 10px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.82rem;outline:none"
+                oninput="TestsManagerPage._filterPosSearch(this.value)">
+            <div id="tm-pos-list" style="flex:1;max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:3px">
+                ${allPositions.map(p => {
+                    const on = selectedPos.includes(p);
+                    return `<label style="display:flex;align-items:center;gap:7px;padding:5px 8px;border-radius:7px;cursor:pointer;background:${on?'rgba(99,102,241,.06)':''};transition:background .12s"
+                        onmouseenter="this.style.background=this.querySelector('input').checked?'rgba(99,102,241,.06)':'var(--bg-raised)'"
+                        onmouseleave="this.style.background=this.querySelector('input').checked?'rgba(99,102,241,.06)':''">
+                        <input type="checkbox" name="tm-pos" value="${p}" ${on?'checked':''}
+                            style="width:14px;height:14px;cursor:pointer;accent-color:var(--primary);flex-shrink:0"
+                            onchange="TestsManagerPage._togglePosLabel(this.closest('label'),this.checked)">
+                        <span style="font-size:.82rem;color:var(--text-primary)">${p}</span>
+                    </label>`;
+                }).join('')}
+            </div>` : `<div style="font-size:.78rem;color:var(--text-muted)">Посади не знайдено — заповніть профілі співробітників</div>`}
+            ${isEdit ? `<button type="button" class="btn btn-ghost btn-sm" style="margin-top:auto" onclick="TestsManagerPage._runAutoAssign('${test.id}')">▶ Запустити зараз</button>` : ''}
+        </div>
     </div>
-    <div id="tm-pos-tags" style="display:flex;flex-wrap:wrap;gap:4px;min-height:24px">
-        ${selectedPos.length
-            ? selectedPos.map(p => {
-                const js = p.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-                return `<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px 2px 10px;border-radius:20px;background:rgba(99,102,241,.1);border:1.5px solid var(--primary);color:var(--primary);font-size:.72rem;font-weight:600">${p}<button type="button" onclick="TestsManagerPage._removePosTag('${js}')" style="background:none;border:none;cursor:pointer;color:var(--primary);padding:0;margin:0 0 0 2px;font-size:.75rem;line-height:1">✕</button></span>`;
-            }).join('')
-            : `<span style="font-size:.75rem;color:var(--text-muted)">Не вибрано — тільки вручну</span>`
-        }
-    </div>
-    ${allPositions.length ? `
-    <input id="tm-pos-search" type="text" placeholder="🔍 Пошук посади..."
-        style="width:100%;box-sizing:border-box;padding:6px 10px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.82rem;outline:none"
-        oninput="TestsManagerPage._filterPosSearch(this.value)">
-    <div id="tm-pos-list" style="flex:1;max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:3px">
-        ${allPositions.map(p => {
-            const on = selectedPos.includes(p);
-            return `<label style="display:flex;align-items:center;gap:7px;padding:5px 8px;border-radius:7px;cursor:pointer;background:${on?'rgba(99,102,241,.06)':''};transition:background .12s"
-                onmouseenter="this.style.background=this.querySelector('input').checked?'rgba(99,102,241,.06)':'var(--bg-raised)'"
-                onmouseleave="this.style.background=this.querySelector('input').checked?'rgba(99,102,241,.06)':''">
-                <input type="checkbox" name="tm-pos" value="${p}" ${on?'checked':''}
-                    style="width:14px;height:14px;cursor:pointer;accent-color:var(--primary);flex-shrink:0"
-                    onchange="TestsManagerPage._togglePosLabel(this.closest('label'),this.checked)">
-                <span style="font-size:.82rem;color:var(--text-primary)">${p}</span>
-            </label>`;
-        }).join('')}
-    </div>` : `<div style="font-size:.78rem;color:var(--text-muted)">Посади не знайдено — заповніть профілі співробітників</div>`}
-    ${isEdit ? `<button type="button" class="btn btn-ghost btn-sm" style="margin-top:auto" onclick="TestsManagerPage._runAutoAssign('${test.id}')">▶ Запустити зараз</button>` : ''}
-</div>
-</div>`,
-            footer: `
-<button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
-<button class="btn btn-primary" onclick="TestsManagerPage._saveMeta(${isEdit ? `'${test.id}'` : 'null'})">${isEdit ? 'Зберегти' : 'Створити'}</button>`
-        });
+</div>`;
     },
 
     async _saveMeta(testId) {
@@ -415,9 +467,7 @@ const TestsManagerPage = {
                 test = await API.tests.create(payload);
                 Toast.success('Тест створено');
             }
-            Modal.close();
-            const container = document.getElementById('page-content');
-            await this.openEditor(test.id, container);
+            await this.openEditor(test.id);
         } catch(e) { Toast.error('Помилка', e.message); }
         finally { Loader.hide(); }
     },
@@ -512,6 +562,7 @@ const TestsManagerPage = {
     },
 
     _renderEditor(container) {
+        this._prevView = 'editor';
         container.innerHTML = `
 <style>
 .te-wrap{display:flex;flex-direction:column;height:calc(100vh - 120px);min-height:600px}
@@ -522,7 +573,7 @@ const TestsManagerPage = {
 .te-body{display:flex;flex:1;gap:0;overflow:hidden;margin-top:16px;border:1px solid var(--border);border-radius:18px;overflow:hidden}
 
 /* Left panel */
-.te-left{flex:1 1 50%;min-width:0;display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--border)}
+.te-left{flex:0 0 65%;min-width:0;display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--border)}
 .te-left-toolbar{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0;background:var(--bg-raised);flex-wrap:wrap}
 .te-type-chips{display:flex;gap:4px;flex-wrap:nowrap}
 .te-type-chip{padding:5px 10px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:.75rem;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap}
@@ -570,7 +621,7 @@ const TestsManagerPage = {
 .te-text-hint{padding:16px;border-radius:12px;border:1.5px solid rgba(99,102,241,.25);background:rgba(99,102,241,.07);color:var(--text-secondary);font-size:.85rem;line-height:1.6;margin-bottom:14px}
 
 /* Right panel */
-.te-right{flex:1 1 50%;min-width:0;display:flex;flex-direction:column;overflow:hidden;background:var(--bg-raised)}
+.te-right{flex:0 0 35%;min-width:0;display:flex;flex-direction:column;overflow:hidden;background:var(--bg-raised)}
 .te-right-header{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
 .te-right-title{font-size:.82rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em}
 .te-right-count{font-size:.78rem;color:var(--text-muted)}
@@ -597,13 +648,82 @@ const TestsManagerPage = {
 
 .te-empty-q{display:flex;flex-direction:column;align-items:center;padding:2rem 1rem;text-align:center;color:var(--text-muted);font-size:.85rem}
 .te-empty-q-ico{font-size:2.5rem;margin-bottom:.75rem;opacity:.4}
+
+/* Media panel */
+.te-media-panel{border:1.5px solid var(--border);border-radius:12px;padding:12px;margin-bottom:16px}
+.te-media-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.te-media-thumbs{display:flex;flex-wrap:wrap;gap:8px}
+.te-media-thumb{position:relative;width:70px;height:70px;border-radius:8px;overflow:hidden;border:1.5px solid var(--border);flex-shrink:0;cursor:pointer}
+.te-media-thumb img{width:100%;height:100%;object-fit:cover;display:block;cursor:zoom-in}
+.te-media-thumb-actions{position:absolute;inset:0;background:rgba(0,0,0,.55);display:none;flex-direction:column;align-items:center;justify-content:center;gap:3px}
+.te-media-thumb:hover .te-media-thumb-actions{display:flex}
+.te-media-thumb-actions button{background:rgba(255,255,255,.9);border:none;border-radius:5px;padding:2px 6px;font-size:.65rem;cursor:pointer;width:58px;text-align:center}
+.te-upload-lbl{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:8px;border:1.5px dashed var(--border);background:transparent;color:var(--text-muted);font-size:.78rem;cursor:pointer;transition:all .15s}
+.te-upload-lbl:hover{border-color:var(--primary);color:var(--primary)}
+/* Answer image */
+.te-opt-img{width:46px;height:46px;border-radius:8px;object-fit:cover;border:1.5px solid var(--border);flex-shrink:0;cursor:zoom-in}
+.te-opt-img-btn{width:32px;height:32px;border-radius:8px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.85rem;flex-shrink:0;transition:all .15s}
+.te-opt-img-btn:hover{border-color:var(--primary);color:var(--primary)}
+.te-opt-img-wrap{position:relative;flex-shrink:0}
+.te-opt-img-del{position:absolute;top:-5px;right:-5px;width:15px;height:15px;border-radius:50%;background:#ef4444;border:none;color:#fff;font-size:.55rem;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:1}
+/* Explanation */
+.te-explanation-wrap{margin-bottom:16px}
+.te-explanation{width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.85rem;resize:vertical;min-height:60px;outline:none;font-family:inherit;transition:border-color .15s}
+.te-explanation:focus{border-color:var(--primary)}
+/* Question list drag */
+.te-qitem[draggable]{cursor:grab}
+.te-qitem.drag-over{border-color:var(--primary)!important;background:rgba(99,102,241,.07)!important}
+.te-qitem-dupe{width:24px;height:24px;border-radius:7px;border:none;background:transparent;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.75rem;flex-shrink:0;transition:all .15s}
+.te-qitem-dupe:hover{background:rgba(99,102,241,.1);color:var(--primary)}
+.ql-editor.drag-active{outline:2px dashed var(--primary)!important;background:rgba(99,102,241,.04)!important}
+.ql-img-toolbar{position:absolute;display:none;z-index:6;background:rgba(15,23,42,.82);border:1.5px solid rgba(255,255,255,.15);border-radius:10px;padding:4px 5px;gap:3px;box-shadow:0 4px 18px rgba(0,0,0,.4);backdrop-filter:blur(6px)}
+.ql-img-toolbar button{width:36px;height:36px;border:none;border-radius:7px;background:transparent;cursor:pointer;font-size:1rem;color:rgba(255,255,255,.75);transition:all .12s;display:flex;align-items:center;justify-content:center}
+.ql-img-toolbar button:hover{background:rgba(255,255,255,.12);color:#fff}
+.ql-img-toolbar button.on{background:var(--primary,#6366f1);color:#fff}
+/* Answer image format bar */
+.te-opt-img-fmt{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.65);display:none;justify-content:center;gap:2px;padding:2px 3px;border-radius:0 0 7px 7px}
+.te-opt-img-wrap:hover .te-opt-img-fmt{display:flex}
+.te-opt-img-fmt button{width:20px;height:20px;border:none;border-radius:3px;background:rgba(255,255,255,.15);color:rgba(255,255,255,.8);font-size:.6rem;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:background .1s}
+.te-opt-img-fmt button.on{background:var(--primary,#6366f1);color:#fff}
+/* Above layout for answer image */
+.te-opt-img-wrap.img-above{width:100%;height:auto;border-radius:8px;overflow:visible}
+.te-opt-img-wrap.img-above .te-opt-img{width:100%;height:auto;max-height:180px;object-fit:contain;border-radius:8px}
+/* Answer Quill cards (single / multiple) */
+.te-ans-cards{display:flex;flex-direction:column;gap:10px}
+.te-ans-card{border:1.5px solid var(--border);border-radius:12px;overflow:visible;background:var(--bg-surface);transition:border-color .15s}
+.te-ans-card.correct{border-color:var(--primary)}
+.te-ans-card-head{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg-raised);border-bottom:1px solid var(--border);border-radius:10px 10px 0 0}
+.te-ans-card-body .ql-toolbar.ql-snow{border:none;border-bottom:1px solid var(--border);padding:3px 8px;background:var(--bg-raised)}
+.te-ans-card-body .ql-container.ql-snow{border:none}
+.te-ans-card-body .ql-editor{min-height:80px;font-size:.9rem;padding:10px 12px}
+.te-ans-card-body .ql-editor img{max-width:100%;border-radius:8px;cursor:zoom-in}
+.te-ans-card-body .ql-editor.drag-active{outline:2px dashed var(--primary)!important;background:rgba(99,102,241,.04)!important}
+/* Font / size picker widths */
+.te-quill-wrap .ql-snow .ql-picker.ql-font{width:120px}
+.te-quill-wrap .ql-snow .ql-picker.ql-size{width:72px}
+.te-ans-card-body .ql-snow .ql-picker.ql-font{width:110px}
+.te-ans-card-body .ql-snow .ql-picker.ql-size{width:68px}
+/* Picker dropdowns — above overlays and sticky headers */
+.ql-snow .ql-picker.ql-expanded .ql-picker-options{z-index:9999!important}
+/* Font picker — show actual font name in label and dropdown items */
+.ql-snow .ql-picker.ql-font .ql-picker-label[data-value]:not([data-value=""])::before,
+.ql-snow .ql-picker.ql-font .ql-picker-item[data-value]:not([data-value=""])::before{content:attr(data-value)!important}
+.ql-snow .ql-picker.ql-font .ql-picker-item[data-value="Arial"]::before{font-family:Arial,sans-serif}
+.ql-snow .ql-picker.ql-font .ql-picker-item[data-value="Georgia"]::before{font-family:Georgia,serif}
+.ql-snow .ql-picker.ql-font .ql-picker-item[data-value="Courier New"]::before{font-family:'Courier New',monospace}
+.ql-snow .ql-picker.ql-font .ql-picker-item[data-value="Tahoma"]::before{font-family:Tahoma,sans-serif}
+.ql-snow .ql-picker.ql-font .ql-picker-item[data-value="Verdana"]::before{font-family:Verdana,sans-serif}
+/* Size picker — show px value in label and dropdown items */
+.ql-snow .ql-picker.ql-size .ql-picker-label[data-value]:not([data-value=""])::before,
+.ql-snow .ql-picker.ql-size .ql-picker-item[data-value]:not([data-value=""])::before{content:attr(data-value)!important}
 </style>
 
 <div class="te-wrap">
     <div class="te-topbar">
         <button class="te-back" onclick="TestsManagerPage._renderList(document.getElementById('page-content'))">← Тести</button>
         <span class="te-test-title">${this._curTest.title}</span>
-        <button class="btn btn-ghost btn-sm" onclick="TestsManagerPage._openMetaModal(TestsManagerPage._curTest)">⚙️ Налаштування</button>
+        <button class="btn btn-ghost btn-sm" onclick="TestsManagerPage._renderSettings(document.getElementById('page-content'),TestsManagerPage._curTest)">⚙️ Налаштування</button>
+        <button class="btn btn-ghost btn-sm" onclick="TestsManagerPage.openPreview('${this._curTest.id}')">👁️ Перегляд</button>
         <button class="btn btn-sm" style="background:#C9A227;color:#fff;border:none;border-radius:10px;padding:7px 16px;font-weight:600;cursor:pointer" onclick="TestsManagerPage.openAssignModal('${this._curTest.id}')">👥 Призначити</button>
         <button class="btn btn-ghost btn-sm" onclick="TestsManagerPage.openResultsModal('${this._curTest.id}')">📊 Результати</button>
     </div>
@@ -687,12 +807,18 @@ const TestsManagerPage = {
             const rawText = q.question_text || q.body || '';
             const text = rawText.replace(/<[^>]*>/g,'').trim() || 'Питання ' + (i+1);
             return `
-<div class="te-qitem${i===this._activeIdx?' active':''}" onclick="TestsManagerPage._selectQuestion(${i})">
+<div class="te-qitem${i===this._activeIdx?' active':''}" draggable="true"
+    onclick="TestsManagerPage._selectQuestion(${i})"
+    ondragstart="TestsManagerPage._handleQDragStart(event,${i})"
+    ondragover="TestsManagerPage._handleQDragOver(event,${i})"
+    ondragleave="TestsManagerPage._handleQDragLeave(event)"
+    ondrop="TestsManagerPage._handleQDrop(event,${i})">
     <div class="te-qitem-num">${i+1}</div>
     <div class="te-qitem-body">
         <div class="te-qitem-text">${text}</div>
         <div class="te-qitem-type">${typeLabels[q.question_type]||q.question_type}</div>
     </div>
+    <button class="te-qitem-dupe" title="Дублювати" onclick="event.stopPropagation();TestsManagerPage.duplicateQuestion(${i})">⎘</button>
     <button class="te-qitem-del" title="Видалити" onclick="event.stopPropagation();TestsManagerPage.deleteQuestion('${q.id}')">✕</button>
 </div>`;
         }).join('');
@@ -708,12 +834,18 @@ const TestsManagerPage = {
         if (q.question_type === 'matching') {
             this._opts = (q.answers||[]).map(a => {
                 const parts = (a.answer_text||'').split('|||');
-                return { left: parts[0]||'', right: parts[1]||'' };
+                return { left: parts[0]||'', right: parts[1]||'', image_url: a.image_url||null, image_align: a.image_align||'left' };
             });
         } else if (q.question_type === 'ordering') {
-            this._opts = [...(q.answers||[])].sort((a,b) => a.order_index - b.order_index).map(a => ({ text: a.answer_text||'' }));
+            this._opts = [...(q.answers||[])].sort((a,b) => a.order_index - b.order_index).map(a => ({ text: a.answer_text||'', image_url: a.image_url||null, image_align: a.image_align||'left' }));
         } else {
-            this._opts = (q.answers||[]).map(a => ({ id: a.id, text: a.answer_text, correct: a.is_correct }));
+            this._opts = (q.answers||[]).map(a => {
+                let html = a.answer_text || '';
+                if (a.image_url && !html.includes('<img')) {
+                    html = `<img src="${a.image_url}">${html ? ' ' + html : ''}`;
+                }
+                return { id: a.id, html, correct: a.is_correct };
+            });
         }
 
         // Update toolbar
@@ -736,8 +868,13 @@ const TestsManagerPage = {
         content.innerHTML = `
 <div class="te-lbl">Текст питання</div>
 <div class="te-quill-wrap"><div id="te-quill"></div></div>
+<div id="te-media-panel">${this._renderMediaPanel()}</div>
 <div class="te-lbl">Варіанти відповідей</div>
 <div id="te-options-area">${this._optionsHtml()}</div>
+<div class="te-explanation-wrap">
+    <div class="te-lbl">💡 Пояснення (показується після відповіді)</div>
+    <textarea class="te-explanation" id="te-explanation" placeholder="Необов'язково — поясніть правильну відповідь...">${q.explanation||''}</textarea>
+</div>
 <button class="te-save-btn" onclick="TestsManagerPage.saveCurrentQuestion()">💾 Зберегти питання</button>`;
 
         // Init Quill
@@ -747,10 +884,61 @@ const TestsManagerPage = {
             if (!el) return;
             this._quill = new Quill('#te-quill', {
                 theme: 'snow',
-                modules: { toolbar: [['bold','italic','underline'],['link'],['clean']] }
+                modules: this._buildQuillModules()
             });
             const text = q.question_text || q.body || '';
-            if (text) this._quill.clipboard.dangerouslyPasteHTML(text);
+            // Direct innerHTML preserves inline styles (width, float, margin) set by
+            // the resize/alignment tools. dangerouslyPasteHTML converts through Delta
+            // and strips all img style attributes.
+            if (text) this._quill.root.innerHTML = text;
+
+            // Clipboard image paste → compress → upload → insert
+            this._quill.root.addEventListener('paste', async e => {
+                const items = Array.from(e.clipboardData?.items || []);
+                const imgItem = items.find(it => it.type.startsWith('image/'));
+                if (!imgItem) return;
+                e.preventDefault(); e.stopPropagation();
+                const file = imgItem.getAsFile();
+                if (!file) return;
+                const qNow = TestsManagerPage._questions[TestsManagerPage._activeIdx];
+                if (!qNow) return;
+                Loader.show();
+                try {
+                    const comp = await TestsManagerPage._compressImage(file);
+                    const { url } = await API.testImages.upload(comp, TestsManagerPage._curTest.id, qNow.id);
+                    if (!qNow.images) qNow.images = [];
+                    qNow.images.push(url);
+                    await API.questions.update(qNow.id, { images: qNow.images });
+                    document.getElementById('te-media-panel').outerHTML = TestsManagerPage._renderMediaPanel();
+                    const range = TestsManagerPage._quill.getSelection(true);
+                    TestsManagerPage._quill.insertEmbed(range.index, 'image', url);
+                    TestsManagerPage._quill.setSelection(range.index + 1);
+                } catch(ex) { Toast.error('Помилка вставки', ex.message); }
+                finally { Loader.hide(); }
+            });
+
+            // Image resize handles inside Quill
+            if (this._questionResizeAbort) this._questionResizeAbort.abort();
+            this._questionResizeAbort = this._initImageResize(this._quill);
+
+            // Drag thumbnail from media panel → drop into Quill text
+            this._quill.root.addEventListener('dragover', e => {
+                if (TestsManagerPage._draggedImageUrl) {
+                    e.preventDefault(); e.dataTransfer.dropEffect = 'copy';
+                    TestsManagerPage._quill.root.classList.add('drag-active');
+                }
+            });
+            this._quill.root.addEventListener('dragleave', () => TestsManagerPage._quill.root.classList.remove('drag-active'));
+            this._quill.root.addEventListener('drop', e => {
+                const url = TestsManagerPage._draggedImageUrl;
+                if (!url) return;
+                e.preventDefault(); e.stopPropagation();
+                TestsManagerPage._quill.root.classList.remove('drag-active');
+                const sel = TestsManagerPage._quill.getSelection() || { index: Math.max(0, TestsManagerPage._quill.getLength() - 1) };
+                TestsManagerPage._quill.insertEmbed(sel.index, 'image', url);
+                TestsManagerPage._quill.setSelection(sel.index + 1);
+                TestsManagerPage._draggedImageUrl = null;
+            });
         }, 50);
     },
 
@@ -760,21 +948,25 @@ const TestsManagerPage = {
             return `<div class="te-text-hint">✍️ Користувач введе текстову відповідь. Перевірка відбувається вручну адміністратором у розділі «Результати».</div>`;
         }
         if (type === 'matching') {
-            if (!this._opts.length) this._opts = [{left:'',right:''},{left:'',right:''}];
+            if (!this._opts.length) this._opts = [{left:'',right:'',image_url:null},{left:'',right:'',image_url:null}];
             return `
 <div id="te-match-list">
 ${this._opts.map((p,i) => `
+<div style="margin-bottom:10px">
 <div class="te-match-row">
-    <input class="te-match-inp" placeholder="Ліва частина..." value="${p.left||''}" oninput="TestsManagerPage._opts[${i}].left=this.value">
+    <input class="te-match-inp" placeholder="Ліва частина..." value="${(p.left||'').replace(/"/g,'&quot;')}" oninput="TestsManagerPage._opts[${i}].left=this.value">
     <span class="te-match-arrow">↔</span>
-    <input class="te-match-inp" placeholder="Права частина..." value="${p.right||''}" oninput="TestsManagerPage._opts[${i}].right=this.value">
+    <input class="te-match-inp" placeholder="Права частина..." value="${(p.right||'').replace(/"/g,'&quot;')}" oninput="TestsManagerPage._opts[${i}].right=this.value">
+    ${p.image_url
+        ? `<div class="te-opt-img-wrap"><img src="${p.image_url}" class="te-opt-img" alt="" onclick="TestsManagerPage._openLightbox(this.src)"><button class="te-opt-img-del" onclick="TestsManagerPage._removeAnswerImage(${i})">✕</button></div>`
+        : `<button class="te-opt-img-btn" data-aidx="${i}" title="Додати зображення" onclick="TestsManagerPage._showImgPicker(${i})">🖼️</button>`}
     <button class="te-opt-del" onclick="TestsManagerPage.removeOption(${i})">✕</button>
-</div>`).join('')}
+</div></div>`).join('')}
 </div>
 <button class="te-add-opt" onclick="TestsManagerPage.addOption()">＋ Додати пару</button>`;
         }
         if (type === 'ordering') {
-            if (!this._opts.length) this._opts = [{text:''},{text:''}];
+            if (!this._opts.length) this._opts = [{text:'',image_url:null},{text:'',image_url:null}];
             return `
 <div id="te-order-list">
 <p style="font-size:.78rem;color:var(--text-muted);margin-bottom:10px">Введіть елементи у правильному порядку ↓</p>
@@ -782,30 +974,40 @@ ${this._opts.map((it,i) => `
 <div class="te-order-item">
     <span class="te-opt-handle">⠿</span>
     <div class="te-order-num">${i+1}</div>
-    <input class="te-opt-inp" placeholder="Елемент ${i+1}..." value="${it.text||''}" oninput="TestsManagerPage._opts[${i}].text=this.value">
+    ${it.image_url
+        ? `<div class="te-opt-img-wrap"><img src="${it.image_url}" class="te-opt-img" alt="" onclick="TestsManagerPage._openLightbox(this.src)"><button class="te-opt-img-del" onclick="TestsManagerPage._removeAnswerImage(${i})">✕</button></div>`
+        : `<button class="te-opt-img-btn" data-aidx="${i}" title="Додати зображення" onclick="TestsManagerPage._showImgPicker(${i})">🖼️</button>`}
+    <input class="te-opt-inp" placeholder="Елемент ${i+1}..." value="${(it.text||'').replace(/"/g,'&quot;')}" oninput="TestsManagerPage._opts[${i}].text=this.value">
     <button class="te-opt-del" onclick="TestsManagerPage.removeOption(${i})">✕</button>
 </div>`).join('')}
 </div>
 <button class="te-add-opt" onclick="TestsManagerPage.addOption()">＋ Додати елемент</button>`;
         }
-        // single / multiple
+        // single / multiple — each answer is a full Quill editor card
         const isMulti = type === 'multiple';
-        if (!this._opts.length) this._opts = [{text:'',correct:false},{text:'',correct:false}];
+        if (!this._opts.length) this._opts = [{html:'',correct:false},{html:'',correct:false}];
+        setTimeout(() => this._initAnswerQuills(), 0);
         return `
-<div class="te-options" id="te-opts-list">
+<div class="te-ans-cards" id="te-opts-list">
 ${this._opts.map((o,i) => `
-<div class="te-opt${o.correct?' correct':''}">
-    <span class="te-opt-handle">⠿</span>
-    <div class="te-opt-marker" style="${isMulti?'border-radius:4px':''}"></div>
-    <input class="te-opt-inp" placeholder="Варіант ${i+1}..." value="${(o.text||'').replace(/"/g,'&quot;')}" oninput="TestsManagerPage._opts[${i}].text=this.value">
-    <button class="te-opt-correct-btn${o.correct?' on':''}" onclick="TestsManagerPage.toggleCorrect(${i})">${o.correct?'✓ Правильна':'Правильна?'}</button>
-    <button class="te-opt-del" onclick="TestsManagerPage.removeOption(${i})">✕</button>
+<div class="te-ans-card${o.correct?' correct':''}" id="te-ans-card-${i}">
+    <div class="te-ans-card-head">
+        <span class="te-opt-handle">⠿</span>
+        <div class="te-opt-marker" style="${isMulti?'border-radius:4px':''}"></div>
+        <span style="font-size:.75rem;color:var(--text-muted);flex:1">Варіант ${i+1}</span>
+        <button class="te-opt-correct-btn${o.correct?' on':''}" onclick="TestsManagerPage.toggleCorrect(${i})">${o.correct?'✓ Правильна':'Правильна?'}</button>
+        <button class="te-opt-del" onclick="TestsManagerPage.removeOption(${i})">✕</button>
+    </div>
+    <div class="te-ans-card-body">
+        <div id="te-ans-quill-${i}"></div>
+    </div>
 </div>`).join('')}
 </div>
 <button class="te-add-opt" onclick="TestsManagerPage.addOption()">＋ Додати варіант</button>`;
     },
 
     _onTypeChange(val) {
+        this._cleanupAnswerQuills();
         this._qType = val;
         this._opts  = [];
         document.querySelectorAll('.te-type-chip').forEach(el => el.classList.toggle('active', el.textContent.trim().startsWith(['⭕','☑️','✍️','↔️','🔢'][['single','multiple','text','matching','ordering'].indexOf(val)])));
@@ -816,16 +1018,19 @@ ${this._opts.map((o,i) => `
         const type = this._qType;
         if (type === 'matching') this._opts.push({ left:'', right:'' });
         else if (type === 'ordering') this._opts.push({ text:'' });
-        else this._opts.push({ text:'', correct: false });
+        else { this._syncAnswerQuillsToOpts(); this._opts.push({ html:'', correct: false }); }
         document.getElementById('te-options-area').innerHTML = this._optionsHtml();
     },
 
     removeOption(idx) {
+        this._syncAnswerQuillsToOpts();
+        this._cleanupAnswerQuills();
         this._opts.splice(idx, 1);
         document.getElementById('te-options-area').innerHTML = this._optionsHtml();
     },
 
     toggleCorrect(idx) {
+        this._syncAnswerQuillsToOpts();
         if (this._qType === 'single') {
             this._opts.forEach((o,i) => o.correct = i === idx);
         } else {
@@ -843,21 +1048,24 @@ ${this._opts.map((o,i) => `
 
         Loader.show();
         try {
+            const explanation = document.getElementById('te-explanation')?.value.trim() || null;
             await API.questions.update(q.id, {
                 question_text: questionText,
                 question_type: type,
-                points: pts,
-                order_index: this._activeIdx
+                points:        pts,
+                explanation,
+                order_index:   this._activeIdx
             });
 
             // Save answers
+            this._syncAnswerQuillsToOpts();
             let answers = [];
             if (type === 'single' || type === 'multiple') {
-                answers = this._opts.filter(o => o.text?.trim()).map(o => ({ text: o.text.trim(), is_correct: o.correct }));
+                answers = this._opts.filter(o => { const h = o.html||''; return h && h !== '<p><br></p>'; }).map(o => ({ text: o.html||'', is_correct: !!o.correct, image_url: null, image_align: 'left' }));
             } else if (type === 'matching') {
-                answers = this._opts.filter(o => o.left?.trim()).map(o => ({ text: o.left.trim() + '|||' + (o.right||'').trim(), is_correct: true }));
+                answers = this._opts.filter(o => o.left?.trim() || o.image_url).map(o => ({ text: (o.left||'').trim() + '|||' + (o.right||'').trim(), is_correct: true, image_url: o.image_url||null, image_align: o.image_align||'left' }));
             } else if (type === 'ordering') {
-                answers = this._opts.filter(o => o.text?.trim()).map(o => ({ text: o.text.trim(), is_correct: true }));
+                answers = this._opts.filter(o => o.text?.trim() || o.image_url).map(o => ({ text: (o.text||'').trim(), is_correct: true, image_url: o.image_url||null, image_align: o.image_align||'left' }));
             }
             const savedAnswers = await API.questions.upsertAnswers(q.id, answers);
 
@@ -865,6 +1073,7 @@ ${this._opts.map((o,i) => `
             q.question_type = type;
             q.question_text = questionText;
             q.points        = pts;
+            q.explanation   = explanation;
             q.answers       = savedAnswers;
             document.getElementById('te-qlist').innerHTML = this._renderQList();
             Toast.success('Збережено');
@@ -914,6 +1123,591 @@ ${this._opts.map((o,i) => `
         finally { Loader.hide(); }
     },
 
+    // ── Images ───────────────────────────────────────────────────
+
+    _renderMediaPanel() {
+        const q = this._questions[this._activeIdx];
+        const images = q?.images || [];
+        return `<div class="te-media-panel" id="te-media-panel">
+    <div class="te-media-head">
+        <div class="te-lbl" style="margin-bottom:0">📎 Медіа</div>
+        <label class="te-upload-lbl">
+            📤 Завантажити
+            <input type="file" accept="image/*" multiple style="display:none" onchange="TestsManagerPage._uploadImages(this.files)">
+        </label>
+    </div>
+    ${images.length ? `<div class="te-media-thumbs">${images.map(url => `
+        <div class="te-media-thumb">
+            <img src="${url}" alt="" draggable="true"
+                ondragstart="TestsManagerPage._onThumbDragStart(event,'${url}')"
+                onclick="TestsManagerPage._openLightbox('${url}')">
+            <div class="te-media-thumb-actions">
+                <button onclick="event.stopPropagation();TestsManagerPage._insertImageToQuill('${url}')">↑ В текст</button>
+                <button onclick="event.stopPropagation();TestsManagerPage._deleteImage('${url}')" style="color:#c00">🗑</button>
+            </div>
+        </div>`).join('')}</div>`
+    : `<div style="font-size:.78rem;color:var(--text-muted);padding:4px 0">Немає зображень</div>`}
+</div>`;
+    },
+
+    async _uploadImages(files) {
+        const q = this._questions[this._activeIdx];
+        if (!q) return;
+        Loader.show();
+        try {
+            for (const file of files) {
+                const comp = await this._compressImage(file);
+                const { url } = await API.testImages.upload(comp, this._curTest.id, q.id);
+                if (!q.images) q.images = [];
+                q.images.push(url);
+            }
+            await API.questions.update(q.id, { images: q.images });
+            document.getElementById('te-media-panel').outerHTML = this._renderMediaPanel();
+        } catch(e) { Toast.error('Помилка завантаження', e.message); }
+        finally { Loader.hide(); }
+    },
+
+    async _deleteImage(url) {
+        const q = this._questions[this._activeIdx];
+        if (!q) return;
+        Loader.show();
+        try {
+            await API.testImages.remove(url);
+            q.images = (q.images || []).filter(u => u !== url);
+            await API.questions.update(q.id, { images: q.images });
+            document.getElementById('te-media-panel').outerHTML = this._renderMediaPanel();
+        } catch(e) { Toast.error('Помилка видалення', e.message); }
+        finally { Loader.hide(); }
+    },
+
+    _insertImageToQuill(url) {
+        if (!this._quill) return;
+        const range = this._quill.getSelection(true);
+        this._quill.insertEmbed(range.index, 'image', url);
+        this._quill.setSelection(range.index + 1);
+    },
+
+    _syncAnswerQuillsToOpts() {
+        if (this._qType !== 'single' && this._qType !== 'multiple') return;
+        (this._answerQuills || []).forEach((q, i) => {
+            if (q && this._opts[i]) this._opts[i].html = q.root.innerHTML;
+        });
+    },
+
+    _cleanupAnswerQuills() {
+        (this._answerResizeAborts || []).forEach(ac => ac?.abort());
+        this._answerResizeAborts = [];
+        this._answerQuills = [];
+    },
+
+    _quillSetup() {
+        if (this._quillSetupDone) return;
+        this._quillSetupDone = true;
+
+        const FontStyle = Quill.import('attributors/style/font');
+        FontStyle.whitelist = ['Arial', 'Georgia', 'Courier New', 'Tahoma', 'Verdana'];
+        Quill.register(FontStyle, true);
+
+        const SizeStyle = Quill.import('attributors/style/size');
+        SizeStyle.whitelist = ['10px', '12px', '14px', '18px', '20px', '24px', '28px'];
+        Quill.register(SizeStyle, true);
+
+    },
+
+    _buildQuillModules() {
+        this._quillSetup();
+        const fontList = ['Arial', 'Georgia', 'Courier New', 'Tahoma', 'Verdana'];
+        const sizeList = ['10px', '12px', '14px', false, '18px', '20px', '24px', '28px'];
+
+        const toolbarContainer = [
+            [{ font: fontList }],
+            [{ size: sizeList }],
+            ['bold', 'italic', 'underline'],
+            [{ color: [] }],
+            ['link'],
+            ['clean'],
+        ];
+
+        return { toolbar: toolbarContainer };
+    },
+
+
+    _initAnswerQuills() {
+        this._cleanupAnswerQuills();
+        if (this._qType !== 'single' && this._qType !== 'multiple') return;
+        const qData = this._questions[this._activeIdx];
+        this._opts.forEach((opt, i) => {
+            const el = document.getElementById(`te-ans-quill-${i}`);
+            if (!el) return;
+            const q = new Quill(`#te-ans-quill-${i}`, {
+                theme: 'snow',
+                modules: this._buildQuillModules()
+            });
+            if (opt.html) q.root.innerHTML = opt.html;
+
+            // Paste image → upload → insert
+            q.root.addEventListener('paste', async e => {
+                const items = Array.from(e.clipboardData?.items || []);
+                const imgItem = items.find(it => it.type.startsWith('image/'));
+                if (!imgItem) return;
+                e.preventDefault(); e.stopPropagation();
+                const file = imgItem.getAsFile();
+                if (!file || !qData) return;
+                Loader.show();
+                try {
+                    const comp = await TestsManagerPage._compressImage(file);
+                    const { url } = await API.testImages.upload(comp, TestsManagerPage._curTest.id, qData.id);
+                    if (!qData.images) qData.images = [];
+                    qData.images.push(url);
+                    await API.questions.update(qData.id, { images: qData.images });
+                    document.getElementById('te-media-panel').outerHTML = TestsManagerPage._renderMediaPanel();
+                    const range = q.getSelection(true);
+                    q.insertEmbed(range.index, 'image', url);
+                    q.setSelection(range.index + 1);
+                } catch(ex) { Toast.error('Помилка', ex.message); }
+                finally { Loader.hide(); }
+            });
+
+            // Drag thumbnail → drop into answer
+            q.root.addEventListener('dragover', e => {
+                if (TestsManagerPage._draggedImageUrl) {
+                    e.preventDefault(); e.dataTransfer.dropEffect = 'copy';
+                    q.root.classList.add('drag-active');
+                }
+            });
+            q.root.addEventListener('dragleave', () => q.root.classList.remove('drag-active'));
+            q.root.addEventListener('drop', e => {
+                const url = TestsManagerPage._draggedImageUrl;
+                if (!url) return;
+                e.preventDefault(); e.stopPropagation();
+                q.root.classList.remove('drag-active');
+                const sel = q.getSelection() || { index: Math.max(0, q.getLength() - 1) };
+                q.insertEmbed(sel.index, 'image', url);
+                q.setSelection(sel.index + 1);
+                TestsManagerPage._draggedImageUrl = null;
+            });
+
+            this._answerResizeAborts.push(this._initImageResize(q));
+            this._answerQuills.push(q);
+        });
+    },
+
+    _initImageResize(quill) {
+        const ac  = new AbortController();
+        const sig = ac.signal;
+
+        let activeImg = null;
+
+        // Attach overlay to .ql-container (parent of .ql-editor) so Quill's
+        // MutationObserver on .ql-editor never sees it and won't call emitter.emit.
+        const wrap = quill.root.parentElement;
+        wrap.style.position = 'relative';
+
+        const ov = document.createElement('div');
+        ov.style.cssText = 'position:absolute;box-sizing:border-box;border:2px solid var(--primary,#6366f1);pointer-events:none;display:none;z-index:5;border-radius:2px';
+        const handle = document.createElement('div');
+        handle.title = 'Змінити розмір';
+        handle.style.cssText = 'position:absolute;bottom:-6px;right:-6px;width:12px;height:12px;background:var(--primary,#6366f1);border:2px solid #fff;border-radius:2px;cursor:se-resize;pointer-events:all';
+        ov.appendChild(handle);
+        wrap.appendChild(ov);
+
+        // Alignment toolbar
+        const tbar = document.createElement('div');
+        tbar.className = 'ql-img-toolbar';
+        tbar.innerHTML = [
+            ['block',  '⬛', 'Блок'],
+            ['center', '↔',  'По центру'],
+            ['left',   '◧',  'Обтекання ліворуч'],
+            ['right',  '◨',  'Обтекання праворуч'],
+        ].map(([a, ic, t]) => `<button data-align="${a}" title="${t}">${ic}</button>`).join('');
+        wrap.appendChild(tbar);
+
+        const hideAll = () => {
+            ov.style.display = 'none';
+            tbar.style.display = 'none';
+            activeImg = null;
+        };
+
+        const syncOv = () => {
+            if (!activeImg || !quill.root.contains(activeImg)) { hideAll(); return; }
+            const ir = activeImg.getBoundingClientRect();
+            const wr = wrap.getBoundingClientRect();
+            const top = ir.top - wr.top, left = ir.left - wr.left;
+            ov.style.cssText += `;top:${top}px;left:${left}px;width:${ir.width}px;height:${ir.height}px;display:block`;
+            // Toolbar centered on image
+            const tbW = tbar.offsetWidth  || 172;
+            const tbH = tbar.offsetHeight || 46;
+            tbar.style.top  = (top  + ir.height / 2 - tbH / 2) + 'px';
+            tbar.style.left = Math.max(0, Math.min(left + ir.width / 2 - tbW / 2, wr.width - tbW - 4)) + 'px';
+            tbar.style.display = 'flex';
+            // Highlight active alignment
+            const fl = activeImg.style.float;
+            const centered = !fl && activeImg.style.marginLeft === 'auto';
+            tbar.querySelectorAll('button').forEach(btn => {
+                const a = btn.dataset.align;
+                btn.classList.toggle('on',
+                    (a === 'left'   && fl === 'left') ||
+                    (a === 'right'  && fl === 'right') ||
+                    (a === 'center' && centered) ||
+                    (a === 'block'  && !fl && !centered)
+                );
+            });
+        };
+
+        quill.root.addEventListener('click', e => {
+            if (e.target.tagName !== 'IMG') { hideAll(); return; }
+            activeImg = e.target;
+            syncOv();
+        }, { signal: sig });
+        quill.root.addEventListener('scroll', syncOv, { signal: sig });
+
+        tbar.addEventListener('click', e => {
+            const btn = e.target.closest('button[data-align]');
+            if (!btn || !activeImg) return;
+            e.stopPropagation();
+            activeImg.style.float = activeImg.style.display = activeImg.style.margin = '';
+            const a = btn.dataset.align;
+            if (a === 'block')  { activeImg.style.display = 'block'; activeImg.style.margin = '8px 0'; }
+            if (a === 'center') { activeImg.style.display = 'block'; activeImg.style.margin = '8px auto'; }
+            if (a === 'left')   { activeImg.style.float = 'left';  activeImg.style.margin = '0 12px 8px 0'; }
+            if (a === 'right')  { activeImg.style.float = 'right'; activeImg.style.margin = '0 0 8px 12px'; }
+            syncOv();
+        }, { signal: sig });
+
+        handle.addEventListener('mousedown', e => {
+            if (!activeImg) return;
+            e.preventDefault();
+            const startX = e.clientX;
+            const startW = activeImg.getBoundingClientRect().width;
+            const onMove = ev => {
+                activeImg.style.width  = Math.max(40, startW + ev.clientX - startX) + 'px';
+                activeImg.style.height = 'auto';
+                syncOv();
+            };
+            const onUp = () => {
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+            };
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+        }, { signal: sig });
+
+        document.addEventListener('click', e => {
+            if (!wrap.contains(e.target)) hideAll();
+        }, { signal: sig });
+
+        return ac;
+    },
+
+    _compressImage(file, maxWidth = 1400, quality = 0.85) {
+        return new Promise(resolve => {
+            const img = new Image();
+            const objUrl = URL.createObjectURL(file);
+            img.onload = () => {
+                URL.revokeObjectURL(objUrl);
+                if (img.width <= maxWidth) { resolve(file); return; }
+                const scale = maxWidth / img.width;
+                const canvas = document.createElement('canvas');
+                canvas.width  = Math.round(img.width  * scale);
+                canvas.height = Math.round(img.height * scale);
+                canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                canvas.toBlob(blob => {
+                    if (!blob) { resolve(file); return; }
+                    const base = file.name.replace(/\.[^.]+$/, '') || 'image';
+                    resolve(new File([blob], `${base}.jpg`, { type: 'image/jpeg' }));
+                }, 'image/jpeg', quality);
+            };
+            img.onerror = () => { URL.revokeObjectURL(objUrl); resolve(file); };
+            img.src = objUrl;
+        });
+    },
+
+    _openLightbox(url) {
+        document.getElementById('img-lightbox')?.remove();
+        const ov = document.createElement('div');
+        ov.id = 'img-lightbox';
+        ov.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;cursor:zoom-out;backdrop-filter:blur(3px);animation:lb-in .15s ease';
+        ov.innerHTML = '<style>@keyframes lb-in{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}</style>'
+            + `<img src="${url}" style="max-width:90vw;max-height:90vh;border-radius:10px;box-shadow:0 20px 60px rgba(0,0,0,.6);object-fit:contain;user-select:none;pointer-events:none">`;
+        const close = () => ov.remove();
+        ov.onclick = close;
+        const onKey = e => { if (e.key === 'Escape') { close(); document.removeEventListener('keydown', onKey); } };
+        document.addEventListener('keydown', onKey);
+        ov.addEventListener('remove', () => document.removeEventListener('keydown', onKey));
+        document.body.appendChild(ov);
+    },
+
+    _onThumbDragStart(e, url) {
+        this._draggedImageUrl = url;
+        e.dataTransfer.effectAllowed = 'copy';
+        e.dataTransfer.setData('text/plain', url);
+        e.target.addEventListener('dragend', () => { this._draggedImageUrl = null; }, { once: true });
+    },
+
+    _showImgPicker(answerIdx) {
+        const existing = document.getElementById('te-img-picker');
+        if (existing) {
+            if (existing.dataset.target === String(answerIdx)) { existing.remove(); return; }
+            existing.remove();
+        }
+        const q = this._questions[this._activeIdx];
+        const images = q?.images || [];
+        const btn = document.querySelector(`.te-opt-img-btn[data-aidx="${answerIdx}"]`);
+
+        const picker = document.createElement('div');
+        picker.id = 'te-img-picker';
+        picker.dataset.target = answerIdx;
+        picker.style.cssText = 'position:fixed;z-index:300;background:var(--bg-surface);border:1.5px solid var(--border);border-radius:12px;padding:10px;box-shadow:0 8px 28px rgba(0,0,0,.2);display:flex;flex-wrap:wrap;gap:8px;max-width:310px;max-height:220px;overflow-y:auto';
+
+        if (!images.length) {
+            picker.innerHTML = '<div style="font-size:.78rem;color:var(--text-muted);padding:8px">Немає зображень — завантажте в панелі медіа</div>';
+        } else {
+            picker.innerHTML = images.map(url => `<img src="${url}"
+                style="width:64px;height:64px;object-fit:cover;border-radius:8px;cursor:pointer;border:1.5px solid var(--border);transition:border-color .1s"
+                onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='var(--border)'"
+                onclick="TestsManagerPage._setAnswerImage(${answerIdx},'${url}');document.getElementById('te-img-picker')?.remove()">`).join('');
+        }
+
+        if (btn) {
+            const rect = btn.getBoundingClientRect();
+            picker.style.top  = (rect.bottom + 6) + 'px';
+            picker.style.left = Math.min(rect.left, window.innerWidth - 330) + 'px';
+        } else {
+            picker.style.top = '50%'; picker.style.left = '50%';
+        }
+        document.body.appendChild(picker);
+        setTimeout(() => {
+            document.addEventListener('click', function h(e) {
+                if (!picker.contains(e.target) && e.target !== btn) {
+                    picker.remove(); document.removeEventListener('click', h);
+                }
+            });
+        }, 0);
+    },
+
+    _setAnswerImage(idx, url) {
+        this._opts[idx].image_url = url;
+        document.getElementById('te-options-area').innerHTML = this._optionsHtml();
+    },
+
+    _removeAnswerImage(idx) {
+        this._opts[idx].image_url = null;
+        document.getElementById('te-options-area').innerHTML = this._optionsHtml();
+    },
+
+    _setAnswerAlign(idx, align) {
+        this._opts[idx].image_align = align;
+        document.getElementById('te-options-area').innerHTML = this._optionsHtml();
+    },
+
+    // ── Question duplication & drag ───────────────────────────────
+
+    async duplicateQuestion(idx) {
+        const q = this._questions[idx];
+        Loader.show();
+        try {
+            const newQ = await API.questions.create({
+                test_id:       this._curTest.id,
+                question_text: q.question_text,
+                question_type: q.question_type,
+                points:        q.points,
+                explanation:   q.explanation || null,
+                images:        q.images || [],
+                order_index:   this._questions.length
+            });
+            const answers = (q.answers || []).map(a => ({
+                text:       a.answer_text,
+                is_correct: a.is_correct,
+                image_url:  a.image_url || null
+            }));
+            newQ.answers = answers.length ? await API.questions.upsertAnswers(newQ.id, answers) : [];
+            this._questions.push(newQ);
+            document.getElementById('te-qlist').innerHTML    = this._renderQList();
+            document.getElementById('te-qcount').textContent = this._questions.length;
+            Toast.success('Питання скопійовано');
+        } catch(e) { Toast.error('Помилка', e.message); }
+        finally { Loader.hide(); }
+    },
+
+    _handleQDragStart(e, idx) {
+        this._dragSrcIdx = idx;
+        e.dataTransfer.effectAllowed = 'move';
+    },
+
+    _handleQDragOver(e, idx) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        document.querySelectorAll('.te-qitem').forEach((el, i) =>
+            el.classList.toggle('drag-over', i === idx && i !== this._dragSrcIdx));
+    },
+
+    _handleQDragLeave(e) {
+        if (!e.currentTarget.contains(e.relatedTarget)) {
+            e.currentTarget.classList.remove('drag-over');
+        }
+    },
+
+    async _handleQDrop(e, toIdx) {
+        e.preventDefault();
+        document.querySelectorAll('.te-qitem').forEach(el => el.classList.remove('drag-over'));
+        const fromIdx = this._dragSrcIdx;
+        this._dragSrcIdx = null;
+        if (fromIdx == null || fromIdx === toIdx) return;
+
+        const moved = this._questions.splice(fromIdx, 1)[0];
+        this._questions.splice(toIdx, 0, moved);
+
+        if      (this._activeIdx === fromIdx)                                   this._activeIdx = toIdx;
+        else if (fromIdx < this._activeIdx && toIdx >= this._activeIdx)         this._activeIdx--;
+        else if (fromIdx > this._activeIdx && toIdx <= this._activeIdx)         this._activeIdx++;
+
+        document.getElementById('te-qlist').innerHTML    = this._renderQList();
+        document.getElementById('te-qcount').textContent = this._questions.length;
+        try {
+            await Promise.all(this._questions.map((q, i) => API.questions.update(q.id, { order_index: i })));
+        } catch(e) { Toast.error('Помилка збереження порядку', e.message); }
+    },
+
+    // ── Test list features ────────────────────────────────────────
+
+    _filterTests(query) {
+        const q = query.trim().toLowerCase();
+        document.querySelectorAll('.tm-card').forEach(card => {
+            const title = card.querySelector('.tm-card-title')?.textContent.toLowerCase() || '';
+            card.style.display = (!q || title.includes(q)) ? '' : 'none';
+        });
+    },
+
+    async duplicateTest(testId) {
+        if (!confirm('Створити копію цього тесту?')) return;
+        Loader.show();
+        try {
+            const test    = await API.tests.getById(testId);
+            const newTest = await API.tests.create({
+                title:               test.title + ' (копія)',
+                description:         test.description,
+                instructions:        test.instructions,
+                passing_score:       test.passing_score,
+                max_attempts:        test.max_attempts,
+                time_limit_minutes:  test.time_limit_minutes,
+                randomize_questions: test.randomize_questions,
+                show_results:        test.show_results,
+                is_published:        false,
+                course_id:           null,
+                created_by:          AppState.user.id
+            });
+            for (const q of (test.questions || [])) {
+                const newQ = await API.questions.create({
+                    test_id:       newTest.id,
+                    question_text: q.question_text,
+                    question_type: q.question_type,
+                    points:        q.points,
+                    explanation:   q.explanation || null,
+                    images:        q.images || [],
+                    order_index:   q.order_index
+                });
+                const answers = (q.answers || []).map(a => ({
+                    text: a.answer_text, is_correct: a.is_correct, image_url: a.image_url || null
+                }));
+                if (answers.length) await API.questions.upsertAnswers(newQ.id, answers);
+            }
+            Toast.success('Тест скопійовано', newTest.title);
+            await this._renderList(document.getElementById('page-content'));
+        } catch(e) { Toast.error('Помилка', e.message); }
+        finally { Loader.hide(); }
+    },
+
+    // ── Preview ───────────────────────────────────────────────────
+
+    async openPreview(testId) {
+        const container = document.getElementById('page-content');
+        await this._renderPreview(container, testId);
+    },
+
+    async _renderPreview(container, testId) {
+        container.innerHTML = '<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>';
+        let test;
+        try { test = await API.tests.getById(testId); }
+        catch(e) { Toast.error('Помилка', e.message); this._goBack(container); return; }
+
+        const questions = (test.questions || []).sort((a,b) => a.order_index - b.order_index);
+        container.innerHTML = `<style>
+.tprev-page{max-width:780px}
+.tprev-topbar{display:flex;align-items:center;gap:12px;padding-bottom:16px;border-bottom:1px solid var(--border);margin-bottom:24px}
+.tprev-back{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);font-size:.83rem;font-weight:500;cursor:pointer;transition:all .15s}
+.tprev-back:hover{border-color:var(--primary);color:var(--primary)}
+.tprev-badge{padding:4px 12px;border-radius:20px;background:rgba(245,158,11,.12);color:#f59e0b;font-size:.78rem;font-weight:700}
+.tprev-q{border:1px solid var(--border);border-radius:16px;padding:20px;margin-bottom:14px;background:var(--bg-surface)}
+.tprev-qnum{font-size:.73rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
+.tprev-qtext{font-size:.95rem;color:var(--text-primary);margin-bottom:14px;line-height:1.6}
+.tprev-qtext img{display:block;max-width:100%;height:auto;border-radius:8px;margin:6px 0;float:none!important;cursor:zoom-in}
+.tprev-qtext p{margin:0 0 4px}
+.tprev-opt{display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);margin-bottom:8px;background:var(--bg-raised)}
+.tprev-opt-marker{width:18px;height:18px;border-radius:50%;border:2px solid var(--border);flex-shrink:0;margin-top:3px}
+.tprev-opt-marker.sq{border-radius:4px}
+.tprev-opt-body{flex:1;min-width:0;font-size:.9rem;line-height:1.5}
+.tprev-opt-body img{display:block;max-width:100%;height:auto;border-radius:8px;margin:4px 0;float:none!important;cursor:zoom-in}
+.tprev-opt-body p{margin:0 0 2px}
+.tprev-expl{margin-top:12px;padding:10px 14px;border-radius:10px;background:rgba(99,102,241,.07);border:1.5px solid rgba(99,102,241,.2);font-size:.82rem;color:var(--text-secondary)}
+</style>
+<div class="tprev-page">
+    <div class="tprev-topbar">
+        <button class="tprev-back" onclick="TestsManagerPage._goBack(document.getElementById('page-content'))">← Назад</button>
+        <span style="font-size:1.1rem;font-weight:700;color:var(--text-primary);flex:1">${test.title}</span>
+        <span class="tprev-badge">👁️ Перегляд</span>
+    </div>
+    ${test.description ? `<p style="color:var(--text-muted);margin-bottom:20px;font-size:.9rem">${test.description}</p>` : ''}
+    ${questions.map((q, qi) => {
+        const ans  = (q.answers||[]).sort((a,b) => a.order_index - b.order_index);
+        const pts  = q.points || 1;
+        const ptsTxt = pts === 1 ? 'бал' : pts < 5 ? 'бали' : 'балів';
+        const imgHtml = a => {
+            if (!a.image_url) return '';
+            const al = a.image_align || 'left';
+            const st = al === 'above'
+                ? 'display:block;width:100%;max-height:200px;object-fit:contain;border-radius:8px;margin-bottom:6px'
+                : al === 'right'
+                    ? 'width:64px;height:64px;object-fit:cover;border-radius:7px;flex-shrink:0;order:2'
+                    : 'width:64px;height:64px;object-fit:cover;border-radius:7px;flex-shrink:0';
+            return `<img src="${a.image_url}" style="${st}" onclick="TestsManagerPage._openLightbox('${a.image_url.replace(/'/g,"\\'")}')" title="Збільшити">`;
+        };
+        let optHtml = '';
+        if (q.question_type === 'text') {
+            optHtml = `<textarea style="width:100%;box-sizing:border-box;padding:10px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.88rem;min-height:80px;resize:vertical;outline:none" placeholder="Відповідь..." disabled></textarea>`;
+        } else if (q.question_type === 'matching') {
+            optHtml = ans.map(a => {
+                const [l, r] = (a.answer_text || '').split('|||');
+                return `<div class="tprev-opt">${imgHtml(a)}<span style="flex:1">${l||''}</span><span style="color:var(--text-muted);margin:0 8px">↔</span><span style="flex:1">${r||''}</span></div>`;
+            }).join('');
+        } else if (q.question_type === 'ordering') {
+            optHtml = ans.map((a, ai) => `
+                <div class="tprev-opt">
+                    <span style="width:22px;height:22px;border-radius:50%;background:var(--primary);color:#fff;font-size:.72rem;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">${ai+1}</span>
+                    ${imgHtml(a)}<span>${a.answer_text||''}</span>
+                </div>`).join('');
+        } else {
+            // single / multiple — answer_text is Quill HTML
+            optHtml = ans.map(a => `
+                <div class="tprev-opt">
+                    <div class="tprev-opt-marker${q.question_type==='multiple'?' sq':''}"></div>
+                    ${imgHtml(a)}
+                    <div class="tprev-opt-body">${a.answer_text || ''}</div>
+                </div>`).join('');
+        }
+        return `<div class="tprev-q">
+            <div class="tprev-qnum">Питання ${qi+1} &nbsp;·&nbsp; ${pts} ${ptsTxt}</div>
+            <div class="tprev-qtext">${q.question_text || ''}</div>
+            ${optHtml}
+            ${q.explanation ? `<div class="tprev-expl">💡 ${q.explanation}</div>` : ''}
+        </div>`;
+    }).join('')}
+</div>`;
+        container.querySelectorAll('.tprev-qtext img').forEach(img => {
+            img.style.float = 'none';
+            img.onclick = () => TestsManagerPage._openLightbox(img.src);
+        });
+    },
+
     async deleteTest(id, title) {
         if (!confirm(`Видалити тест «${title}»? Це незворотньо.`)) return;
         Loader.show();
@@ -932,15 +1726,22 @@ ${this._opts.map((o,i) => `
     // ── Assign modal ──────────────────────────────────────────────
 
     async openAssignModal(testId) {
-        Loader.show();
-        let allEmployees = [], assigned = [];
+        const container = document.getElementById('page-content');
+        await this._renderAssign(container, testId);
+    },
+
+    async _renderAssign(container, testId) {
+        container.innerHTML = '<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>';
+        let allEmployees = [], assigned = [], attemptsMap = new Map(), testTitle = '';
         try {
-            [allEmployees, assigned] = await Promise.all([
+            [allEmployees, assigned, attemptsMap] = await Promise.all([
                 TestsManagerAPI.getAllEmployees(),
-                TestsManagerAPI.getAssignments(testId)
+                TestsManagerAPI.getAssignments(testId),
+                TestsManagerAPI.getAttemptsSummary(testId)
             ]);
-        } catch(e) { Toast.error('Помилка', e.message); Loader.hide(); return; }
-        Loader.hide();
+            const t = this._tests.find(x => x.id === testId) || this._curTest;
+            testTitle = t?.title || '';
+        } catch(e) { Toast.error('Помилка', e.message); this._goBack(container); return; }
 
         // Manager sees only subordinates
         let employees = allEmployees;
@@ -958,69 +1759,84 @@ ${this._opts.map((o,i) => `
         const mgrIds        = [...new Set(employees.map(e => e.manager_id).filter(Boolean))];
         const managers      = mgrIds.map(mid => allEmployees.find(e => e.id === mid)).filter(Boolean);
         const showMgrFilter = AppState.isAdmin() && managers.length > 0;
+        const filterCols    = 1 + (positions.length ? 1 : 0) + (showMgrFilter ? 1 : 0);
 
-        const filterRowCols = 1 + (positions.length ? 1 : 0) + (showMgrFilter ? 1 : 0);
-
-        Modal.open({
-            title: '👥 Призначити тест',
-            size: 'lg',
-            body: `
-<div style="display:grid;grid-template-columns:repeat(${filterRowCols},1fr);gap:8px;margin-bottom:10px">
-    <input id="tm-search" type="text" placeholder="🔍 Пошук за іменем..."
-        style="padding:8px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.85rem;outline:none"
-        oninput="TestsManagerPage._applyAssignFilters()">
-    ${positions.length ? `
-    <select id="tm-filter-pos" onchange="TestsManagerPage._applyAssignFilters()"
-        style="padding:8px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.85rem;outline:none">
-        <option value="">Всі посади</option>
-        ${positions.map(p => `<option value="${p.toLowerCase()}">${p}</option>`).join('')}
-    </select>` : ''}
-    ${showMgrFilter ? `
-    <select id="tm-filter-mgr" onchange="TestsManagerPage._applyAssignFilters()"
-        style="padding:8px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.85rem;outline:none">
-        <option value="">Всі керівники</option>
-        ${managers.map(m => `<option value="${m.id}">${m.full_name}</option>`).join('')}
-    </select>` : ''}
-</div>
-<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-    <div style="display:flex;align-items:center;gap:6px">
-        <button type="button" class="btn btn-ghost btn-sm" onclick="TestsManagerPage._selectAllFiltered(true)">☑ Вибрати всіх</button>
-        <button type="button" class="btn btn-ghost btn-sm" onclick="TestsManagerPage._selectAllFiltered(false)">☐ Скинути</button>
-        <span id="tm-assign-count" style="font-size:.78rem;color:var(--text-muted);padding-left:4px"></span>
+        container.innerHTML = `<style>
+.tasgn-page{max-width:900px;display:flex;flex-direction:column;height:calc(100vh - 120px)}
+.tasgn-topbar{display:flex;align-items:center;gap:12px;padding-bottom:16px;border-bottom:1px solid var(--border);margin-bottom:20px;flex-shrink:0}
+.tasgn-back{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);font-size:.83rem;font-weight:500;cursor:pointer;transition:all .15s}
+.tasgn-back:hover{border-color:var(--primary);color:var(--primary)}
+.tasgn-controls{flex-shrink:0}
+.tasgn-list-wrap{flex:1;overflow-y:auto;border:1px solid var(--border);border-radius:12px;min-height:0}
+.tm-assign-item:last-child{border-bottom:none}
+</style>
+<div class="tasgn-page">
+    <div class="tasgn-topbar">
+        <button class="tasgn-back" onclick="TestsManagerPage._goBack(document.getElementById('page-content'))">← Назад</button>
+        <span style="font-size:1.1rem;font-weight:700;color:var(--text-primary);flex:1">👥 ${testTitle}</span>
+        <button class="btn btn-primary" onclick="TestsManagerPage._doAssign('${testId}')">Зберегти</button>
     </div>
-    <div style="display:flex;align-items:center;gap:8px">
-        <label style="font-size:.82rem;color:var(--text-muted);white-space:nowrap">Дедлайн:</label>
-        <input type="datetime-local" id="tm-deadline" value="${commonDl}"
-            style="padding:5px 10px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.82rem;outline:none">
-    </div>
-</div>
-<div id="tm-assign-list" style="max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:12px">
-    ${employees.map(e => {
-        const a     = assignedMap.get(e.id);
-        const dlTxt = a?.deadline_at ? `до ${Fmt.dateShort(a.deadline_at)}` : '';
-        return `
-    <label class="tm-assign-item"
-        data-name="${(e.full_name||e.email||'').toLowerCase()}"
-        data-pos="${(e.job_position||'').toLowerCase()}"
-        data-mgr="${e.manager_id||''}"
-        style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s"
-        onmouseenter="this.style.background='var(--bg-raised)'" onmouseleave="this.style.background=''">
-        <input type="checkbox" value="${e.id}" ${a?'checked':''} data-was-assigned="${!!a}"
-            style="width:16px;height:16px;cursor:pointer;flex-shrink:0"
-            onchange="TestsManagerPage._updateAssignCount()">
-        <div style="flex:1;min-width:0">
-            <div style="font-weight:600;font-size:.88rem">${e.full_name||e.email}</div>
-            ${e.job_position?`<div style="font-size:.75rem;color:var(--text-muted)">${e.job_position}</div>`:''}
+    <div class="tasgn-controls">
+        <div style="display:grid;grid-template-columns:repeat(${filterCols},1fr);gap:8px;margin-bottom:10px">
+            <input id="tm-search" type="text" placeholder="🔍 Пошук за іменем..."
+                style="padding:8px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.85rem;outline:none"
+                oninput="TestsManagerPage._applyAssignFilters()">
+            ${positions.length ? `
+            <select id="tm-filter-pos" onchange="TestsManagerPage._applyAssignFilters()"
+                style="padding:8px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.85rem;outline:none">
+                <option value="">Всі посади</option>
+                ${positions.map(p => `<option value="${p.toLowerCase()}">${p}</option>`).join('')}
+            </select>` : ''}
+            ${showMgrFilter ? `
+            <select id="tm-filter-mgr" onchange="TestsManagerPage._applyAssignFilters()"
+                style="padding:8px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.85rem;outline:none">
+                <option value="">Всі керівники</option>
+                ${managers.map(m => `<option value="${m.id}">${m.full_name}</option>`).join('')}
+            </select>` : ''}
         </div>
-        ${a ? `<span style="font-size:.72rem;color:#10b981;font-weight:600;white-space:nowrap">✓ ${dlTxt}</span>` : ''}
-    </label>`;
-    }).join('')}
-</div>
-`,
-            footer: `
-<button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
-<button class="btn btn-primary" onclick="TestsManagerPage._doAssign('${testId}')">Зберегти</button>`
-        });
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <div style="display:flex;align-items:center;gap:6px">
+                <button type="button" class="btn btn-ghost btn-sm" onclick="TestsManagerPage._selectAllFiltered(true)">☑ Вибрати всіх</button>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="TestsManagerPage._selectAllFiltered(false)">☐ Скинути</button>
+                <span id="tm-assign-count" style="font-size:.78rem;color:var(--text-muted);padding-left:4px"></span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+                <label style="font-size:.82rem;color:var(--text-muted);white-space:nowrap">Дедлайн:</label>
+                <input type="datetime-local" id="tm-deadline" value="${commonDl}"
+                    style="padding:5px 10px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.82rem;outline:none">
+            </div>
+        </div>
+    </div>
+    <div class="tasgn-list-wrap">
+        ${employees.map(e => {
+            const a      = assignedMap.get(e.id);
+            const dlTxt  = a?.deadline_at ? `до ${Fmt.dateShort(a.deadline_at)}` : '';
+            const attempt = attemptsMap.get(e.id);
+            const statusHtml = attempt
+                ? attempt.passed
+                    ? `<span style="font-size:.7rem;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(16,185,129,.12);color:#10b981;white-space:nowrap">✓ Пройшов</span>`
+                    : `<span style="font-size:.7rem;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(239,68,68,.1);color:#ef4444;white-space:nowrap">✗ Не пройшов</span>`
+                : a ? `<span style="font-size:.7rem;font-weight:700;padding:2px 8px;border-radius:20px;background:var(--bg-raised);color:var(--text-muted);white-space:nowrap;border:1px solid var(--border)">⏸ Не починав</span>` : '';
+            return `
+        <label class="tm-assign-item"
+            data-name="${(e.full_name||e.email||'').toLowerCase().replace(/"/g,'&quot;')}"
+            data-pos="${(e.job_position||'').toLowerCase().replace(/"/g,'&quot;')}"
+            data-mgr="${e.manager_id||''}"
+            style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s"
+            onmouseenter="this.style.background='var(--bg-raised)'" onmouseleave="this.style.background=''">
+            <input type="checkbox" value="${e.id}" ${a?'checked':''} data-was-assigned="${!!a}"
+                style="width:16px;height:16px;cursor:pointer;flex-shrink:0"
+                onchange="TestsManagerPage._updateAssignCount()">
+            <div style="flex:1;min-width:0">
+                <div style="font-weight:600;font-size:.88rem">${e.full_name||e.email}</div>
+                ${e.job_position?`<div style="font-size:.75rem;color:var(--text-muted)">${e.job_position}</div>`:''}
+            </div>
+            ${statusHtml}
+            ${a && dlTxt ? `<span style="font-size:.7rem;color:var(--text-muted);white-space:nowrap">${dlTxt}</span>` : ''}
+        </label>`;
+        }).join('')}
+    </div>
+</div>`;
         this._updateAssignCount();
     },
 
@@ -1032,7 +1848,7 @@ ${this._opts.map((o,i) => `
             const ok = (!query || el.dataset.name.includes(query))
                     && (!pos   || el.dataset.pos  === pos)
                     && (!mgr   || el.dataset.mgr  === mgr);
-            el.style.display = ok ? '' : 'none';
+            el.style.display = ok ? 'flex' : 'none';
         });
         this._updateAssignCount();
     },
@@ -1055,88 +1871,153 @@ ${this._opts.map((o,i) => `
     },
 
     async _doAssign(testId) {
-        const checkboxes = [...document.querySelectorAll('.tm-assign-item input[type=checkbox]')];
-        const selected   = checkboxes.filter(c => c.checked).map(c => c.value);
-        const toUnassign = checkboxes.filter(c => !c.checked && c.dataset.wasAssigned === 'true').map(c => c.value);
-        const deadline   = Dom.val('tm-deadline') || null;
+        const test = this._tests.find(x => x.id === testId) || this._curTest;
+        if (test && !test.is_published) {
+            Toast.error('Тест не опубліковано', 'Опублікуйте тест перед призначенням');
+            return;
+        }
+
+        const checkboxes    = [...document.querySelectorAll('.tm-assign-item input[type=checkbox]')];
+        const deadline      = Dom.val('tm-deadline') || null;
+        const deadlineIso   = deadline ? new Date(deadline).toISOString() : null;
+
+        // Users newly ticked — always assign (with deadline if set)
+        const toAssignNew   = checkboxes
+            .filter(c => c.checked && c.dataset.wasAssigned === 'false')
+            .map(c => c.value);
+
+        // Already-assigned users still ticked — only update deadline if one was explicitly entered
+        const toUpdateDl    = deadlineIso ? checkboxes
+            .filter(c => c.checked && c.dataset.wasAssigned === 'true')
+            .map(c => c.value) : [];
+
+        const toUnassign    = checkboxes
+            .filter(c => !c.checked && c.dataset.wasAssigned === 'true')
+            .map(c => c.value);
+
         Loader.show();
         try {
-            if (selected.length) {
-                await TestsManagerAPI.assign(testId, selected, deadline ? new Date(deadline).toISOString() : null);
+            const toAssign = [...toAssignNew, ...toUpdateDl];
+            if (toAssign.length) {
+                await TestsManagerAPI.assign(testId, toAssign, deadlineIso);
             }
             for (const uid of toUnassign) {
                 await TestsManagerAPI.unassign(testId, uid);
             }
+            // Send notifications to newly assigned users
+            if (toAssignNew.length) {
+                const testTitle = (this._tests.find(x => x.id === testId) || this._curTest)?.title || 'Тест';
+                try {
+                    await Promise.all(toAssignNew.map(uid =>
+                        supabase.from('notifications').insert({
+                            user_id: uid, type: 'test_assigned',
+                            title: 'Новий тест',
+                            body:  `Вам призначено тест: ${testTitle}`,
+                            data:  { test_id: testId }
+                        })
+                    ));
+                } catch(_) {}
+            }
             Toast.success('Збережено');
-            Modal.close();
+            this._goBack(document.getElementById('page-content'));
         } catch(e) { Toast.error('Помилка', e.message); }
         finally { Loader.hide(); }
     },
 
-    // ── Results modal ─────────────────────────────────────────────
+    // ── Results page ──────────────────────────────────────────────
 
     async openResultsModal(testId) {
-        Loader.show();
+        const container = document.getElementById('page-content');
+        await this._renderResults(container, testId);
+    },
+
+    async _renderResults(container, testId) {
+        container.innerHTML = '<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>';
         let results = [], test;
         try {
             [results, test] = await Promise.all([
                 TestsManagerAPI.getAllResults(testId),
                 API.tests.getById(testId)
             ]);
-        } catch(e) { Toast.error('Помилка', e.message); Loader.hide(); return; }
-        Loader.hide();
+        } catch(e) { Toast.error('Помилка', e.message); this._goBack(container); return; }
 
-        const passed  = results.filter(r => r.passed).length;
-        const avgPct  = results.length ? Math.round(results.reduce((s,r) => s+(r.percentage||0), 0) / results.length) : 0;
+        this._lastResults = results;
+        const passed = results.filter(r => r.passed).length;
+        const avgPct = results.length ? Math.round(results.reduce((s,r) => s+(r.percentage||0), 0) / results.length) : 0;
 
-        Modal.open({
-            title: `📊 Результати — ${test.title}`,
-            size: 'lg',
-            body: `
-<div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
-    ${[
-        ['👥', results.length, 'Спроб'],
-        ['✅', passed, 'Пройшли'],
-        ['❌', results.length-passed, 'Не пройшли'],
-        ['📊', avgPct+'%', 'Середній бал']
-    ].map(([ic,v,l]) => `
-    <div style="flex:1;min-width:100px;padding:12px 16px;border-radius:14px;border:1px solid var(--border);background:var(--bg-raised);text-align:center">
-        <div style="font-size:1.5rem">${ic}</div>
-        <div style="font-size:1.3rem;font-weight:800;color:var(--text-primary)">${v}</div>
-        <div style="font-size:.72rem;color:var(--text-muted)">${l}</div>
-    </div>`).join('')}
-</div>
-${results.length ? `
-<div style="border:1px solid var(--border);border-radius:12px;overflow:hidden">
-    <table style="width:100%;border-collapse:collapse;font-size:.85rem">
-        <thead>
-            <tr style="background:var(--bg-raised)">
-                <th style="padding:10px 14px;text-align:left;font-weight:600;color:var(--text-muted)">Співробітник</th>
-                <th style="padding:10px 14px;text-align:left;font-weight:600;color:var(--text-muted)">Дата</th>
-                <th style="padding:10px 14px;text-align:center;font-weight:600;color:var(--text-muted)">Бал</th>
-                <th style="padding:10px 14px;text-align:center;font-weight:600;color:var(--text-muted)">Статус</th>
-            </tr>
-        </thead>
-        <tbody>
-            ${results.map(r => `
-            <tr style="border-top:1px solid var(--border)">
-                <td style="padding:10px 14px">
-                    <div style="font-weight:600">${r.user?.full_name||r.user?.email||'—'}</div>
-                    ${r.user?.job_position?`<div style="font-size:.72rem;color:var(--text-muted)">${r.user.job_position}</div>`:''}
-                </td>
-                <td style="padding:10px 14px;color:var(--text-muted)">${Fmt.dateShort(r.completed_at)}</td>
-                <td style="padding:10px 14px;text-align:center;font-weight:700;font-size:1rem;color:${r.passed?'#10b981':'#ef4444'}">${Math.round(r.percentage||0)}%</td>
-                <td style="padding:10px 14px;text-align:center">
-                    <span style="display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:.72rem;font-weight:700;${r.passed?'background:rgba(16,185,129,.12);color:#10b981':'background:rgba(239,68,68,.1);color:#ef4444'}">
-                        ${r.passed ? '✓ Пройшов' : '✗ Не пройшов'}
-                    </span>
-                </td>
-            </tr>`).join('')}
-        </tbody>
-    </table>
-</div>` : '<div style="text-align:center;padding:2rem;color:var(--text-muted)">Результатів поки немає</div>'}`,
-            footer: `<button class="btn btn-secondary" onclick="Modal.close()">Закрити</button>`
-        });
+        container.innerHTML = `<style>
+.tres-page{max-width:900px;display:flex;flex-direction:column;height:calc(100vh - 120px)}
+.tres-topbar{display:flex;align-items:center;gap:12px;padding-bottom:16px;border-bottom:1px solid var(--border);margin-bottom:20px;flex-shrink:0}
+.tres-back{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);font-size:.83rem;font-weight:500;cursor:pointer;transition:all .15s}
+.tres-back:hover{border-color:var(--primary);color:var(--primary)}
+.tres-stats{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;flex-shrink:0}
+.tres-stat{flex:1;min-width:110px;padding:14px 16px;border-radius:14px;border:1px solid var(--border);background:var(--bg-raised);text-align:center}
+.tres-table-wrap{flex:1;border:1px solid var(--border);border-radius:12px;overflow:auto;min-height:0}
+</style>
+<div class="tres-page">
+    <div class="tres-topbar">
+        <button class="tres-back" onclick="TestsManagerPage._goBack(document.getElementById('page-content'))">← Назад</button>
+        <span style="font-size:1.1rem;font-weight:700;color:var(--text-primary);flex:1">📊 ${test.title}</span>
+        ${results.length ? `<button class="btn btn-ghost btn-sm" onclick="TestsManagerPage._exportCSV(TestsManagerPage._lastResults,'${test.title.replace(/'/g,"\\'")}')">📥 CSV</button>` : ''}
+    </div>
+    <div class="tres-stats">
+        ${[['👥',results.length,'Спроб'],['✅',passed,'Пройшли'],['❌',results.length-passed,'Не пройшли'],['📊',avgPct+'%','Середній бал']].map(([ic,v,l]) => `
+        <div class="tres-stat">
+            <div style="font-size:1.5rem">${ic}</div>
+            <div style="font-size:1.3rem;font-weight:800;color:var(--text-primary)">${v}</div>
+            <div style="font-size:.72rem;color:var(--text-muted)">${l}</div>
+        </div>`).join('')}
+    </div>
+    ${results.length ? `
+    <div class="tres-table-wrap">
+        <table style="width:100%;border-collapse:collapse;font-size:.85rem">
+            <thead style="position:sticky;top:0;z-index:1">
+                <tr style="background:var(--bg-raised)">
+                    <th style="padding:10px 14px;text-align:left;font-weight:600;color:var(--text-muted)">Співробітник</th>
+                    <th style="padding:10px 14px;text-align:left;font-weight:600;color:var(--text-muted)">Дата</th>
+                    <th style="padding:10px 14px;text-align:center;font-weight:600;color:var(--text-muted)">Бал</th>
+                    <th style="padding:10px 14px;text-align:center;font-weight:600;color:var(--text-muted)">Статус</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${results.map(r => `
+                <tr style="border-top:1px solid var(--border)">
+                    <td style="padding:10px 14px">
+                        <div style="font-weight:600">${r.user?.full_name||r.user?.email||'—'}</div>
+                        ${r.user?.job_position?`<div style="font-size:.72rem;color:var(--text-muted)">${r.user.job_position}</div>`:''}
+                    </td>
+                    <td style="padding:10px 14px;color:var(--text-muted)">${Fmt.dateShort(r.completed_at)}</td>
+                    <td style="padding:10px 14px;text-align:center;font-weight:700;font-size:1rem;color:${r.passed?'#10b981':'#ef4444'}">${Math.round(r.percentage||0)}%</td>
+                    <td style="padding:10px 14px;text-align:center">
+                        <span style="display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:.72rem;font-weight:700;${r.passed?'background:rgba(16,185,129,.12);color:#10b981':'background:rgba(239,68,68,.1);color:#ef4444'}">
+                            ${r.passed ? '✓ Пройшов' : '✗ Не пройшов'}
+                        </span>
+                    </td>
+                </tr>`).join('')}
+            </tbody>
+        </table>
+    </div>` : '<div style="text-align:center;padding:3rem;color:var(--text-muted)">Результатів поки немає</div>'}
+</div>`;
+    },
+
+    _exportCSV(results, title) {
+        const headers = ['Співробітник', 'Email', 'Посада', 'Дата', 'Бал (%)', 'Статус', 'Час (хв)'];
+        const rows = results.map(r => [
+            r.user?.full_name || '',
+            r.user?.email || '',
+            r.user?.job_position || '',
+            r.completed_at ? new Date(r.completed_at).toLocaleString('uk-UA') : '',
+            Math.round(r.percentage || 0),
+            r.passed ? 'Пройшов' : 'Не пройшов',
+            r.time_spent_seconds ? Math.round(r.time_spent_seconds / 60) : ''
+        ]);
+        const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+        const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `results_${title.replace(/[^\wа-яА-ЯіїєёЄІЇ ]/g, '_')}.csv`;
+        a.click();
+        URL.revokeObjectURL(a.href);
     }
 };
 

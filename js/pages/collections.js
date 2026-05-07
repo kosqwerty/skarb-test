@@ -33,7 +33,7 @@ const CollectionsPage = {
                 if (home) {
                     Router.go(`collections/${home.id}`);
                 } else {
-                    container.innerHTML = `<div class="empty-state"><div class="empty-icon">🖥</div><h3>Сторінок поки немає</h3></div>`;
+                    container.innerHTML = `<div class="empty-state"><div class="empty-icon">🪄</div><h3>Сторінок поки немає</h3></div>`;
                 }
             } catch(e) {
                 container.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>${e.message}</h3></div>`;
@@ -44,7 +44,7 @@ const CollectionsPage = {
         container.innerHTML = `
             <div class="page-header">
                 <div class="page-title">
-                    <h1>🖥 Меню порталу</h1>
+                    <h1>🪄 Меню порталу</h1>
                     <p>Власні HTML-сторінки з довільним стилем та посиланнями.</p>
                 </div>
                 <div class="page-actions">
@@ -72,7 +72,7 @@ const CollectionsPage = {
             if (!visible.length) {
                 el.innerHTML = `
                     <div class="empty-state">
-                        <div class="empty-icon">🖥</div>
+                        <div class="empty-icon">🪄</div>
                         <h3>Сторінок поки немає</h3>
                         ${AppState.isStaff() ? '<p>Створіть першу сторінку.</p>' : ''}
                     </div>`;
@@ -120,7 +120,7 @@ const CollectionsPage = {
                  onmouseenter="this.style.borderColor='var(--primary)';this.style.boxShadow='var(--shadow-md)'"
                  onmouseleave="this.style.borderColor='var(--border)';this.style.boxShadow='none'">
                 <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:.5rem;margin-bottom:.75rem">
-                    <span style="font-size:1.75rem">🖥</span>
+                    <span style="font-size:1.75rem">🪄</span>
                     <div style="display:flex;align-items:center;gap:.4rem" onclick="event.stopPropagation()">
                         <button class="res-star-btn${Bookmarks.isBookmarked('collections/'+p.id) ? ' active' : ''}"
                             data-bm-route="collections/${p.id}"
@@ -342,33 +342,64 @@ document.addEventListener('click', function(e) {
         this._editingPageId = id;
         this._attachments   = [];
         this._savedCursor   = null;
-        // Create a history entry so Router.back() returns to previous page
         const editHash = '#/' + (id ? `collections/${id}/edit` : 'collections/new');
         if (location.hash !== editHash) history.pushState(null, '', editHash);
-        let page = null, attachments = [];
-        if (id) {
-            Loader.show();
-            try {
-                [page, attachments] = await Promise.all([
-                    API.pages.getById(id),
-                    API.pageAttachments.getAll(id)
-                ]);
-            }
-            catch (e) { Toast.error('Помилка', e.message); Loader.hide(); return; }
-            finally { Loader.hide(); }
+        let page = null, attachments = [], groups = [];
+        Loader.show();
+        try {
+            const fetches = [API.accessGroups.getAll().catch(() => [])];
+            if (id) fetches.push(API.pages.getById(id), API.pageAttachments.getAll(id));
+            const results = await Promise.all(fetches);
+            groups      = results[0];
+            if (id) { page = results[1]; attachments = results[2]; }
         }
+        catch (e) { Toast.error('Помилка', e.message); Loader.hide(); return; }
+        finally { Loader.hide(); }
 
         const container = document.getElementById('page-content');
         UI.setBreadcrumb([
             { label: 'Меню порталу', link: 'collections' },
             { label: id ? 'Редагувати' : 'Нова сторінка' }
         ]);
-        container.innerHTML = this._editorHtml(page);
+        container.innerHTML = this._editorHtml(page, groups);
         this._initEditor(page);
         this._renderAttachmentGrid(attachments);
     },
 
-    _editorHtml(page) {
+    _editorHtml(page, groups = []) {
+        const selectedLabels = page?.allowed_labels || [];
+        const groupNames = groups.map(g => g.name).sort();
+        const tagPickerHtml = `
+            <div style="display:flex;flex-direction:column;gap:4px" title="Оберіть групи доступу. Порожньо = видно всім.">
+                <div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;min-width:180px;max-width:280px;padding:4px 8px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-raised);cursor:pointer"
+                     id="col-tags-box" onclick="CollectionsPage._toggleTagDropdown()">
+                    <span style="font-size:.8rem;color:var(--text-muted);white-space:nowrap;flex-shrink:0">🔐 Доступ:</span>
+                    <span id="col-tags-preview" style="font-size:.8rem;color:var(--text-primary);flex:1;min-width:60px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                        ${selectedLabels.length ? selectedLabels.join(', ') : 'Всі користувачі'}
+                    </span>
+                    <span style="font-size:.65rem;color:var(--text-muted)">▾</span>
+                </div>
+                <div id="col-tags-dropdown" style="display:none;position:absolute;z-index:200;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-lg);padding:.5rem;min-width:200px;max-width:300px;max-height:260px;overflow-y:auto">
+                    ${!groupNames.length
+                        ? `<div style="font-size:.8rem;color:var(--text-muted);padding:.25rem .5rem">Групи не знайдено</div>`
+                        : groupNames.map(name => `
+                        <label style="display:flex;align-items:center;gap:.5rem;padding:.35rem .5rem;border-radius:6px;cursor:pointer;font-size:.85rem;transition:background var(--transition)"
+                               onmouseenter="this.style.background='var(--bg-hover)'" onmouseleave="this.style.background=''">
+                            <input type="checkbox" name="col-group" value="${name.replace(/"/g,'&quot;')}"
+                                   ${selectedLabels.includes(name) ? 'checked' : ''}
+                                   onchange="CollectionsPage._onTagChange()">
+                            <span>${name}</span>
+                        </label>`).join('')}
+                    <div style="border-top:1px solid var(--border);margin-top:.35rem;padding-top:.35rem">
+                        <label style="display:flex;align-items:center;gap:.5rem;padding:.25rem .5rem;border-radius:6px;cursor:pointer;font-size:.8rem;color:var(--text-muted)"
+                               onmouseenter="this.style.background='var(--bg-hover)'" onmouseleave="this.style.background=''">
+                            <input type="checkbox" id="col-group-all" ${!selectedLabels.length ? 'checked' : ''}
+                                   onchange="CollectionsPage._clearAllTags()">
+                            <span>Всі користувачі (без обмежень)</span>
+                        </label>
+                    </div>
+                </div>
+            </div>`;
         return `
         <div style="display:flex;flex-direction:column;height:calc(100vh - 120px);gap:0">
 
@@ -381,13 +412,7 @@ document.addEventListener('click', function(e) {
                     <input type="checkbox" id="page-published" ${page?.is_published ? 'checked' : ''}>
                     Опублікувати
                 </label>
-                <div style="display:flex;align-items:center;gap:.4rem;flex-shrink:0" title="Мітки доступу (через кому). Порожньо = всі користувачі.">
-                    <span style="font-size:.8rem;color:var(--text-muted);white-space:nowrap">🏷 Мітки:</span>
-                    <input id="page-labels" type="text"
-                           value="${(page?.allowed_labels || []).join(', ')}"
-                           placeholder="Техніка, Золото, ..."
-                           style="width:160px;font-size:.8rem;padding:4px 8px;border-radius:var(--radius-md);border:1px solid var(--border);background:var(--bg-raised);color:var(--text-primary);outline:none">
-                </div>
+                <div style="position:relative;flex-shrink:0">${tagPickerHtml}</div>
                 <button class="btn btn-ghost btn-sm" onclick="CollectionsPage._insertResourceLink()">+ Ресурс</button>
                 <button class="btn btn-secondary btn-sm" onclick="CollectionsPage._openPreviewModal()">👁 Перегляд</button>
                 <button class="btn btn-primary btn-sm" onclick="CollectionsPage.savePage('${page?.id || ''}')">💾 Зберегти</button>
@@ -903,12 +928,49 @@ tr:hover td { background: #f8fafc; }
         Modal.close();
     },
 
+    // ── Tag picker ────────────────────────────────────────────────
+    _toggleTagDropdown() {
+        const dd = document.getElementById('col-tags-dropdown');
+        if (!dd) return;
+        const isOpen = dd.style.display !== 'none';
+        dd.style.display = isOpen ? 'none' : 'block';
+        if (!isOpen) {
+            setTimeout(() => {
+                document.addEventListener('click', function closeDD(e) {
+                    if (!e.target.closest('#col-tags-dropdown') && !e.target.closest('#col-tags-box')) {
+                        document.getElementById('col-tags-dropdown').style.display = 'none';
+                    }
+                    document.removeEventListener('click', closeDD);
+                });
+            }, 0);
+        }
+    },
+
+    _onTagChange() {
+        const checks = [...document.querySelectorAll('input[name="col-group"]:checked')];
+        const allChk = document.getElementById('col-group-all');
+        if (allChk) allChk.checked = checks.length === 0;
+        const preview = document.getElementById('col-tags-preview');
+        if (preview) preview.textContent = checks.length ? checks.map(c => c.value).join(', ') : 'Всі користувачі';
+    },
+
+    _clearAllTags() {
+        document.querySelectorAll('input[name="col-group"]').forEach(c => c.checked = false);
+        const preview = document.getElementById('col-tags-preview');
+        if (preview) preview.textContent = 'Всі користувачі';
+        const allChk = document.getElementById('col-group-all');
+        if (allChk) allChk.checked = true;
+    },
+
+    _getSelectedLabels() {
+        return [...document.querySelectorAll('input[name="col-group"]:checked')].map(c => c.value);
+    },
+
     // ── Save ──────────────────────────────────────────────────────
     async savePage(id) {
         const title = document.getElementById('page-title-input')?.value.trim();
         if (!title) { Toast.error('Помилка', 'Вкажіть назву сторінки'); return; }
-        const labelsRaw = document.getElementById('page-labels')?.value || '';
-        const allowed_labels = labelsRaw.split(',').map(s => s.trim()).filter(Boolean);
+        const allowed_labels = this._getSelectedLabels();
         const fields = {
             title,
             html_content:   document.getElementById('editor-html')?.value || '',

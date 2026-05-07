@@ -238,7 +238,7 @@ const TestsManagerPage = {
 
         container.innerHTML = `
 <style>
-.tm-page{max-width:1200px}
+
 .tm-hero{border-radius:22px;padding:32px 36px;margin-bottom:24px;background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 60%,#1e40af 100%);position:relative;overflow:hidden}
 .tm-hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 60% 80% at 80% 20%,rgba(201,162,39,.18),transparent);pointer-events:none}
 .tm-hero-inner{position:relative;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}

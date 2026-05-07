@@ -2475,6 +2475,7 @@ select {
     transition: background .2s;
     position: relative;
     overflow: hidden;
+    min-height: 120px;
 }
 .file-upload-area::before {
     content: '';
@@ -2581,7 +2582,7 @@ select {
     overflow: hidden;
     flex-shrink: 0;
 }
-.news-thumb img { width: 100%; height: 100%; object-fit: contain; object-position: center; display: block; transition: transform 0.4s ease; }
+.news-thumb img { width: 100%; height: 100%; object-fit: fill; display: block; transition: transform 0.4s ease; }
 .news-card:hover .news-thumb img { transform: scale(1.05); }
 .news-body { padding: 1.25rem; }
 .news-category { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--primary); margin-bottom: 0.5rem; }

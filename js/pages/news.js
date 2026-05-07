@@ -97,7 +97,7 @@ const NewsPage = {
                 onmouseenter="this.style.borderColor='var(--primary)'" onmouseleave="this.style.borderColor='var(--border)'">
                 ${news.thumbnail_url ? `
                     <div style="height:280px;overflow:hidden">
-                        <img src="${news.thumbnail_url}" style="width:100%;height:100%;object-fit:cover">
+                        <img src="${news.thumbnail_url}" style="width:100%;height:100%;object-fit:fill;display:block">
                     </div>` : `<div style="height:280px;background:linear-gradient(135deg,rgba(99,102,241,.1),rgba(139,92,246,.1));display:flex;align-items:center;justify-content:center;font-size:5rem">📰</div>`}
                 <div style="padding:2rem;display:flex;flex-direction:column;justify-content:center">
                     <span style="color:var(--primary);font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.75rem">
@@ -122,7 +122,7 @@ const NewsPage = {
             <div class="news-card" onclick="Router.go('news/${news.id}')">
                 <div class="news-thumb">
                     ${news.thumbnail_url
-                        ? `<img src="${news.thumbnail_url}" alt="${news.title}" loading="lazy">`
+                        ? `<img src="${news.thumbnail_url}" alt="${news.title}" loading="lazy" style="width:100%;height:100%;object-fit:fill;display:block">`
                         : `<div style="height:100%;background:linear-gradient(135deg,rgba(99,102,241,.08),rgba(139,92,246,.08));display:flex;align-items:center;justify-content:center;font-size:3rem">📰</div>`}
                 </div>
                 <div class="news-body">
@@ -192,7 +192,7 @@ const NewsPage = {
                     .nv-recent-item{display:flex;flex-direction:column;gap:.6rem;padding:1rem;border-radius:var(--radius-md);cursor:pointer;transition:all var(--transition);border:1px solid var(--border);background:var(--bg-surface)}
                     .nv-recent-item:hover{background:var(--bg-raised);border-color:var(--primary)}
                     .nv-recent-thumb{width:100%;height:130px;border-radius:var(--radius-sm);overflow:hidden;flex-shrink:0;background:var(--bg-raised)}
-                    .nv-recent-thumb img{width:100%;height:100%;object-fit:contain;display:block}
+                    .nv-recent-thumb img{width:100%;height:100%;object-fit:fill;display:block}
                     .nv-recent-thumb-ph{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:2.5rem}
                     .nv-recent-info{flex:1;min-width:0}
                     .nv-recent-title{font-size:.92rem;font-weight:600;line-height:1.4;color:var(--text-primary);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
@@ -268,7 +268,7 @@ const NewsPage = {
                                 <div class="nv-recent-item" onclick="Router.go('news/${n.id}')">
                                     <div class="nv-recent-thumb">
                                         ${n.thumbnail_url
-                                            ? `<img src="${n.thumbnail_url}" loading="lazy">`
+                                            ? `<img src="${n.thumbnail_url}" loading="lazy" style="width:100%;height:100%;object-fit:fill;display:block">`
                                             : `<div class="nv-recent-thumb-ph">📰</div>`}
                                     </div>
                                     <div class="nv-recent-info">

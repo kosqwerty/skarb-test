@@ -104,7 +104,7 @@ const Bookmarks = {
         try {
             const added = await this.toggle({
                 type: 'collection', route: `collections/${id}`,
-                title, icon: '🖥', subtitle: 'Меню порталу'
+                title, icon: '🪄', subtitle: 'Меню порталу'
             });
             Toast[added ? 'success' : 'info'](added ? 'Додано до закладок' : 'Закладку видалено', title);
         } catch (e) { Toast.error('Помилка', e.message); }
@@ -280,7 +280,7 @@ const BookmarksPage = {
             { f: 'all',        label: 'Всі',       icon: '⭐' },
             { f: 'resource',   label: 'Ресурси',   icon: '📎' },
             { f: 'news',       label: 'Новини',    icon: '📰' },
-            { f: 'collection', label: 'Портал',    icon: '🖥' }
+            { f: 'collection', label: 'Портал',    icon: '🪄' }
         ];
         return types.map(t => {
             const cnt = t.f === 'all' ? all.length : all.filter(b => b.type === t.f).length;
@@ -301,7 +301,7 @@ const BookmarksPage = {
     },
 
     _cardHtml(b) {
-        const labels = { resource: '📎 Ресурс', news: '📰 Новина', collection: '🖥 Портал' };
+        const labels = { resource: '📎 Ресурс', news: '📰 Новина', collection: '🪄 Портал' };
         return `
 <div class="bm-card tp-${b.type}" onclick="Router.go('${b.route}')">
     <div class="bm-card-accent"></div>

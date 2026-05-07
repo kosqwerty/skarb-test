@@ -1765,18 +1765,22 @@ const AdminPage = {
     },
 
     // ── Курси ─────────────────────────────────────────────────────
+    _coursesEl: null,
+    _courseThumbFile: null,
+
     async _renderCourses(el) {
+        this._coursesEl = el;
         const { data: courses } = await API.courses.getAll({ pageSize: 200 });
 
         el.innerHTML = `
             <div style="display:flex;gap:1rem;margin-bottom:1rem">
                 <input type="text" placeholder="Пошук..." style="flex:1" onkeyup="AdminPage._filterTable('courses-tbody', event)">
-                <button class="btn btn-primary" onclick="CoursesPage.openCreate()">+ Створити курс</button>
+                <button class="btn btn-primary" onclick="AdminPage._openCourseForm()">+ Створити курс</button>
             </div>
             <div class="table-wrapper">
                 <table>
                     <thead>
-                        <tr><th>Назва</th><th>Викладач</th><th>Рівень</th><th>Створено</th><th>Дії</th></tr>
+                        <tr><th>Назва</th><th>Викладач</th><th>Рівень</th><th>Статус</th><th>Створено</th><th>Дії</th></tr>
                     </thead>
                     <tbody id="courses-tbody">
                         ${courses.map(c => `
@@ -1789,14 +1793,134 @@ const AdminPage = {
                                 <td>
                                     <div style="display:flex;gap:.4rem">
                                         <button class="btn btn-ghost btn-sm" onclick="Router.go('courses/${c.id}')">👁</button>
-                                        <button class="btn btn-ghost btn-sm" onclick="CoursesPage.openEdit('${c.id}')">✏️</button>
-                                        <button class="btn btn-danger btn-sm" onclick="CoursesPage.deleteCourse('${c.id}','${c.title.replace(/'/g,"\\'")}')">🗑</button>
+                                        <button class="btn btn-ghost btn-sm" onclick="AdminPage._loadCourseForm('${c.id}')">✏️</button>
+                                        <button class="btn btn-danger btn-sm" onclick="AdminPage._deleteCourse('${c.id}','${c.title.replace(/'/g,"\\'")}')">🗑</button>
                                     </div>
                                 </td>
                             </tr>`).join('')}
                     </tbody>
                 </table>
             </div>`;
+    },
+
+    async _loadCourseForm(id) {
+        Loader.show();
+        try { const c = await API.courses.getById(id); this._openCourseForm(c); }
+        catch(e) { Toast.error('Помилка', e.message); }
+        finally { Loader.hide(); }
+    },
+
+    _openCourseForm(course = null) {
+        const el = this._coursesEl;
+        if (!el) return;
+        this._courseThumbFile = null;
+        const isEdit = !!course;
+        el.innerHTML = `
+            <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem">
+                <button class="btn btn-ghost btn-sm" onclick="AdminPage._renderCourses(AdminPage._coursesEl)">
+                    <i class="fa-solid fa-arrow-left"></i> Назад
+                </button>
+                <h3 style="margin:0">${isEdit ? '✏️ Редагувати курс' : '+ Створити курс'}</h3>
+            </div>
+            <div style="max-width:680px">
+                <div style="display:flex;flex-direction:column;gap:1rem">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Назва курсу *</label>
+                            <input id="c-title" type="text" placeholder="Введіть назву" value="${course?.title || ''}">
+                        </div>
+                        <div class="form-group">
+                            <label>Рівень</label>
+                            <select id="c-level">
+                                <option value="beginner"     ${course?.level === 'beginner'     ? 'selected' : ''}>Початковий</option>
+                                <option value="intermediate" ${course?.level === 'intermediate' ? 'selected' : ''}>Середній</option>
+                                <option value="advanced"     ${course?.level === 'advanced'     ? 'selected' : ''}>Просунутий</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Опис</label>
+                        <textarea id="c-desc" placeholder="Опис курсу" rows="3">${course?.description || ''}</textarea>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Категорія</label>
+                            <input id="c-category" type="text" placeholder="Наприклад: Програмування" value="${course?.category || ''}">
+                        </div>
+                        <div class="form-group">
+                            <label>Тривалість (годин)</label>
+                            <input id="c-duration" type="number" min="0" placeholder="0" value="${course?.duration_hours || ''}">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Обкладинка курсу</label>
+                        <div id="thumb-upload-zone"></div>
+                        ${course?.thumbnail_url ? `<div style="margin-top:.5rem;height:120px;border-radius:var(--radius-sm);overflow:hidden"><img src="${course.thumbnail_url}" style="width:100%;height:100%;object-fit:cover;display:block"></div>` : ''}
+                    </div>
+                    <div class="form-group">
+                        <label class="checkbox-item" style="cursor:pointer;user-select:none">
+                            <input type="checkbox" id="c-published" ${course?.is_published ? 'checked' : ''}>
+                            <span>Опублікувати курс</span>
+                        </label>
+                        <label class="checkbox-item" style="cursor:pointer;user-select:none;margin-top:.5rem">
+                            <input type="checkbox" id="c-featured" ${course?.is_featured ? 'checked' : ''}>
+                            <span>Рекомендований курс</span>
+                        </label>
+                    </div>
+                    <div style="display:flex;gap:.75rem;justify-content:flex-end;padding-top:.5rem;border-top:1px solid var(--border)">
+                        <button class="btn btn-secondary" onclick="AdminPage._renderCourses(AdminPage._coursesEl)">Скасувати</button>
+                        <button class="btn btn-primary" onclick="AdminPage._saveCourse('${course?.id || ''}')">
+                            ${isEdit ? 'Зберегти' : 'Створити'}
+                        </button>
+                    </div>
+                </div>
+            </div>`;
+
+        const zone = document.getElementById('thumb-upload-zone');
+        if (zone) {
+            const input = FileUpload.createDropZone(zone, { accept: 'image/*', label: 'Завантажити обкладинку', hint: 'PNG, JPG до 5 МБ' });
+            input.addEventListener('change', () => { this._courseThumbFile = input.files[0]; });
+        }
+    },
+
+    async _saveCourse(id) {
+        const title = Dom.val('c-title').trim();
+        if (!title) { Toast.error('Помилка', 'Вкажіть назву курсу'); return; }
+        const fields = {
+            title,
+            description:    Dom.val('c-desc').trim() || null,
+            level:          Dom.val('c-level'),
+            category:       Dom.val('c-category').trim() || 'general',
+            duration_hours: parseInt(Dom.val('c-duration')) || 0,
+            is_published:   document.getElementById('c-published').checked,
+            is_featured:    document.getElementById('c-featured').checked
+        };
+        Loader.show();
+        try {
+            let course = id ? await API.courses.update(id, fields) : await API.courses.create(fields);
+            if (this._courseThumbFile) await API.courses.uploadThumbnail(course.id, this._courseThumbFile);
+            AuditLog.write(id ? 'course_update' : 'course_create', 'course', title);
+            Toast.success('Збережено!', `Курс "${title}" ${id ? 'оновлено' : 'створено'}`);
+            await this._renderCourses(this._coursesEl);
+        } catch(e) { Toast.error('Помилка', e.message); }
+        finally { Loader.hide(); }
+    },
+
+    async _deleteCourse(id, title) {
+        const ok = await Modal.confirm({
+            title: 'Видалити курс',
+            message: `Видалити курс "<strong>${title}</strong>"? Всі уроки та матеріали будуть видалені.`,
+            confirmText: 'Видалити', danger: true
+        });
+        if (!ok) return;
+        Loader.show();
+        try {
+            await API.courses.delete(id);
+            AuditLog.write('course_delete', 'course', title);
+            Toast.success('Видалено', `Курс "${title}" видалено`);
+            await this._renderCourses(this._coursesEl);
+        } catch(e) { Toast.error('Помилка', e.message); }
+        finally { Loader.hide(); }
     },
 
     // ── Тести ─────────────────────────────────────────────────────

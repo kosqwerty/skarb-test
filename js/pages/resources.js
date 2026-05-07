@@ -137,9 +137,10 @@ const ResourcesPage = {
 
 .kb-toolbar-right{display:flex;align-items:center;gap:8px}
 .kb-sort-select{padding:7px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);font-size:.82rem;cursor:pointer;outline:none}
-.kb-view-toggle{display:flex;border:1.5px solid var(--border);border-radius:10px;overflow:hidden}
-.kb-view-btn{padding:7px 11px;background:var(--bg-surface);border:none;cursor:pointer;color:var(--text-muted);font-size:1rem;transition:background .15s,color .15s;line-height:1}
-.kb-view-btn.active{background:var(--primary);color:#fff}
+.kb-view-toggle{display:flex;gap:4px;background:var(--bg-raised);border:1.5px solid var(--border);border-radius:12px;padding:3px}
+.kb-view-btn{display:flex;align-items:center;justify-content:center;width:32px;height:32px;background:transparent;border:none;cursor:pointer;color:var(--text-muted);font-size:.9rem;border-radius:8px;transition:background .15s,color .15s,box-shadow .15s}
+.kb-view-btn:hover{background:var(--bg-hover);color:var(--text-primary)}
+.kb-view-btn.active{background:var(--primary);color:#fff;box-shadow:0 2px 6px rgba(99,102,241,.35)}
 
 /* ── KB Secondary toolbar ── */
 .kb-filters-row{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;align-items:center}
@@ -231,6 +232,7 @@ const ResourcesPage = {
                 <p class="kb-hero-sub">Навчальні матеріали та довідкові ресурси</p>
             </div>
         </div>
+        ${AppState.isAdmin() ? '<div id="kb-db-size" style="margin-left:auto;align-self:center"></div>' : ''}
     </div>
 </div>
 
@@ -253,8 +255,8 @@ const ResourcesPage = {
             <option value="name_za">Z → A</option>
         </select>
         <div class="kb-view-toggle">
-            <button class="kb-view-btn${this._kbViewMode==='grid'?' active':''}" title="Сітка" onclick="ResourcesPage._kbSetView('grid',this)">▦</button>
-            <button class="kb-view-btn${this._kbViewMode==='list'?' active':''}" title="Список" onclick="ResourcesPage._kbSetView('list',this)">≡</button>
+            <button class="kb-view-btn${this._kbViewMode==='grid'?' active':''}" title="Сітка" onclick="ResourcesPage._kbSetView('grid',this)"><i class="fa-solid fa-grip"></i></button>
+            <button class="kb-view-btn${this._kbViewMode==='list'?' active':''}" title="Список" onclick="ResourcesPage._kbSetView('list',this)"><i class="fa-solid fa-list"></i></button>
         </div>
     </div>
 </div>
@@ -274,6 +276,29 @@ const ResourcesPage = {
 
         await this._loadFilters();
         await this.load();
+        if (AppState.isAdmin()) this._loadDbSize();
+    },
+
+    async _loadDbSize() {
+        try {
+            const data = await API.system.getDbSize();
+            const el = document.getElementById('kb-db-size');
+            if (!el) return;
+            const usedGb  = data.bytes / 1073741824;
+            const maxGb   = APP_CONFIG.dbQuotaGb || 8;
+            const pct     = Math.min(100, (usedGb / maxGb) * 100);
+            const barColor = pct > 85 ? '#ef4444' : pct > 60 ? '#f59e0b' : '#22c55e';
+            el.innerHTML = `
+<div style="display:flex;flex-direction:column;gap:.3rem;min-width:180px;background:rgba(0,0,0,.18);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:.5rem .85rem">
+  <div style="display:flex;justify-content:space-between;align-items:center;font-size:.78rem;opacity:.9;white-space:nowrap">
+    <span>💾 База даних</span>
+    <span style="font-weight:600">${usedGb.toFixed(2)} / ${maxGb} ГБ</span>
+  </div>
+  <div style="height:5px;border-radius:4px;background:rgba(255,255,255,.15);overflow:hidden">
+    <div style="height:100%;width:${pct.toFixed(1)}%;background:${barColor};border-radius:4px;transition:width .4s"></div>
+  </div>
+</div>`;
+        } catch (_) {}
     },
 
     switchTab(tab, el) {
@@ -849,9 +874,20 @@ const ResourcesPage = {
                 filtered = data.filter(r => AccessGroupsPage.checkAccess(r.access_group));
             }
 
-            // В розділі документів показувати тільки відстежувані (is_tracked_download)
+            // База знань: тільки публічні + нетраковані ресурси
+            if (this._view === 'kb') {
+                filtered = filtered.filter(r => {
+                    if (r.is_tracked_download) return false;
+                    if (r.access_group && !r.access_group.is_public) return false;
+                    return true;
+                });
+            }
+
+            // Документи: тільки з обмеженнями (трековані АБО обмежена група доступу)
             if (this._view === 'docs') {
-                filtered = filtered.filter(r => r.is_tracked_download);
+                filtered = filtered.filter(r =>
+                    r.is_tracked_download || (r.access_group && !r.access_group.is_public)
+                );
             }
 
             // Load per-user download state for docs view

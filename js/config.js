@@ -55,7 +55,10 @@ const APP_CONFIG = {
     },
 
     // Pagination
-    pageSize: 12
+    pageSize: 12,
+
+    // Supabase plan DB quota in GB (Pro = 8, Free = 0.5)
+    dbQuotaGb: 0.5
 };
 
 // ── Global App State ───────────────────────────────────────────────

@@ -204,7 +204,7 @@ const CoursesPage = {
                 <div class="form-group">
                     <label>Обкладинка курсу</label>
                     <div id="thumb-upload-zone"></div>
-                    ${course?.thumbnail_url ? `<img src="${course.thumbnail_url}" style="max-height:80px;margin-top:.5rem;border-radius:var(--radius-sm)">` : ''}
+                    ${course?.thumbnail_url ? `<div style="margin-top:.5rem;height:120px;border-radius:var(--radius-sm);overflow:hidden"><img src="${course.thumbnail_url}" style="width:100%;height:100%;object-fit:cover;display:block"></div>` : ''}
                 </div>
                 <div class="form-group">
                     <label class="checkbox-item" style="cursor:pointer;user-select:none">

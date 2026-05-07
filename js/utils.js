@@ -194,7 +194,7 @@ const UI = {
             ...common,
             { icon: '📂', label: 'База знань',   route: 'knowledge-base' },
             { icon: '📋', label: 'Документи',    route: 'documents' },
-            { icon: '🖥',  label: 'Меню порталу', route: 'collections' }
+            { icon: '<i class="fa-solid fa-wand-magic-sparkles" style="background:linear-gradient(135deg,#818cf8,#c084fc);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-size:1rem"></i>', label: 'Меню порталу', route: 'collections' }
         ];
         const ntfItem      = { icon: '🔔', label: 'Сповіщення',   route: 'notifications', badgeId: 'nav-ntf-badge' };
         const contactsItem = { icon: '👥', label: 'Контакти',     route: 'contacts' };
@@ -388,9 +388,21 @@ const FileUpload = {
         return input;
     },
     _handleFile(area, _input, file) {
-        area.querySelector('.file-upload-label').textContent = file.name;
-        area.querySelector('.file-upload-hint').textContent  = Fmt.fileSize(file.size);
-        area.style.borderColor = 'var(--success)';
+        if (file.type.startsWith('image/')) {
+            const reader = new FileReader();
+            reader.onload = e => {
+                area.style.cssText += ';padding:0;position:relative;overflow:hidden;border-color:var(--success)';
+                area.innerHTML = `
+                    <img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover;display:block">
+                    <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.52);color:#fff;font-size:.7rem;padding:.2rem .5rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${file.name} · ${Fmt.fileSize(file.size)}</div>`;
+            };
+            reader.readAsDataURL(file);
+        } else {
+            area.querySelector('.file-upload-label').textContent = file.name;
+            const hint = area.querySelector('.file-upload-hint');
+            if (hint) hint.textContent = Fmt.fileSize(file.size);
+            area.style.borderColor = 'var(--success)';
+        }
     }
 };
 

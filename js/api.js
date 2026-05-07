@@ -1276,5 +1276,13 @@ const API = {
             ]);
             return { enrollments: enrollments.data || [], attempts: attempts.data || [] };
         }
+    },
+
+    system: {
+        async getDbSize() {
+            const { data, error } = await supabase.rpc('get_db_size');
+            if (error) throw error;
+            return data; // { bytes, pretty }
+        }
     }
 };

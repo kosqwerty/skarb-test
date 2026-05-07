@@ -117,7 +117,7 @@ const TestsPage = {
                                 </summary>
                                 <div class="table-wrapper" style="margin-top:.75rem">
                                     <table>
-                                        <thead><tr><th>#</th><th>Дата</th><th>Результат</th><th>Час</th><th>Статус</th></tr></thead>
+                                        <thead><tr><th>#</th><th>Дата</th><th>Результат</th><th>Час</th><th>Статус</th><th></th></tr></thead>
                                         <tbody>
                                             ${completedAttempts.map(a => `
                                                 <tr>
@@ -126,13 +126,103 @@ const TestsPage = {
                                                     <td><strong>${Math.round(a.percentage||0)}%</strong></td>
                                                     <td style="color:var(--text-muted)">${a.time_spent_seconds ? Math.floor(a.time_spent_seconds/60)+' хв' : '—'}</td>
                                                     <td><span class="badge ${a.passed ? 'badge-success' : 'badge-danger'}">${a.passed ? 'Зараховано' : 'Не зараховано'}</span></td>
+                                                    <td><button class="btn btn-ghost btn-sm" id="proto-btn-${a.id}" onclick="TestsPage.showAttemptProtocol('${a.id}', this)">
+                                                        <i class="fa-solid fa-list-check"></i> Помилки
+                                                    </button></td>
                                                 </tr>`).join('')}
                                         </tbody>
                                     </table>
                                 </div>
-                            </details>` : ''}
+                            </details>
+                            <div id="ti-protocol" style="margin-top:1rem"></div>` : ''}
                 </div>
             </div>`;
+    },
+
+    async showAttemptProtocol(attemptId, btn) {
+        const el = document.getElementById('ti-protocol');
+        if (!el) return;
+
+        // toggle: якщо цей же attempt вже відкритий — закрити
+        if (el.dataset.attemptId === attemptId && el.innerHTML) {
+            el.innerHTML = '';
+            delete el.dataset.attemptId;
+            if (btn) btn.classList.remove('active');
+            return;
+        }
+
+        // зняти active з усіх кнопок протоколу
+        document.querySelectorAll('[id^="proto-btn-"]').forEach(b => b.classList.remove('active'));
+        if (btn) btn.classList.add('active');
+        el.dataset.attemptId = attemptId;
+        el.innerHTML = `<div style="display:flex;justify-content:center;padding:1.5rem"><div class="spinner"></div></div>`;
+
+        try {
+            const attemptAnswers = await API.attempts.getAnswers(attemptId);
+            const ansMap = new Map(attemptAnswers.map(a => [a.question_id, a]));
+
+            const wrong = (this._test.questions || []).filter(q => {
+                if (q.question_type === 'text') return false;
+                const aa = ansMap.get(q.id);
+                return aa && (aa.selected_answer_ids?.length > 0) && !aa.is_correct;
+            });
+
+            if (!wrong.length) {
+                el.innerHTML = `
+                    <div style="padding:1rem 1.25rem;border-radius:var(--radius-md);border:1px solid rgba(16,185,129,.25);background:rgba(16,185,129,.06);display:flex;align-items:center;gap:.6rem">
+                        <i class="fa-solid fa-circle-check" style="color:var(--success)"></i>
+                        <span style="font-size:.875rem;color:var(--success);font-weight:600">Помилок немає — всі відповіді правильні</span>
+                    </div>`;
+                return;
+            }
+
+            const totalQ = (this._test.questions || []).filter(q => q.question_type !== 'text').length;
+
+            el.innerHTML = `
+                <div style="border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden">
+                    <div style="display:flex;align-items:center;gap:.6rem;padding:.75rem 1rem;background:var(--bg-raised);border-bottom:1px solid var(--border)">
+                        <i class="fa-solid fa-circle-xmark" style="color:var(--danger)"></i>
+                        <span style="font-weight:700;font-size:.9rem">Протокол помилок</span>
+                        <span style="font-size:.8rem;color:var(--text-muted);margin-left:auto">${wrong.length} з ${totalQ} питань</span>
+                    </div>
+                    <div style="padding:.875rem 1rem;display:flex;flex-direction:column;gap:.75rem">
+                        ${wrong.map(q => {
+                            const aa       = ansMap.get(q.id);
+                            const selected = aa.selected_answer_ids || [];
+                            const qNum     = (this._test.questions || []).indexOf(q) + 1;
+
+                            const answersHtml = (q.answers || []).map(ans => {
+                                const isSel  = selected.includes(ans.id);
+                                const isCorr = ans.is_correct;
+                                if (!isSel && !isCorr) return '';
+                                const bg     = isCorr ? 'rgba(16,185,129,.1)'  : 'rgba(239,68,68,.08)';
+                                const border = isCorr ? 'rgba(16,185,129,.3)'  : 'rgba(239,68,68,.25)';
+                                const icon   = isCorr
+                                    ? `<i class="fa-solid fa-check" style="color:var(--success);flex-shrink:0"></i>`
+                                    : `<i class="fa-solid fa-xmark" style="color:var(--danger);flex-shrink:0"></i>`;
+                                const note = isCorr && !isSel
+                                    ? `<span style="font-size:.7rem;color:var(--success);opacity:.85;margin-left:.25rem">(правильна)</span>`
+                                    : '';
+                                return `<div style="display:flex;align-items:center;gap:.55rem;padding:.4rem .65rem;border-radius:6px;margin-bottom:.25rem;background:${bg};border:1px solid ${border};font-size:.85rem">
+                                    ${icon}<span class="ql-snow">${ans.answer_text}${note}</span></div>`;
+                            }).join('');
+
+                            return `
+                                <div style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden">
+                                    <div style="display:flex;gap:.6rem;align-items:baseline;padding:.6rem .875rem;background:var(--bg-raised);border-bottom:1px solid var(--border)">
+                                        <span style="font-size:.7rem;font-weight:800;color:var(--danger);background:rgba(239,68,68,.1);border:1.5px solid rgba(239,68,68,.3);border-radius:5px;padding:.1rem .4rem;flex-shrink:0">✗ ${qNum}</span>
+                                        <div style="font-size:.875rem;font-weight:600;line-height:1.45;color:var(--text-primary)" class="ql-snow">${q.question_text}</div>
+                                    </div>
+                                    <div style="padding:.65rem .875rem">${answersHtml}</div>
+                                    ${q.explanation ? `<div style="padding:.4rem .875rem .7rem;font-size:.8rem;color:var(--text-secondary);border-top:1px dashed var(--border)">
+                                        <i class="fa-solid fa-lightbulb" style="color:var(--warning)"></i> ${q.explanation}</div>` : ''}
+                                </div>`;
+                        }).join('')}
+                    </div>
+                </div>`;
+        } catch(e) {
+            el.innerHTML = `<div style="color:var(--danger);font-size:.875rem;padding:.5rem">${e.message}</div>`;
+        }
     },
 
     // ── Progress persistence ──────────────────────────────────────────

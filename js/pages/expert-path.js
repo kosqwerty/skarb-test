@@ -187,7 +187,7 @@ const ExpertPathPage = {
                        </div>`
                     : `<div style="font-size:.7rem;color:var(--text-muted);margin-top:auto"><i class="fa-regular fa-circle"></i> Не записаний</div>`;
                 return `
-                <div class="ep-course-card" onclick="Router.go('courses/${c.id}')">
+                <div class="ep-course-card" onclick="Router.go('courses/${c.id}?from=expert-path')">
                     <div class="ep-course-thumb">${thumb}</div>
                     <div class="ep-course-body">
                         <div class="ep-course-title">${c.title}</div>
@@ -226,7 +226,7 @@ const ExpertPathPage = {
 
     // ── Тести (реюз MyTestsPage) ─────────────────────────────────────
     async _renderTests(area) {
-        await MyTestsPage._render(area);
+        await MyTestsPage._render(area, true);
     },
 
     // ── Результати ───────────────────────────────────────────────────
@@ -255,7 +255,7 @@ const ExpertPathPage = {
                 <div class="card-header"><h3><i class="fa-solid fa-book"></i> Курси</h3></div>
                 <div class="card-body" style="padding:0">
                     ${enrollments.length ? enrollments.map(e => `
-                        <div onclick="Router.go('courses/${e.course_id}')"
+                        <div onclick="Router.go('courses/${e.course_id}?from=expert-path')"
                             style="display:flex;align-items:center;gap:1rem;padding:.875rem 1.25rem;border-bottom:1px solid var(--border);cursor:pointer;transition:background var(--transition)"
                             onmouseenter="this.style.background='var(--bg-hover)'" onmouseleave="this.style.background=''">
                             <div style="flex:1;min-width:0">

@@ -211,12 +211,13 @@ const TestsManagerPage = {
     _quillSetupDone: false,
     _pendingCoverFile: null,
     _coverImageUrl:    null,
+    _container:        null,
 
     async init(container, params = {}) {
         if (!AppState.canSchedule() && !AppState.isStaff()) {
             Router.go('dashboard'); return;
         }
-        UI.setBreadcrumb([{ label: 'Тести' }]);
+        UI.setBreadcrumb([{ label: 'Адміністрування', route: 'admin' }, { label: 'Тести' }]);
         const testId = params.test;
         if (testId) await this._openEditorById(container, testId);
         else         await this._renderList(container);
@@ -225,6 +226,7 @@ const TestsManagerPage = {
     // ── List ─────────────────────────────────────────────────────
 
     async _renderList(container) {
+        this._container = container;
         this._prevView  = 'list';
         this._curTest   = null;
         this._questions = [];
@@ -370,14 +372,14 @@ const TestsManagerPage = {
     // ── Create / Edit meta modal ──────────────────────────────────
 
     openCreateModal() {
-        const c = document.getElementById('page-content');
+        const c = TestsManagerPage._container;
         this._renderSettings(c, null);
     },
 
     openSettings(testId) {
         const t = this._tests.find(x => x.id === testId);
         if (!t) return;
-        const c = document.getElementById('page-content');
+        const c = TestsManagerPage._container;
         this._renderSettings(c, t);
     },
 
@@ -421,7 +423,7 @@ const TestsManagerPage = {
 </style>
 <div class="tset-page">
     <div class="tset-topbar">
-        <button class="tset-back" onclick="TestsManagerPage._goBack(document.getElementById('page-content'))"><i class="fa-solid fa-arrow-left"></i> Назад</button>
+        <button class="tset-back" onclick="TestsManagerPage._goBack(TestsManagerPage._container)"><i class="fa-solid fa-arrow-left"></i> Назад</button>
         <span style="font-size:1.1rem;font-weight:700;color:var(--text-primary);flex:1">${isEdit ? '<i class="fa-solid fa-gear"></i> ' + test.title : '<i class="fa-solid fa-plus"></i> Новий тест'}</span>
         <button class="btn btn-primary" onclick="TestsManagerPage._saveMeta(${isEdit ? `'${test.id}'` : 'null'})">${isEdit ? 'Зберегти' : 'Створити'}</button>
     </div>
@@ -676,7 +678,7 @@ const TestsManagerPage = {
     // ── Editor ───────────────────────────────────────────────────
 
     async openEditor(testId) {
-        const container = document.getElementById('page-content');
+        const container = TestsManagerPage._container;
         await this._openEditorById(container, testId);
     },
 
@@ -686,7 +688,7 @@ const TestsManagerPage = {
             const test = await API.tests.getById(testId);
             this._curTest   = test;
             this._questions = [...(test.questions || [])].sort((a,b) => a.order_index - b.order_index);
-            UI.setBreadcrumb([{ label: 'Тести', route: 'tests-manager' }, { label: test.title }]);
+            UI.setBreadcrumb([{ label: 'Адміністрування', route: 'admin?tab=tests' }, { label: test.title }]);
             this._renderEditor(container);
         } catch(e) {
             Toast.error('Помилка', e.message);
@@ -857,9 +859,9 @@ const TestsManagerPage = {
 
 <div class="te-wrap">
     <div class="te-topbar">
-        <button class="te-back" onclick="TestsManagerPage._renderList(document.getElementById('page-content'))"><i class="fa-solid fa-arrow-left"></i> Тести</button>
+        <button class="te-back" onclick="TestsManagerPage._renderList(TestsManagerPage._container)"><i class="fa-solid fa-arrow-left"></i> Тести</button>
         <span class="te-test-title">${this._curTest.title}</span>
-        <button class="btn btn-ghost btn-sm" onclick="TestsManagerPage._renderSettings(document.getElementById('page-content'),TestsManagerPage._curTest)"><i class="fa-solid fa-gear"></i> Налаштування</button>
+        <button class="btn btn-ghost btn-sm" onclick="TestsManagerPage._renderSettings(TestsManagerPage._container,TestsManagerPage._curTest)"><i class="fa-solid fa-gear"></i> Налаштування</button>
         <button class="btn btn-ghost btn-sm" onclick="TestsManagerPage.openPreview('${this._curTest.id}')"><i class="fa-solid fa-eye"></i> Перегляд</button>
         <button class="btn btn-sm" style="background:#C9A227;color:#fff;border:none;border-radius:10px;padding:7px 16px;font-weight:600;cursor:pointer" onclick="TestsManagerPage.openAssignModal('${this._curTest.id}')"><i class="fa-solid fa-users"></i> Призначити</button>
         <button class="btn btn-ghost btn-sm" onclick="TestsManagerPage.openResultsModal('${this._curTest.id}')"><i class="fa-solid fa-chart-bar"></i> Результати</button>
@@ -1817,7 +1819,7 @@ ${this._opts.map((o,i) => `
                 if (answers.length) await API.questions.upsertAnswers(newQ.id, answers);
             }
             Toast.success('Тест скопійовано', newTest.title);
-            await this._renderList(document.getElementById('page-content'));
+            await this._renderList(TestsManagerPage._container);
         } catch(e) { Toast.error('Помилка', e.message); }
         finally { Loader.hide(); }
     },
@@ -1825,7 +1827,7 @@ ${this._opts.map((o,i) => `
     // ── Preview ───────────────────────────────────────────────────
 
     async openPreview(testId) {
-        const container = document.getElementById('page-content');
+        const container = TestsManagerPage._container;
         await this._renderPreview(container, testId);
     },
 
@@ -1857,7 +1859,7 @@ ${this._opts.map((o,i) => `
 </style>
 <div class="tprev-page">
     <div class="tprev-topbar">
-        <button class="tprev-back" onclick="TestsManagerPage._goBack(document.getElementById('page-content'))"><i class="fa-solid fa-arrow-left"></i> Назад</button>
+        <button class="tprev-back" onclick="TestsManagerPage._goBack(TestsManagerPage._container)"><i class="fa-solid fa-arrow-left"></i> Назад</button>
         <span style="font-size:1.1rem;font-weight:700;color:var(--text-primary);flex:1">${test.title}</span>
         <span class="tprev-badge"><i class="fa-solid fa-eye"></i> Перегляд</span>
     </div>
@@ -1919,7 +1921,7 @@ ${this._opts.map((o,i) => `
         try {
             await API.tests.delete(id);
             Toast.success('Тест видалено');
-            await this._renderList(document.getElementById('page-content'));
+            await this._renderList(TestsManagerPage._container);
         } catch(e) { Toast.error('Помилка', e.message); }
         finally { Loader.hide(); }
     },
@@ -1931,7 +1933,7 @@ ${this._opts.map((o,i) => `
     // ── Assign modal ──────────────────────────────────────────────
 
     async openAssignModal(testId) {
-        const container = document.getElementById('page-content');
+        const container = TestsManagerPage._container;
         await this._renderAssign(container, testId);
     },
 
@@ -1976,7 +1978,7 @@ ${this._opts.map((o,i) => `
 </style>
 <div class="tasgn-page">
     <div class="tasgn-topbar">
-        <button class="tasgn-back" onclick="TestsManagerPage._goBack(document.getElementById('page-content'))"><i class="fa-solid fa-arrow-left"></i> Назад</button>
+        <button class="tasgn-back" onclick="TestsManagerPage._goBack(TestsManagerPage._container)"><i class="fa-solid fa-arrow-left"></i> Назад</button>
         <span style="font-size:1.1rem;font-weight:700;color:var(--text-primary);flex:1"><i class="fa-solid fa-users"></i> ${testTitle}</span>
         <button class="btn btn-primary" onclick="TestsManagerPage._doAssign('${testId}')">Зберегти</button>
     </div>
@@ -2125,7 +2127,7 @@ ${this._opts.map((o,i) => `
                 } catch(e) { Toast.warning('Сповіщення', 'Призначено, але не вдалося надіслати сповіщення деяким користувачам'); }
             }
             Toast.success('Збережено');
-            this._goBack(document.getElementById('page-content'));
+            this._goBack(TestsManagerPage._container);
         } catch(e) { Toast.error('Помилка', e.message); }
         finally { Loader.hide(); }
     },
@@ -2133,7 +2135,7 @@ ${this._opts.map((o,i) => `
     // ── Results page ──────────────────────────────────────────────
 
     async openResultsModal(testId) {
-        const container = document.getElementById('page-content');
+        const container = TestsManagerPage._container;
         await this._renderResults(container, testId);
     },
 
@@ -2162,7 +2164,7 @@ ${this._opts.map((o,i) => `
 </style>
 <div class="tres-page">
     <div class="tres-topbar">
-        <button class="tres-back" onclick="TestsManagerPage._goBack(document.getElementById('page-content'))"><i class="fa-solid fa-arrow-left"></i> Назад</button>
+        <button class="tres-back" onclick="TestsManagerPage._goBack(TestsManagerPage._container)"><i class="fa-solid fa-arrow-left"></i> Назад</button>
         <span style="font-size:1.1rem;font-weight:700;color:var(--text-primary);flex:1"><i class="fa-solid fa-chart-bar"></i> ${test.title}</span>
         ${results.length ? `<button class="btn btn-ghost btn-sm" onclick="TestsManagerPage._exportCSV(TestsManagerPage._lastResults,'${test.title.replace(/'/g,"\\'")}')"><i class="fa-solid fa-file-csv"></i> CSV</button>` : ''}
     </div>
@@ -2232,15 +2234,20 @@ ${this._opts.map((o,i) => `
 // ================================================================
 const MyTestsPage = {
     _tab: 'pending',
+    _assignments: [],
+    _attempts: [],
+    _completedTestIds: new Set(),
+    _fromExpert: false,
 
     async init(container) {
         UI.setBreadcrumb([{ label: 'Мої тести' }]);
         container.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
         this._tab = 'pending';
-        await this._render(container);
+        await this._render(container, false);
     },
 
-    async _render(container) {
+    async _render(container, fromExpert = false) {
+        this._fromExpert = fromExpert;
         let assignments = [], attempts = [];
         try {
             [assignments, attempts] = await Promise.all([
@@ -2254,7 +2261,10 @@ const MyTestsPage = {
             ]);
         } catch(e) { assignments = []; attempts = []; }
 
-        const completedTestIds = new Set(attempts.filter(a => a.passed).map(a => a.test_id));
+        const completedTestIds = new Set(attempts.map(a => a.test_id));
+        this._assignments      = assignments;
+        this._attempts         = attempts;
+        this._completedTestIds = completedTestIds;
 
         container.innerHTML = `
 <style>
@@ -2331,25 +2341,23 @@ const MyTestsPage = {
         this._tab = tab;
         document.querySelectorAll('.mt-tab').forEach(t => t.classList.remove('active'));
         btn.classList.add('active');
-        document.getElementById('mt-content').innerHTML =
-            tab === 'pending'
-                ? '<div style="display:flex;justify-content:center;padding:2rem"><div class="spinner"></div></div>'
-                : '<div style="display:flex;justify-content:center;padding:2rem"><div class="spinner"></div></div>';
-        MyTestsPage.init(document.getElementById('page-content'));
+        const content = document.getElementById('mt-content');
+        if (content) content.innerHTML = tab === 'pending'
+            ? this._pendingHtml(this._assignments, this._completedTestIds)
+            : this._historyHtml(this._attempts);
     },
 
     _pendingHtml(assignments, completedTestIds) {
-        if (!assignments.length) return `
+        const pending = assignments.filter(a => !completedTestIds.has(a.test_id));
+
+        if (!pending.length) return `
 <div class="mt-empty">
     <div class="mt-empty-ico"><i class="fa-solid fa-clipboard-list"></i></div>
-    <div class="mt-empty-head">Немає призначених тестів</div>
-    <div class="mt-empty-txt">Коли керівник призначить вам тест — він з'явиться тут</div>
+    <div class="mt-empty-head">${assignments.length ? 'Всі тести пройдено!' : 'Немає призначених тестів'}</div>
+    <div class="mt-empty-txt">${assignments.length ? 'Результати зберігаються у вкладці «Пройдені»' : 'Коли керівник призначить вам тест — він з\'явиться тут'}</div>
 </div>`;
 
-        const sorted = [...assignments].sort((a,b) => {
-            const aDone = completedTestIds.has(a.test_id);
-            const bDone = completedTestIds.has(b.test_id);
-            if (aDone !== bDone) return aDone ? 1 : -1;
+        const sorted = [...pending].sort((a,b) => {
             if (a.deadline_at && b.deadline_at) return new Date(a.deadline_at) - new Date(b.deadline_at);
             if (a.deadline_at) return -1;
             if (b.deadline_at) return 1;
@@ -2359,10 +2367,8 @@ const MyTestsPage = {
         return `<div class="mt-list">${sorted.map(a => {
             const test = a.test;
             if (!test) return '';
-            const isDone    = completedTestIds.has(a.test_id);
-            const isOverdue = !isDone && a.deadline_at && new Date(a.deadline_at) < new Date();
+            const isOverdue = a.deadline_at && new Date(a.deadline_at) < new Date();
             const qCount    = test.questions?.length || 0;
-            const barCls    = isDone ? 'done' : isOverdue ? 'overdue' : 'pending';
             let deadlineTxt = '';
             if (a.deadline_at) {
                 const dl = new Date(a.deadline_at);
@@ -2375,7 +2381,7 @@ const MyTestsPage = {
             }
             return `
 <div class="mt-card">
-    <div class="mt-card-bar ${barCls}"></div>
+    <div class="mt-card-bar ${isOverdue ? 'overdue' : 'pending'}"></div>
     <div class="mt-card-body">
         <div class="mt-card-info">
             <div class="mt-card-title">${test.title}</div>
@@ -2383,12 +2389,10 @@ const MyTestsPage = {
                 <span class="mt-badge mt-badge-info"><i class="fa-solid fa-question"></i> ${qCount} питань</span>
                 ${test.time_limit_minutes ? `<span class="mt-badge mt-badge-info"><i class="fa-regular fa-clock"></i> ${test.time_limit_minutes} хв</span>` : ''}
                 <span class="mt-badge mt-badge-info"><i class="fa-solid fa-bullseye"></i> ${test.passing_score||70}% прохідний</span>
-                ${isDone ? `<span class="mt-badge mt-badge-done"><i class="fa-solid fa-check"></i> Пройдено</span>` : deadlineTxt}
+                ${deadlineTxt}
             </div>
         </div>
-        ${isDone
-            ? `<button class="mt-btn-view" onclick="Router.go('tests/${test.id}?from=expert-path')">Переглянути</button>`
-            : `<button class="mt-btn-start" onclick="Router.go('tests/${test.id}?from=expert-path')">Пройти тест <i class="fa-solid fa-arrow-right"></i></button>`}
+        <button class="mt-btn-start" onclick="Router.go('tests/${test.id}?from=expert-path')">Пройти тест <i class="fa-solid fa-arrow-right"></i></button>
     </div>
 </div>`;
         }).join('')}</div>`;
@@ -2419,7 +2423,7 @@ const MyTestsPage = {
         <div class="mt-score-circle" style="background:${a.passed?'rgba(16,185,129,.12)':'rgba(239,68,68,.1)'};color:${a.passed?'#10b981':'#ef4444'}">
             ${pct}%
         </div>
-        <button class="mt-btn-view" onclick="Router.go('tests/${a.test_id}')">Деталі</button>
+        <button class="mt-btn-view" onclick="Router.go('tests/${a.test_id}${this._fromExpert ? '?from=expert-path' : ''}')">Деталі</button>
     </div>
 </div>`;
         }).join('')}</div>`;

@@ -161,8 +161,8 @@ const App = {
                 await MyCalendarPage.init(container, params);
             },
 
-            'tests-manager': async ({ container, params }) => {
-                await TestsManagerPage.init(container, params);
+            'tests-manager': async () => {
+                Router.go('admin?tab=tests');
             },
 
             'my-tests': async ({ container }) => {

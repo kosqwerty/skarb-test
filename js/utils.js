@@ -184,7 +184,7 @@ const UI = {
         if (bellBtn) bellBtn.classList.toggle('has-unread', count > 0);
     },
     _getNavItems(role) {
-        const expertItem   = { icon: '<img src="icons/road_up.png" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;background:#fff;border-radius:3px;padding:1px">', label: 'Шлях експерта', route: 'expert-path' };
+        const expertItem   = { icon: '<img src="icons/road_up.png" style="width:33px;height:33px;object-fit:contain;vertical-align:middle;border-radius:3px;padding:1px">', label: 'Шлях експерта', route: 'expert-path' };
         const common = [
             { icon: '🏠', label: 'Головна', route: 'dashboard' },
             expertItem,
@@ -205,7 +205,6 @@ const UI = {
                 { title: 'Навчання', items: contentItems },
                 { title: 'Управління', items: [
                     { icon: '📊', label: 'Аналітика',         route: 'analytics' },
-                    { icon: '📝', label: 'Тести',             route: 'tests-manager' },
                     { icon: '📅', label: 'Розділ планування', route: 'scheduler' },
                     { icon: '⚙️', label: 'Адміністрування',  route: 'admin' },
                     { icon: '🔒', label: 'Обмеження доступу', route: 'label-access', noStar: true }
@@ -217,7 +216,7 @@ const UI = {
             return [
                 { title: 'Навчання', items: contentItems },
                 { title: 'Управління', items: [
-                    { icon: '📝', label: 'Тести',             route: 'tests-manager' },
+                    { icon: '📝', label: 'Тести',             route: 'admin?tab=tests' },
                     { icon: '📅', label: 'Розділ планування', route: 'scheduler' }
                 ]},
                 { title: 'Особисте', items: [ contactsItem, bmItem, ntfItem ] }

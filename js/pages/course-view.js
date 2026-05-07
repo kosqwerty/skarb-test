@@ -5,10 +5,15 @@
 const CourseViewPage = {
     _course: null,
     _enrolled: false,
+    _from: null,
 
     async init(container, params) {
         const courseId = params.id;
-        UI.setBreadcrumb([{ label: 'Курси', route: 'courses' }, { label: 'Завантаження...' }]);
+        this._from = params.from || null;
+        const fromExpert = this._from === 'expert-path';
+        const backLabel = fromExpert ? 'Шлях експерта' : 'Курси';
+        const backRoute = fromExpert ? 'expert-path' : 'courses';
+        UI.setBreadcrumb([{ label: backLabel, route: backRoute }, { label: 'Завантаження...' }]);
         container.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
 
         try {
@@ -18,7 +23,7 @@ const CourseViewPage = {
             ]);
             this._course   = course;
             this._enrolled = enrolled;
-            UI.setBreadcrumb([{ label: 'Курси', route: 'courses' }, { label: course.title }]);
+            UI.setBreadcrumb([{ label: backLabel, route: backRoute }, { label: course.title }]);
             course.lessons?.sort((a,b) => a.order_index - b.order_index);
 
             let progressMap = {};
@@ -32,7 +37,7 @@ const CourseViewPage = {
                 <div class="empty-state">
                     <div class="empty-icon">⚠️</div>
                     <h3>Курс не знайдено</h3>
-                    <button class="btn btn-primary" onclick="Router.go('courses')">← Назад до курсів</button>
+                    <button class="btn btn-primary" onclick="Router.go('${fromExpert ? 'expert-path' : 'courses'}')">← Назад</button>
                 </div>`;
         }
     },
@@ -127,9 +132,10 @@ const CourseViewPage = {
             const prog      = progressMap[lesson.id];
             const completed = prog?.completed;
             const canOpen   = enrolled || lesson.is_free_preview || AppState.isStaff();
+            const lessonUrl = `lessons/${lesson.id}${this._from === 'expert-path' ? '?from=expert-path' : ''}`;
             return `
                 <div class="lesson-item ${completed ? 'completed' : ''}"
-                     ${canOpen ? `onclick="Router.go('lessons/${lesson.id}')"` : ''}>
+                     ${canOpen ? `onclick="Router.go('${lessonUrl}')"` : ''}>
                     <div class="lesson-num">${completed ? '✓' : i + 1}</div>
                     <div class="lesson-info">
                         <div class="lesson-title">${lesson.title}</div>
@@ -169,7 +175,7 @@ const CourseViewPage = {
                 <span style="color:var(--success)">✓</span>
                 <span style="font-weight:600">Ви записані на курс</span>
             </div>
-            ${lesson ? `<button class="btn btn-primary btn-full" onclick="Router.go('lessons/${lesson.id}')">
+            ${lesson ? `<button class="btn btn-primary btn-full" onclick="Router.go('lessons/${lesson.id}${this._from === 'expert-path' ? '?from=expert-path' : ''}')">
                 ${pct > 0 ? '▶ Продовжити навчання' : '▶ Розпочати навчання'}
             </button>` : ''}`;
     },
@@ -199,7 +205,7 @@ const CourseViewPage = {
                 <h3 style="margin-bottom:1rem">📝 Тести</h3>
                 <div class="lesson-list">
                     ${visible.map(t => `
-                        <div class="lesson-item" ${enrolled || AppState.isStaff() ? `onclick="Router.go('tests/${t.id}')"` : ''}>
+                        <div class="lesson-item" ${enrolled || AppState.isStaff() ? `onclick="Router.go('tests/${t.id}${this._from === 'expert-path' ? '?from=expert-path' : ''}')"` : ''}>
                             <div class="lesson-num">📝</div>
                             <div class="lesson-info">
                                 <div class="lesson-title">${t.title}</div>

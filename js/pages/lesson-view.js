@@ -4,18 +4,22 @@
 
 const LessonViewPage = {
     _lesson: null,
+    _from: null,
 
     async init(container, params) {
         const lessonId = params.id;
+        this._from = params.from || null;
+        const fromExpert = this._from === 'expert-path';
         container.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
 
         try {
             const lesson = await API.lessons.getById(lessonId);
             this._lesson = lesson;
 
+            const courseRoute = `courses/${lesson.course?.id}${fromExpert ? '?from=expert-path' : ''}`;
             UI.setBreadcrumb([
-                { label: 'Курси', route: 'courses' },
-                { label: lesson.course?.title || 'Курс', route: `courses/${lesson.course?.id}` },
+                { label: fromExpert ? 'Шлях експерта' : 'Курси', route: fromExpert ? 'expert-path' : 'courses' },
+                { label: lesson.course?.title || 'Курс', route: courseRoute },
                 { label: lesson.title }
             ]);
 
@@ -26,7 +30,7 @@ const LessonViewPage = {
                         <div class="empty-icon">🔒</div>
                         <h3>Немає доступу</h3>
                         <p>Запишіться на курс для доступу до цього уроку</p>
-                        <button class="btn btn-primary" onclick="Router.go('courses/${lesson.course_id}')">До курсу</button>
+                        <button class="btn btn-primary" onclick="Router.go('${courseRoute}')">До курсу</button>
                     </div>`;
                 return;
             }
@@ -48,15 +52,17 @@ const LessonViewPage = {
         const prevLesson = allLessons[idx - 1];
         const nextLesson = allLessons[idx + 1];
         const completed  = progress?.completed;
+        const fromSuffix = this._from === 'expert-path' ? '?from=expert-path' : '';
+        const courseUrl  = `courses/${lesson.course_id}${fromSuffix}`;
 
         container.innerHTML = `
             <div style="display:grid;grid-template-columns:1fr 280px;gap:2rem;align-items:start" class="lesson-layout">
                 <div>
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:.75rem">
-                        <button class="btn btn-ghost btn-sm" onclick="Router.go('courses/${lesson.course_id}')">← Назад до курсу</button>
+                        <button class="btn btn-ghost btn-sm" onclick="Router.go('${courseUrl}')">← Назад до курсу</button>
                         <div style="display:flex;gap:.5rem">
-                            ${prevLesson ? `<button class="btn btn-secondary btn-sm" onclick="Router.go('lessons/${prevLesson.id}')">← Попередній</button>` : ''}
-                            ${nextLesson ? `<button class="btn btn-secondary btn-sm" onclick="Router.go('lessons/${nextLesson.id}')">Наступний →</button>` : ''}
+                            ${prevLesson ? `<button class="btn btn-secondary btn-sm" onclick="Router.go('lessons/${prevLesson.id}${fromSuffix}')">← Попередній</button>` : ''}
+                            ${nextLesson ? `<button class="btn btn-secondary btn-sm" onclick="Router.go('lessons/${nextLesson.id}${fromSuffix}')">Наступний →</button>` : ''}
                         </div>
                     </div>
 
@@ -90,13 +96,13 @@ const LessonViewPage = {
                                     : '<span style="color:var(--text-muted)">Відмітьте урок як завершений</span>'}
                             </div>
                             <div style="display:flex;gap:.75rem">
-                                ${prevLesson ? `<button class="btn btn-secondary" onclick="Router.go('lessons/${prevLesson.id}')">← Попередній</button>` : ''}
+                                ${prevLesson ? `<button class="btn btn-secondary" onclick="Router.go('lessons/${prevLesson.id}${fromSuffix}')">← Попередній</button>` : ''}
                                 ${!completed ? `
                                     <button class="btn btn-success" id="complete-btn" onclick="LessonViewPage.markComplete('${lesson.id}','${lesson.course_id}')">
                                         ✓ Відмітити як завершений
                                     </button>` : ''}
-                                ${nextLesson ? `<button class="btn btn-primary" onclick="Router.go('lessons/${nextLesson.id}')">Наступний урок →</button>` : ''}
-                                ${!nextLesson && completed ? `<button class="btn btn-primary" onclick="Router.go('courses/${lesson.course_id}')">До курсу →</button>` : ''}
+                                ${nextLesson ? `<button class="btn btn-primary" onclick="Router.go('lessons/${nextLesson.id}${fromSuffix}')">Наступний урок →</button>` : ''}
+                                ${!nextLesson && completed ? `<button class="btn btn-primary" onclick="Router.go('${courseUrl}')">До курсу →</button>` : ''}
                             </div>
                         </div>` : ''}
                 </div>
@@ -106,7 +112,7 @@ const LessonViewPage = {
                         <div class="card-header"><h4>📋 Уроки курсу</h4></div>
                         <div style="max-height:600px;overflow-y:auto">
                             ${allLessons.map((l, i) => `
-                                <div onclick="Router.go('lessons/${l.id}')"
+                                <div onclick="Router.go('lessons/${l.id}${fromSuffix}')"
                                      style="display:flex;align-items:center;gap:.75rem;padding:.75rem 1rem;cursor:pointer;border-bottom:1px solid var(--border);transition:background var(--transition);
                                             ${l.id === lesson.id ? 'background:var(--primary-glow);border-left:3px solid var(--primary)' : ''}">
                                     <div style="width:24px;height:24px;border-radius:50%;background:var(--bg-hover);display:flex;align-items:center;justify-content:center;font-size:.7rem;flex-shrink:0;font-weight:600">${i+1}</div>

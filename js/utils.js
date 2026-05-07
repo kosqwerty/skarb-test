@@ -52,6 +52,16 @@ const Modal = {
 
     confirm({ title = 'Підтвердження', message = '', confirmText = 'Підтвердити', danger = false } = {}) {
         return new Promise(resolve => {
+            const cleanup = () => document.removeEventListener('keydown', keyHandler);
+            const keyHandler = e => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    cleanup();
+                    this._onClose = null;
+                    this.close();
+                    resolve(true);
+                }
+            };
             this.open({
                 title,
                 body: `<p style="color:var(--text-secondary)">${message}</p>`,
@@ -59,9 +69,10 @@ const Modal = {
                     <button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
                     <button class="btn ${danger ? 'btn-danger' : 'btn-primary'}" id="confirm-btn">${confirmText}</button>`,
                 size: 'sm',
-                onClose: () => resolve(false)
+                onClose: () => { cleanup(); resolve(false); }
             });
-            document.getElementById('confirm-btn').onclick = () => { this._onClose = null; this.close(); resolve(true); };
+            document.getElementById('confirm-btn').onclick = () => { cleanup(); this._onClose = null; this.close(); resolve(true); };
+            document.addEventListener('keydown', keyHandler);
         });
     }
 };
@@ -173,42 +184,38 @@ const UI = {
         if (bellBtn) bellBtn.classList.toggle('has-unread', count > 0);
     },
     _getNavItems(role) {
+        const expertItem   = { icon: '<img src="icons/road_up.png" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;background:#fff;border-radius:3px;padding:1px">', label: 'Шлях експерта', route: 'expert-path' };
         const common = [
-            { icon: '🏠', label: 'Головна',  route: 'dashboard' },
-            { icon: '📚', label: 'Курси',    route: 'courses' },
-            { icon: '📰', label: 'Новини',   route: 'news' }
+            { icon: '🏠', label: 'Головна', route: 'dashboard' },
+            expertItem,
+            { icon: '📰', label: 'Новини',  route: 'news' }
         ];
         const contentItems = [
             ...common,
-            { icon: '📂', label: 'База знань', route: 'knowledge-base' },
-            { icon: '📋', label: 'Документи',  route: 'documents' },
-            { icon: '🖥',  label: 'Меню порталу',  route: 'collections' }
+            { icon: '📂', label: 'База знань',   route: 'knowledge-base' },
+            { icon: '📋', label: 'Документи',    route: 'documents' },
+            { icon: '🖥',  label: 'Меню порталу', route: 'collections' }
         ];
-        const ntfItem      = { icon: '🔔', label: 'Сповіщення', route: 'notifications', badgeId: 'nav-ntf-badge' };
-        const contactsItem = { icon: '👥', label: 'Контакти',    route: 'contacts' };
-        const bmItem       = { icon: '⭐', label: 'Закладки',    route: 'bookmarks',  noStar: true };
+        const ntfItem      = { icon: '🔔', label: 'Сповіщення',   route: 'notifications', badgeId: 'nav-ntf-badge' };
+        const contactsItem = { icon: '👥', label: 'Контакти',     route: 'contacts' };
+        const bmItem       = { icon: '⭐', label: 'Закладки',     route: 'bookmarks', noStar: true };
+
         if (role === 'owner' || role === 'admin') {
             return [
                 { title: 'Навчання', items: contentItems },
                 { title: 'Управління', items: [
                     { icon: '📊', label: 'Аналітика',         route: 'analytics' },
                     { icon: '📝', label: 'Тести',             route: 'tests-manager' },
-                    { icon: '📅', label: 'Розділ планування',       route: 'scheduler' },
-                    { icon: '⚙️', label: 'Адміністрування',   route: 'admin' },
+                    { icon: '📅', label: 'Розділ планування', route: 'scheduler' },
+                    { icon: '⚙️', label: 'Адміністрування',  route: 'admin' },
                     { icon: '🔒', label: 'Обмеження доступу', route: 'label-access', noStar: true }
                 ]},
                 { title: 'Особисте', items: [ contactsItem, bmItem, ntfItem ] }
             ];
         }
         if (role === 'manager') {
-            const managerNav = [
-                ...common,
-                { icon: '📂', label: 'База знань',   route: 'knowledge-base' },
-                { icon: '📋', label: 'Документи',    route: 'documents' },
-                { icon: '🖥',  label: 'Меню порталу', route: 'collections' }
-            ];
             return [
-                { title: 'Навчання', items: managerNav },
+                { title: 'Навчання', items: contentItems },
                 { title: 'Управління', items: [
                     { icon: '📝', label: 'Тести',             route: 'tests-manager' },
                     { icon: '📅', label: 'Розділ планування', route: 'scheduler' }
@@ -220,37 +227,29 @@ const UI = {
             return [
                 { title: 'Навчання', items: contentItems },
                 { title: 'Управління', items: [
-                    { icon: '📊', label: 'Аналітика',   route: 'analytics' },
-                    { icon: '⚙️', label: 'Контент',     route: 'admin' },
+                    { icon: '📊', label: 'Аналітика',        route: 'analytics' },
+                    { icon: '⚙️', label: 'Контент',          route: 'admin' },
                     { icon: '📅', label: 'Розділ планування', route: 'scheduler', noStar: true }
                 ]},
-                { title: 'Особисте', items: [ contactsItem, { icon: '📝', label: 'Мої тести', route: 'my-tests' }, bmItem, ntfItem ] }
+                { title: 'Особисте', items: [ contactsItem, bmItem, ntfItem ] }
             ];
         }
         if (role === 'teacher') {
             return [
                 { title: 'Навчання', items: contentItems },
                 { title: 'Управління', items: [
-                    { icon: '📊', label: 'Аналітика',   route: 'analytics' },
+                    { icon: '📊', label: 'Аналітика',        route: 'analytics' },
                     { icon: '📅', label: 'Розділ планування', route: 'scheduler', noStar: true }
                 ]},
-                { title: 'Особисте', items: [ contactsItem, { icon: '📝', label: 'Мої тести', route: 'my-tests' }, bmItem, ntfItem ] }
+                { title: 'Особисте', items: [ contactsItem, bmItem, ntfItem ] }
             ];
         }
         return [
-            { title: 'Навчання', items: [
-                ...common,
-                { icon: '📂', label: 'База знань',    route: 'knowledge-base' },
-                { icon: '📋', label: 'Документи',     route: 'documents' },
-                { icon: '🖥',  label: 'Меню порталу', route: 'collections' }
-            ]},
+            { title: 'Навчання', items: contentItems },
             { title: 'Особисте', items: [
                 contactsItem,
-                { icon: '📝', label: 'Мої тести',     route: 'my-tests' },
-                { icon: '🏆', label: 'Мої результати', route: 'results' },
-                { icon: '📅', label: 'Розділ планування',    route: 'scheduler', noStar: true },
-                bmItem,
-                { icon: '🔔', label: 'Сповіщення', route: 'notifications', badge: null, badgeId: 'nav-ntf-badge' }
+                { icon: '📅', label: 'Розділ планування', route: 'scheduler', noStar: true },
+                bmItem, ntfItem
             ]}
         ];
     },
@@ -367,14 +366,16 @@ const Dom = {
 };
 
 const FileUpload = {
-    createDropZone(container, { accept = '*', label = 'Перетягніть файл або натисніть для вибору', hint = '' } = {}) {
+    createDropZone(container, { accept = '*', label = 'Перетягніть або натисніть для завантаження', hint = '' } = {}) {
         const id = 'file-' + Math.random().toString(36).slice(2);
         container.innerHTML = `
-            <div class="file-upload-area" onclick="document.getElementById('${id}').click()">
-                <div class="file-upload-icon">📁</div>
-                <div class="file-upload-label">${label}</div>
-                <div class="file-upload-hint">${hint}</div>
-                <input id="${id}" type="file" accept="${accept}" style="display:none">
+            <div class="file-upload-frame">
+                <div class="file-upload-area" onclick="document.getElementById('${id}').click()">
+                    <div class="file-upload-icon"><i class="fa-solid fa-cloud-arrow-up"></i></div>
+                    <div class="file-upload-label">${label}</div>
+                    ${hint ? `<div class="file-upload-hint">${hint}</div>` : ''}
+                    <input id="${id}" type="file" accept="${accept}" style="display:none">
+                </div>
             </div>`;
         const area  = container.querySelector('.file-upload-area');
         const input = document.getElementById(id);

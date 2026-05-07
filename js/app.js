@@ -167,6 +167,10 @@ const App = {
 
             'my-tests': async ({ container }) => {
                 await MyTestsPage.init(container);
+            },
+
+            'expert-path': async ({ container }) => {
+                await ExpertPathPage.init(container);
             }
         });
 

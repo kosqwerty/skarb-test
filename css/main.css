@@ -2461,23 +2461,57 @@ select {
 }
 
 /* ── File Upload ────────────────────────────────────────────────── */
+.file-upload-frame { padding: 2px; border-radius: 16px; background: var(--border-light, #CBD5E1); }
 .file-upload-area {
-    border: 2px dashed var(--border);
-    border-radius: var(--radius-lg);
-    padding: 2rem;
-    text-align: center;
+    border: none;
+    border-radius: 14px;
+    padding: 28px 20px;
     cursor: pointer;
-    transition: all var(--transition);
-    background: var(--bg-raised);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    background: linear-gradient(145deg, rgba(99,102,241,.05), rgba(139,92,246,.05));
+    transition: background .2s;
+    position: relative;
+    overflow: hidden;
+}
+.file-upload-area::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 90% 70% at 50% 110%, rgba(99,102,241,.1), transparent 60%),
+                radial-gradient(ellipse 35% 35% at 8% 8%, rgba(139,92,246,.08), transparent);
+    pointer-events: none;
 }
 .file-upload-area:hover,
 .file-upload-area.drag-over {
-    border-color: var(--primary);
-    background: var(--primary-glow);
+    background: linear-gradient(145deg, rgba(99,102,241,.09), rgba(139,92,246,.09));
 }
-.file-upload-icon { font-size: 2.5rem; margin-bottom: 0.75rem; opacity: 0.7; }
-.file-upload-label { font-weight: 500; margin-bottom: 0.25rem; }
-.file-upload-hint { font-size: 0.8rem; color: var(--text-muted); }
+.file-upload-icon {
+    width: 64px; height: 64px;
+    border-radius: 18px;
+    background: linear-gradient(135deg, rgba(99,102,241,.15), rgba(139,92,246,.18));
+    border: 1.5px solid rgba(99,102,241,.28);
+    display: flex; align-items: center; justify-content: center;
+    transition: transform .25s, box-shadow .25s;
+    box-shadow: 0 4px 18px rgba(99,102,241,.12);
+    flex-shrink: 0;
+}
+.file-upload-icon i { font-size: 1.6rem; color: #6366f1; }
+.file-upload-area:hover .file-upload-icon,
+.file-upload-area.drag-over .file-upload-icon {
+    transform: translateY(-4px) scale(1.05);
+    box-shadow: 0 8px 24px rgba(99,102,241,.22);
+}
+.file-upload-label { font-weight: 700; font-size: .9rem; color: var(--text-primary); text-align: center; }
+.file-upload-hint {
+    display: flex; align-items: center; gap: 8px;
+    font-size: .73rem; color: var(--text-muted);
+}
+.file-upload-hint::before, .file-upload-hint::after {
+    content: ''; flex: 1; height: 1px; background: var(--border); max-width: 36px;
+}
 
 /* ── Sidebar Overlay (Mobile) ───────────────────────────────────── */
 .sidebar-overlay {

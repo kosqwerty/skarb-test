@@ -1544,13 +1544,15 @@ const AdminPage = {
                     <button class="btn btn-ghost btn-sm" onclick="AdminPage._downloadImportExample()">📄 Завантажити приклад файлу</button>
                     <span style="color:var(--text-muted);font-size:.78rem">← рекомендуємо відкрити у Excel або Google Sheets</span>
                 </div>
-                <label for="import-file-input" style="display:flex;flex-direction:column;align-items:center;gap:.75rem;border:2px dashed var(--border);border-radius:var(--radius-md);padding:2rem;cursor:pointer;transition:border-color .2s"
-                       onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='var(--border)'">
-                    <span style="font-size:2.5rem">📂</span>
-                    <span style="color:var(--text-secondary)">Натисніть, щоб вибрати CSV-файл</span>
-                </label>
-                <input type="file" id="import-file-input" accept=".csv,.txt" style="display:none"
-                       onchange="AdminPage._onImportFile(this)">
+                <div class="file-upload-frame">
+                    <label for="import-file-input" class="file-upload-area">
+                        <div class="file-upload-icon"><i class="fa-solid fa-file-csv"></i></div>
+                        <div class="file-upload-label">Натисніть або перетягніть CSV-файл</div>
+                        <div class="file-upload-hint">CSV, TXT · кодування UTF-8</div>
+                        <input type="file" id="import-file-input" accept=".csv,.txt" style="display:none"
+                               onchange="AdminPage._onImportFile(this)">
+                    </label>
+                </div>
                 <div id="import-preview"></div>`,
             footer: `
                 <button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
@@ -1799,9 +1801,17 @@ const AdminPage = {
 
     // ── Тести ─────────────────────────────────────────────────────
     async _renderTests(el) {
+        this._testsEl = el;
         const tests = await API.tests.getAll().catch(() => []);
 
         el.innerHTML = `
+            <style>
+                .ap-tbl{width:100%;border-collapse:collapse}
+                .ap-tbl th{padding:.6rem .875rem;font-size:.75rem;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);border-bottom:1px solid var(--border);text-align:left;white-space:nowrap}
+                .ap-tbl td{padding:.65rem .875rem;border-bottom:1px solid var(--border);font-size:.875rem;vertical-align:middle}
+                .ap-tbl tr:last-child td{border-bottom:none}
+                .ap-tbl tr:hover td{background:var(--bg-hover)}
+            </style>
             <div style="margin-bottom:1rem">
                 <input type="text" placeholder="Пошук тестів..." style="width:300px" onkeyup="AdminPage._filterTable('tests-tbody', event)">
             </div>
@@ -1820,6 +1830,7 @@ const AdminPage = {
                                 <td><span class="badge ${t.is_published ? 'badge-success' : 'badge-muted'}">${t.is_published ? 'Опубліковано' : 'Чернетка'}</span></td>
                                 <td>
                                     <div style="display:flex;gap:.4rem">
+                                        <button class="btn btn-ghost btn-sm" title="Результати" onclick="AdminPage._openTestProtocol('${t.id}','${t.title.replace(/'/g,"\\'")}')"><i class="fa-solid fa-chart-bar"></i></button>
                                         <button class="btn btn-ghost btn-sm" onclick="TestsPage.openEdit('${t.id}')">✏️</button>
                                         <button class="btn btn-ghost btn-sm" onclick="TestsPage.openQuestionEditor('${t.id}')">❓</button>
                                         <button class="btn btn-danger btn-sm" onclick="TestsPage.deleteTest('${t.id}','${t.title.replace(/'/g,"\\'")}')">🗑</button>
@@ -1829,6 +1840,142 @@ const AdminPage = {
                     </tbody>
                 </table>
             </div>`;
+    },
+
+    _testsLoading(msg = '') {
+        if (this._testsEl) this._testsEl.innerHTML =
+            `<div style="display:flex;justify-content:center;padding:4rem"><div class="spinner"></div></div>`;
+    },
+
+    async _openTestProtocol(testId, testTitle) {
+        const el = this._testsEl;
+        if (!el) return;
+        el.innerHTML = `<div style="display:flex;justify-content:center;padding:4rem"><div class="spinner"></div></div>`;
+        try {
+            const attempts = (await API.attempts.getAllForTest(testId)).filter(a => a.completed_at);
+
+            const byUser = new Map();
+            for (const a of attempts) {
+                if (!byUser.has(a.user_id) || new Date(a.completed_at) > new Date(byUser.get(a.user_id).completed_at))
+                    byUser.set(a.user_id, a);
+            }
+            const rows = [...byUser.values()].sort((a, b) => new Date(b.completed_at) - new Date(a.completed_at));
+
+            el.innerHTML = `
+                <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem">
+                    <button class="btn btn-ghost btn-sm" onclick="AdminPage._renderTests(AdminPage._testsEl)">
+                        <i class="fa-solid fa-arrow-left"></i> Назад
+                    </button>
+                    <h3 style="margin:0"><i class="fa-solid fa-chart-bar" style="color:var(--primary)"></i> ${testTitle}</h3>
+                </div>
+                ${!rows.length ? `<div class="empty-state"><div class="empty-icon"><i class="fa-solid fa-inbox"></i></div><p>Спроб поки немає</p></div>` : `
+                <div style="font-size:.82rem;color:var(--text-muted);margin-bottom:.75rem">
+                    Показано останню спробу кожного користувача · всього ${attempts.length} спроб(и)
+                </div>
+                <div class="table-wrapper">
+                <table class="ap-tbl">
+                    <thead><tr>
+                        <th>Користувач</th><th>Дата</th><th>Результат</th><th>Час</th><th>Статус</th><th>Протокол</th>
+                    </tr></thead>
+                    <tbody>
+                        ${rows.map(a => {
+                            const name = a.user?.full_name || a.user?.email || a.user_id;
+                            const pct  = Math.round(a.percentage || 0);
+                            const mins = a.time_spent_seconds ? Math.floor(a.time_spent_seconds / 60) + ' хв' : '—';
+                            const esc  = name.replace(/'/g,"\\'");
+                            const tesc = testTitle.replace(/'/g,"\\'");
+                            return `<tr>
+                                <td>
+                                    <div style="font-weight:600">${name}</div>
+                                    <div style="font-size:.75rem;color:var(--text-muted)">${a.user?.email||''}</div>
+                                </td>
+                                <td style="color:var(--text-muted);white-space:nowrap">${Fmt.datetime(a.completed_at)}</td>
+                                <td><strong style="color:${a.passed?'var(--success)':'var(--danger)'}">${pct}%</strong></td>
+                                <td style="color:var(--text-muted)">${mins}</td>
+                                <td><span class="badge ${a.passed?'badge-success':'badge-danger'}">${a.passed?'Зараховано':'Не зараховано'}</span></td>
+                                <td>
+                                    <button class="btn btn-ghost btn-sm" onclick="AdminPage._showUserProtocol('${testId}','${a.id}','${esc}','${tesc}')">
+                                        <i class="fa-solid fa-list-check"></i> Помилки
+                                    </button>
+                                </td>
+                            </tr>`;
+                        }).join('')}
+                    </tbody>
+                </table>
+                </div>`}`;
+        } catch(e) {
+            el.innerHTML = `<div class="empty-state"><p style="color:var(--danger)">${e.message}</p></div>`;
+        }
+    },
+
+    async _showUserProtocol(testId, attemptId, userName, testTitle) {
+        const el = this._testsEl;
+        if (!el) return;
+        el.innerHTML = `<div style="display:flex;justify-content:center;padding:4rem"><div class="spinner"></div></div>`;
+        try {
+            const [test, attemptAnswers] = await Promise.all([
+                API.tests.getById(testId),
+                API.attempts.getAnswers(attemptId)
+            ]);
+
+            const ansMap = new Map(attemptAnswers.map(a => [a.question_id, a]));
+            const wrong  = (test.questions || []).filter(q =>
+                q.question_type !== 'text' && ansMap.has(q.id) && !ansMap.get(q.id).is_correct
+            );
+            const total  = (test.questions || []).filter(q => q.question_type !== 'text').length;
+
+            const backBtn = `<button class="btn btn-ghost btn-sm" onclick="AdminPage._openTestProtocol('${testId}','${testTitle.replace(/'/g,"\\'")}')">
+                <i class="fa-solid fa-arrow-left"></i> Назад
+            </button>`;
+
+            const wrongHtml = wrong.length ? wrong.map(q => {
+                const aa          = ansMap.get(q.id);
+                const selected    = aa.selected_answer_ids || [];
+                const answersHtml = (q.answers || []).map(ans => {
+                    const isSel  = selected.includes(ans.id);
+                    const isCorr = ans.is_correct;
+                    if (!isSel && !isCorr) return '';
+                    const bg     = isCorr ? 'rgba(16,185,129,.1)' : 'rgba(239,68,68,.08)';
+                    const border = isCorr ? 'rgba(16,185,129,.3)' : 'rgba(239,68,68,.25)';
+                    const icon   = isCorr
+                        ? `<i class="fa-solid fa-check" style="color:var(--success);flex-shrink:0"></i>`
+                        : `<i class="fa-solid fa-xmark" style="color:var(--danger);flex-shrink:0"></i>`;
+                    const note   = isCorr && !isSel ? ` <span style="font-size:.7rem;color:var(--success);opacity:.85">(правильна)</span>` : '';
+                    return `<div style="display:flex;align-items:center;gap:.6rem;padding:.45rem .75rem;border-radius:6px;margin-bottom:.3rem;background:${bg};border:1px solid ${border};font-size:.86rem">
+                        ${icon}<span class="ql-snow">${ans.answer_text}${note}</span></div>`;
+                }).join('');
+                const qNum = (test.questions || []).indexOf(q) + 1;
+                return `
+                    <div style="border:1px solid var(--border);border-radius:var(--radius-md);margin-bottom:.875rem;overflow:hidden">
+                        <div style="display:flex;gap:.75rem;align-items:baseline;padding:.8rem 1rem;background:var(--bg-raised);border-bottom:1px solid var(--border)">
+                            <span style="font-size:.72rem;font-weight:800;color:var(--danger);background:rgba(239,68,68,.1);border:1.5px solid rgba(239,68,68,.3);border-radius:6px;padding:.15rem .45rem;flex-shrink:0">✗ ${qNum}</span>
+                            <div style="font-size:.9rem;font-weight:600;color:var(--text-primary);line-height:1.5" class="ql-snow">${q.question_text}</div>
+                        </div>
+                        <div style="padding:.75rem 1rem">${answersHtml}</div>
+                        ${q.explanation ? `<div style="padding:.5rem 1rem .8rem;font-size:.82rem;color:var(--text-secondary);border-top:1px dashed var(--border)">
+                            <i class="fa-solid fa-lightbulb" style="color:var(--warning)"></i> ${q.explanation}</div>` : ''}
+                    </div>`;
+            }).join('')
+            : `<div style="padding:2.5rem;text-align:center;border:1px solid rgba(16,185,129,.25);border-radius:var(--radius-md);background:rgba(16,185,129,.06)">
+                   <i class="fa-solid fa-circle-check" style="font-size:2rem;color:var(--success);margin-bottom:.5rem;display:block"></i>
+                   <div style="font-weight:700;color:var(--success)">Помилок немає — всі відповіді правильні</div>
+               </div>`;
+
+            el.innerHTML = `
+                <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem">
+                    ${backBtn}
+                    <div>
+                        <h3 style="margin:0"><i class="fa-solid fa-list-check" style="color:var(--primary)"></i> ${userName}</h3>
+                        <div style="font-size:.78rem;color:var(--text-muted)">${testTitle}</div>
+                    </div>
+                </div>
+                ${wrong.length ? `<div style="margin-bottom:1rem;padding:.6rem .875rem;border-radius:var(--radius-sm);background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.2);font-size:.875rem;color:var(--danger);font-weight:600">
+                    <i class="fa-solid fa-circle-xmark"></i> Неправильних відповідей: ${wrong.length} з ${total}
+                </div>` : ''}
+                ${wrongHtml}`;
+        } catch(e) {
+            el.innerHTML = `<div class="empty-state"><p style="color:var(--danger)">${e.message}</p></div>`;
+        }
     },
 
     // ── Новини (адмін) ────────────────────────────────────────────

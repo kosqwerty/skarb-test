@@ -411,7 +411,7 @@ const API = {
 
         async getById(id) {
             const { data, error } = await supabase.from('tests')
-                .select(`*, questions(*, answers(*))`)
+                .select(`*, course:courses(id,title), questions(*, answers(*))`)
                 .eq('id', id).single();
             if (error) throw error;
             // Sort questions and answers by order_index

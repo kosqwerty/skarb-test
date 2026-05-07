@@ -3,25 +3,37 @@
 // ================================================================
 
 const TestsPage = {
-    _test: null,
-    _attempt: null,
-    _answers: {},
-    _startTime: null,
-    _timer: null,
+    _test:          null,
+    _attempt:       null,
+    _answers:       {},
+    _textAnswers:   {},
+    _confirmedSet:  null,
+    _startTime:     null,
+    _timer:         null,
+    _curQIdx:       0,
 
     async init(container, params) {
         const testId = params.id;
-        UI.setBreadcrumb([{ label: 'Курси', route: 'courses' }, { label: 'Тест' }]);
+        this._from   = params.from || null;
+        UI.setBreadcrumb([{ label: 'Тест' }]);
         container.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
 
         try {
             const test = await API.tests.getById(testId);
             this._test = test;
-            UI.setBreadcrumb([
-                { label: 'Курси', route: 'courses' },
-                { label: test.course?.title || 'Курс', route: `courses/${test.course_id}` },
-                { label: test.title }
-            ]);
+
+            if (this._from === 'expert-path') {
+                UI.setBreadcrumb([
+                    { label: 'Шлях експерта', route: 'expert-path' },
+                    { label: test.title }
+                ]);
+            } else {
+                UI.setBreadcrumb([
+                    { label: 'Курси', route: 'courses' },
+                    { label: test.course?.title || 'Курс', route: `courses/${test.course_id}` },
+                    { label: test.title }
+                ]);
+            }
 
             const attempts      = await API.attempts.getByTest(testId);
             const best          = attempts.reduce((b,a) => (!b || (a.percentage||0) > (b.percentage||0)) ? a : b, null);
@@ -36,46 +48,73 @@ const TestsPage = {
     _renderIntro(container, test, attempts, best, attemptsLeft) {
         const canAttempt        = attemptsLeft === null || attemptsLeft > 0;
         const completedAttempts = attempts.filter(a => a.completed_at);
+        const saved             = this._loadSavedProgress();
 
         container.innerHTML = `
-            <div class="test-container">
-                <div class="card">
-                    <div class="card-header">
-                        <h2>📝 ${test.title}</h2>
-                        <button class="btn btn-ghost btn-sm" onclick="Router.go('courses/${test.course_id}')">← Назад до курсу</button>
-                    </div>
-                    <div class="card-body">
-                        ${test.description  ? `<p style="color:var(--text-secondary);margin-bottom:1.5rem">${test.description}</p>` : ''}
+            <style>
+                .ti-wrap{max-width:1200px}
+                .ti-stats{display:flex;gap:.75rem;flex-wrap:wrap;margin-bottom:1.5rem}
+                .ti-stat{flex:1;min-width:120px;padding:.9rem 1.1rem;border-radius:var(--radius-md);border:1px solid var(--border);background:var(--bg-surface)}
+                .ti-stat-val{font-size:1.3rem;font-weight:700;color:var(--text-primary);margin-bottom:.15rem}
+                .ti-stat-lbl{font-size:.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em}
+            </style>
+            <div class="ti-wrap">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">
+                    <h2 style="margin:0"><i class="fa-solid fa-file-pen" style="color:var(--primary);margin-right:.4rem"></i>${test.title}</h2>
+                    <button class="btn btn-ghost btn-sm" onclick="Router.go('${this._from==='expert-path'?'expert-path':'courses/'+test.course_id}')">
+                        <i class="fa-solid fa-arrow-left"></i> ${this._from==='expert-path'?'Шлях експерта':'Назад до курсу'}
+                    </button>
+                </div>
+                <div>
+                        ${test.description ? `<p style="color:var(--text-secondary);margin-bottom:1.5rem">${test.description}</p>` : ''}
                         ${test.instructions ? `
                             <div style="background:var(--bg-raised);border:1px solid var(--border);border-radius:var(--radius-md);padding:1rem;margin-bottom:1.5rem">
-                                <strong>📋 Інструкції:</strong><br>
-                                <span style="color:var(--text-secondary)">${test.instructions}</span>
+                                <div style="font-weight:600;margin-bottom:.35rem"><i class="fa-solid fa-circle-info" style="color:var(--primary)"></i> Інструкції</div>
+                                <span style="color:var(--text-secondary);font-size:.9rem">${test.instructions}</span>
                             </div>` : ''}
 
-                        <div class="stats-grid" style="grid-template-columns:repeat(auto-fill,minmax(160px,1fr));margin-bottom:1.5rem">
+                        <div class="ti-stats">
                             ${[
-                                { icon:'❓', label:'Запитань',         value: test.questions?.length || 0 },
-                                { icon:'🎯', label:'Прохідний бал',    value: test.passing_score + '%' },
-                                { icon:'🔄', label:'Спроб залишилось', value: attemptsLeft === null ? '∞' : attemptsLeft },
-                                { icon:'⏱', label:'Час',               value: test.time_limit_minutes ? test.time_limit_minutes + ' хв' : 'Без ліміту' }
+                                { icon:'fa-question',    label:'Запитань',         value: test.questions?.length || 0 },
+                                { icon:'fa-bullseye',    label:'Прохідний бал',    value: test.passing_score + '%' },
+                                { icon:'fa-rotate-right',label:'Спроб залишилось', value: attemptsLeft === null ? '∞' : attemptsLeft },
+                                { icon:'fa-clock',       label:'Час',              value: test.time_limit_minutes ? test.time_limit_minutes + ' хв' : 'Без ліміту' }
                             ].map(s => `
-                                <div class="stat-card" style="padding:1rem">
-                                    <div style="font-size:1.5rem;margin-bottom:.25rem">${s.icon}</div>
-                                    <div style="font-size:1.25rem;font-weight:700">${s.value}</div>
-                                    <div class="stat-label">${s.label}</div>
+                                <div class="ti-stat">
+                                    <div class="ti-stat-val">${s.value}</div>
+                                    <div class="ti-stat-lbl"><i class="fa-solid ${s.icon}"></i> ${s.label}</div>
                                 </div>`).join('')}
                         </div>
 
                         ${best ? `
-                            <div style="background:${best.passed ? 'rgba(16,185,129,.1)' : 'rgba(239,68,68,.1)'};border:1px solid ${best.passed ? 'rgba(16,185,129,.3)' : 'rgba(239,68,68,.3)'};border-radius:var(--radius-md);padding:1rem;margin-bottom:1.5rem">
-                                <strong>Ваш найкращий результат:</strong>
-                                <span style="margin-left:1rem;font-size:1.25rem;font-weight:700;color:${best.passed ? 'var(--success)' : 'var(--danger)'}">${Math.round(best.percentage||0)}%</span>
-                                <span class="badge ${best.passed ? 'badge-success' : 'badge-danger'}" style="margin-left:.5rem">${best.passed ? 'Зараховано' : 'Не зараховано'}</span>
-                            </div>` : ''}
+                            <div style="display:inline-flex;align-items:center;gap:.75rem;padding:.875rem 1rem;border-radius:var(--radius-md);border:1px solid ${best.passed ? 'rgba(16,185,129,.3)' : 'rgba(239,68,68,.3)'};background:${best.passed ? 'rgba(16,185,129,.06)' : 'rgba(239,68,68,.06)'};margin-bottom:.75rem">
+                                <span style="color:var(--text-muted);font-size:.875rem">Ваш найкращий результат:</span>
+                                <span style="font-size:1.2rem;font-weight:700;color:${best.passed ? 'var(--success)' : 'var(--danger)'}">${Math.round(best.percentage||0)}%</span>
+                                <span class="badge ${best.passed ? 'badge-success' : 'badge-danger'}">${best.passed ? 'Зараховано' : 'Не зараховано'}</span>
+                            </div><br>` : ''}
+
+                        ${canAttempt
+                            ? saved
+                                ? `<div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:1.5rem">
+                                       <button class="btn btn-primary" onclick="TestsPage.startTest(true)">
+                                           <i class="fa-solid fa-play"></i> Продовжити (${(saved.confirmedIds||[]).length}/${(saved.questionOrder||[]).length})
+                                       </button>
+                                       ${test.allow_restart ? `<button class="btn btn-ghost btn-sm" onclick="TestsPage.startTest(false)">
+                                           <i class="fa-solid fa-rotate-right"></i> Почати заново
+                                       </button>` : ''}
+                                   </div>`
+                                : `<button class="btn btn-primary" style="margin-bottom:1.5rem" onclick="TestsPage.startTest()">
+                                       <i class="fa-solid fa-play"></i> Розпочати тест
+                                   </button>`
+                            : `<div style="display:inline-flex;padding:.75rem 1rem;border-radius:var(--radius-md);background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.2);color:var(--danger);font-size:.875rem;margin-bottom:1.5rem">
+                                   <i class="fa-solid fa-ban"></i>&nbsp; Ви вичерпали всі спроби для цього тесту
+                               </div>`}
 
                         ${completedAttempts.length ? `
-                            <details style="margin-bottom:1.5rem">
-                                <summary style="cursor:pointer;color:var(--text-muted);font-size:.875rem">Історія спроб (${completedAttempts.length})</summary>
+                            <details>
+                                <summary style="cursor:pointer;color:var(--text-muted);font-size:.875rem">
+                                    <i class="fa-solid fa-clock-rotate-left"></i> Історія спроб (${completedAttempts.length})
+                                </summary>
                                 <div class="table-wrapper" style="margin-top:.75rem">
                                     <table>
                                         <thead><tr><th>#</th><th>Дата</th><th>Результат</th><th>Час</th><th>Статус</th></tr></thead>
@@ -92,21 +131,69 @@ const TestsPage = {
                                     </table>
                                 </div>
                             </details>` : ''}
-
-                        ${canAttempt
-                            ? `<button class="btn btn-primary btn-lg btn-full" onclick="TestsPage.startTest()">🚀 Розпочати тест</button>`
-                            : `<div class="empty-state" style="padding:1rem"><p style="color:var(--danger)">Ви вичерпали всі спроби для цього тесту</p></div>`}
-                    </div>
                 </div>
             </div>`;
     },
 
-    async startTest() {
+    // ── Progress persistence ──────────────────────────────────────────
+    _progressKey() {
+        return `lms_tp_${AppState.user.id}_${this._test.id}`;
+    },
+    _saveProgress() {
+        try {
+            localStorage.setItem(this._progressKey(), JSON.stringify({
+                attemptId:    this._attempt.id,
+                answers:      this._answers,
+                textAnswers:  this._textAnswers,
+                confirmedIds: [...this._confirmedSet],
+                curQIdx:      this._curQIdx,
+                startTime:    this._startTime,
+                questionOrder: this._questions.map(q => q.id)
+            }));
+        } catch(e) {}
+    },
+    _clearProgress() {
+        try { localStorage.removeItem(this._progressKey()); } catch(e) {}
+    },
+    _loadSavedProgress() {
+        try {
+            const raw = localStorage.getItem(this._progressKey());
+            return raw ? JSON.parse(raw) : null;
+        } catch(e) { return null; }
+    },
+
+    async startTest(resume = false) {
         Loader.show();
         try {
-            this._attempt   = await API.attempts.create(this._test.id);
-            this._answers   = {};
-            this._startTime = Date.now();
+            if (resume) {
+                const saved = this._loadSavedProgress();
+                if (saved) {
+                    this._attempt      = { id: saved.attemptId };
+                    this._answers      = saved.answers      || {};
+                    this._textAnswers  = saved.textAnswers  || {};
+                    this._confirmedSet = new Set(saved.confirmedIds || []);
+                    this._curQIdx      = saved.curQIdx      || 0;
+                    this._startTime    = saved.startTime    || Date.now();
+                    const qMap         = new Map((this._test.questions || []).map(q => [q.id, q]));
+                    this._questions    = (saved.questionOrder || []).map(id => qMap.get(id)).filter(Boolean);
+                    this._renderTest();
+                    if (this._test.time_limit_minutes) {
+                        const elapsed   = Math.floor((Date.now() - this._startTime) / 1000);
+                        const remaining = this._test.time_limit_minutes * 60 - elapsed;
+                        if (remaining > 0) this._startTimer(remaining);
+                        else               { Loader.hide(); this.submitTest(true); return; }
+                    }
+                    return;
+                }
+            }
+            // Fresh start
+            this._clearProgress();
+            this._attempt      = await API.attempts.create(this._test.id);
+            this._answers      = {};
+            this._textAnswers  = {};
+            this._confirmedSet = new Set();
+            this._curQIdx      = 0;
+            this._startTime    = Date.now();
 
             let questions = [...(this._test.questions || [])];
             if (this._test.randomize_questions) questions = questions.sort(() => Math.random() - 0.5);
@@ -120,84 +207,255 @@ const TestsPage = {
 
     _renderTest() {
         const container = document.getElementById('page-content');
-        const questions = this._questions;
+        const qs = this._questions;
 
         container.innerHTML = `
-            <div class="test-container" id="test-taking">
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem">
-                    <h2>📝 ${this._test.title}</h2>
-                    <div style="display:flex;align-items:center;gap:1rem">
-                        ${this._test.time_limit_minutes ? `
-                            <div id="timer" style="font-size:1.25rem;font-weight:700;color:var(--primary);background:var(--bg-raised);padding:.5rem 1rem;border-radius:var(--radius-md)">⏱ --:--</div>` : ''}
-                        <button class="btn btn-secondary" onclick="TestsPage.cancelTest()">Скасувати</button>
-                    </div>
+            <style>
+                .tq-wrap{max-width:1200px}
+                .tq-topbar{display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem;padding-bottom:1rem;border-bottom:1px solid var(--border)}
+                .tq-prog-row{display:flex;align-items:center;gap:.75rem;margin-bottom:1.75rem}
+                .tq-prog-bar{flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden}
+                .tq-prog-fill{height:100%;background:var(--primary);border-radius:3px;transition:width .35s}
+                .tq-prog-text{font-size:.75rem;color:var(--text-muted);white-space:nowrap}
+                #timer{font-size:.85rem;font-weight:700;color:var(--primary);background:var(--bg-raised);padding:.28rem .65rem;border-radius:var(--radius-sm);border:1px solid var(--border);white-space:nowrap}
+.tq-type-badge{display:inline-flex;align-items:center;gap:.4rem;padding:.35rem .85rem;border-radius:20px;font-size:.78rem;font-weight:700;margin-bottom:1rem}
+                .tq-type-single{background:rgba(99,102,241,.12);color:var(--primary);border:1.5px solid rgba(99,102,241,.3)}
+                .tq-type-multiple{background:rgba(16,185,129,.12);color:var(--success);border:1.5px solid rgba(16,185,129,.3)}
+                .tq-type-text{background:rgba(245,158,11,.12);color:var(--warning);border:1.5px solid rgba(245,158,11,.3)}
+                .tq-points-badge{display:inline-flex;align-items:center;gap:.35rem;padding:.28rem .7rem;border-radius:20px;font-size:.72rem;font-weight:700;background:rgba(245,158,11,.1);color:var(--warning);border:1.5px solid rgba(245,158,11,.25);margin-left:.5rem}
+                .tq-qtext{font-size:1.08rem;font-weight:400;line-height:1.7;color:var(--text-primary);margin-bottom:1.4rem;flex:1;min-width:0}
+                .tq-qtext p{margin:0;padding:0}
+                .tq-qtext img{max-width:100%;height:auto;border-radius:4px}
+                .tq-answer{display:flex;align-items:center;gap:.85rem;padding:.75rem 1rem;border-radius:var(--radius-md);border:none;background:transparent;cursor:pointer;transition:background .12s;margin-bottom:.2rem;user-select:none}
+                .tq-answer:hover{background:var(--primary-glow,rgba(99,102,241,.07))}
+                .tq-answer.selected{background:var(--primary-glow,rgba(99,102,241,.1))}
+                .tq-answer input{display:none}
+                .tq-marker{width:20px;height:20px;border-radius:50%;border:2px solid var(--border-light,#CBD5E1);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.55rem;color:#fff;transition:all .12s}
+                .tq-answer.selected .tq-marker{background:var(--primary);border-color:var(--primary)}
+                .tq-marker-sq{border-radius:5px}
+                .tq-atext{font-size:.93rem;line-height:1.4;color:var(--text-primary);flex:1;min-width:0}
+                .tq-atext p{margin:0;padding:0}
+                .tq-atext img{max-width:100%;height:auto;border-radius:4px}
+                .tq-botbar{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--border)}
+                .tq-textarea{width:100%;resize:vertical;padding:.75rem;border-radius:var(--radius-md);border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.93rem;box-sizing:border-box;transition:border-color .15s;font-family:inherit}
+                .tq-textarea:focus{outline:none;border-color:var(--primary)}
+                @keyframes tq-in{from{opacity:0;transform:translateX(14px)}to{opacity:1;transform:translateX(0)}}
+                .tq-anim{animation:tq-in .18s ease}
+            </style>
+
+            <div class="tq-wrap" id="test-taking">
+                <div class="tq-topbar">
+                    <button class="btn btn-ghost btn-sm" onclick="TestsPage.cancelTest()">
+                        <i class="fa-solid fa-xmark"></i> Скасувати
+                    </button>
+                    <span style="font-size:.95rem;font-weight:600;color:var(--text-primary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${this._test.title}</span>
+                    ${this._test.time_limit_minutes ? `<div id="timer">--:--</div>` : ''}
+                    <button class="btn btn-secondary btn-sm" onclick="TestsPage.submitTest()">
+                        <i class="fa-solid fa-flag-checkered"></i> Завершити тест
+                    </button>
                 </div>
 
-                <div class="test-progress-bar">
-                    <div class="progress-bar"><div class="progress-fill" id="test-prog-fill" style="width:0%"></div></div>
-                    <span class="test-progress-text" id="test-prog-text">0 / ${questions.length}</span>
+                <div class="tq-prog-row">
+                    <div class="tq-prog-bar"><div class="tq-prog-fill" id="tq-prog-fill" style="width:0%"></div></div>
+                    <div class="tq-prog-text" id="tq-prog-text">0 / ${qs.length}</div>
                 </div>
 
-                <div id="questions-area">
-                    ${questions.map((q, i) => this._renderQuestion(q, i)).join('')}
-                </div>
+                <div id="tq-question-area"></div>
 
-                <div style="display:flex;justify-content:flex-end;margin-top:2rem">
-                    <button class="btn btn-primary btn-lg" onclick="TestsPage.submitTest()">✓ Завершити тест</button>
+                <div class="tq-botbar">
+                    ${this._test.allow_back_navigation
+                        ? `<button class="btn btn-secondary" id="tq-btn-prev" onclick="TestsPage._prevQuestion()">
+                               <i class="fa-solid fa-arrow-left"></i> Назад
+                           </button>`
+                        : `<span></span>`}
+                    <button class="btn btn-primary" id="tq-btn-confirm" onclick="TestsPage._confirmAnswer()">
+                        Відповісти <i class="fa-solid fa-arrow-right"></i>
+                    </button>
                 </div>
             </div>`;
 
-        container.addEventListener('change', () => this._updateProgress());
+        this._showQuestion(this._curQIdx);
+        this._updateProgress();
     },
 
-    _renderQuestion(q, i) {
+    _showQuestion(idx) {
+        const questions = this._questions;
+        if (idx < 0 || idx >= questions.length) return;
+        this._curQIdx = idx;
+
+        const q          = questions[idx];
         const isMultiple = q.question_type === 'multiple';
-        return `
-            <div class="question-card" id="q-${q.id}">
-                <div class="question-header">
-                    <div class="question-num">${i + 1}</div>
-                    <div>
-                        <div class="question-text">${q.question_text}</div>
-                        <div class="question-points">${q.points} бал(ів) ${isMultiple ? '• Кілька відповідей' : '• Одна відповідь'}</div>
-                    </div>
-                </div>
-                <div class="answer-options">
-                    ${q.answers.map(a => `
-                        <label class="answer-option" for="ans-${a.id}">
-                            <div class="answer-marker"></div>
-                            <input type="${isMultiple ? 'checkbox' : 'radio'}"
-                                   id="ans-${a.id}" name="q-${q.id}" value="${a.id}" style="display:none"
-                                   onchange="TestsPage.onAnswer('${q.id}','${a.id}',${isMultiple})">
-                            <span class="answer-text">${a.answer_text}</span>
-                        </label>`).join('')}
-                </div>
-            </div>`;
+        const isText     = q.question_type === 'text';
+        const selected   = this._answers[q.id] || [];
+        const textVal    = this._textAnswers[q.id] || '';
+
+        let answersHtml;
+        if (isText) {
+            answersHtml = `<textarea class="tq-textarea" rows="4" placeholder="Введіть відповідь..."
+                oninput="TestsPage._onTextAnswer('${q.id}',this.value)">${textVal}</textarea>`;
+        } else {
+            answersHtml = (q.answers || []).map(a => {
+                const isSel = selected.includes(a.id);
+                const icon  = isSel ? (isMultiple ? '<i class="fa-solid fa-check"></i>' : '<i class="fa-solid fa-circle" style="font-size:.4rem"></i>') : '';
+                return `
+                    <label class="tq-answer${isSel ? ' selected' : ''}" onclick="if(event.target.tagName==='INPUT')return; TestsPage.onAnswer('${q.id}','${a.id}',${isMultiple})">
+                        <input type="${isMultiple ? 'checkbox' : 'radio'}" name="q-${q.id}" value="${a.id}" ${isSel ? 'checked' : ''}>
+                        <div class="tq-marker${isMultiple ? ' tq-marker-sq' : ''}">${icon}</div>
+                        <div class="tq-atext">${a.answer_text}</div>
+                    </label>`;
+            }).join('');
+        }
+
+        const typeBadge = isText
+            ? `<span class="tq-type-badge tq-type-text"><i class="fa-solid fa-pen-line"></i> Відповідь текстом</span>`
+            : isMultiple
+                ? `<span class="tq-type-badge tq-type-multiple"><i class="fa-solid fa-list-check"></i> Кілька правильних відповідей</span>`
+                : `<span class="tq-type-badge tq-type-single"><i class="fa-solid fa-circle-dot"></i> Одна правильна відповідь</span>`;
+        const pointsBadge = q.points > 1
+            ? `<span class="tq-points-badge"><i class="fa-solid fa-star"></i> ${q.points} балів</span>`
+            : '';
+
+        const area = document.getElementById('tq-question-area');
+        if (!area) return;
+        area.classList.remove('tq-anim');
+        void area.offsetWidth;
+        area.classList.add('tq-anim');
+        area.innerHTML = `
+            <div class="ql-snow" style="margin-bottom:.9rem">${typeBadge}${pointsBadge}</div>
+            <div style="display:flex;gap:.5rem;align-items:baseline;margin-bottom:1.4rem" class="ql-snow">
+                <span style="color:var(--text-muted);font-weight:600;font-size:1.08rem;flex-shrink:0">${idx + 1}.</span>
+                <div class="tq-qtext">${q.question_text}</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:0" class="ql-snow">${answersHtml}</div>`;
+
+        const prev    = document.getElementById('tq-btn-prev');
+        const confirm = document.getElementById('tq-btn-confirm');
+        const isLast  = idx === questions.length - 1;
+        if (prev)    prev.style.visibility = idx === 0 ? 'hidden' : 'visible';
+        if (confirm) confirm.innerHTML = isLast
+            ? `<i class="fa-solid fa-flag-checkered"></i> Завершити тест`
+            : `Відповісти <i class="fa-solid fa-arrow-right"></i>`;
     },
 
     onAnswer(questionId, answerId, isMultiple) {
         if (isMultiple) {
             if (!this._answers[questionId]) this._answers[questionId] = [];
-            const idx = this._answers[questionId].indexOf(answerId);
-            if (idx > -1) this._answers[questionId].splice(idx, 1);
+            const pos = this._answers[questionId].indexOf(answerId);
+            if (pos > -1) this._answers[questionId].splice(pos, 1);
             else          this._answers[questionId].push(answerId);
         } else {
             this._answers[questionId] = [answerId];
         }
-        const questionEl = document.getElementById(`q-${questionId}`);
-        questionEl?.querySelectorAll('.answer-option').forEach(opt => {
-            const input = opt.querySelector('input');
-            opt.classList.toggle('selected', input?.checked || false);
-            opt.querySelector('.answer-marker').textContent = input?.checked ? '✓' : '';
+
+        const selected = this._answers[questionId] || [];
+        document.querySelectorAll('.tq-answer').forEach(label => {
+            const input  = label.querySelector('input');
+            const marker = label.querySelector('.tq-marker');
+            if (!input || !marker) return;
+            const isSel = selected.includes(input.value);
+            label.classList.toggle('selected', isSel);
+            marker.innerHTML = isSel
+                ? (isMultiple ? '<i class="fa-solid fa-check"></i>' : '<i class="fa-solid fa-circle" style="font-size:.4rem"></i>')
+                : '';
         });
+    },
+
+    _confirmAnswer() {
+        const q      = this._questions[this._curQIdx];
+        const isLast = this._curQIdx === this._questions.length - 1;
+        this._confirmedSet.add(q.id);
         this._updateProgress();
+        if (this._test.show_answer_feedback) {
+            this._showFeedback(q, isLast);
+        } else {
+            if (isLast) { this._saveProgress(); this.submitTest(); }
+            else        { this._nextQuestion(); this._saveProgress(); }
+        }
+    },
+
+    _proceedNext() {
+        const isLast = this._curQIdx === this._questions.length - 1;
+        if (isLast) { this._saveProgress(); this.submitTest(); }
+        else        { this._nextQuestion(); this._saveProgress(); }
+    },
+
+    _showFeedback(q, isLast) {
+        const isText     = q.question_type === 'text';
+        const isMultiple = q.question_type === 'multiple';
+        const selected   = this._answers[q.id] || [];
+        const correctIds = isText ? [] : (q.answers || []).filter(a => a.is_correct).map(a => a.id);
+
+        let isCorrect = false;
+        if (!isText) {
+            isCorrect = isMultiple
+                ? correctIds.length === selected.length && correctIds.every(id => selected.includes(id))
+                : selected.length === 1 && correctIds.includes(selected[0]);
+
+            document.querySelectorAll('.tq-answer').forEach(label => {
+                const input    = label.querySelector('input');
+                const marker   = label.querySelector('.tq-marker');
+                if (!input) return;
+                const id       = input.value;
+                const isSel    = selected.includes(id);
+                const isCorr   = correctIds.includes(id);
+                label.style.pointerEvents = 'none';
+                if (isCorr && isSel) {
+                    label.style.background = 'rgba(16,185,129,.13)';
+                    if (marker) { marker.style.background = 'var(--success)'; marker.style.borderColor = 'var(--success)'; }
+                } else if (isCorr && !isSel) {
+                    label.style.outline = '1.5px solid var(--success)';
+                } else if (!isCorr && isSel) {
+                    label.style.background = 'rgba(239,68,68,.1)';
+                    if (marker) { marker.style.background = 'var(--danger)'; marker.style.borderColor = 'var(--danger)'; }
+                }
+            });
+        }
+
+        const color = isText ? 'var(--primary)' : isCorrect ? 'var(--success)' : 'var(--danger)';
+        const bg    = isText ? 'rgba(99,102,241,.08)' : isCorrect ? 'rgba(16,185,129,.1)' : 'rgba(239,68,68,.08)';
+        const icon  = isText ? 'fa-pen' : isCorrect ? 'fa-circle-check' : 'fa-circle-xmark';
+        const text  = isText ? 'Відповідь прийнята' : isCorrect ? 'Правильно!' : 'Неправильно';
+
+        const area = document.getElementById('tq-question-area');
+        if (area) {
+            const fb = document.createElement('div');
+            fb.style.cssText = `margin-top:1rem;padding:.875rem 1rem;border-radius:var(--radius-md);background:${bg};border:1.5px solid ${color}`;
+            fb.innerHTML = `
+                <div style="font-weight:700;color:${color};margin-bottom:${q.explanation?'.4rem':'0'}">
+                    <i class="fa-solid ${icon}"></i> ${text}
+                </div>
+                ${q.explanation ? `<div style="font-size:.875rem;color:var(--text-secondary)">${q.explanation}</div>` : ''}`;
+            area.appendChild(fb);
+        }
+
+        const btn = document.getElementById('tq-btn-confirm');
+        if (btn) {
+            btn.innerHTML = isLast
+                ? `<i class="fa-solid fa-flag-checkered"></i> Завершити тест`
+                : `Далі <i class="fa-solid fa-arrow-right"></i>`;
+            btn.onclick = () => TestsPage._proceedNext();
+        }
+    },
+
+    _onTextAnswer(qId, val) {
+        if (val.trim()) this._textAnswers[qId] = val;
+        else            delete this._textAnswers[qId];
+    },
+
+    _nextQuestion() {
+        if (this._curQIdx < this._questions.length - 1) this._showQuestion(this._curQIdx + 1);
+    },
+
+    _prevQuestion() {
+        if (this._curQIdx > 0) this._showQuestion(this._curQIdx - 1);
     },
 
     _updateProgress() {
-        const answered = Object.keys(this._answers).length;
+        const answered = this._confirmedSet.size;
         const total    = this._questions.length;
         const pct      = total ? (answered / total * 100) : 0;
-        const fill = document.getElementById('test-prog-fill');
-        const text = document.getElementById('test-prog-text');
+        const fill = document.getElementById('tq-prog-fill');
+        const text = document.getElementById('tq-prog-text');
         if (fill) fill.style.width = pct + '%';
         if (text) text.textContent = `${answered} / ${total}`;
     },
@@ -209,7 +467,8 @@ const TestsPage = {
             const el = document.getElementById('timer');
             if (!el)  { clearInterval(this._timer); return; }
             const m = Math.floor(remaining / 60), s = remaining % 60;
-            el.textContent = `⏱ ${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+            const mm = String(m).padStart(2,'0'), ss = String(s).padStart(2,'0');
+            el.innerHTML = `<i class="fa-solid fa-clock"></i> ${mm}:${ss}`;
             if (remaining <= 300) el.style.color = 'var(--warning)';
             if (remaining <= 60)  el.style.color = 'var(--danger)';
             if (remaining <= 0)   { clearInterval(this._timer); this.submitTest(true); return; }
@@ -225,7 +484,7 @@ const TestsPage = {
         clearInterval(this._timer);
 
         if (!isTimeout) {
-            const answered = Object.keys(this._answers).length;
+            const answered = this._confirmedSet.size;
             const total    = this._questions.length;
             if (answered < total) {
                 const ok = await Modal.confirm({
@@ -246,6 +505,7 @@ const TestsPage = {
                 percentage: result.percentage, passed: result.passed,
                 timeSpent, answers: result.answers
             });
+            this._clearProgress();
             this._renderResult(result, timeSpent);
         } catch(e) { Toast.error('Помилка', e.message); }
         finally { Loader.hide(); }
@@ -255,9 +515,17 @@ const TestsPage = {
         let score = 0, maxScore = 0;
         const answers = [];
         for (const q of this._questions) {
-            const correctIds  = q.answers.filter(a => a.is_correct).map(a => a.id);
-            const selectedIds = this._answers[q.id] || [];
             maxScore += q.points;
+            if (q.question_type === 'text') {
+                const textAnswer = this._textAnswers[q.id] || '';
+                const isCorrect  = !!textAnswer.trim();
+                const pointsEarned = isCorrect ? q.points : 0;
+                score += pointsEarned;
+                answers.push({ questionId: q.id, selectedIds: [], textAnswer, isCorrect, pointsEarned });
+                continue;
+            }
+            const correctIds  = (q.answers || []).filter(a => a.is_correct).map(a => a.id);
+            const selectedIds = this._answers[q.id] || [];
             const isCorrect = q.question_type === 'multiple'
                 ? correctIds.length === selectedIds.length && correctIds.every(id => selectedIds.includes(id))
                 : selectedIds.length === 1 && correctIds.includes(selectedIds[0]);
@@ -313,8 +581,63 @@ const TestsPage = {
                                 <h3 style="margin-bottom:1rem">Розбір запитань</h3>
                                 ${this._renderAnswerReview(result.answers)}
                             </div>` : ''}
+                        ${this._test.show_wrong_answers ? this._renderWrongAnswersProtocol(result.answers) : ''}
                     </div>
                 </div>
+            </div>`;
+    },
+
+    _renderWrongAnswersProtocol(answers) {
+        const wrong = answers.map((a, i) => ({ a, q: this._questions[i] }))
+                             .filter(({ a, q }) => q && !a.isCorrect && q.question_type !== 'text');
+        if (!wrong.length) return `
+            <div style="margin-top:2rem;padding:1.25rem;border-radius:var(--radius-md);border:1px solid rgba(16,185,129,.3);background:rgba(16,185,129,.06);text-align:center">
+                <i class="fa-solid fa-circle-check" style="color:var(--success);font-size:1.4rem;margin-bottom:.4rem;display:block"></i>
+                <div style="font-weight:700;color:var(--success)">Помилок немає — всі відповіді правильні!</div>
+            </div>`;
+
+        return `
+            <div style="margin-top:2rem;text-align:left">
+                <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:1rem;padding-bottom:.75rem;border-bottom:1px solid var(--border)">
+                    <i class="fa-solid fa-circle-xmark" style="color:var(--danger)"></i>
+                    <h3 style="margin:0;font-size:1rem">Протокол помилок <span style="font-size:.85rem;font-weight:400;color:var(--text-muted)">(${wrong.length} з ${answers.length})</span></h3>
+                </div>
+                <style>
+                    .wp-item{border:1px solid var(--border);border-radius:var(--radius-md);margin-bottom:.75rem;overflow:hidden}
+                    .wp-qhead{display:flex;gap:.75rem;align-items:baseline;padding:.875rem 1rem;background:var(--bg-raised);border-bottom:1px solid var(--border)}
+                    .wp-qnum{font-size:.72rem;font-weight:800;color:var(--danger);background:rgba(239,68,68,.1);border:1.5px solid rgba(239,68,68,.3);border-radius:6px;padding:.15rem .45rem;flex-shrink:0}
+                    .wp-qtext{font-size:.9rem;font-weight:600;color:var(--text-primary);line-height:1.5}
+                    .wp-qtext p{margin:0}
+                    .wp-answers{padding:.75rem 1rem;display:flex;flex-direction:column;gap:.4rem}
+                    .wp-ans{display:flex;align-items:center;gap:.65rem;padding:.5rem .75rem;border-radius:var(--radius-sm);font-size:.88rem}
+                    .wp-ans-correct{background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3)}
+                    .wp-ans-wrong{background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.25)}
+                    .wp-ans-neutral{background:transparent;color:var(--text-muted)}
+                    .wp-exp{padding:.6rem 1rem .875rem;font-size:.82rem;color:var(--text-secondary);border-top:1px dashed var(--border)}
+                </style>
+                ${wrong.map(({ a, q }, idx) => {
+                    const correctIds = (q.answers || []).filter(ans => ans.is_correct).map(ans => ans.id);
+                    const answersHtml = (q.answers || []).map(ans => {
+                        const isSel  = a.selectedIds?.includes(ans.id);
+                        const isCorr = ans.is_correct;
+                        if (!isSel && !isCorr) return '';
+                        const cls  = isCorr ? 'wp-ans-correct' : 'wp-ans-wrong';
+                        const icon = isCorr
+                            ? `<i class="fa-solid fa-check" style="color:var(--success);flex-shrink:0"></i>`
+                            : `<i class="fa-solid fa-xmark" style="color:var(--danger);flex-shrink:0"></i>`;
+                        const label = isCorr && !isSel ? ' <span style="font-size:.72rem;color:var(--success);opacity:.8">(правильна)</span>' : '';
+                        return `<div class="wp-ans ${cls}">${icon}<span>${ans.answer_text}${label}</span></div>`;
+                    }).join('');
+                    return `
+                        <div class="wp-item">
+                            <div class="wp-qhead">
+                                <span class="wp-qnum">✗ ${answers.indexOf(a) + 1}</span>
+                                <div class="wp-qtext ql-snow">${q.question_text}</div>
+                            </div>
+                            <div class="wp-answers">${answersHtml}</div>
+                            ${q.explanation ? `<div class="wp-exp"><i class="fa-solid fa-lightbulb" style="color:var(--warning)"></i> ${q.explanation}</div>` : ''}
+                        </div>`;
+                }).join('')}
             </div>`;
     },
 
@@ -327,10 +650,31 @@ const TestsPage = {
         return answers.map((a, i) => {
             const q = this._questions[i];
             if (!q) return '';
+            const borderColor = a.isCorrect ? 'rgba(16,185,129,.4)' : 'rgba(239,68,68,.4)';
+            const numBg       = a.isCorrect ? 'rgba(16,185,129,.15)' : 'rgba(239,68,68,.15)';
+            const numColor    = a.isCorrect ? 'var(--success)' : 'var(--danger)';
+
+            let answersBlock;
+            if (q.question_type === 'text') {
+                answersBlock = `<div style="padding:.75rem;background:var(--bg-raised);border-radius:var(--radius-sm);font-size:.9rem;color:var(--text-secondary);font-style:italic">${a.textAnswer || '(без відповіді)'}</div>`;
+            } else {
+                answersBlock = `<div class="answer-options">
+                    ${(q.answers || []).map(ans => {
+                        const wasSelected = a.selectedIds?.includes(ans.id);
+                        const cls = ans.is_correct ? 'correct' : (wasSelected ? 'wrong' : '');
+                        return `
+                            <div class="answer-option ${cls}" style="cursor:default">
+                                <div class="answer-marker">${ans.is_correct ? '✓' : wasSelected ? '✗' : ''}</div>
+                                <span class="answer-text">${ans.answer_text}</span>
+                            </div>`;
+                    }).join('')}
+                </div>`;
+            }
+
             return `
-                <div class="question-card" style="border-color:${a.isCorrect ? 'rgba(16,185,129,.4)' : 'rgba(239,68,68,.4)'}">
+                <div class="question-card" style="border-color:${borderColor}">
                     <div class="question-header">
-                        <div class="question-num" style="background:${a.isCorrect ? 'rgba(16,185,129,.15)' : 'rgba(239,68,68,.15)'};color:${a.isCorrect ? 'var(--success)' : 'var(--danger)'}">
+                        <div class="question-num" style="background:${numBg};color:${numColor}">
                             ${a.isCorrect ? '✓' : '✗'}
                         </div>
                         <div>
@@ -338,18 +682,8 @@ const TestsPage = {
                             <div class="question-points">${a.isCorrect ? `+${a.pointsEarned} балів` : '0 балів'}</div>
                         </div>
                     </div>
-                    <div class="answer-options">
-                        ${q.answers.map(ans => {
-                            const wasSelected = a.selectedIds?.includes(ans.id);
-                            const cls = ans.is_correct ? 'correct' : (wasSelected ? 'wrong' : '');
-                            return `
-                                <div class="answer-option ${cls}" style="cursor:default">
-                                    <div class="answer-marker">${ans.is_correct ? '✓' : wasSelected ? '✗' : ''}</div>
-                                    <span class="answer-text">${ans.answer_text}</span>
-                                </div>`;
-                        }).join('')}
-                    </div>
-                    ${q.explanation ? `<div style="margin-top:.75rem;padding:.75rem;background:var(--bg-raised);border-radius:var(--radius-sm);font-size:.85rem;color:var(--text-secondary)">💡 ${q.explanation}</div>` : ''}
+                    ${answersBlock}
+                    ${q.explanation ? `<div style="margin-top:.75rem;padding:.75rem;background:var(--bg-raised);border-radius:var(--radius-sm);font-size:.85rem;color:var(--text-secondary)"><i class="fa-solid fa-lightbulb" style="color:var(--warning)"></i> ${q.explanation}</div>` : ''}
                 </div>`;
         }).join('');
     },

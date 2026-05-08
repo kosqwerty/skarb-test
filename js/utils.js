@@ -216,7 +216,6 @@ const UI = {
             return [
                 { title: 'Навчання', items: contentItems },
                 { title: 'Управління', items: [
-                    { icon: '📝', label: 'Тести',             route: 'admin?tab=tests' },
                     { icon: '📅', label: 'Розділ планування', route: 'scheduler' }
                 ]},
                 { title: 'Особисте', items: [ contactsItem, bmItem, ntfItem ] }

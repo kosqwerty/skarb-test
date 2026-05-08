@@ -68,8 +68,8 @@ const AppState = {
     session: null,
     _realProfile: null, // saved when impersonating
 
-    isOwner()   { return this._realProfile?.role === 'owner' || (!this._realProfile && this.profile?.role === 'owner'); },
-    isAdmin()   { const r = this._realProfile?.role || this.profile?.role; return r === 'admin' || r === 'owner'; },
+    isOwner()   { return this.profile?.role === 'owner'; },
+    isAdmin()   { return this.profile?.role === 'admin' || this.profile?.role === 'owner'; },
     isSmm()     { return this.profile?.role === 'smm'; },
     isTeacher() { return this.profile?.role === 'teacher'; },
     isManager() { return this.profile?.role === 'manager'; },
@@ -82,13 +82,18 @@ const AppState = {
         this._realProfile = this.profile;
         this.profile = targetProfile;
         ImpersonationBanner.show(targetProfile);
+        UI.renderNavigation(targetProfile.role);
+        UI.renderSidebarUser(targetProfile);
         Router.go(location.hash.replace('#/', '') || 'knowledge-base');
     },
 
     stopImpersonating() {
-        this.profile = this._realProfile;
+        const real = this._realProfile;
+        this.profile = real;
         this._realProfile = null;
         ImpersonationBanner.hide();
+        UI.renderNavigation(real.role);
+        UI.renderSidebarUser(real);
         Router.go(location.hash.replace('#/', '') || 'dashboard');
     }
 };

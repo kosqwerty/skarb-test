@@ -1,4 +1,4 @@
-// ================================================================
+﻿// ================================================================
 // EduFlow LMS — UI Утиліти
 // ================================================================
 
@@ -1079,5 +1079,32 @@ const AuditLog = {
         } catch(e) {
             console.warn('AuditLog.write failed:', e.message);
         }
+    }
+};
+
+
+// ── Impersonation Banner ──────────────────────────────────────────
+const ImpersonationBanner = {
+    show(profile) {
+        let el = document.getElementById('impersonation-banner');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'impersonation-banner';
+            document.body.appendChild(el);
+        }
+        el.innerHTML = `
+            <span style="display:inline-flex;align-items:center;gap:.5rem">
+                <span style="font-size:1rem">👁</span>
+                <span>Ви переглядаєте як <strong>${profile.full_name || profile.email || '?'}</strong></span>
+                <span style="font-size:.78rem;opacity:.75">${profile.role ? '· ' + profile.role : ''}${profile.job_position ? ' · ' + profile.job_position : ''}${profile.city ? ' · ' + profile.city : ''}</span>
+            </span>
+            <button onclick="AppState.stopImpersonating()" style="margin-left:1rem;padding:5px 14px;border-radius:8px;border:1.5px solid rgba(255,255,255,.5);background:transparent;color:#fff;font-size:.8rem;font-weight:600;cursor:pointer;transition:background .15s" onmouseenter="this.style.background='rgba(255,255,255,.15)'" onmouseleave="this.style.background='transparent'">✕ Вийти</button>`;
+        el.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:9999;background:linear-gradient(90deg,#7c3aed,#4f46e5);color:#fff;padding:10px 20px;display:flex;align-items:center;justify-content:center;gap:.75rem;font-size:.875rem;box-shadow:0 -2px 16px rgba(0,0,0,.2);';
+        document.body.style.paddingBottom = '48px';
+    },
+    hide() {
+        const el = document.getElementById('impersonation-banner');
+        if (el) el.remove();
+        document.body.style.paddingBottom = '';
     }
 };

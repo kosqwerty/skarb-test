@@ -66,13 +66,29 @@ const AppState = {
     user:    null,   // current auth user (from supabase.auth)
     profile: null,   // current profile row
     session: null,
+    _realProfile: null, // saved when impersonating
 
-    isOwner()   { return this.profile?.role === 'owner'; },
-    isAdmin()   { return this.profile?.role === 'admin' || this.profile?.role === 'owner'; },
+    isOwner()   { return this._realProfile?.role === 'owner' || (!this._realProfile && this.profile?.role === 'owner'); },
+    isAdmin()   { const r = this._realProfile?.role || this.profile?.role; return r === 'admin' || r === 'owner'; },
     isSmm()     { return this.profile?.role === 'smm'; },
     isTeacher() { return this.profile?.role === 'teacher'; },
     isManager() { return this.profile?.role === 'manager'; },
     canSchedule(){ return ['owner','admin','manager'].includes(this.profile?.role); },
-    // isStaff: всі хто може керувати контентом
-    isStaff()   { return ['owner','admin','smm','teacher'].includes(this.profile?.role); }
+    isStaff()   { return ['owner','admin','smm','teacher'].includes(this.profile?.role); },
+
+    isImpersonating() { return !!this._realProfile; },
+
+    impersonate(targetProfile) {
+        this._realProfile = this.profile;
+        this.profile = targetProfile;
+        ImpersonationBanner.show(targetProfile);
+        Router.go(location.hash.replace('#/', '') || 'knowledge-base');
+    },
+
+    stopImpersonating() {
+        this.profile = this._realProfile;
+        this._realProfile = null;
+        ImpersonationBanner.hide();
+        Router.go(location.hash.replace('#/', '') || 'dashboard');
+    }
 };

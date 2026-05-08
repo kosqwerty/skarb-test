@@ -379,6 +379,7 @@ const AdminPage = {
                 ${canSetBdReminder ? this._birthdayReminderBlock(u, bdReminder) : ''}`,
             footer: `
                 <button class="btn btn-secondary" onclick="Modal.close()">Закрити</button>
+                ${AppState.isAdmin() && u.id !== AppState.user?.id ? `<button class="btn btn-ghost" onclick="Modal.close();AppState.impersonate(${JSON.stringify(u).replace(/"/g,'&quot;')})" title="Переглянути інтерфейс від імені цього користувача">👁 Переглянути як</button>` : ''}
                 ${(u.role !== 'owner' || AppState.isOwner()) ? `<button class="btn btn-primary" onclick="Modal.close();AdminPage.openEditUser(${JSON.stringify(u).replace(/"/g,'&quot;')})">✏️ Редагувати</button>` : ''}
             `
         });

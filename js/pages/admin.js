@@ -1564,10 +1564,10 @@ const AdminPage = {
         const header = this._importHeaders.join(';');
         const rows = [
             'Іваненко;Олег;Петрович;o.ivanenko;oleg@company.com;pass123;user;male;+380501234567;1990-05-15;Київ;Менеджер;Відділ продажів;Новий',
-            'Коваль;Марія;Андріївна;m.koval;maria@company.com;pass456;teacher;female;+380671112233;1985-11-20;Львів;Викладач;HR;;',
-            'Сидоренко;Андрій;;a.sydorenko;andrii@company.com;secure99;admin;male;+380931234567;;Харків;;;',
+            'Коваль;Марія;Андріївна;m.koval;maria@company.com;pass456;teacher;female;+380671112233;20.11.1985;Львів;Викладач;HR;;',
+            'Сидоренко;Андрій;Васильович;a.sydorenko;andrii@company.com;secure99;admin;male;+380931234567;1978-03-10;Харків;Адміністратор;IT;;',
             'Бондаренко;Олена;;o.bondar;olena@company.com;qwerty1;smm;female;;;Одеса;SMM-спеціаліст;Маркетинг;',
-            'Мельник;Тарас;Іванович;;taras@company.com;mypass1;user;male;;;;;; '
+            'Гриценко;Ірина;Олексіївна;i.hrytsenko;iryna@company.com;pass789;manager;female;+380671234567;15.03.1992;Дніпро;Керівник відділу;Операційний;'
         ];
         const bom = '\uFEFF';
         const csv = bom + [header, ...rows].join('\r\n');

@@ -1752,6 +1752,19 @@ const AdminPage = {
             <div style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-md);padding:.5rem .75rem">
                 ${errors.map(e => `<div style="font-size:.75rem;color:var(--danger);padding:.2rem 0;border-bottom:1px solid var(--border-light)">${e}</div>`).join('')}
             </div>` : ''}`;
+        // sync new subdivisions to the directory table
+        const newSubdivisions = [...new Set(rows.filter(r => r.subdivision).map(r => r.subdivision.trim()))];
+        if (newSubdivisions.length) {
+            try {
+                const existing = (await API.directories.getAll('subdivisions')).map(s => s.name.toLowerCase());
+                await Promise.all(
+                    newSubdivisions
+                        .filter(s => !existing.includes(s.toLowerCase()))
+                        .map(s => API.directories.create('subdivisions', s).catch(() => {}))
+                );
+            } catch(e) { /* directory sync is best-effort */ }
+        }
+
         footer.innerHTML = `<button class="btn btn-primary" onclick="Modal.close();AdminPage._renderUsersList(document.getElementById('admin-content'))">Готово</button>`;
     },
 

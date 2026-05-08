@@ -468,6 +468,8 @@ h4 { font-size: 1.125rem; font-weight: 500; }
     padding: 0 .1rem;
 }
 .ms-chip-x:hover { opacity: 1; }
+.ms-chip-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
+.ms-chip-more { background: var(--bg-hover); color: var(--text-secondary); border: 1px solid var(--border); cursor: default; }
 .ms-search {
     border: none; outline: none; background: transparent;
     font-size: .8rem; color: var(--text-primary);
@@ -491,7 +493,7 @@ h4 { font-size: 1.125rem; font-weight: 500; }
 .ms-dropdown {
     display: none;
     position: fixed;
-    max-width: 260px;
+    max-width: 380px;
     z-index: 9999;
     background: var(--bg-raised); border: 1px solid var(--border-light);
     border-radius: var(--radius-sm); box-shadow: 0 8px 24px rgba(0,0,0,.45);
@@ -512,14 +514,29 @@ h4 { font-size: 1.125rem; font-weight: 500; }
 .ms-search-inner::placeholder { color: var(--text-muted); }
 .ms-list { max-height: 220px; overflow-y: auto; background: var(--bg-raised); }
 .ms-option {
-    display: flex; align-items: flex-start; gap: .5rem;
-    padding: .38rem .65rem; cursor: pointer; font-size: .8rem;
+    display: flex; align-items: center; gap: .5rem;
+    padding: .3rem .65rem; cursor: pointer; font-size: .75rem;
     color: var(--text-primary); transition: background .1s;
-    white-space: normal; word-break: break-word;
 }
 .ms-option:hover, .ms-option.ms-focused { background: var(--bg-hover); }
-.ms-option.ms-selected { color: var(--primary); font-weight: 500; }
-.ms-check { width: 14px; text-align: center; font-size: .75rem; flex-shrink: 0; color: var(--primary); }
+.ms-option.ms-selected { color: var(--primary); }
+.ms-check {
+    width: 14px; height: 14px; flex-shrink: 0;
+    border: 1.5px solid var(--border-light); border-radius: 3px;
+    background: var(--bg-surface);
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: all .12s;
+}
+.ms-check.ms-check-on {
+    background: var(--primary); border-color: var(--primary);
+}
+.ms-check.ms-check-on::after {
+    content: ''; display: block;
+    width: 4px; height: 7px;
+    border: 1.5px solid #fff; border-top: none; border-left: none;
+    transform: rotate(45deg) translateY(-1px);
+}
+.ms-opt-label { flex: 1; min-width: 0; white-space: normal; word-break: break-word; }
 .ms-empty { padding: .75rem; text-align: center; font-size: .78rem; color: var(--text-muted); background: var(--bg-raised); }
 
 /* MultiSelect in table filter row */
@@ -573,15 +590,17 @@ h4 { font-size: 1.125rem; font-weight: 500; }
 .btn-reset-filters:hover { border-color: var(--primary); color: var(--primary); }
 th .ms-wrap { display: block; }
 th .ms-wrap .ms-control {
-    min-height: 28px; padding: .25rem .35rem;
-    flex-direction: column; align-items: stretch; gap: .2rem;
+    height: 28px; min-height: unset; padding: .25rem .35rem;
+    flex-direction: row; align-items: center; gap: .25rem; overflow: hidden;
 }
 th .ms-wrap .ms-chips {
-    display: flex; flex-direction: column;
-    gap: .2rem; flex: 1; min-width: 0;
+    display: flex; flex-direction: row; flex-wrap: nowrap;
+    align-items: center; gap: .25rem; flex: 1; min-width: 0; overflow: hidden;
 }
-th .ms-wrap .ms-chip        { font-size: .7rem; justify-content: space-between; }
-th .ms-wrap .ms-actions     { align-self: flex-end; }
+th .ms-wrap .ms-chip:first-child { flex: 1; min-width: 0; overflow: hidden; max-width: 100%; }
+th .ms-wrap .ms-chip        { font-size: .7rem; flex-shrink: 0; }
+th .ms-wrap .ms-chip:first-child { flex-shrink: 1; }
+th .ms-wrap .ms-actions     { flex-shrink: 0; }
 th .ms-wrap .ms-search      { display: none; }
 th .ms-wrap .ms-search-inner { font-size: .78rem; }
 
@@ -828,6 +847,7 @@ table {
     width: 100%;
     border-collapse: collapse;
     font-size: 0.875rem;
+    table-layout: fixed;
 }
 thead th {
     position: sticky;
@@ -835,7 +855,7 @@ thead th {
     z-index: 10;
     background: var(--bg-raised);
     color: var(--text-muted);
-    font-weight: 600;
+    font-weight: 500;
     font-size: 0.75rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -850,7 +870,8 @@ tbody tr {
 }
 tbody tr:last-child { border-bottom: none; }
 tbody tr:hover { background: var(--bg-raised); }
-tbody td { padding: 0.875rem 1rem; vertical-align: middle; }
+tbody td { padding: 0.875rem 1rem; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+tbody td:nth-child(3) { white-space: normal; word-break: break-word; }
 
 /* ── Bulk selection bar ─────────────────────────────────────────── */
 .bulk-bar {

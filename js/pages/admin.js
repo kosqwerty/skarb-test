@@ -1,4 +1,4 @@
-// ================================================================
+﻿// ================================================================
 // EduFlow LMS — Панель адміністратора
 // ================================================================
 
@@ -188,25 +188,26 @@ const AdminPage = {
                                 <input type="checkbox" id="uf-select-all" title="Вибрати всіх видимих"
                                        onchange="AdminPage._toggleAllVisible(this)">
                             </th>
-                            <th><div class="ms-filter-label" onclick="AdminPage._sortByLabel('name')">ПІБ ${AdminPage._sortBtn('name')}</div>${MultiSelect.html('uf-name', 'Всі...')}</th>
-                            <th><div class="ms-filter-label" onclick="AdminPage._sortByLabel('job')">Посада ${AdminPage._sortBtn('job')}</div>${MultiSelect.html('uf-job', 'Всі...')}</th>
-                            <th><div class="ms-filter-label" onclick="AdminPage._sortByLabel('city')">Місто ${AdminPage._sortBtn('city')}</div>${MultiSelect.html('uf-city', 'Всі...')}</th>
-                            <th><div class="ms-filter-label" onclick="AdminPage._sortByLabel('subdivision')">Підрозділ ${AdminPage._sortBtn('subdivision')}</div>${MultiSelect.html('uf-subdivision', 'Всі...')}</th>
-                            <th>
+                            <th style="width:220px"><div class="ms-filter-label" onclick="AdminPage._sortByLabel('name')">ПІБ ${AdminPage._sortBtn('name')}</div><input type="text" id="uf-name" placeholder="Пошук..." oninput="AdminPage._applyUserFilters()"></th>
+                            <th style="width:170px"><div class="ms-filter-label" onclick="AdminPage._sortByLabel('job')">Посада ${AdminPage._sortBtn('job')}</div>${MultiSelect.html('uf-job', 'Всі...')}</th>
+                            <th style="width:120px"><div class="ms-filter-label" onclick="AdminPage._sortByLabel('city')">Місто ${AdminPage._sortBtn('city')}</div>${MultiSelect.html('uf-city', 'Всі...')}</th>
+                            <th style="width:150px"><div class="ms-filter-label" onclick="AdminPage._sortByLabel('subdivision')">Підрозділ ${AdminPage._sortBtn('subdivision')}</div>${MultiSelect.html('uf-subdivision', 'Всі...')}</th>
+                            <th style="width:97px">
                                 <div class="ms-filter-label" onclick="AdminPage._sortByLabel('role')">Роль ${AdminPage._sortBtn('role')}</div>
                                 <select id="uf-role" onchange="AdminPage._applyUserFilters()">
                                     <option value="">Всі</option>
-                                    <option value="owner">👑 Власник</option>
-                                    <option value="admin">👑 Адмін</option>
+                                    <option value="owner">👑 Admin</option>
+                                    <option value="admin">👑 Адміністратор</option>
+                                    <option value="manager">👑 Керівник</option>
                                     <option value="smm">📰 SMM</option>
                                     <option value="teacher">Викладач</option>
                                     <option value="user">Користувач</option>
                                 </select>
                             </th>
-                            <th><div class="ms-filter-label" onclick="AdminPage._sortByLabel('label')">Мітка ${AdminPage._sortBtn('label')}</div>${MultiSelect.html('uf-label', 'Всі...')}</th>
-                            <th><div class="ms-filter-label" onclick="AdminPage._sortByLabel('date')">Реєстрація ${AdminPage._sortBtn('date')}</div><input id="uf-date" type="text" placeholder="дд.мм.рррр" oninput="AdminPage._applyUserFilters()"></th>
-                            <th><div class="ms-filter-label" onclick="AdminPage._sortByLabel('activity')">Активність ${AdminPage._sortBtn('activity')}</div><input id="uf-activity" type="text" placeholder="дд.мм.рррр" oninput="AdminPage._applyUserFilters()"></th>
-                            <th style="vertical-align:bottom;padding-top:.7rem;text-align:center">
+                            <th style="width:110px"><div class="ms-filter-label" onclick="AdminPage._sortByLabel('label')">Мітка ${AdminPage._sortBtn('label')}</div>${MultiSelect.html('uf-label', 'Всі...')}</th>
+                            <th style="width:90px"><div class="ms-filter-label" onclick="AdminPage._sortByLabel('date')">Реєстрація ${AdminPage._sortBtn('date')}</div><input id="uf-date" type="text" placeholder="дд.мм.рррр" oninput="AdminPage._applyUserFilters()"></th>
+                            <th style="width:90px"><div class="ms-filter-label" onclick="AdminPage._sortByLabel('activity')">Активність ${AdminPage._sortBtn('activity')}</div><input id="uf-activity" type="text" placeholder="дд.мм.рррр" oninput="AdminPage._applyUserFilters()"></th>
+                            <th style="width:50px;vertical-align:bottom;padding-top:.7rem;text-align:center">
                                 <button class="btn-reset-filters" onclick="AdminPage._clearUserFilters()" title="Скинути всі фільтри"><img src="icons/filter.png" alt="Скинути фільтри"></button>
                             </th>
                         </tr>
@@ -234,14 +235,13 @@ const AdminPage = {
 
         // Збираємо унікальні значення з завантажених даних
         const uniq = (field) => [...new Set(list.map(u => u[field]).filter(Boolean))].sort((a,b) => a.localeCompare(b,'uk'));
-        MultiSelect.init('uf-name',        uniq('full_name'));
         MultiSelect.init('uf-job',         uniq('job_position'));
         MultiSelect.init('uf-city',        uniq('city'));
         MultiSelect.init('uf-subdivision', uniq('subdivision'));
         MultiSelect.init('uf-label',       uniq('label'));
 
         // Реагуємо на зміни MultiSelect
-        ['uf-name','uf-job','uf-city','uf-subdivision','uf-label'].forEach(id => {
+        ['uf-job','uf-city','uf-subdivision','uf-label'].forEach(id => {
             document.getElementById(id)?.addEventListener('change', () => AdminPage._applyUserFilters());
         });
 
@@ -290,7 +290,7 @@ const AdminPage = {
                         </div>
                     </div>
                 </td>
-                <td style="font-size:.8rem;white-space:nowrap">${u.job_position || '<span style="color:var(--text-muted)">—</span>'}</td>
+                <td style="font-size:.8rem">${u.job_position || '<span style="color:var(--text-muted)">—</span>'}</td>
                 <td style="font-size:.8rem;white-space:nowrap">${u.city        || '<span style="color:var(--text-muted)">—</span>'}</td>
                 <td style="font-size:.8rem">${u.subdivision || '<span style="color:var(--text-muted)">—</span>'}</td>
                 <td>${Fmt.roleBadge(u.role)}</td>
@@ -1192,7 +1192,7 @@ const AdminPage = {
     _applyUserFilters() {
         const v   = id => document.getElementById(id)?.value || '';
         const f = {
-            name:        MultiSelect.getValues('uf-name'),
+            name:        v('uf-name'),
             job:         MultiSelect.getValues('uf-job'),
             city:        MultiSelect.getValues('uf-city'),
             subdivision: MultiSelect.getValues('uf-subdivision'),
@@ -1202,8 +1202,7 @@ const AdminPage = {
             activity:    v('uf-activity'),
             status:      v('uf-status'),
         };
-        // Для порівняння з data-* атрибутами (вони lowercase) — lowercase версії
-        const nameLC = f.name.map(x => x.toLowerCase());
+        const nameLC = f.name.toLowerCase().trim();
         const jobLC  = f.job.map(x => x.toLowerCase());
         const cityLC = f.city.map(x => x.toLowerCase());
         const subLC  = f.subdivision.map(x => x.toLowerCase());
@@ -1223,7 +1222,7 @@ const AdminPage = {
         document.querySelectorAll('#users-tbody tr').forEach(row => {
             const d = row.dataset;
             const match =
-                (nameLC.length === 0 || nameLC.includes(d.name))                          &&
+                (!nameLC || d.name.includes(nameLC))                                       &&
                 (jobLC.length  === 0 || jobLC.includes(d.job))                            &&
                 (cityLC.length === 0 || cityLC.includes(d.city))                          &&
                 (subLC.length  === 0 || subLC.includes(d.subdivision))                    &&
@@ -1252,7 +1251,8 @@ const AdminPage = {
     _clearUserFilters() {
         ['uf-date','uf-activity'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
         ['uf-role','uf-status'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
-        ['uf-name','uf-job','uf-city','uf-subdivision','uf-label'].forEach(id => MultiSelect.clear(id));
+        const ufName = document.getElementById('uf-name'); if (ufName) ufName.value = '';
+        ['uf-job','uf-city','uf-subdivision','uf-label'].forEach(id => MultiSelect.clear(id));
         this._sortState = { field: null, dir: 1 };
         document.querySelectorAll('.sort-arrow').forEach(el => el.classList.remove('active'));
         localStorage.removeItem('lms_admin_user_filters');
@@ -1269,7 +1269,7 @@ const AdminPage = {
         set('uf-date',     f.date);
         set('uf-activity', f.activity);
         set('uf-status',   f.status);
-        if (Array.isArray(f.name)        && f.name.length)        MultiSelect.setValues('uf-name',        f.name);
+        if (f.name && typeof f.name === 'string') { const el = document.getElementById('uf-name'); if (el) el.value = f.name; }
         if (Array.isArray(f.job)         && f.job.length)         MultiSelect.setValues('uf-job',         f.job);
         if (Array.isArray(f.city)        && f.city.length)        MultiSelect.setValues('uf-city',        f.city);
         if (Array.isArray(f.subdivision) && f.subdivision.length) MultiSelect.setValues('uf-subdivision', f.subdivision);
@@ -1620,13 +1620,18 @@ const AdminPage = {
             const vals = line.split(delim).map(v => v.trim().replace(/^"|"$/g, ''));
             const row = { _line: idx + 2 };
             colMap.forEach((key, i) => { if (key) row[key] = vals[i] || ''; });
+            // DD.MM.YYYY → YYYY-MM-DD
+            if (row.birth_date && /^\d{2}\.\d{2}\.\d{4}$/.test(row.birth_date)) {
+                const [d, m, y] = row.birth_date.split('.');
+                row.birth_date = `${y}-${m}-${d}`;
+            }
             row._errors = [];
             if (!row.last_name)  row._errors.push('Прізвище');
             if (!row.first_name) row._errors.push('Ім\u2019я');
             if (!row.email)      row._errors.push('Email');
             if (!row.password)   row._errors.push('Пароль');
             if (row.password && row.password.length < 6) row._errors.push('Пароль (мін. 6 символів)');
-            const validRoles = ['owner','admin','smm','teacher','user'];
+            const validRoles = ['owner','admin','smm','teacher','manager','user'];
             if (row.role && !validRoles.includes(row.role)) row._errors.push('Роль (невірне значення)');
             if (row.gender && !['male','female'].includes(row.gender)) row._errors.push('Стать (male або female)');
             if (row.birth_date && !/^\d{4}-\d{2}-\d{2}$/.test(row.birth_date)) row._errors.push('Дата нар. (формат РРРР-ММ-ДД)');
@@ -1655,7 +1660,7 @@ const AdminPage = {
             <div style="max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-md)">
                 <table style="font-size:.78rem">
                     <thead><tr>
-                        <th>#</th><th>Прізвище</th><th>Ім\u2019я</th><th>Email</th><th>Логін</th><th>Роль</th><th>Статус</th>
+                        <th>#</th><th>Прізвище</th><th>Ім\u2019я</th><th>По батькові</th><th>Email</th><th>Логін</th><th>Роль</th><th>Статус</th>
                     </tr></thead>
                     <tbody>
                         ${rows.map(r => `
@@ -1663,6 +1668,7 @@ const AdminPage = {
                                 <td style="color:var(--text-muted)">${r._line}</td>
                                 <td>${r.last_name  || '<span style="color:var(--danger)">—</span>'}</td>
                                 <td>${r.first_name || '<span style="color:var(--danger)">—</span>'}</td>
+                                <td style="color:var(--text-muted)">${r.patronymic || '—'}</td>
                                 <td>${r.email      || '<span style="color:var(--danger)">—</span>'}</td>
                                 <td style="color:var(--text-muted)">${r.login || '—'}</td>
                                 <td>${r.role ? `<span class="badge badge-muted" style="font-size:.65rem">${Fmt.role(r.role)}</span>` : '<span style="color:var(--text-muted)">user</span>'}</td>
@@ -2156,7 +2162,7 @@ const AdminPage = {
         };
 
         const roleColors = { owner: '#f59e0b', admin: '#6366f1', smm: '#10b981' };
-        const roleLabels = { owner: 'Власник', admin: 'Адмін', smm: 'SMM' };
+        const roleLabels = { owner: 'Admin', admin: 'Адмін', smm: 'SMM' };
 
         const uniqueRoles   = [...new Set(logs.map(l => l.actor_role).filter(Boolean))];
         const uniqueActions = [...new Set(logs.map(l => l.action).filter(Boolean))];

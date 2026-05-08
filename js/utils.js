@@ -312,10 +312,10 @@ const Fmt = {
         return `${size.toFixed(1)} ${units[i]}`;
     },
     role(r) {
-        return { owner: 'Власник', admin: 'Адміністратор', smm: 'SMM-менеджер', teacher: 'Викладач', manager: 'Керівник', user: 'Користувач', student: 'Користувач' }[r] || r || '—';
+        return { owner: 'Admin', admin: 'Адміністратор', smm: 'SMM-менеджер', teacher: 'Викладач', manager: 'Керівник', user: 'Користувач', student: 'Користувач' }[r] || r || '—';
     },
     roleBadge(r) {
-        if (r === 'owner')   return `<span class="badge badge-warning">👑 Власник</span>`;
+        if (r === 'owner')   return `<span class="badge badge-warning">👑 Admin</span>`;
         if (r === 'admin')   return `<span class="badge badge-admin">👑 Адміністратор</span>`;
         if (r === 'smm')     return `<span class="badge badge-info">📰 SMM-менеджер</span>`;
         if (r === 'manager') return `<span class="badge badge-manager">👔 Керівник</span>`;
@@ -818,9 +818,15 @@ const MultiSelect = (() => {
         const chips     = wrap.querySelector('.ms-chips');
         const clearBtn  = wrap.querySelector('.ms-clear-btn');
         const searchInput = wrap.querySelector('.ms-search');
-        chips.innerHTML = s.selected.map(v =>
-            `<span class="ms-chip">${v}<span class="ms-chip-x" data-ms="${id}" data-val="${v.replace(/"/g,'&quot;')}">✕</span></span>`
-        ).join('');
+        if (s.selected.length === 0) {
+            chips.innerHTML = '';
+        } else {
+            const first = s.selected[0];
+            const rest  = s.selected.length - 1;
+            chips.innerHTML =
+                `<span class="ms-chip"><span class="ms-chip-label">${first}</span><span class="ms-chip-x" data-ms="${id}" data-val="${first.replace(/"/g,'&quot;')}">✕</span></span>` +
+                (rest > 0 ? `<span class="ms-chip ms-chip-more" title="${s.selected.slice(1).join(', ')}">+${rest}</span>` : '');
+        }
 
         if (clearBtn) {
             clearBtn.dataset.visible = s.selected.length ? '1' : '0';
@@ -845,7 +851,7 @@ const MultiSelect = (() => {
             const safeVal  = o.replace(/"/g, '&quot;');
             return `<div class="ms-option${checked ? ' ms-selected' : ''}${focused ? ' ms-focused' : ''}"
                         data-ms="${id}" data-val="${safeVal}">
-                        <span class="ms-check">${checked ? '✓' : ''}</span>${o}
+                        <span class="ms-check${checked ? ' ms-check-on' : ''}"></span><span class="ms-opt-label">${o}</span>
                     </div>`;
         }).join('');
         if (s.focused >= 0) {
@@ -873,10 +879,11 @@ const MultiSelect = (() => {
             dd.style.position = 'fixed';
             dd.style.top      = (r.bottom + 3) + 'px';
             dd.style.left     = r.left + 'px';
-            dd.style.width    = Math.max(r.width, 180) + 'px';
+            const ddWidth = Math.max(r.width, 280);
+            dd.style.width    = ddWidth + 'px';
             dd.style.right    = 'auto';
             // Якщо виходить за правий край вікна — зсуваємо вліво
-            const overflowRight = r.left + Math.max(r.width, 180) - window.innerWidth;
+            const overflowRight = r.left + ddWidth - window.innerWidth;
             if (overflowRight > 0) dd.style.left = (r.left - overflowRight - 8) + 'px';
         }
 

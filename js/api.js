@@ -240,6 +240,29 @@ const API = {
             if (error) throw error;
         },
 
+        async softDelete(id) {
+            const { error } = await supabase.from('resources')
+                .update({ deleted_at: new Date().toISOString(), deleted_by: AppState.user.id })
+                .eq('id', id);
+            if (error) throw error;
+        },
+
+        async restore(id) {
+            const { error } = await supabase.from('resources')
+                .update({ deleted_at: null, deleted_by: null })
+                .eq('id', id);
+            if (error) throw error;
+        },
+
+        async getTrash() {
+            const { data, error } = await supabase.from('resources')
+                .select('*, deleter:profiles!deleted_by(full_name)')
+                .not('deleted_at', 'is', null)
+                .order('deleted_at', { ascending: false });
+            if (error) throw error;
+            return data || [];
+        },
+
         async getAll({ courseId, search, category, page = 0, pageSize = 20, includeLessonResources = false, studentOnly = false, trackedOnly = false, docsOnly = false } = {}) {
             let q = supabase.from('resources')
                 .select(`*, course:courses(id,title), creator:profiles!created_by(full_name),
@@ -248,6 +271,7 @@ const API = {
                         positions:access_group_positions(position),
                         departments:access_group_departments(department),
                         labels:access_group_labels(label))`, { count: 'exact' });
+            q = q.is('deleted_at', null);
             if (!includeLessonResources) q = q.is('lesson_id', null);
             if (courseId) q = q.eq('course_id', courseId);
             if (category) q = q.eq('category', category);

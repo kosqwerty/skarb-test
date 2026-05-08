@@ -1,4 +1,4 @@
-// ================================================================
+﻿// ================================================================
 // EduFlow LMS — Модуль ресурсів / База знань
 // ================================================================
 
@@ -87,6 +87,7 @@ const ResourcesPage = {
                             </select>
                         </div>
                         ${AppState.isStaff() ? '<button class="btn btn-primary" onclick="ResourcesPage.openForm()">+ Додати</button>' : ''}
+                            ${AppState.isOwner() ? '<button class="btn btn-ghost btn-sm" onclick="ResourcesPage._openTrash()" title="Кошик">🗑️ Кошик</button>' : ''}
                     </div>
                 </div>
                 ${isManager ? `
@@ -173,6 +174,9 @@ const ResourcesPage = {
 .kb-btn-dl:hover{border-color:var(--primary);color:var(--primary)}
 .kb-btn-edit{display:inline-flex;align-items:center;padding:7px 9px;border-radius:10px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:.82rem;cursor:pointer;transition:all .15s}
 .kb-btn-edit:hover{border-color:var(--primary);color:var(--primary)}
+.kb-btn-del{display:inline-flex;align-items:center;padding:7px 9px;border-radius:10px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:.82rem;cursor:pointer;transition:all .15s}
+.kb-btn-del:hover{border-color:#ef4444;color:#ef4444;background:rgba(239,68,68,.06)}
+.res-del-btn:hover{border-color:#ef4444!important;color:#ef4444!important}
 .kb-star{width:32px;height:32px;border-radius:10px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:1rem;transition:all .15s;flex-shrink:0}
 .kb-star:hover,.kb-star.active{border-color:#f59e0b;color:#f59e0b;background:rgba(245,158,11,.1)}
 
@@ -269,6 +273,7 @@ const ResourcesPage = {
         <option value="">Всі курси</option>
     </select>
     ${AppState.isStaff() ? '<button class="btn btn-primary kb-add-btn" onclick="ResourcesPage.openForm()">+ Додати ресурс</button>' : ''}
+    ${AppState.isOwner() ? '<button class="btn btn-ghost btn-sm kb-add-btn" onclick="ResourcesPage._openTrash()" title="Кошик" style="margin-left:.25rem">🗑️ Кошик</button>' : ''}
 </div>
 
 <div id="resource-list"></div>
@@ -796,7 +801,7 @@ const ResourcesPage = {
         <div class="kb-card-actions">
             <button class="kb-btn-open" onclick="ResourcesPage.openViewer('${resource.id}')">Відкрити →</button>
             ${resource.download_allowed ? `<button class="kb-btn-dl" title="Завантажити" onclick="ResourcesPage.downloadResource('${resource.id}')">⬇</button>` : ''}
-            ${AppState.isStaff() ? `<button class="kb-btn-edit" title="Редагувати" onclick="ResourcesPage.openEdit('${resource.id}')">✏️</button>` : ''}
+            ${AppState.isStaff() ? `<button class="kb-btn-edit" title="Редагувати" onclick="ResourcesPage.openEdit('${resource.id}')">✏️</button><button class="kb-btn-del" title="Видалити" onclick="ResourcesPage.deleteResource('${resource.id}','${safeTitle}')">🗑️</button>` : ''}
         </div>
         <button class="kb-star res-star-btn${isBm?' active':''}"
             data-bm-route="resource/${resource.id}"
@@ -828,7 +833,7 @@ const ResourcesPage = {
     <div class="kb-row-actions" onclick="event.stopPropagation()">
         <button class="kb-btn-open" onclick="ResourcesPage.openViewer('${resource.id}')">Відкрити →</button>
         ${resource.download_allowed ? `<button class="kb-btn-dl" title="Завантажити" onclick="ResourcesPage.downloadResource('${resource.id}')">⬇</button>` : ''}
-        ${AppState.isStaff() ? `<button class="kb-btn-edit" title="Редагувати" onclick="ResourcesPage.openEdit('${resource.id}')">✏️</button>` : ''}
+        ${AppState.isStaff() ? `<button class="kb-btn-edit" title="Редагувати" onclick="ResourcesPage.openEdit('${resource.id}')">✏️</button><button class="kb-btn-del" title="Видалити" onclick="ResourcesPage.deleteResource('${resource.id}','${safeTitle}')">🗑️</button>` : ''}
         <button class="kb-star res-star-btn${isBm?' active':''}"
             data-bm-route="resource/${resource.id}"
             title="${isBm?'Видалити з закладок':'Зберегти в закладки'}"
@@ -986,7 +991,7 @@ const ResourcesPage = {
                     </div>
                     <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center" onclick="event.stopPropagation()">
                         <button class="btn btn-ghost btn-sm" onclick="ResourcesPage.openViewer('${resource.id}')">Відкрити</button>
-                        ${AppState.isStaff() ? `<button class="btn btn-ghost btn-sm" onclick="ResourcesPage.openEdit('${resource.id}')">✏️</button>` : ''}
+                        ${AppState.isStaff() ? `<button class="btn btn-ghost btn-sm" onclick="ResourcesPage.openEdit('${resource.id}')">✏️</button><button class="btn btn-ghost btn-sm res-del-btn" title="Видалити" onclick="ResourcesPage.deleteResource('${resource.id}','${resource.title.replace(/'/g,"\\'").replace(/"/g,'&quot;')}')">🗑️</button>` : ''}
                     </div>
                 </div>`;
         }
@@ -1458,7 +1463,97 @@ const ResourcesPage = {
         container.innerHTML = Array.from({ length: pages }, (_, index) => `
             <button class="btn ${index === this._page ? 'btn-primary' : 'btn-ghost'} btn-sm"
                     onclick="ResourcesPage.setPage(${index})">${index + 1}</button>`).join('');
-    }
+    },
+
+    async deleteResource(id, title) {
+        Modal.open({
+            title: '',
+            size: 'sm',
+            body: `
+                <div style="text-align:center;padding:.5rem 0 .25rem">
+                    <div style="width:64px;height:64px;border-radius:50%;background:rgba(239,68,68,.1);border:2px solid rgba(239,68,68,.2);display:flex;align-items:center;justify-content:center;font-size:2rem;margin:0 auto 1rem">🗑️</div>
+                    <div style="font-size:1.05rem;font-weight:700;color:var(--text-primary);margin-bottom:.5rem">Видалити файл?</div>
+                    <div style="color:var(--text-muted);font-size:.875rem;line-height:1.5">
+                        «<strong style="color:var(--text-primary)">${title}</strong>» буде переміщено до кошика.<br>
+                        Власник може відновити або видалити назавжди.
+                    </div>
+                </div>`,
+            footer: `
+                <button class="btn btn-ghost" onclick="Modal.close()">Скасувати</button>
+                <button class="btn btn-danger" id="confirm-del-btn" onclick="ResourcesPage._confirmDelete('${id}')">Видалити</button>`
+        });
+    },
+
+    async _confirmDelete(id) {
+        const btn = document.getElementById('confirm-del-btn');
+        if (btn) { btn.disabled = true; btn.textContent = '...'; }
+        try {
+            await API.resources.softDelete(id);
+            Modal.close();
+            Toast.success('Переміщено до кошика');
+            await this.load();
+        } catch(e) {
+            Toast.error('Помилка', e.message);
+            if (btn) { btn.disabled = false; btn.textContent = 'Видалити'; }
+        }
+    },
+
+    async _openTrash() {
+        Modal.open({
+            title: '🗑️ Кошик',
+            size: 'lg',
+            body: `<div style="text-align:center;padding:2rem"><div class="spinner"></div></div>`,
+            footer: `<button class="btn btn-ghost" onclick="Modal.close()">Закрити</button>`
+        });
+        try {
+            const items = await API.resources.getTrash();
+            const body = document.getElementById('modal-body');
+            if (!body) return;
+            if (!items.length) {
+                body.innerHTML = `<div style="text-align:center;padding:2rem;color:var(--text-muted)"><div style="font-size:2.5rem;margin-bottom:.5rem">🗑️</div>Кошик порожній</div>`;
+                return;
+            }
+            body.innerHTML = `
+                <div style="display:flex;flex-direction:column;gap:.5rem;max-height:440px;overflow-y:auto">
+                    ${items.map(r => `
+                    <div style="display:flex;align-items:center;gap:.75rem;padding:.75rem;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-raised)">
+                        <div style="font-size:1.3rem;flex-shrink:0">${this._resourceIcon(r.type||r.file_type||'file')}</div>
+                        <div style="flex:1;min-width:0">
+                            <div style="font-weight:600;font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.title}</div>
+                            <div style="font-size:.75rem;color:var(--text-muted)">Видалено ${Fmt.dateShort(r.deleted_at)}${r.deleter?.full_name ? ' · ' + r.deleter.full_name : ''}</div>
+                        </div>
+                        <button class="btn btn-ghost btn-sm" onclick="ResourcesPage._restoreResource('${r.id}')">↩ Відновити</button>
+                        <button class="btn btn-sm" style="background:rgba(239,68,68,.1);color:#ef4444;border:1px solid rgba(239,68,68,.2)" onclick="ResourcesPage._hardDelete('${r.id}','${r.title.replace(/'/g,"\\'")}')">✕</button>
+                    </div>`).join('')}
+                </div>`;
+        } catch(e) {
+            const body = document.getElementById('modal-body');
+            if (body) body.innerHTML = `<div style="color:var(--danger);padding:1rem">${e.message}</div>`;
+        }
+    },
+
+    async _restoreResource(id) {
+        try {
+            await API.resources.restore(id);
+            Toast.success('Відновлено');
+            await this._openTrash();
+            await this.load();
+        } catch(e) {
+            Toast.error('Помилка', e.message);
+        }
+    },
+
+    async _hardDelete(id, title) {
+        if (!await Modal.confirm(`Видалити «${title}» назавжди? Це незворотна дія.`)) return;
+        try {
+            await API.resources.delete(id);
+            Toast.success('Видалено назавжди');
+            await this._openTrash();
+            await this.load();
+        } catch(e) {
+            Toast.error('Помилка', e.message);
+        }
+    },
 };
 
 // ================================================================

@@ -4,7 +4,7 @@
 
 
 /* === Fixel Display Font Family === */
-
+/* 
 @font-face {
   font-family: 'Fixel Display';
   src: url('/font/FixelDisplay-Regular.woff2') format('woff2'),
@@ -68,7 +68,7 @@
   src: url('/font/FixelDisplay-Regular.woff2') format('woff2'),
        url('/font/FixelDisplay-Regular.otf') format('opentype');
   font-weight: 400;
-}
+} */
 
 /* ── CSS Variables (Dark Theme – by default) ───────────────────────── */
 :root {
@@ -155,7 +155,7 @@
 html { font-size: 16px; scroll-behavior: smooth; }
 
 body {
-    font-family: 'Fixel Display', sans-serif;
+    font-family: 'Play', sans-serif;
     background: var(--bg-base);
     color: var(--text-primary);
     line-height: 1.6;
@@ -220,7 +220,7 @@ h4 { font-size: 1.125rem; font-weight: 500; }
 .btn {
     display: inline-flex;
     align-items: center;
-    font-family: 'Fixel Display', sans-serif;
+    font-family: 'Play', sans-serif;
     gap: 0.4rem;
     padding: 0.55rem 1.2rem;
     border-radius: var(--radius-md);
@@ -1755,7 +1755,7 @@ input#uf-select-all {
 .sidebar-theme-btn::after {
     content: attr(title);
     font-size: 0.8rem;
-    font-family: 'Fixel Display', sans-serif;
+    font-family: 'Play', sans-serif;
     color: var(--text-muted);
     transition: color var(--transition);
 }

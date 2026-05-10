@@ -23,6 +23,8 @@ const ResourcesPage = {
     _kbTypeFilter: 'all',
     _kbAllItems: [],
     _docsSort: 'priority',
+    _allDovirenosti: [],
+    _myDovirenosti: [],
 
     async init(container, { view = 'kb' } = {}) {
         this._page = 0;
@@ -94,7 +96,6 @@ const ResourcesPage = {
                 <div style="display:flex;gap:.5rem;margin-bottom:1.25rem;border-bottom:1px solid var(--border);padding-bottom:.75rem">
                     <button id="docs-tab-list" class="btn btn-primary btn-sm" onclick="ResourcesPage.switchTab('list',this)">📋 Документи</button>
                     <button id="docs-tab-status" class="btn btn-ghost btn-sm" onclick="ResourcesPage.switchTab('status',this)">📊 Статус</button>
-                    <button id="docs-tab-offshift" class="btn btn-ghost btn-sm" onclick="ResourcesPage.switchTab('offshift',this)">⚠️ Поза зміною</button>
                 </div>` : ''}
                 <div id="docs-tab-content">
                     <div id="resource-list" class="resource-list-docs"></div>
@@ -102,7 +103,6 @@ const ResourcesPage = {
                 </div>`;
 
             await this._loadFilters();
-            if (isManager) this._myLocations = await API.documentDownloads.getManagerLocations().catch(() => []);
             await this.load();
             return;
         }
@@ -289,18 +289,36 @@ const ResourcesPage = {
             const data = await API.system.getDbSize();
             const el = document.getElementById('kb-db-size');
             if (!el) return;
-            const usedGb  = data.bytes / 1073741824;
-            const maxGb   = APP_CONFIG.dbQuotaGb || 8;
-            const pct     = Math.min(100, (usedGb / maxGb) * 100);
-            const barColor = pct > 85 ? '#ef4444' : pct > 60 ? '#f59e0b' : '#22c55e';
-            el.innerHTML = `
-<div style="display:flex;flex-direction:column;gap:.3rem;min-width:180px;background:rgba(0,0,0,.18);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:.5rem .85rem">
-  <div style="display:flex;justify-content:space-between;align-items:center;font-size:.78rem;opacity:.9;white-space:nowrap">
-    <span>💾 База даних</span>
-    <span style="font-weight:600">${usedGb.toFixed(2)} / ${maxGb} ГБ</span>
+
+            const maxGb = APP_CONFIG.dbQuotaGb || 0.5;
+
+            const fmt = bytes => {
+                const gb = bytes / 1073741824;
+                return gb >= 0.1 ? `${gb.toFixed(2)} ГБ` : `${(bytes / 1048576).toFixed(1)} МБ`;
+            };
+
+            const bar = (bytes, max, color) => {
+                const pct = Math.min(100, (bytes / (max * 1073741824)) * 100);
+                const c = pct > 85 ? '#ef4444' : pct > 60 ? '#f59e0b' : color;
+                return `
+  <div style="display:flex;justify-content:space-between;align-items:center;font-size:.75rem;opacity:.85;white-space:nowrap;margin-bottom:2px">
+    <span>${pct > 85 ? '🔴' : pct > 60 ? '🟡' : '🟢'} &nbsp;${fmt(bytes)} / ${maxGb} ГБ</span>
   </div>
-  <div style="height:5px;border-radius:4px;background:rgba(255,255,255,.15);overflow:hidden">
-    <div style="height:100%;width:${pct.toFixed(1)}%;background:${barColor};border-radius:4px;transition:width .4s"></div>
+  <div style="height:4px;border-radius:4px;background:rgba(255,255,255,.12);overflow:hidden">
+    <div style="height:100%;width:${pct.toFixed(1)}%;background:${c};border-radius:4px"></div>
+  </div>`;
+            };
+
+            el.innerHTML = `
+<div style="display:flex;gap:.75rem;background:rgba(0,0,0,.18);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:.55rem 1rem">
+  <div style="display:flex;flex-direction:column;gap:.2rem;min-width:160px">
+    <div style="font-size:.7rem;font-weight:600;opacity:.6;letter-spacing:.04em;text-transform:uppercase">Файли (Storage)</div>
+    ${bar(data.storage_bytes, maxGb, '#60a5fa')}
+  </div>
+  <div style="width:1px;background:rgba(255,255,255,.1)"></div>
+  <div style="display:flex;flex-direction:column;gap:.2rem;min-width:160px">
+    <div style="font-size:.7rem;font-weight:600;opacity:.6;letter-spacing:.04em;text-transform:uppercase">База даних</div>
+    ${bar(data.db_bytes, maxGb, '#a78bfa')}
   </div>
 </div>`;
         } catch (_) {}
@@ -323,8 +341,6 @@ const ResourcesPage = {
         } else if (tab === 'status') {
             this._statusCache = null;
             this._renderStatusTab(content);
-        } else if (tab === 'offshift') {
-            this._renderOffShiftTab(content);
         }
     },
 
@@ -343,19 +359,36 @@ const ResourcesPage = {
                 API.documentDownloads.getAllEmployees()
             ]);
             const allDocs = docsRes.data || [];
-            const docs = AppState.canSchedule() ? allDocs : allDocs.filter(r => AccessGroupsPage.checkAccess(r.access_group));
+            let docs = AppState.canSchedule() ? allDocs : allDocs.filter(r => AccessGroupsPage.checkAccess(r.access_group));
 
             if (token !== this._renderToken) return;
-            if (!docs.length) {
-                content.innerHTML = `<div class="empty-state"><div class="empty-icon">📊</div><h3>Немає відстежуваних документів</h3></div>`;
-                return;
-            }
 
             let employees = allEmps;
             if (!isOwner) {
-                const myId = AppState.user.id;
+                const myId = AppState.profile.id;
                 const subordinates = allEmps.filter(e => e.manager_id === myId);
-                if (subordinates.length) employees = subordinates;
+                if (!subordinates.length) {
+                    content.innerHTML = `<div class="empty-state"><div class="empty-icon">👤</div><h3>Немає підлеглих</h3><p>Жодного співробітника не призначено до вас як керівника.</p></div>`;
+                    return;
+                }
+                employees = subordinates;
+
+                // Залишаємо тільки документи релевантні для підлеглих:
+                // документ без довіреностей — видний всім,
+                // документ з довіреностями — тільки якщо хоча б один підлеглий має таку довіреність
+                const subDovIds = new Set(
+                    subordinates.flatMap(e => (e.profile_dovirenosti || []).map(d => d.dovirenost_id))
+                );
+                docs = docs.filter(doc => {
+                    const rdovs = doc.resource_dovirenosti || [];
+                    if (rdovs.length === 0) return true;
+                    return rdovs.some(rd => subDovIds.has(rd.dovirenost_id));
+                });
+            }
+
+            if (!docs.length) {
+                content.innerHTML = `<div class="empty-state"><div class="empty-icon">📊</div><h3>Немає відстежуваних документів</h3></div>`;
+                return;
             }
 
             if (!employees.length) {
@@ -440,7 +473,8 @@ const ResourcesPage = {
 
     _openStatusModal(docId) {
         if (!this._statusCache) return;
-        this._modalState = { docId, filter: 'all', search: '', page: 0 };
+        const defaultFilter = AppState.isOwner() ? 'all' : 'acked';
+        this._modalState = { docId, filter: defaultFilter, search: '', page: 0 };
         const doc = this._statusCache.docs.find(d => d.id === docId);
         if (!doc) return;
         Modal.open({
@@ -588,54 +622,23 @@ const ResourcesPage = {
         if (body) body.innerHTML = this._buildStatusModalBody();
     },
 
-    async _renderOffShiftTab(content) {
-        const token = ++this._renderToken;
-        content.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
-        try {
-            const locationIds = this._myLocations.map(l => l.id);
-            const downloads = await API.documentDownloads.getOffShiftForLocations(locationIds);
-            if (token !== this._renderToken) return;
-            if (!downloads.length) {
-                content.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>Завантажень поза зміною не знайдено</h3></div>`;
-                return;
-            }
-            const rows = downloads.map(d => `
-                <tr style="border-bottom:1px solid var(--border)">
-                    <td style="padding:.625rem .875rem;font-size:.85rem;font-weight:500">${d.resource?.title || '—'}</td>
-                    <td style="padding:.625rem .875rem;font-size:.85rem">${d.user?.full_name || '—'}</td>
-                    <td style="padding:.625rem .875rem;font-size:.85rem;color:var(--text-muted)">${d.location?.name || '—'}</td>
-                    <td style="padding:.625rem .875rem;font-size:.85rem;color:var(--text-muted)">${Fmt.datetime(d.downloaded_at)}</td>
-                </tr>`).join('');
-            content.innerHTML = `
-                <div style="overflow-x:auto">
-                    <table style="width:100%;border-collapse:collapse">
-                        <thead>
-                            <tr style="border-bottom:2px solid var(--border);background:var(--bg-raised)">
-                                <th style="padding:.5rem .875rem;text-align:left;font-size:.8rem;color:var(--text-muted)">Документ</th>
-                                <th style="padding:.5rem .875rem;text-align:left;font-size:.8rem;color:var(--text-muted)">Співробітник</th>
-                                <th style="padding:.5rem .875rem;text-align:left;font-size:.8rem;color:var(--text-muted)">Локація</th>
-                                <th style="padding:.5rem .875rem;text-align:left;font-size:.8rem;color:var(--text-muted)">Час</th>
-                            </tr>
-                        </thead>
-                        <tbody>${rows}</tbody>
-                    </table>
-                </div>`;
-        } catch (e) {
-            content.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>${e.message}</h3></div>`;
-        }
-    },
 
     async _loadFilters() {
         try {
             const courseArgs = AppState.isStaff() ? { pageSize: 200 } : { published: true, pageSize: 200 };
-            const [coursesRes, categories, accessGroups] = await Promise.all([
+            const [coursesRes, categories, accessGroups, allDov] = await Promise.all([
                 API.courses.getAll(courseArgs).catch(() => ({ data: [] })),
                 API.resources.getCategories({ docsOnly: this._view === 'docs' }).catch(() => []),
-                API.accessGroups.getAll().catch(() => [])
+                API.accessGroups.getAll().catch(() => []),
+                API.dovirenosti.getAll().catch(() => [])
             ]);
-            this._courses      = coursesRes.data || [];
-            this._categories   = categories;
-            this._accessGroups = accessGroups;
+            this._courses          = coursesRes.data || [];
+            this._categories       = categories;
+            this._accessGroups     = accessGroups;
+            this._allDovirenosti   = allDov;
+            if (!AppState.canSchedule()) {
+                this._myDovirenosti = await API.dovirenosti.getForProfile(AppState.profile.id).catch(() => []);
+            }
             this._renderFilterOptions();
         } catch (e) {
             console.warn('[ResourcesPage] filter load error', e);
@@ -861,14 +864,15 @@ const ResourcesPage = {
         if (!list) return;
         list.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
         try {
+            const isKb = this._view === 'kb';
             const { data, count } = await API.resources.getAll({
                 courseId: this._courseId || undefined,
                 search: this._search || undefined,
                 category: this._category || undefined,
-                page: this._page,
-                pageSize: this._pageSize,
+                page: isKb ? 0 : this._page,
+                pageSize: isKb ? 500 : this._pageSize,
                 includeLessonResources: false,
-                studentOnly: this._view === 'kb' && !AppState.isStaff(),
+                studentOnly: isKb && !AppState.isStaff(),
                 docsOnly: this._view === 'docs'
             });
 
@@ -877,6 +881,16 @@ const ResourcesPage = {
             const bypassFilter = AppState.isStaff() || (this._view === 'docs' && AppState.isManager());
             if (!bypassFilter) {
                 filtered = data.filter(r => AccessGroupsPage.checkAccess(r.access_group));
+            }
+
+            // Довіреності filter: docs view, non-privileged users
+            if (this._view === 'docs' && !bypassFilter) {
+                const myDovIds = new Set(this._myDovirenosti.map(d => d.id));
+                filtered = filtered.filter(r => {
+                    const rdovs = r.resource_dovirenosti || [];
+                    if (rdovs.length === 0) return true;
+                    return rdovs.some(rd => myDovIds.has(rd.dovirenost_id));
+                });
             }
 
             // База знань: тільки публічні + нетраковані ресурси
@@ -922,7 +936,7 @@ const ResourcesPage = {
             if (this._view === 'kb') {
                 this._kbAllItems = filtered;
                 this._kbRerender();
-                this._renderPagination(count);
+                this._renderPagination(filtered.length);
                 return;
             }
 
@@ -980,6 +994,7 @@ const ResourcesPage = {
                     <div class="resource-icon ${resource.type || 'file'}">${icon}</div>
                     <div class="resource-info">
                         <div class="resource-title">${resource.title}</div>
+                        ${resource.description ? `<div style="font-size:.8rem;color:var(--text-muted);margin-top:.15rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${resource.description}</div>` : ''}
                         <div class="resource-meta">
                             ${resource.category ? `Категорія: ${resource.category}` : ''}
                             <span style="font-size:.72rem;font-weight:600;background:var(--bg-base);border:1px solid var(--border);border-radius:4px;padding:1px 5px;margin-left:.3rem;color:var(--text-muted)">${this._fileLabel(resource)}</span>
@@ -1273,86 +1288,109 @@ const ResourcesPage = {
 
     openForm(resource = null) {
         const isEdit = !!resource;
-        const fileHint = resource && resource.storage_path ? resource.storage_path.split('/').pop() : 'Оберіть файл для завантаження';
+        const fileHint = resource && resource.storage_path
+            ? (resource.original_name || resource.storage_path.split('/').pop().replace(/^\d+_/, ''))
+            : 'Оберіть файл для завантаження';
         const courseOptions = this._courses.map(c => `<option value="${c.id}" ${resource?.course_id === c.id ? 'selected' : ''}>${c.title}</option>`).join('');
 
         Modal.open({
             title: isEdit ? '✏️ Редагувати ресурс' : '+ Додати ресурс',
             size: 'lg',
             body: `
-                <div class="form-row">
-                    <div class="form-group" style="flex:1">
+                <style>
+                    #rfg .form-group { margin-bottom: 0; }
+                    #rfg label:not(.checkbox-item) { font-size: .8rem; margin-bottom: .2rem; }
+                    #rfg textarea { height: 54px; resize: none; }
+                    #rfg .file-upload-area { min-height: 66px; padding: 8px 16px; gap: 5px; }
+                    #rfg .file-upload-icon { width: 32px; height: 32px; border-radius: 9px; box-shadow: none; }
+                    #rfg .file-upload-icon i { font-size: .9rem; }
+                    #rfg .file-upload-label { font-size: .78rem; }
+                    #rfg .file-upload-hint { font-size: .68rem; }
+                    #rfg .file-upload-area::before { display: none; }
+                </style>
+                <div id="rfg" style="display:grid;grid-template-columns:1fr 1fr;gap:.625rem .875rem">
+
+                    <div class="form-group">
                         <label>Назва *</label>
-                        <input id="res-title" type="text" value="${resource?.title || ''}" placeholder="Назва ресурсу">
+                        <input id="res-title" type="text" value="${(resource?.title || '').replace(/"/g, '&quot;')}" placeholder="Назва ресурсу">
                     </div>
-                    <div class="form-group" style="flex:1">
+                    <div class="form-group">
                         <label>Категорія</label>
-                        <input id="res-category" type="text" value="${resource?.category || ''}" placeholder="Наприклад: Документація">
+                        <input id="res-category" type="text" value="${(resource?.category || '').replace(/"/g, '&quot;')}" placeholder="Наприклад: Документація">
                     </div>
-                </div>
-                <div class="form-group">
-                    <label>Опис</label>
-                    <textarea id="res-desc" placeholder="Короткий опис ресурсу">${resource?.description || ''}</textarea>
-                </div>
-                <div class="form-row">
-                    <div class="form-group" style="flex:1">
-                        <label>Курс (необов'язково)</label>
-                        <select id="res-course">
-                            <option value="">— Без курсу —</option>
-                            ${courseOptions}
-                        </select>
+
+                    <div class="form-group" style="grid-column:1/-1">
+                        <label>Опис</label>
+                        <textarea id="res-desc" placeholder="Короткий опис ресурсу">${resource?.description || ''}</textarea>
                     </div>
-                    <div class="form-group" style="flex:1">
+
+                    <div class="form-group">
                         <label>Група доступу</label>
                         <select id="res-access-group">
                             <option value="">🌐 Публічний (без обмежень)</option>
                             ${(this._accessGroups || []).map(g =>
-                                `<option value="${g.id}" ${resource?.access_group_id === g.id ? 'selected' : ''}>
-                                    ${g.is_public ? '🌐' : '🔐'} ${g.name}
-                                </option>`
+                                `<option value="${g.id}" ${resource?.access_group_id === g.id ? 'selected' : ''}>${g.is_public ? '🌐' : '🔐'} ${g.name}</option>`
                             ).join('')}
                         </select>
                     </div>
-                </div>
-                <div class="form-group" style="display:flex;gap:1.5rem;flex-wrap:wrap">
-                    <label class="checkbox-item" style="cursor:pointer;user-select:none">
-                        <input type="checkbox" id="res-download" ${resource?.download_allowed !== false ? 'checked' : ''}>
-                        <span>Дозволити завантаження</span>
-                    </label>
-                    <label class="checkbox-item" style="cursor:pointer;user-select:none">
-                        <input type="checkbox" id="res-tracked" ${resource?.is_tracked_download ? 'checked' : ''}
-                            onchange="ResourcesPage._toggleDeadlineRow(this.checked)">
-                        <span>📋 Відстежуваний документ</span>
-                    </label>
-                </div>
-                <div id="res-deadline-row" style="display:${resource?.is_tracked_download ? 'flex' : 'none'};gap:1.5rem;flex-wrap:wrap;align-items:center;margin-top:.25rem">
-                    <label class="checkbox-item" style="cursor:pointer;user-select:none">
-                        <input type="checkbox" id="res-has-deadline" ${resource?.deadline_days ? 'checked' : ''}
-                            onchange="ResourcesPage._toggleDeadlineDays(this.checked)">
-                        <span>Встановити дедлайн</span>
-                    </label>
-                    <div id="res-deadline-days-wrap" style="display:${resource?.deadline_days ? 'flex' : 'none'};align-items:center;gap:.5rem">
-                        <input type="number" id="res-deadline-days" min="1" max="90"
-                            value="${resource?.deadline_days || 3}"
-                            style="width:70px;padding:4px 8px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg-raised);color:var(--text-primary);font-size:.875rem">
-                        <span style="font-size:.85rem;color:var(--text-muted)">днів після публікації</span>
+
+                    <div class="form-group">
+                        <label>Доступ по довіреності</label>
+                        ${CreatableMultiSelect.html('res-dovirenosti')}
+                        <div style="font-size:.72rem;color:var(--text-muted);margin-top:.2rem">Без тегу — видний всім</div>
                     </div>
-                    <input type="hidden" id="res-bump-version" value="0">
-                    ${resource?.doc_version ? `<span style="font-size:.8rem;color:var(--text-muted)">Версія: <b id="res-version-label">${resource.doc_version}</b>
-                        <button type="button" onclick="ResourcesPage._bumpVersion()" title="Збільшити версію — скине всі ознайомлення"
-                            style="margin-left:4px;padding:2px 8px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg-raised);font-size:.78rem;cursor:pointer;color:var(--text-muted)">
-                            ↑ нова версія
-                        </button></span>` : ''}
-                </div>
-                <div class="form-group">
-                    <label>Файл</label>
-                    <div id="resource-file-upload"></div>
-                    <div style="margin-top:.5rem;color:var(--text-muted);font-size:.85rem">${fileHint}</div>
+                    <div style="display:flex;flex-direction:column;gap:.45rem">
+                        <div style="font-size:.8rem;font-weight:500;color:var(--text-secondary)">Параметри</div>
+                        <label class="checkbox-item" style="cursor:pointer;user-select:none">
+                            <input type="checkbox" id="res-download" ${resource?.download_allowed !== false ? 'checked' : ''}>
+                            <span>Дозволити завантаження</span>
+                        </label>
+                        <label class="checkbox-item" style="cursor:pointer;user-select:none">
+                            <input type="checkbox" id="res-tracked" ${resource?.is_tracked_download ? 'checked' : ''}
+                                onchange="ResourcesPage._toggleDeadlineRow(this.checked)">
+                            <span>📋 Відстежуваний документ</span>
+                        </label>
+                        <div id="res-deadline-row" style="display:${resource?.is_tracked_download ? 'flex' : 'none'};flex-direction:column;gap:.35rem;padding-top:.1rem">
+                            <label class="checkbox-item" style="cursor:pointer;user-select:none">
+                                <input type="checkbox" id="res-has-deadline" ${resource?.deadline_days ? 'checked' : ''}
+                                    onchange="ResourcesPage._toggleDeadlineDays(this.checked)">
+                                <span>Встановити дедлайн</span>
+                            </label>
+                            <div id="res-deadline-days-wrap" style="display:${resource?.deadline_days ? 'flex' : 'none'};align-items:center;gap:.4rem">
+                                <input type="number" id="res-deadline-days" min="1" max="90" value="${resource?.deadline_days || 3}"
+                                    style="width:58px;padding:3px 7px;border-radius:7px;border:1.5px solid var(--border);background:var(--bg-raised);color:var(--text-primary);font-size:.8rem">
+                                <span style="font-size:.78rem;color:var(--text-muted)">днів після публікації</span>
+                            </div>
+                            ${resource?.doc_version ? `<div style="display:flex;align-items:center;gap:.35rem">
+                                <span style="font-size:.78rem;color:var(--text-muted)">Версія: <b id="res-version-label">${resource.doc_version}</b></span>
+                                <button type="button" onclick="ResourcesPage._bumpVersion()"
+                                    style="padding:2px 7px;border-radius:7px;border:1.5px solid var(--border);background:var(--bg-raised);font-size:.73rem;cursor:pointer;color:var(--text-muted)">
+                                    ↑ нова версія
+                                </button>
+                            </div>` : ''}
+                            <input type="hidden" id="res-bump-version" value="0">
+                        </div>
+                    </div>
+
+                    <div class="form-group" style="grid-column:1/-1">
+                        <label>Файл</label>
+                        <div id="resource-file-upload"></div>
+                        <div style="margin-top:.3rem;color:var(--text-muted);font-size:.78rem">${fileHint}</div>
+                    </div>
+
                 </div>`,
             footer: `
                 <button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
                 <button class="btn btn-primary" onclick="ResourcesPage.saveResource(${resource ? `'${resource.id}'` : ''})">${isEdit ? 'Зберегти' : 'Додати'}</button>`
         });
+
+        const selectedDovs = (resource?.resource_dovirenosti || [])
+            .map(rd => rd.dovirenosti).filter(Boolean);
+        CreatableMultiSelect.init(
+            'res-dovirenosti',
+            this._allDovirenosti.map(d => ({ id: d.id, name: d.name })),
+            selectedDovs
+        );
 
         this._resourceFile = null;
         const uploadContainer = document.getElementById('resource-file-upload');
@@ -1375,7 +1413,9 @@ const ResourcesPage = {
     },
 
     _toggleDeadlineRow(show) {
-        document.getElementById('res-deadline-row').style.display = show ? 'flex' : 'none';
+        const el = document.getElementById('res-deadline-row');
+        if (el) el.style.display = show ? 'flex' : 'none';
+        if (el && show) el.style.flexDirection = 'column';
     },
 
     _toggleDeadlineDays(show) {
@@ -1401,7 +1441,7 @@ const ResourcesPage = {
             title,
             description:          Dom.val('res-desc').trim() || null,
             category:             Dom.val('res-category').trim() || null,
-            course_id:            Dom.val('res-course') || null,
+            course_id:            null,
             access_group_id:      Dom.val('res-access-group') || null,
             download_allowed:     document.getElementById('res-download')?.checked === true,
             is_tracked_download:  isTracked,
@@ -1422,6 +1462,9 @@ const ResourcesPage = {
                 Object.assign(fields, upload);
             }
 
+            const dovIds = CreatableMultiSelect.getValues('res-dovirenosti');
+            let savedId = resourceId;
+
             if (resourceId) {
                 // Bump doc_version if file changed or manually requested
                 if (fields._bump_version || this._resourceFile) {
@@ -1434,12 +1477,15 @@ const ResourcesPage = {
             } else {
                 fields.doc_version = 1;
                 const created = await API.resources.create(fields);
+                savedId = created.id;
                 // Notify users on publish of tracked document
                 if (fields.is_tracked_download && created) {
                     API.documentDownloads.notifyOnPublish({ ...fields, id: created.id }).catch(() => {});
                 }
                 Toast.success('Додано', 'Новий ресурс успішно створено');
             }
+
+            await API.resources.setDovirenosti(savedId, dovIds).catch(() => {});
 
             Modal.close();
             await Promise.all([this.load(), this._loadFilters()]);

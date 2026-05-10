@@ -35,9 +35,12 @@ const TestsPage = {
                 ]);
             }
 
-            const attempts      = await API.attempts.getByTest(testId);
+            const [attempts, myGrants] = await Promise.all([
+                API.attempts.getByTest(testId),
+                API.attempts.getMyGrants(testId).catch(() => 0)
+            ]);
             const best          = attempts.reduce((b,a) => (!b || (a.percentage||0) > (b.percentage||0)) ? a : b, null);
-            const attemptsLeft  = test.max_attempts ? test.max_attempts - attempts.filter(a => a.completed_at).length : null;
+            const attemptsLeft  = test.max_attempts ? (test.max_attempts + myGrants) - attempts.filter(a => a.completed_at).length : null;
 
             this._renderIntro(container, test, attempts, best, attemptsLeft);
         } catch(e) {
@@ -61,8 +64,8 @@ const TestsPage = {
             <div class="ti-wrap">
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">
                     <h2 style="margin:0"><i class="fa-solid fa-file-pen" style="color:var(--primary);margin-right:.4rem"></i>${test.title}</h2>
-                    <button class="btn btn-ghost btn-sm" onclick="Router.go('${this._from==='expert-path'?'expert-path':'courses/'+test.course_id}')">
-                        <i class="fa-solid fa-arrow-left"></i> ${this._from==='expert-path'?'Шлях експерта':'Назад до курсу'}
+                    <button class="btn btn-ghost btn-sm" onclick="Router.go('${this._from==='expert-path'?'expert-path':test.course_id?'courses/'+test.course_id:'dashboard'}')">
+                        <i class="fa-solid fa-arrow-left"></i> ${this._from==='expert-path'?'Шлях експерта':test.course_id?'Назад до курсу':'Головна'}
                     </button>
                 </div>
                 <div>
@@ -97,7 +100,7 @@ const TestsPage = {
                             ? saved
                                 ? `<div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:1.5rem">
                                        <button class="btn btn-primary" onclick="TestsPage.startTest(true)">
-                                           <i class="fa-solid fa-play"></i> Продовжити (${(saved.confirmedIds||[]).length}/${(saved.questionOrder||[]).length})
+                                           <i class="fa-solid fa-play"></i> Продовжити (${(saved.curQIdx ?? 0) + 1}/${(saved.questionOrder||[]).length})
                                        </button>
                                        ${test.allow_restart ? `<button class="btn btn-ghost btn-sm" onclick="TestsPage.startTest(false)">
                                            <i class="fa-solid fa-rotate-right"></i> Почати заново
@@ -353,9 +356,9 @@ const TestsPage = {
                 <div id="tq-question-area"></div>
 
                 <div class="tq-botbar">
-                    ${this._test.allow_back_navigation
-                        ? `<button class="btn btn-secondary" id="tq-btn-prev" onclick="TestsPage._prevQuestion()">
-                               <i class="fa-solid fa-arrow-left"></i> Назад
+                    ${this._test.allow_skip
+                        ? `<button class="btn btn-ghost btn-sm" id="tq-btn-skip" onclick="TestsPage._skipQuestion()">
+                               Пропустити <i class="fa-solid fa-forward"></i>
                            </button>`
                         : `<span></span>`}
                     <button class="btn btn-primary" id="tq-btn-confirm" onclick="TestsPage._confirmAnswer()">
@@ -365,13 +368,13 @@ const TestsPage = {
             </div>`;
 
         this._showQuestion(this._curQIdx);
-        this._updateProgress();
     },
 
     _showQuestion(idx) {
         const questions = this._questions;
         if (idx < 0 || idx >= questions.length) return;
         this._curQIdx = idx;
+        this._updateProgress();
 
         const q          = questions[idx];
         const isMultiple = q.question_type === 'multiple';
@@ -418,10 +421,10 @@ const TestsPage = {
             </div>
             <div style="display:flex;flex-direction:column;gap:0" class="ql-snow">${answersHtml}</div>`;
 
-        const prev    = document.getElementById('tq-btn-prev');
+        const skip    = document.getElementById('tq-btn-skip');
         const confirm = document.getElementById('tq-btn-confirm');
         const isLast  = idx === questions.length - 1;
-        if (prev)    prev.style.visibility = idx === 0 ? 'hidden' : 'visible';
+        if (skip) skip.style.visibility = isLast ? 'hidden' : 'visible';
         if (confirm) confirm.innerHTML = isLast
             ? `<i class="fa-solid fa-flag-checkered"></i> Завершити тест`
             : `Відповісти <i class="fa-solid fa-arrow-right"></i>`;
@@ -536,18 +539,21 @@ const TestsPage = {
         if (this._curQIdx < this._questions.length - 1) this._showQuestion(this._curQIdx + 1);
     },
 
-    _prevQuestion() {
-        if (this._curQIdx > 0) this._showQuestion(this._curQIdx - 1);
+    _skipQuestion() {
+        if (this._curQIdx < this._questions.length - 1) {
+            this._showQuestion(this._curQIdx + 1);
+            this._saveProgress();
+        }
     },
 
     _updateProgress() {
-        const answered = this._confirmedSet.size;
-        const total    = this._questions.length;
-        const pct      = total ? (answered / total * 100) : 0;
+        const current = this._curQIdx + 1;
+        const total   = this._questions.length;
+        const pct     = total ? (current / total * 100) : 0;
         const fill = document.getElementById('tq-prog-fill');
         const text = document.getElementById('tq-prog-text');
         if (fill) fill.style.width = pct + '%';
-        if (text) text.textContent = `${answered} / ${total}`;
+        if (text) text.textContent = `${current} / ${total}`;
     },
 
     _startTimer(seconds) {
@@ -568,7 +574,12 @@ const TestsPage = {
         this._timer = setInterval(update, 1000);
     },
 
-    cancelTest() { clearInterval(this._timer); Router.go('courses/' + this._test.course_id); },
+    cancelTest() {
+        clearInterval(this._timer);
+        if (this._from === 'expert-path') Router.go('expert-path');
+        else if (this._test.course_id)   Router.go('courses/' + this._test.course_id);
+        else                             Router.go('dashboard');
+    },
 
     async submitTest(isTimeout = false) {
         clearInterval(this._timer);

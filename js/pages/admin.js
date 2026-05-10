@@ -24,19 +24,21 @@ const AdminPage = {
             </div>
 
             <div class="tabs">
-                ${canManageUsers ? `<button class="tab active" onclick="AdminPage.switchTab('users', this)">👥 Користувачі</button>` : ''}
-                <button class="tab ${canManageUsers ? '' : 'active'}" onclick="AdminPage.switchTab('courses', this)">📚 Курси</button>
-                <button class="tab" onclick="AdminPage.switchTab('tests', this)">📝 Тести</button>
-                <button class="tab" onclick="AdminPage.switchTab('news', this)">📰 Новини</button>
-                <button class="tab" onclick="AdminPage.switchTab('enrollments', this)">🎓 Записи</button>
-                ${canManageUsers ? `<button class="tab" onclick="AdminPage.switchTab('access-groups', this)">🔐 Групи доступу</button>` : ''}
-                ${AppState.isOwner() ? `<button class="tab" onclick="AdminPage.switchTab('trash', this)">🗑 Кошик</button>` : ''}
-                ${AppState.isOwner() ? `<button class="tab" onclick="AdminPage.switchTab('logs', this)">📋 Логи</button>` : ''}
+                ${canManageUsers ? `<button class="tab" data-tab="users" onclick="AdminPage.switchTab('users', this)">👥 Користувачі</button>` : ''}
+                <button class="tab" data-tab="courses" onclick="AdminPage.switchTab('courses', this)">📚 Курси</button>
+                <button class="tab" data-tab="tests" onclick="AdminPage.switchTab('tests', this)">📝 Тести</button>
+                <button class="tab" data-tab="news" onclick="AdminPage.switchTab('news', this)">📰 Новини</button>
+                <button class="tab" data-tab="enrollments" onclick="AdminPage.switchTab('enrollments', this)">🎓 Записи</button>
+                ${canManageUsers ? `<button class="tab" data-tab="access-groups" onclick="AdminPage.switchTab('access-groups', this)">🔐 Групи доступу</button>` : ''}
+                ${AppState.isOwner() ? `<button class="tab" data-tab="trash" onclick="AdminPage.switchTab('trash', this)">🗑 Кошик</button>` : ''}
+                ${AppState.isOwner() ? `<button class="tab" data-tab="logs" onclick="AdminPage.switchTab('logs', this)">📋 Логи</button>` : ''}
             </div>
 
             <div id="admin-content"></div>`;
 
         this._tab = params.tab || (canManageUsers ? 'users' : 'courses');
+        const activeBtn = container.querySelector(`.tab[data-tab="${this._tab}"]`);
+        if (activeBtn) activeBtn.classList.add('active');
         await this._loadTab();
     },
 
@@ -588,7 +590,10 @@ const AdminPage = {
     async openCreateUser() {
         const el = document.getElementById('admin-content');
         el.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
-        const { cities, positions, subdivisions, users } = await this._loadRefData();
+        const [{ cities, positions, subdivisions, users }, allDovirenosti] = await Promise.all([
+            this._loadRefData(),
+            API.dovirenosti.getAll().catch(() => [])
+        ]);
 
         const mgItems = users
             .filter(u => u.role === 'manager')
@@ -724,6 +729,10 @@ const AdminPage = {
                     <label class="input-label">
                         <span>Керівник</span>
                         ${SearchSelect.html('cu-manager', mgItems, '')}
+                    </label>
+                    <label class="input-label">
+                        <span>Довіреність</span>
+                        ${CreatableMultiSelect.html('cu-dovirenosti')}
                     </label>
                     <div class="input-row-2col">
                         <label class="input-label"><span>Дата оформлення</span><input id="cu-hired-at" type="date" onpaste="Fmt.parseDatePaste(event,this)"></label>
@@ -1023,6 +1032,7 @@ const AdminPage = {
 `;
 
         CreatableSelect.init();
+        CreatableMultiSelect.init('cu-dovirenosti', allDovirenosti.map(d => ({ id: d.id, name: d.name })), []);
     },
 
     _autoPassword() {
@@ -1104,6 +1114,9 @@ const AdminPage = {
                     );
                 }
             }
+
+            const dovIds = CreatableMultiSelect.getValues('cu-dovirenosti');
+            if (dovIds.length) await API.dovirenosti.setForProfile(userId, dovIds);
 
             const fullName = [lastName, firstName, patronymic].filter(Boolean).join(' ');
             AuditLog.write('user_create', 'user', fullName, { role });
@@ -1528,8 +1541,8 @@ const AdminPage = {
     // ── Імпорт користувачів з CSV ─────────────────────────────────
     _importRows: [],
 
-    _importCols: ['last_name','first_name','patronymic','login','email','password','role','gender','phone','birth_date','city','job_position','subdivision','label'],
-    _importHeaders: ['Прізвище','Ім\u2019я','По батькові','Логін','Email','Пароль','Роль','Стать','Телефон','Дата нар.','Місто','Посада','Підрозділ','Мітка'],
+    _importCols: ['last_name','first_name','patronymic','login','email','password','role','gender','phone','birth_date','city','job_position','subdivision','label','dovirenosti'],
+    _importHeaders: ['Прізвище','Ім\u2019я','По батькові','Логін','Email','Пароль','Роль','Стать','Телефон','Дата нар.','Місто','Посада','Підрозділ','Мітка','Довіреність'],
 
     importUsers() {
         Modal.open({
@@ -1564,10 +1577,10 @@ const AdminPage = {
     _downloadImportExample() {
         const header = this._importHeaders.join(';');
         const rows = [
-            'Іваненко;Олег;Петрович;o.ivanenko;oleg@company.com;pass123;user;male;+380501234567;1990-05-15;Київ;Менеджер;Відділ продажів;Новий',
-            'Коваль;Марія;Андріївна;m.koval;maria@company.com;pass456;teacher;female;+380671112233;20.11.1985;Львів;Викладач;HR;;',
+            'Іваненко;Олег;Петрович;o.ivanenko;oleg@company.com;pass123;user;male;+380501234567;1990-05-15;Київ;Менеджер;Відділ продажів;Новий;Ф-47',
+            'Коваль;Марія;Андріївна;m.koval;maria@company.com;pass456;teacher;female;+380671112233;20.11.1985;Львів;Викладач;HR;;Ф-47|Ф-112',
             'Сидоренко;Андрій;Васильович;a.sydorenko;andrii@company.com;secure99;admin;male;+380931234567;1978-03-10;Харків;Адміністратор;IT;;',
-            'Бондаренко;Олена;;o.bondar;olena@company.com;qwerty1;smm;female;;;Одеса;SMM-спеціаліст;Маркетинг;',
+            'Бондаренко;Олена;;o.bondar;olena@company.com;qwerty1;smm;female;;;Одеса;SMM-спеціаліст;Маркетинг;;',
             'Гриценко;Ірина;Олексіївна;i.hrytsenko;iryna@company.com;pass789;manager;female;+380671234567;15.03.1992;Дніпро;Керівник відділу;Операційний;'
         ];
         const bom = '\uFEFF';
@@ -1613,7 +1626,8 @@ const AdminPage = {
             'місто':'city','город':'city','city':'city',
             'посада':'job_position','должность':'job_position','job_position':'job_position','position':'job_position',
             'підрозділ':'subdivision','подразделение':'subdivision','subdivision':'subdivision',
-            'мітка':'label','метка':'label','label':'label'
+            'мітка':'label','метка':'label','label':'label',
+            'довіреність':'dovirenosti','доверенность':'dovirenosti','dovirenosti':'dovirenosti'
         };
         const colMap = rawHeaders.map(h => colAlias[h] || null);
 
@@ -1733,8 +1747,19 @@ const AdminPage = {
                     p_label:        row.label        || null,
                 });
                 if (error) throw error;
+                if (row.dovirenosti) {
+                    const names = row.dovirenosti.split('|').map(s => s.trim()).filter(Boolean);
+                    if (names.length) {
+                        const allDov = await API.dovirenosti.getAll().catch(() => []);
+                        const ids = await Promise.all(names.map(async name => {
+                            const ex = allDov.find(d => d.name.toLowerCase() === name.toLowerCase());
+                            return ex ? ex.id : (await API.dovirenosti.create(name)).id;
+                        }));
+                        await API.dovirenosti.setForProfile(userId, ids).catch(() => {});
+                    }
+                }
                 done++;
-            
+
             } catch(e) {
                 failed++;
                 errors.push(`Рядок ${row._line} (${row.email}): ${e?.message || 'невідома помилка'}`);

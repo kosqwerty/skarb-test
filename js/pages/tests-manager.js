@@ -249,7 +249,7 @@ const TestsManagerPage = {
 .tm-btn-new{display:inline-flex;align-items:center;gap:8px;padding:10px 22px;border-radius:12px;background:#C9A227;border:none;color:#fff;font-size:.9rem;font-weight:700;cursor:pointer;transition:background .15s;flex-shrink:0}
 .tm-btn-new:hover{background:#b8911f}
 
-.tm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;animation:tm-in .3s ease}
+.tm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:16px;animation:tm-in .3s ease}
 @keyframes tm-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .tm-card{background:var(--bg-surface);border:1px solid var(--border);border-radius:20px;overflow:hidden;display:flex;flex-direction:column;transition:box-shadow .2s,transform .2s;cursor:pointer}
 .tm-card:hover{box-shadow:0 8px 28px rgba(0,0,0,.12);transform:translateY(-2px)}
@@ -466,12 +466,12 @@ const TestsManagerPage = {
                 </div>
             </div>
             <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
-                <input type="checkbox" id="tm-back-nav" ${test?.allow_back_navigation?'checked':''} style="width:18px;height:18px;cursor:pointer">
-                <label for="tm-back-nav" style="cursor:pointer;font-weight:500">Дозволити повернення до попередніх питань</label>
-            </div>
-            <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
                 <input type="checkbox" id="tm-restart" ${test?.allow_restart?'checked':''} style="width:18px;height:18px;cursor:pointer">
                 <label for="tm-restart" style="cursor:pointer;font-weight:500">Дозволити почати заново (скинути прогрес)</label>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+                <input type="checkbox" id="tm-skip" ${test?.allow_skip?'checked':''} style="width:18px;height:18px;cursor:pointer">
+                <label for="tm-skip" style="cursor:pointer;font-weight:500">Дозволити пропускати питання</label>
             </div>
             <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
                 <input type="checkbox" id="tm-feedback" ${test?.show_answer_feedback?'checked':''} style="width:18px;height:18px;cursor:pointer">
@@ -534,8 +534,8 @@ const TestsManagerPage = {
             max_attempts:           parseInt(Dom.val('tm-attempts')) || 1,
             passing_score:          parseInt(Dom.val('tm-score')) || 70,
             randomize_questions:    document.getElementById('tm-shuffle')?.checked || false,
-            allow_back_navigation:  document.getElementById('tm-back-nav')?.checked || false,
             allow_restart:          document.getElementById('tm-restart')?.checked   || false,
+            allow_skip:             document.getElementById('tm-skip')?.checked      || false,
             show_answer_feedback:   document.getElementById('tm-feedback')?.checked  || false,
             show_wrong_answers:     document.getElementById('tm-wrong')?.checked     || false,
             is_published:           document.getElementById('tm-pub')?.checked || false,
@@ -1794,8 +1794,8 @@ ${this._opts.map((o,i) => `
                 max_attempts:        test.max_attempts,
                 time_limit_minutes:  test.time_limit_minutes,
                 randomize_questions:   test.randomize_questions,
-                allow_back_navigation: test.allow_back_navigation,
                 allow_restart:         test.allow_restart,
+                allow_skip:            test.allow_skip,
                 show_answer_feedback:  test.show_answer_feedback,
                 show_wrong_answers:    test.show_wrong_answers,
                 show_results:          test.show_results,
@@ -2141,17 +2141,59 @@ ${this._opts.map((o,i) => `
 
     async _renderResults(container, testId) {
         container.innerHTML = '<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>';
-        let results = [], test;
+        let results = [], test, grants = {};
         try {
-            [results, test] = await Promise.all([
+            [results, test, grants] = await Promise.all([
                 TestsManagerAPI.getAllResults(testId),
-                API.tests.getById(testId)
+                API.tests.getById(testId),
+                API.attempts.getGrantsForTest(testId).catch(() => ({}))
             ]);
         } catch(e) { Toast.error('Помилка', e.message); this._goBack(container); return; }
 
         this._lastResults = results;
-        const passed = results.filter(r => r.passed).length;
+        this._resultsTestId = testId;
+
+        // Group attempts by user
+        const userMap = new Map();
+        for (const r of results) {
+            if (!userMap.has(r.user_id)) userMap.set(r.user_id, { user: r.user, uid: r.user_id, attempts: [] });
+            userMap.get(r.user_id).attempts.push(r);
+        }
+        const users = [...userMap.values()];
+
+        const totalPassed = users.filter(u => u.attempts.some(a => a.passed)).length;
         const avgPct = results.length ? Math.round(results.reduce((s,r) => s+(r.percentage||0), 0) / results.length) : 0;
+        const maxAttempts = test.max_attempts;
+
+        const rowsHtml = users.map(({ user, uid, attempts }) => {
+            const best = attempts.reduce((b,a) => (!b || (a.percentage||0) > (b.percentage||0)) ? a : b, null);
+            const extraGrants = grants[uid] || 0;
+            const allowed = maxAttempts ? maxAttempts + extraGrants : null;
+            const exhausted = allowed !== null && attempts.length >= allowed;
+            const hasPassed = attempts.some(a => a.passed);
+            return `
+            <tr style="border-top:1px solid var(--border)">
+                <td style="padding:10px 14px">
+                    <div style="font-weight:600">${user?.full_name||user?.email||'—'}</div>
+                    ${user?.job_position?`<div style="font-size:.72rem;color:var(--text-muted)">${user.job_position}</div>`:''}
+                </td>
+                <td style="padding:10px 14px;text-align:center">
+                    <span style="font-weight:600">${attempts.length}</span>
+                    ${allowed !== null ? `<span style="color:var(--text-muted);font-size:.8rem"> / ${allowed}</span>` : ''}
+                </td>
+                <td style="padding:10px 14px;text-align:center;font-weight:700;font-size:1rem;color:${best?.passed?'#10b981':'#ef4444'}">${best ? Math.round(best.percentage||0)+'%' : '—'}</td>
+                <td style="padding:10px 14px;text-align:center">
+                    <span style="display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:.72rem;font-weight:700;${hasPassed?'background:rgba(16,185,129,.12);color:#10b981':'background:rgba(239,68,68,.1);color:#ef4444'}">
+                        ${hasPassed ? '<i class="fa-solid fa-check"></i> Пройшов' : '<i class="fa-solid fa-xmark"></i> Не пройшов'}
+                    </span>
+                </td>
+                <td style="padding:10px 14px;text-align:center">
+                    ${maxAttempts && exhausted ? `<button class="btn btn-ghost btn-sm" onclick="TestsManagerPage._grantAttempt('${testId}','${uid}',this)" title="Дати додаткову спробу">
+                        <i class="fa-solid fa-plus"></i> Спробу
+                    </button>` : ''}
+                </td>
+            </tr>`;
+        }).join('');
 
         container.innerHTML = `<style>
 .tres-page{max-width:900px;display:flex;flex-direction:column;height:calc(100vh - 120px)}
@@ -2169,43 +2211,41 @@ ${this._opts.map((o,i) => `
         ${results.length ? `<button class="btn btn-ghost btn-sm" onclick="TestsManagerPage._exportCSV(TestsManagerPage._lastResults,'${test.title.replace(/'/g,"\\'")}')"><i class="fa-solid fa-file-csv"></i> CSV</button>` : ''}
     </div>
     <div class="tres-stats">
-        ${[['<i class="fa-solid fa-users"></i>',results.length,'Спроб'],['<i class="fa-solid fa-circle-check"></i>',passed,'Пройшли'],['<i class="fa-solid fa-circle-xmark"></i>',results.length-passed,'Не пройшли'],['<i class="fa-solid fa-chart-bar"></i>',avgPct+'%','Середній бал']].map(([ic,v,l]) => `
+        ${[['<i class="fa-solid fa-users"></i>',users.length,'Співробітників'],['<i class="fa-solid fa-circle-check"></i>',totalPassed,'Пройшли'],['<i class="fa-solid fa-circle-xmark"></i>',users.length-totalPassed,'Не пройшли'],['<i class="fa-solid fa-chart-bar"></i>',avgPct+'%','Середній бал']].map(([ic,v,l]) => `
         <div class="tres-stat">
             <div style="font-size:1.5rem">${ic}</div>
             <div style="font-size:1.3rem;font-weight:800;color:var(--text-primary)">${v}</div>
             <div style="font-size:.72rem;color:var(--text-muted)">${l}</div>
         </div>`).join('')}
     </div>
-    ${results.length ? `
+    ${users.length ? `
     <div class="tres-table-wrap">
         <table style="width:100%;border-collapse:collapse;font-size:.85rem">
             <thead style="position:sticky;top:0;z-index:1">
                 <tr style="background:var(--bg-raised)">
                     <th style="padding:10px 14px;text-align:left;font-weight:600;color:var(--text-muted)">Співробітник</th>
-                    <th style="padding:10px 14px;text-align:left;font-weight:600;color:var(--text-muted)">Дата</th>
-                    <th style="padding:10px 14px;text-align:center;font-weight:600;color:var(--text-muted)">Бал</th>
+                    <th style="padding:10px 14px;text-align:center;font-weight:600;color:var(--text-muted)">Спроби</th>
+                    <th style="padding:10px 14px;text-align:center;font-weight:600;color:var(--text-muted)">Кращий бал</th>
                     <th style="padding:10px 14px;text-align:center;font-weight:600;color:var(--text-muted)">Статус</th>
+                    <th style="padding:10px 14px;text-align:center;font-weight:600;color:var(--text-muted)"></th>
                 </tr>
             </thead>
-            <tbody>
-                ${results.map(r => `
-                <tr style="border-top:1px solid var(--border)">
-                    <td style="padding:10px 14px">
-                        <div style="font-weight:600">${r.user?.full_name||r.user?.email||'—'}</div>
-                        ${r.user?.job_position?`<div style="font-size:.72rem;color:var(--text-muted)">${r.user.job_position}</div>`:''}
-                    </td>
-                    <td style="padding:10px 14px;color:var(--text-muted)">${Fmt.dateShort(r.completed_at)}</td>
-                    <td style="padding:10px 14px;text-align:center;font-weight:700;font-size:1rem;color:${r.passed?'#10b981':'#ef4444'}">${Math.round(r.percentage||0)}%</td>
-                    <td style="padding:10px 14px;text-align:center">
-                        <span style="display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:.72rem;font-weight:700;${r.passed?'background:rgba(16,185,129,.12);color:#10b981':'background:rgba(239,68,68,.1);color:#ef4444'}">
-                            ${r.passed ? '<i class="fa-solid fa-check"></i> Пройшов' : '<i class="fa-solid fa-xmark"></i> Не пройшов'}
-                        </span>
-                    </td>
-                </tr>`).join('')}
-            </tbody>
+            <tbody>${rowsHtml}</tbody>
         </table>
     </div>` : '<div style="text-align:center;padding:3rem;color:var(--text-muted)">Результатів поки немає</div>'}
 </div>`;
+    },
+
+    async _grantAttempt(testId, userId, btn) {
+        btn.disabled = true;
+        try {
+            await API.attempts.grantExtra(testId, userId);
+            Toast.success('Готово', 'Додаткову спробу надано');
+            await this._renderResults(TestsManagerPage._container, testId);
+        } catch(e) {
+            Toast.error('Помилка', e.message);
+            btn.disabled = false;
+        }
     },
 
     _exportCSV(results, title) {

@@ -3,6 +3,8 @@
 // ================================================================
 
 const App = {
+    _reminderShown: false,
+
     async boot() {
         Theme.init();
         SearchSelect.init();
@@ -183,7 +185,13 @@ const App = {
         }
 
         // Show personal calendar reminder after initial page renders
-        setTimeout(() => typeof MyCalendarPage !== 'undefined' && MyCalendarPage.showTodayReminder(), 800);
+        this._reminderShown = false;
+        setTimeout(() => {
+            if (!this._reminderShown) {
+                this._reminderShown = true;
+                MyCalendarPage.showTodayReminder();
+            }
+        }, 800);
     },
 
     // ── Results Page (quick inline) ───────────────────────────────

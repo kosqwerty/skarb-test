@@ -401,10 +401,6 @@ ${this._styles()}`;
     // ── Login reminder modal ──────────────────────────────────────
 
     async showTodayReminder() {
-        const key = `mc_reminder_${AppState.user.id}_${new Date().toISOString().slice(0,10)}`;
-        if (sessionStorage.getItem(key)) return;
-        sessionStorage.setItem(key, '1');
-
         const today = new Date().toISOString().slice(0, 10);
         const { data } = await supabase
             .from('personal_cal_events')

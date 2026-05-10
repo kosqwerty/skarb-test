@@ -270,7 +270,8 @@ const API = {
                         cities:access_group_cities(city),
                         positions:access_group_positions(position),
                         departments:access_group_departments(department),
-                        labels:access_group_labels(label))`, { count: 'exact' });
+                        labels:access_group_labels(label)),
+                    resource_dovirenosti(dovirenost_id, dovirenosti(id,name))`, { count: 'exact' });
             q = q.is('deleted_at', null);
             if (!includeLessonResources) q = q.is('lesson_id', null);
             if (courseId) q = q.eq('course_id', courseId);
@@ -294,9 +295,19 @@ const API = {
                         cities:access_group_cities(city),
                         positions:access_group_positions(position),
                         departments:access_group_departments(department),
-                        labels:access_group_labels(label))`).eq('id', id).single();
+                        labels:access_group_labels(label)),
+                    resource_dovirenosti(dovirenost_id, dovirenosti(id,name))`).eq('id', id).single();
             if (error) throw error;
             return data;
+        },
+
+        async setDovirenosti(resourceId, ids) {
+            await supabase.from('resource_dovirenosti').delete().eq('resource_id', resourceId);
+            if (ids.length) {
+                const rows = ids.map(id => ({ resource_id: resourceId, dovirenost_id: id }));
+                const { error } = await supabase.from('resource_dovirenosti').insert(rows);
+                if (error) throw error;
+            }
         },
 
         async getCategories({ trackedOnly = false, docsOnly = false } = {}) {
@@ -307,7 +318,7 @@ const API = {
             if (docsOnly) q = q.neq('type', 'video').neq('type', 'link').neq('type', 'scorm');
             const { data, error } = await q;
             if (error) throw error;
-            return (data || []).map(r => r.category).filter(Boolean);
+            return [...new Set((data || []).map(r => r.category).filter(Boolean))].sort();
         },
 
         async getSignedUrl(storagePath) {
@@ -338,6 +349,7 @@ const API = {
             if (error) throw error;
             return {
                 storage_path: path,
+                original_name: file.name,
                 file_type: file.type || this._mimeTypeByExt(ext),
                 type: this._resourceTypeByExt(ext),
                 file_url: null
@@ -657,6 +669,34 @@ const API = {
                 .order('completed_at', { ascending: false });
             if (error) throw error;
             return data;
+        },
+
+        async getMyGrants(testId) {
+            const { data, error } = await supabase.from('test_attempt_grants')
+                .select('id')
+                .eq('test_id', testId)
+                .eq('user_id', AppState.user.id);
+            if (error) throw error;
+            return (data || []).length;
+        },
+
+        async getGrantsForTest(testId) {
+            const { data, error } = await supabase.from('test_attempt_grants')
+                .select('user_id')
+                .eq('test_id', testId);
+            if (error) throw error;
+            const counts = {};
+            (data || []).forEach(r => { counts[r.user_id] = (counts[r.user_id] || 0) + 1; });
+            return counts;
+        },
+
+        async grantExtra(testId, userId) {
+            const { error } = await supabase.from('test_attempt_grants').insert({
+                test_id:    testId,
+                user_id:    userId,
+                granted_by: AppState.user.id
+            });
+            if (error) throw error;
         }
     },
 
@@ -1021,7 +1061,7 @@ const API = {
         // Returns all employee profiles (for "who hasn't acknowledged" calculation)
         async getAllEmployees() {
             const { data, error } = await supabase.from('profiles')
-                .select('id, full_name, job_position, role, manager_id')
+                .select('id, full_name, job_position, role, manager_id, profile_dovirenosti(dovirenost_id)')
                 .in('role', ['user', 'teacher', 'smm', 'manager'])
                 .order('full_name');
             if (error) throw error;

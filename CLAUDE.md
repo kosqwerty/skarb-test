@@ -101,3 +101,67 @@ Defined in `APP_CONFIG.buckets`. Each bucket needs a migration for creation + RL
 ## CSS conventions
 
 All colours and spacing use CSS variables from `css/main.css`. Always use `var(--primary)`, `var(--border)`, `var(--bg-surface)`, etc. — never hardcode hex values except in one-off inline styles inside JS template literals where a variable isn't accessible.
+
+## Security — write safe HTML from the start
+
+These rules are mandatory whenever writing template literals in `js/pages/*.js`. Do not add them as a cleanup step — apply them immediately.
+
+### Rule 1 — `Fmt.esc()` for any DB value in innerHTML
+
+Every string from the database inserted into an HTML template must be wrapped in `Fmt.esc()`. This includes `full_name`, `email`, `title`, `description`, `category`, `excerpt`, `job_position`, `city`, `subdivision`, `bio`, `name`, `label`, tags, and any other user-supplied text.
+
+```js
+// WRONG
+`<div>${user.full_name}</div>`
+
+// RIGHT
+`<div>${Fmt.esc(user.full_name)}</div>`
+```
+
+Exceptions (safe without escaping): values returned by `Fmt.*` functions, hardcoded string literals, UUIDs, content intentionally stored as HTML (Quill editor output).
+
+### Rule 2 — `JSON.stringify` for string args in onclick
+
+Never pass user-controlled strings into onclick via single-quote interpolation. The `.replace(/'/g, "\\'")`  pattern has a backslash bypass vulnerability. Use `JSON.stringify` instead.
+
+```js
+// WRONG
+`onclick="doSomething('${title.replace(/'/g, "\\'")}')"`
+
+// RIGHT
+`onclick="doSomething(${JSON.stringify(title).replace(/"/g, '&quot;')})"`
+```
+
+UUIDs are safe to interpolate directly with single quotes: `'${record.id}'`.
+
+### Rule 3 — `Fmt.safeUrl()` for user-entered URLs in href/src
+
+Any URL from a DB field (not a Supabase storage signed URL) must go through `Fmt.safeUrl()` to block `javascript:`, `data:`, and `vbscript:` schemes.
+
+```js
+// WRONG
+`<a href="${resource.url}">Відкрити</a>`
+
+// RIGHT
+`<a href="${Fmt.safeUrl(resource.url)}" rel="noopener noreferrer">Відкрити</a>`
+```
+
+Also add `rel="noopener noreferrer"` to every `target="_blank"` link.
+
+### Rule 4 — `data-*` attribute pattern for display-only values in onclick
+
+When a value is only used for display (toast message, confirm dialog text), store it in a `data-*` attribute and read via `this.dataset.*`. This avoids passing the value through JS string context entirely.
+
+```js
+`<button data-name="${Fmt.esc(user.full_name)}"
+         onclick="doSomething('${user.id}', this.dataset.name)">
+    Action
+</button>`
+```
+
+### Security utilities available in `Fmt` (`js/utils.js`)
+
+| Function | Purpose |
+|----------|---------|
+| `Fmt.esc(str)` | HTML-escape `< > " ' &` for safe innerHTML insertion |
+| `Fmt.safeUrl(url)` | Returns `#` if URL uses `javascript:`, `data:`, or `vbscript:` |

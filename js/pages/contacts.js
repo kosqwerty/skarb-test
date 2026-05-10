@@ -180,7 +180,7 @@ const ContactsPage = {
             <span>${bdStr}${daysUntil <= 7 ? `<span class="ct-bd-soon">через ${daysUntil} дн.</span>` : ''}</span>
             <button class="ct-bd-btn${reminder ? ' active' : ''}"
                 title="${reminder ? `Нагадування за ${reminder.days_before} дн.` : 'Додати нагадування'}"
-                onclick="ContactsPage._openBdModal('${u.id}','${(u.full_name||'').replace(/'/g,"\\'")}','${u.birth_date}')">
+                onclick="ContactsPage._openBdModal('${u.id}',${JSON.stringify(u.full_name||'').replace(/"/g,'&quot;')},'${u.birth_date}')">
                 🔔
             </button>
         </div>` : ''}
@@ -257,7 +257,7 @@ const ContactsPage = {
             footer: `
             ${reminder ? `<button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="ContactsPage._removeBdReminder('${userId}')">Видалити</button>` : ''}
             <button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
-            <button class="btn btn-primary" onclick="ContactsPage._saveBdReminder('${userId}','${fullName.replace(/'/g,"\\'")}')">
+            <button class="btn btn-primary" onclick="ContactsPage._saveBdReminder('${userId}',${JSON.stringify(fullName||'').replace(/"/g,'&quot;')})">
                 ${reminder ? 'Оновити' : 'Зберегти'}
             </button>`
         });

@@ -334,6 +334,21 @@ const Fmt = {
     successStatus(s) {
         return { 'passed': 'Зараховано', 'failed': 'Не зараховано', 'unknown': '—' }[s] || s || '—';
     },
+    esc(str) {
+        if (str === null || str === undefined) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    },
+    safeUrl(url) {
+        if (!url) return '#';
+        const s = String(url).trim();
+        if (/^javascript:/i.test(s) || /^data:/i.test(s) || /^vbscript:/i.test(s)) return '#';
+        return s;
+    },
     parseDatePaste(e, input) {
         const text = (e.clipboardData || window.clipboardData).getData('text').trim();
         const m = text.match(/^(\d{1,2})[.\-\/](\d{1,2})[.\-\/](\d{4})$/);

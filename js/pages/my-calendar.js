@@ -371,7 +371,7 @@ ${this._styles()}`;
         const filtered = (data || []).filter(p => !existing.has(p.id));
         res.innerHTML = filtered.length
             ? filtered.map(p => `
-            <div class="mc-viewer-row mc-viewer-result" onclick="MyCalendarPage._addViewer('${p.id}','${(p.full_name||'').replace(/'/g,"\\'")}')">
+            <div class="mc-viewer-row mc-viewer-result" onclick="MyCalendarPage._addViewer('${p.id}',${JSON.stringify(p.full_name||'').replace(/"/g,'&quot;')})">
                 <span>${p.full_name || '—'}</span>
                 <span class="mc-viewer-add">＋</span>
             </div>`).join('')

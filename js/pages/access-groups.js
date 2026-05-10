@@ -128,7 +128,7 @@ const AccessGroupsPage = {
                     <button class="btn btn-ghost btn-sm" onclick="AccessGroupsPage.openMembers('${g.id}')">👥 Учасники</button>
                     <button class="btn btn-ghost btn-sm" onclick="AccessGroupsPage.openForm(${esc})">✏️ Редагувати</button>
                     <button class="btn btn-danger btn-sm" style="margin-left:auto"
-                            onclick="AccessGroupsPage.deleteGroup('${g.id}','${g.name.replace(/'/g,"\\'").replace(/"/g,'\\"')}')">🗑</button>
+                            onclick="AccessGroupsPage.deleteGroup('${g.id}',${JSON.stringify(g.name||'').replace(/"/g,'&quot;')})">🗑</button>
                 </div>
             </div>`;
     },
@@ -402,7 +402,7 @@ const AccessGroupsPage = {
                     </div>`,
                 footer: `
                     <button class="btn btn-secondary" onclick="Modal.close()">Закрити</button>
-                    ${members.length ? `<button class="btn btn-success" onclick="AccessGroupsPage._exportMembers(${esc},'${group.name.replace(/'/g,"\\'")}')">📊 Експорт</button>` : ''}`
+                    ${members.length ? `<button class="btn btn-success" onclick="AccessGroupsPage._exportMembers(${esc},${JSON.stringify(group.name||'').replace(/"/g,'&quot;')})">📊 Експорт</button>` : ''}`
             });
         } catch(e) {
             Toast.error('Помилка', e.message);

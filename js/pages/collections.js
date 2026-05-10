@@ -125,7 +125,7 @@ const CollectionsPage = {
                         <button class="res-star-btn${Bookmarks.isBookmarked('collections/'+p.id) ? ' active' : ''}"
                             data-bm-route="collections/${p.id}"
                             title="${Bookmarks.isBookmarked('collections/'+p.id) ? 'Видалити з закладок' : 'Зберегти в закладки'}"
-                            onclick="Bookmarks.toggleCollection('${p.id}','${p.title.replace(/'/g,"\\'")}')">★</button>
+                            onclick="Bookmarks.toggleCollection('${p.id}',${JSON.stringify(p.title||'').replace(/"/g,'&quot;')})">★</button>
                         ${adminBtns}
                     </div>
                 </div>
@@ -211,7 +211,7 @@ const CollectionsPage = {
                         <button class="res-star-btn${Bookmarks.isBookmarked('collections/'+page.id) ? ' active' : ''}"
                             data-bm-route="collections/${page.id}"
                             title="${Bookmarks.isBookmarked('collections/'+page.id) ? 'Видалити з закладок' : 'Зберегти в закладки'}"
-                            onclick="Bookmarks.toggleCollection('${page.id}','${page.title.replace(/'/g,"\\'")}')">★</button>
+                            onclick="Bookmarks.toggleCollection('${page.id}',${JSON.stringify(page.title||'').replace(/"/g,'&quot;')})">★</button>
                         ${editBtn}
                     </div>
                 </div>
@@ -893,7 +893,7 @@ tr:hover td { background: #f8fafc; }
                            oninput="CollectionsPage.__filterRes(this.value)">
                     <div id="res-link-list" style="max-height:360px;overflow-y:auto;display:flex;flex-direction:column;gap:.35rem">
                         ${data.map(r => `
-                            <div onclick="CollectionsPage.__pickRes('${r.id}','${r.title.replace(/'/g,"\\'")}','${r.type||''}')"
+                            <div onclick="CollectionsPage.__pickRes('${r.id}',${JSON.stringify(r.title||'').replace(/"/g,'&quot;')},'${r.type||''}')"
                                  style="display:flex;align-items:center;gap:.75rem;padding:.6rem .75rem;border:1px solid var(--border);border-radius:var(--radius-md);cursor:pointer;transition:background var(--transition)"
                                  onmouseenter="this.style.background='var(--bg-hover)'" onmouseleave="this.style.background=''">
                                 <span>${icon(r)}</span>

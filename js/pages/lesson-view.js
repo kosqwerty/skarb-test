@@ -166,7 +166,7 @@ const LessonViewPage = {
                         <div class="card"><div class="card-body" style="text-align:center">
                             <div style="font-size:3rem;margin-bottom:1rem">🔗</div>
                             <h3>${resource.title}</h3>
-                            <a href="${resource.url}" target="_blank" rel="noopener" class="btn btn-primary" style="margin-top:1rem">Відкрити посилання ↗</a>
+                            <a href="${Fmt.safeUrl(resource.url)}" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="margin-top:1rem">Відкрити посилання ↗</a>
                         </div></div>`;
                     break;
                 default:      await this._openFile(viewer, resource);
@@ -232,7 +232,7 @@ const LessonViewPage = {
                 <div style="font-size:3rem;margin-bottom:1rem">📁</div>
                 <h3>${resource.title}</h3>
                 <p style="color:var(--text-muted);margin:.5rem 0 1.5rem">${Fmt.fileSize(resource.file_size)}</p>
-                <a href="${url}" download="${resource.title}" class="btn btn-primary">⬇ Завантажити файл</a>
+                <a href="${Fmt.safeUrl(url)}" download="${Fmt.esc(resource.title)}" class="btn btn-primary">⬇ Завантажити файл</a>
             </div></div>`;
     },
 

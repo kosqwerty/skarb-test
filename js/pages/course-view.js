@@ -150,7 +150,7 @@ const CourseViewPage = {
                         ${!canOpen ? '<span style="color:var(--text-muted)">🔒</span>' : ''}
                         ${AppState.isStaff() ? `
                             <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();CourseViewPage.openEditLesson('${lesson.id}')">✏️</button>
-                            <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();CourseViewPage.deleteLesson('${lesson.id}','${lesson.title.replace(/'/g,"\\'")}')">🗑</button>
+                            <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();CourseViewPage.deleteLesson('${lesson.id}',${JSON.stringify(lesson.title||'').replace(/"/g,'&quot;')})">🗑</button>
                         ` : ''}
                     </div>
                 </div>`;
@@ -219,7 +219,7 @@ const CourseViewPage = {
                                 ${!t.is_published ? '<span class="badge badge-muted">Чернетка</span>' : ''}
                                 ${AppState.isStaff() ? `
                                     <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();TestsPage.openEdit('${t.id}')">✏️</button>
-                                    <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();TestsPage.deleteTest('${t.id}','${t.title.replace(/'/g,"\\'")}')">🗑</button>
+                                    <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();TestsPage.deleteTest('${t.id}',${JSON.stringify(t.title||'').replace(/"/g,'&quot;')})">🗑</button>
                                 ` : ''}
                             </div>
                         </div>`).join('')}

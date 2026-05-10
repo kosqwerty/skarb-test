@@ -285,16 +285,16 @@ const AdminPage = {
                         </div>
                         <div>
                             <div style="font-weight:600;font-size:.82rem;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px;text-decoration-color:var(--border-light);white-space:nowrap">
-                                ${u.full_name || '—'}
+                                ${Fmt.esc(u.full_name) || '—'}
                                 ${u.is_hidden ? '<span style="font-size:.6rem;padding:1px 5px;background:rgba(156,163,175,.15);color:var(--text-muted);border-radius:4px;margin-left:4px;font-weight:500">🙈 прихований</span>' : ''}
                             </div>
-                            <div style="font-size:.72rem;color:var(--text-muted)">${u.email}</div>
+                            <div style="font-size:.72rem;color:var(--text-muted)">${Fmt.esc(u.email)}</div>
                         </div>
                     </div>
                 </td>
-                <td style="font-size:.8rem">${u.job_position || '<span style="color:var(--text-muted)">—</span>'}</td>
-                <td style="font-size:.8rem;white-space:nowrap">${u.city        || '<span style="color:var(--text-muted)">—</span>'}</td>
-                <td style="font-size:.8rem">${u.subdivision || '<span style="color:var(--text-muted)">—</span>'}</td>
+                <td style="font-size:.8rem">${Fmt.esc(u.job_position) || '<span style="color:var(--text-muted)">—</span>'}</td>
+                <td style="font-size:.8rem;white-space:nowrap">${Fmt.esc(u.city) || '<span style="color:var(--text-muted)">—</span>'}</td>
+                <td style="font-size:.8rem">${Fmt.esc(u.subdivision) || '<span style="color:var(--text-muted)">—</span>'}</td>
                 <td>${Fmt.roleBadge(u.role)}</td>
                 <td>${u.label ? `<span class="badge badge-warning" style="font-size:.65rem">${u.label}</span>` : '<span style="color:var(--text-muted);font-size:.8rem">—</span>'}</td>
                 <td style="color:var(--text-muted);font-size:.78rem;white-space:nowrap">${Fmt.dateShort(u.created_at)}</td>
@@ -354,7 +354,7 @@ const AdminPage = {
                         ${avatar}
                     </div>
                     <div>
-                        <div style="font-size:1.1rem;font-weight:700;margin-bottom:.3rem">${u.full_name || '—'}</div>
+                        <div style="font-size:1.1rem;font-weight:700;margin-bottom:.3rem">${Fmt.esc(u.full_name) || '—'}</div>
                         <div style="display:flex;gap:.4rem;flex-wrap:wrap">
                             ${Fmt.roleBadge(u.role)}
                             ${u.label ? `<span class="badge badge-warning" style="font-size:.65rem">${u.label}</span>` : ''}
@@ -363,19 +363,19 @@ const AdminPage = {
                     </div>
                 </div>
                 <div style="border-top:1px solid var(--border)">
-                    ${row('✉️', 'Email',      u.email)}
-                    ${row('🔑', 'Логін',      u.login || '—')}
-                    ${row('📞', 'Телефон',    u.phone)}
+                    ${row('✉️', 'Email',      Fmt.esc(u.email))}
+                    ${row('🔑', 'Логін',      Fmt.esc(u.login) || '—')}
+                    ${row('📞', 'Телефон',    Fmt.esc(u.phone))}
                     ${row('👤', 'Стать',      genderMap[u.gender])}
                     ${row('🎂', 'Дата нар.',  u.birth_date ? Fmt.dateShort(u.birth_date) : null)}
-                    ${row('💼', 'Посада',     u.job_position)}
-                    ${row('🏢', 'Підрозділ',  u.subdivision)}
-                    ${row('📍', 'Місто',      u.city)}
+                    ${row('💼', 'Посада',     Fmt.esc(u.job_position))}
+                    ${row('🏢', 'Підрозділ',  Fmt.esc(u.subdivision))}
+                    ${row('📍', 'Місто',      Fmt.esc(u.city))}
                     ${row('📅', 'Реєстрація', Fmt.datetime(u.created_at))}
                     ${u.bio ? `
                     <div style="padding:.6rem 0">
                         <div style="color:var(--text-muted);font-size:.78rem;margin-bottom:.3rem">Про себе</div>
-                        <div style="font-size:.875rem;color:var(--text-secondary);line-height:1.5">${u.bio}</div>
+                        <div style="font-size:.875rem;color:var(--text-secondary);line-height:1.5">${Fmt.esc(u.bio)}</div>
                     </div>` : ''}
                 </div>
                 ${canSetBdReminder ? this._birthdayReminderBlock(u, bdReminder) : ''}`,
@@ -424,7 +424,7 @@ const AdminPage = {
                 <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
                     ${chips}
                     <input type="hidden" id="bd-days-val" value="${reminder.days_before}">
-                    <button onclick="AdminPage._saveBirthdayReminder('${u.id}','${(u.full_name||'').replace(/'/g,"\\'")}')"
+                    <button data-n="${Fmt.esc(u.full_name||'')}" onclick="AdminPage._saveBirthdayReminder('${u.id}',this.dataset.n)"
                         style="margin-left:auto;padding:6px 14px;background:var(--primary);color:#fff;border:none;border-radius:40px;font-size:.82rem;font-weight:600;cursor:pointer">Оновити</button>
                 </div>
             </div>` : `
@@ -432,7 +432,7 @@ const AdminPage = {
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
                 ${chips}
                 <input type="hidden" id="bd-days-val" value="7">
-                <button onclick="AdminPage._saveBirthdayReminder('${u.id}','${(u.full_name||'').replace(/'/g,"\\'")}')"
+                <button data-n="${Fmt.esc(u.full_name||'')}" onclick="AdminPage._saveBirthdayReminder('${u.id}',this.dataset.n)"
                     style="margin-left:auto;padding:6px 14px;background:var(--primary);color:#fff;border:none;border-radius:40px;font-size:.82rem;font-weight:600;cursor:pointer">Зберегти</button>
             </div>`}
         </div>
@@ -1839,7 +1839,7 @@ const AdminPage = {
                                     <div style="display:flex;gap:.4rem">
                                         <button class="btn btn-ghost btn-sm" onclick="Router.go('courses/${c.id}')">👁</button>
                                         <button class="btn btn-ghost btn-sm" onclick="AdminPage._loadCourseForm('${c.id}')">✏️</button>
-                                        <button class="btn btn-danger btn-sm" onclick="AdminPage._deleteCourse('${c.id}','${c.title.replace(/'/g,"\\'")}')">🗑</button>
+                                        <button class="btn btn-danger btn-sm" onclick="AdminPage._deleteCourse('${c.id}',${JSON.stringify(c.title||'').replace(/"/g,'&quot;')})">🗑</button>
                                     </div>
                                 </td>
                             </tr>`).join('')}
@@ -1997,7 +1997,7 @@ const AdminPage = {
                                     <div style="display:flex;gap:.4rem">
                                         <button class="btn btn-ghost btn-sm" onclick="Router.go('news/${n.id}')">👁</button>
                                         <button class="btn btn-ghost btn-sm" onclick="NewsPage.openEdit('${n.id}')">✏️</button>
-                                        <button class="btn btn-danger btn-sm" onclick="NewsPage.deleteNews('${n.id}','${n.title.replace(/'/g,"\\'")}')">🗑</button>
+                                        <button class="btn btn-danger btn-sm" onclick="NewsPage.deleteNews('${n.id}',${JSON.stringify(n.title||'').replace(/"/g,'&quot;')})">🗑</button>
                                     </div>
                                 </td>
                             </tr>`).join('')}
@@ -2093,8 +2093,8 @@ const AdminPage = {
                         <div style="display:flex;align-items:center;justify-content:space-between;padding:.625rem 1rem;border-bottom:1px solid var(--border)">
                             <span style="font-size:.875rem">${i.name}</span>
                             <div style="display:flex;gap:.3rem">
-                                <button class="btn btn-ghost btn-sm" onclick="AdminPage.openEditDir('${table}','${i.id}','${i.name.replace(/'/g,"\\'")}')">✏️</button>
-                                <button class="btn btn-danger btn-sm" onclick="AdminPage.deleteDir('${table}','${i.id}','${i.name.replace(/'/g,"\\'")}')">🗑</button>
+                                <button class="btn btn-ghost btn-sm" onclick="AdminPage.openEditDir('${table}','${i.id}',${JSON.stringify(i.name||'').replace(/"/g,'&quot;')})">✏️</button>
+                                <button class="btn btn-danger btn-sm" onclick="AdminPage.deleteDir('${table}','${i.id}',${JSON.stringify(i.name||'').replace(/"/g,'&quot;')})">🗑</button>
                             </div>
                         </div>`).join('')
                     : `<div style="padding:1.5rem;text-align:center;color:var(--text-muted);font-size:.85rem">Список порожній</div>`}

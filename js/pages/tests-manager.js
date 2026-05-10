@@ -364,7 +364,7 @@ const TestsManagerPage = {
         <button class="tm-btn-assign" onclick="TestsManagerPage.openAssignModal('${t.id}')"><i class="fa-solid fa-users"></i></button>
         <button class="tm-btn-results" onclick="TestsManagerPage.openResultsModal('${t.id}')"><i class="fa-solid fa-chart-line"></i></button>
         <button class="tm-btn-dupe" onclick="TestsManagerPage.duplicateTest('${t.id}')" title="Дублювати тест"><i class="fa-regular fa-copy"></i></button>
-        <button class="tm-btn-del" onclick="TestsManagerPage.deleteTest('${t.id}','${t.title.replace(/'/g,"\\'")}')"><i class="fa-solid fa-trash"></i></button>
+        <button class="tm-btn-del" onclick="TestsManagerPage.deleteTest('${t.id}',${JSON.stringify(t.title||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-trash"></i></button>
     </div>
 </div>`;
     },
@@ -494,8 +494,8 @@ const TestsManagerPage = {
             <div id="tm-pos-tags" style="display:flex;flex-wrap:wrap;gap:4px;min-height:24px">
                 ${selectedPos.length
                     ? selectedPos.map(p => {
-                        const js = p.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-                        return `<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px 2px 10px;border-radius:20px;background:rgba(99,102,241,.1);border:1.5px solid var(--primary);color:var(--primary);font-size:.72rem;font-weight:600">${p}<button type="button" onclick="TestsManagerPage._removePosTag('${js}')" style="background:none;border:none;cursor:pointer;color:var(--primary);padding:0;margin:0 0 0 2px;font-size:.75rem;line-height:1"><i class="fa-solid fa-xmark"></i></button></span>`;
+                        const js = JSON.stringify(p).replace(/"/g,'&quot;');
+                        return `<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px 2px 10px;border-radius:20px;background:rgba(99,102,241,.1);border:1.5px solid var(--primary);color:var(--primary);font-size:.72rem;font-weight:600">${Fmt.esc(p)}<button type="button" onclick="TestsManagerPage._removePosTag(${js})" style="background:none;border:none;cursor:pointer;color:var(--primary);padding:0;margin:0 0 0 2px;font-size:.75rem;line-height:1"><i class="fa-solid fa-xmark"></i></button></span>`;
                     }).join('')
                     : `<span style="font-size:.75rem;color:var(--text-muted)">Не вибрано — тільки вручну</span>`
                 }
@@ -622,8 +622,8 @@ const TestsManagerPage = {
         }
         el.innerHTML = checked.map(cb => {
             const p  = cb.value;
-            const js = p.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-            return `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px 3px 12px;border-radius:20px;background:rgba(99,102,241,.1);border:1.5px solid var(--primary);color:var(--primary);font-size:.75rem;font-weight:600">${p}<button type="button" onclick="TestsManagerPage._removePosTag('${js}')" style="background:none;border:none;cursor:pointer;color:var(--primary);padding:0;margin:0 0 0 2px;font-size:.8rem;line-height:1"><i class="fa-solid fa-xmark"></i></button></span>`;
+            const js = JSON.stringify(p).replace(/"/g,'&quot;');
+            return `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px 3px 12px;border-radius:20px;background:rgba(99,102,241,.1);border:1.5px solid var(--primary);color:var(--primary);font-size:.75rem;font-weight:600">${Fmt.esc(p)}<button type="button" onclick="TestsManagerPage._removePosTag(${js})" style="background:none;border:none;cursor:pointer;color:var(--primary);padding:0;margin:0 0 0 2px;font-size:.8rem;line-height:1"><i class="fa-solid fa-xmark"></i></button></span>`;
         }).join('');
     },
 
@@ -1876,7 +1876,7 @@ ${this._opts.map((o,i) => `
                 : al === 'right'
                     ? 'width:64px;height:64px;object-fit:cover;border-radius:7px;flex-shrink:0;order:2'
                     : 'width:64px;height:64px;object-fit:cover;border-radius:7px;flex-shrink:0';
-            return `<img src="${a.image_url}" style="${st}" onclick="TestsManagerPage._openLightbox('${a.image_url.replace(/'/g,"\\'")}')" title="Збільшити">`;
+            return `<img src="${a.image_url}" style="${st}" onclick="TestsManagerPage._openLightbox(${JSON.stringify(a.image_url||'').replace(/"/g,'&quot;')})" title="Збільшити">`;
         };
         let optHtml = '';
         if (q.question_type === 'text') {
@@ -2174,8 +2174,8 @@ ${this._opts.map((o,i) => `
             return `
             <tr style="border-top:1px solid var(--border)">
                 <td style="padding:10px 14px">
-                    <div style="font-weight:600">${user?.full_name||user?.email||'—'}</div>
-                    ${user?.job_position?`<div style="font-size:.72rem;color:var(--text-muted)">${user.job_position}</div>`:''}
+                    <div style="font-weight:600">${Fmt.esc(user?.full_name||user?.email||'—')}</div>
+                    ${user?.job_position?`<div style="font-size:.72rem;color:var(--text-muted)">${Fmt.esc(user.job_position)}</div>`:''}
                 </td>
                 <td style="padding:10px 14px;text-align:center">
                     <span style="font-weight:600">${attempts.length}</span>
@@ -2208,7 +2208,7 @@ ${this._opts.map((o,i) => `
     <div class="tres-topbar">
         <button class="tres-back" onclick="TestsManagerPage._goBack(TestsManagerPage._container)"><i class="fa-solid fa-arrow-left"></i> Назад</button>
         <span style="font-size:1.1rem;font-weight:700;color:var(--text-primary);flex:1"><i class="fa-solid fa-chart-bar"></i> ${test.title}</span>
-        ${results.length ? `<button class="btn btn-ghost btn-sm" onclick="TestsManagerPage._exportCSV(TestsManagerPage._lastResults,'${test.title.replace(/'/g,"\\'")}')"><i class="fa-solid fa-file-csv"></i> CSV</button>` : ''}
+        ${results.length ? `<button class="btn btn-ghost btn-sm" onclick="TestsManagerPage._exportCSV(TestsManagerPage._lastResults,${JSON.stringify(test.title||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-file-csv"></i> CSV</button>` : ''}
     </div>
     <div class="tres-stats">
         ${[['<i class="fa-solid fa-users"></i>',users.length,'Співробітників'],['<i class="fa-solid fa-circle-check"></i>',totalPassed,'Пройшли'],['<i class="fa-solid fa-circle-xmark"></i>',users.length-totalPassed,'Не пройшли'],['<i class="fa-solid fa-chart-bar"></i>',avgPct+'%','Середній бал']].map(([ic,v,l]) => `

@@ -145,7 +145,7 @@ const CoursesPage = {
                 ${AppState.isStaff() ? `
                     <div class="card-footer" onclick="event.stopPropagation()" style="display:flex;gap:.5rem">
                         <button class="btn btn-secondary btn-sm" onclick="CoursesPage.openEdit('${course.id}')">✏️ Редагувати</button>
-                        <button class="btn btn-danger btn-sm" onclick="CoursesPage.deleteCourse('${course.id}','${course.title.replace(/'/g,"\\'")}')">🗑️</button>
+                        <button class="btn btn-danger btn-sm" onclick="CoursesPage.deleteCourse('${course.id}',${JSON.stringify(course.title||'').replace(/"/g,'&quot;')})">🗑️</button>
                     </div>` : ''}
             </div>`;
     },

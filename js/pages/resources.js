@@ -780,9 +780,9 @@ const ResourcesPage = {
         const tkey = this._kbTypeKey(resource);
         const isNew = this._isNew(resource);
         const isBm = Bookmarks.isBookmarked('resource/'+resource.id);
-        const safeTitle = resource.title.replace(/'/g,"\\'");
-        const safeIcon = icon.replace(/'/g,"\\'");
-        const safeCat = (resource.category||'').replace(/'/g,"\\'");
+        const safeTitle = JSON.stringify(resource.title||'').replace(/"/g,'&quot;');
+        const safeIcon = JSON.stringify(icon||'').replace(/"/g,'&quot;');
+        const safeCat = JSON.stringify(resource.category||'').replace(/"/g,'&quot;');
         return `
 <div class="kb-card kb-t-${tkey}" onclick="ResourcesPage.openViewer('${resource.id}')">
     <div class="kb-card-accent"></div>
@@ -794,22 +794,22 @@ const ResourcesPage = {
                 <span class="kb-badge kb-badge-type kb-badge-${tkey}">${this._kbTypeLabel(tkey)}</span>
             </div>
         </div>
-        <div class="kb-card-title">${resource.title}</div>
+        <div class="kb-card-title">${Fmt.esc(resource.title)}</div>
         <div class="kb-card-meta">
-            ${resource.category ? `<span class="kb-badge kb-badge-cat">${resource.category}</span>` : ''}
-            ${resource.course?.title ? `<span class="kb-badge kb-badge-course">📚 ${resource.course.title}</span>` : ''}
+            ${resource.category ? `<span class="kb-badge kb-badge-cat">${Fmt.esc(resource.category)}</span>` : ''}
+            ${resource.course?.title ? `<span class="kb-badge kb-badge-course">📚 ${Fmt.esc(resource.course.title)}</span>` : ''}
         </div>
     </div>
     <div class="kb-card-footer" onclick="event.stopPropagation()">
         <div class="kb-card-actions">
             <button class="kb-btn-open" onclick="ResourcesPage.openViewer('${resource.id}')">Відкрити →</button>
             ${resource.download_allowed ? `<button class="kb-btn-dl" title="Завантажити" onclick="ResourcesPage.downloadResource('${resource.id}')">⬇</button>` : ''}
-            ${AppState.isStaff() ? `<button class="kb-btn-edit" title="Редагувати" onclick="ResourcesPage.openEdit('${resource.id}')">✏️</button><button class="kb-btn-del" title="Видалити" onclick="ResourcesPage.deleteResource('${resource.id}','${safeTitle}')">🗑️</button>` : ''}
+            ${AppState.isStaff() ? `<button class="kb-btn-edit" title="Редагувати" onclick="ResourcesPage.openEdit('${resource.id}')">✏️</button><button class="kb-btn-del" title="Видалити" onclick="ResourcesPage.deleteResource('${resource.id}',${safeTitle})">🗑️</button>` : ''}
         </div>
         <button class="kb-star res-star-btn${isBm?' active':''}"
             data-bm-route="resource/${resource.id}"
             title="${isBm?'Видалити з закладок':'Зберегти в закладки'}"
-            onclick="Bookmarks.toggleResource('${resource.id}','${safeTitle}','${safeIcon}','${safeCat}')">★</button>
+            onclick="Bookmarks.toggleResource('${resource.id}',${safeTitle},${safeIcon},${safeCat})">★</button>
     </div>
 </div>`;
     },
@@ -818,29 +818,29 @@ const ResourcesPage = {
         const tkey = this._kbTypeKey(resource);
         const isNew = this._isNew(resource);
         const isBm = Bookmarks.isBookmarked('resource/'+resource.id);
-        const safeTitle = resource.title.replace(/'/g,"\\'");
-        const safeIcon = icon.replace(/'/g,"\\'");
-        const safeCat = (resource.category||'').replace(/'/g,"\\'");
+        const safeTitle = JSON.stringify(resource.title||'').replace(/"/g,'&quot;');
+        const safeIcon = JSON.stringify(icon||'').replace(/"/g,'&quot;');
+        const safeCat = JSON.stringify(resource.category||'').replace(/"/g,'&quot;');
         return `
 <div class="kb-row kb-t-${tkey}" onclick="ResourcesPage.openViewer('${resource.id}')">
     <div class="kb-row-icon">${this._kbTypeIcon(tkey)}</div>
     <div class="kb-row-info">
-        <div class="kb-row-title">${resource.title}</div>
+        <div class="kb-row-title">${Fmt.esc(resource.title)}</div>
         <div class="kb-row-meta">
             <span class="kb-badge kb-badge-type kb-badge-${tkey}">${this._kbTypeLabel(tkey)}</span>
-            ${resource.category ? `<span class="kb-badge kb-badge-cat">${resource.category}</span>` : ''}
-            ${resource.course?.title ? `<span class="kb-badge kb-badge-course">📚 ${resource.course.title}</span>` : ''}
+            ${resource.category ? `<span class="kb-badge kb-badge-cat">${Fmt.esc(resource.category)}</span>` : ''}
+            ${resource.course?.title ? `<span class="kb-badge kb-badge-course">📚 ${Fmt.esc(resource.course.title)}</span>` : ''}
             ${isNew ? '<span class="kb-badge kb-badge-new">✦ Нове</span>' : ''}
         </div>
     </div>
     <div class="kb-row-actions" onclick="event.stopPropagation()">
         <button class="kb-btn-open" onclick="ResourcesPage.openViewer('${resource.id}')">Відкрити →</button>
         ${resource.download_allowed ? `<button class="kb-btn-dl" title="Завантажити" onclick="ResourcesPage.downloadResource('${resource.id}')">⬇</button>` : ''}
-        ${AppState.isStaff() ? `<button class="kb-btn-edit" title="Редагувати" onclick="ResourcesPage.openEdit('${resource.id}')">✏️</button><button class="kb-btn-del" title="Видалити" onclick="ResourcesPage.deleteResource('${resource.id}','${safeTitle}')">🗑️</button>` : ''}
+        ${AppState.isStaff() ? `<button class="kb-btn-edit" title="Редагувати" onclick="ResourcesPage.openEdit('${resource.id}')">✏️</button><button class="kb-btn-del" title="Видалити" onclick="ResourcesPage.deleteResource('${resource.id}',${safeTitle})">🗑️</button>` : ''}
         <button class="kb-star res-star-btn${isBm?' active':''}"
             data-bm-route="resource/${resource.id}"
             title="${isBm?'Видалити з закладок':'Зберегти в закладки'}"
-            onclick="Bookmarks.toggleResource('${resource.id}','${safeTitle}','${safeIcon}','${safeCat}')">★</button>
+            onclick="Bookmarks.toggleResource('${resource.id}',${safeTitle},${safeIcon},${safeCat})">★</button>
     </div>
 </div>`;
     },
@@ -993,10 +993,10 @@ const ResourcesPage = {
                 <div class="resource-item ${docClass}" onclick="ResourcesPage.openViewer('${resource.id}')" style="cursor:pointer">
                     <div class="resource-icon ${resource.type || 'file'}">${icon}</div>
                     <div class="resource-info">
-                        <div class="resource-title">${resource.title}</div>
-                        ${resource.description ? `<div style="font-size:.8rem;color:var(--text-muted);margin-top:.15rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${resource.description}</div>` : ''}
+                        <div class="resource-title">${Fmt.esc(resource.title)}</div>
+                        ${resource.description ? `<div style="font-size:.8rem;color:var(--text-muted);margin-top:.15rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Fmt.esc(resource.description)}</div>` : ''}
                         <div class="resource-meta">
-                            ${resource.category ? `Категорія: ${resource.category}` : ''}
+                            ${resource.category ? `Категорія: ${Fmt.esc(resource.category)}` : ''}
                             <span style="font-size:.72rem;font-weight:600;background:var(--bg-base);border:1px solid var(--border);border-radius:4px;padding:1px 5px;margin-left:.3rem;color:var(--text-muted)">${this._fileLabel(resource)}</span>
                             ${resource.access_group
                                 ? ` · <span style="color:var(--primary);font-weight:500">${resource.access_group.is_public ? '🌐' : '🔐'} ${resource.access_group.name}</span>`
@@ -1006,7 +1006,7 @@ const ResourcesPage = {
                     </div>
                     <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center" onclick="event.stopPropagation()">
                         <button class="btn btn-ghost btn-sm" onclick="ResourcesPage.openViewer('${resource.id}')">Відкрити</button>
-                        ${AppState.isStaff() ? `<button class="btn btn-ghost btn-sm" onclick="ResourcesPage.openEdit('${resource.id}')">✏️</button><button class="btn btn-ghost btn-sm res-del-btn" title="Видалити" onclick="ResourcesPage.deleteResource('${resource.id}','${resource.title.replace(/'/g,"\\'").replace(/"/g,'&quot;')}')">🗑️</button>` : ''}
+                        ${AppState.isStaff() ? `<button class="btn btn-ghost btn-sm" onclick="ResourcesPage.openEdit('${resource.id}')">✏️</button><button class="btn btn-ghost btn-sm res-del-btn" title="Видалити" onclick="ResourcesPage.deleteResource('${resource.id}',${JSON.stringify(resource.title||'').replace(/"/g,'&quot;')})">🗑️</button>` : ''}
                     </div>
                 </div>`;
         }
@@ -1115,14 +1115,14 @@ const ResourcesPage = {
                 <div style="padding:2rem;text-align:center;color:var(--text-muted)">
                     <p style="margin-bottom:1rem">Попередній перегляд ${ext.toUpperCase()}-файлів недоступний онлайн.</p>
                     <div style="display:flex;gap:.75rem;justify-content:center;flex-wrap:wrap">
-                        <a href="${url}" target="_blank" class="btn btn-primary">⬇ Завантажити</a>
-                        <a href="${gViewUrl}" target="_blank" rel="noopener" class="btn btn-ghost">🔗 Відкрити в Google Docs</a>
+                        <a href="${Fmt.safeUrl(url)}" target="_blank" rel="noopener noreferrer" class="btn btn-primary">⬇ Завантажити</a>
+                        <a href="${gViewUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-ghost">🔗 Відкрити в Google Docs</a>
                     </div>
                 </div>`;
         }
 
         return `${description}<div style="padding:2rem;text-align:center;color:var(--text-muted)">Файл не підтримується для перегляду онлайн.</div>
-            <div style="text-align:center;margin-top:1rem"><a href="${url}" target="_blank" class="btn btn-primary">Відкрити в новому вікні</a></div>`;
+            <div style="text-align:center;margin-top:1rem"><a href="${Fmt.safeUrl(url)}" target="_blank" rel="noopener noreferrer" class="btn btn-primary">Відкрити в новому вікні</a></div>`;
     },
 
     async downloadResource(id) {
@@ -1569,7 +1569,7 @@ const ResourcesPage = {
                             <div style="font-size:.75rem;color:var(--text-muted)">Видалено ${Fmt.dateShort(r.deleted_at)}${r.deleter?.full_name ? ' · ' + r.deleter.full_name : ''}</div>
                         </div>
                         <button class="btn btn-ghost btn-sm" onclick="ResourcesPage._restoreResource('${r.id}')">↩ Відновити</button>
-                        <button class="btn btn-sm" style="background:rgba(239,68,68,.1);color:#ef4444;border:1px solid rgba(239,68,68,.2)" onclick="ResourcesPage._hardDelete('${r.id}','${r.title.replace(/'/g,"\\'")}')">✕</button>
+                        <button class="btn btn-sm" style="background:rgba(239,68,68,.1);color:#ef4444;border:1px solid rgba(239,68,68,.2)" onclick="ResourcesPage._hardDelete('${r.id}',${JSON.stringify(r.title||'').replace(/"/g,'&quot;')})">✕</button>
                     </div>`).join('')}
                 </div>`;
         } catch(e) {
@@ -1685,7 +1685,7 @@ const ResourceViewPage = {
             const gOpenUrl = `https://docs.google.com/gview?url=${encodeURIComponent(url)}`;
             const dlName   = ResourcesPage._buildFilename(resource);
             const dlBtn    = resource.download_allowed !== false
-                ? `<a href="${url}" download="${dlName}" class="btn btn-primary">⬇ Завантажити</a>`
+                ? `<a href="${Fmt.safeUrl(url)}" download="${Fmt.esc(dlName)}" class="btn btn-primary">⬇ Завантажити</a>`
                 : '';
             viewerHtml = `
                 <div style="position:relative;width:100%;height:calc(100vh - 220px);min-height:500px;border-radius:var(--radius-lg);overflow:hidden;border:1px solid var(--border)">
@@ -1713,7 +1713,7 @@ const ResourceViewPage = {
                 <div style="text-align:center;padding:3rem;background:var(--bg-raised);border-radius:var(--radius-lg);border:1px solid var(--border);color:var(--text-muted)">
                     <div style="font-size:3rem;margin-bottom:1rem">📎</div>
                     <p style="margin-bottom:1.5rem">Цей тип файлу не підтримується для перегляду онлайн.</p>
-                    <a href="${url}" target="_blank" class="btn btn-primary">Відкрити в новому вікні</a>
+                    <a href="${Fmt.safeUrl(url)}" target="_blank" rel="noopener noreferrer" class="btn btn-primary">Відкрити в новому вікні</a>
                 </div>`;
         }
 
@@ -1729,11 +1729,11 @@ const ResourceViewPage = {
                     </button>
                     <div style="flex:1;min-width:0">
                         <div style="display:flex;align-items:center;gap:10px;margin-bottom:.4rem">
-                            <h1 style="margin:0;font-size:1.4rem;font-weight:700;line-height:1.3">${resource.title}</h1>
+                            <h1 style="margin:0;font-size:1.4rem;font-weight:700;line-height:1.3">${Fmt.esc(resource.title)}</h1>
                             <button class="res-star-btn${Bookmarks.isBookmarked('resource/'+resource.id) ? ' active' : ''}"
                                 data-bm-route="resource/${resource.id}"
                                 title="${Bookmarks.isBookmarked('resource/'+resource.id) ? 'Видалити з закладок' : 'Зберегти в закладки'}"
-                                onclick="Bookmarks.toggleResource('${resource.id}','${resource.title.replace(/'/g,"\\'")}','${ResourcesPage._resourceIcon(resource.type||resource.file_type||'file')}','${(resource.category||'').replace(/'/g,"\\'")}')">★</button>
+                                onclick="Bookmarks.toggleResource('${resource.id}',${JSON.stringify(resource.title||'').replace(/"/g,'&quot;')},${JSON.stringify(ResourcesPage._resourceIcon(resource.type||resource.file_type||'file')).replace(/"/g,'&quot;')},${JSON.stringify(resource.category||'').replace(/"/g,'&quot;')})">★</button>
                         </div>
                         <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
                             ${categoryBadge}
@@ -1741,7 +1741,7 @@ const ResourceViewPage = {
                             ${resource.download_allowed === false ? `<span class="badge" style="background:rgba(239,68,68,.1);color:#f87171;font-size:.75rem;padding:3px 10px;border-radius:20px;border:1px solid rgba(239,68,68,.2)">тільки перегляд</span>` : ''}
                             ${deadlineBadge}
                         </div>
-                        ${resource.description ? `<p style="margin:.6rem 0 0;color:var(--text-muted);font-size:.875rem">${resource.description}</p>` : ''}
+                        ${resource.description ? `<p style="margin:.6rem 0 0;color:var(--text-muted);font-size:.875rem">${Fmt.esc(resource.description)}</p>` : ''}
                     </div>
                     ${AppState.isStaff() ? `
                     <button title="Редагувати" onclick="ResourcesPage.openEdit('${resource.id}')"
@@ -1760,7 +1760,7 @@ const ResourceViewPage = {
                 <!-- Download bar (above viewer, for all downloadable files) -->
                 ${resource.download_allowed !== false
                     ? `<div style="display:flex;justify-content:center;padding:.25rem 0">
-                        <a href="${url}" download="${ResourcesPage._buildFilename(resource)}"
+                        <a href="${Fmt.safeUrl(url)}" download="${Fmt.esc(ResourcesPage._buildFilename(resource))}"
                             style="display:inline-flex;align-items:center;gap:8px;padding:10px 32px;background:var(--primary);color:#fff;border-radius:24px;font-size:.95rem;font-weight:600;text-decoration:none;box-shadow:0 2px 8px rgba(0,0,0,.15);transition:background var(--transition)"
                             onmouseenter="this.style.background='var(--primary-dark,#1d4ed8)'"
                             onmouseleave="this.style.background='var(--primary)'">

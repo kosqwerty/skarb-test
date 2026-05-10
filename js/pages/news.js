@@ -101,11 +101,11 @@ const NewsPage = {
                     </div>` : `<div style="height:280px;background:linear-gradient(135deg,rgba(99,102,241,.1),rgba(139,92,246,.1));display:flex;align-items:center;justify-content:center;font-size:5rem">📰</div>`}
                 <div style="padding:2rem;display:flex;flex-direction:column;justify-content:center">
                     <span style="color:var(--primary);font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.75rem">
-                        ⭐ ${news.category || 'Головна новина'}
+                        ⭐ ${Fmt.esc(news.category) || 'Головна новина'}
                     </span>
-                    <h2 style="margin-bottom:1rem;line-height:1.4">${news.title}</h2>
+                    <h2 style="margin-bottom:1rem;line-height:1.4">${Fmt.esc(news.title)}</h2>
                     <p style="color:var(--text-secondary);font-size:.9rem;line-height:1.7;margin-bottom:1.5rem;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">
-                        ${news.excerpt || news.content.slice(0, 200).replace(/<[^>]+>/g, '')}...
+                        ${Fmt.esc(news.excerpt || news.content.slice(0, 200).replace(/<[^>]+>/g, ''))}...
                     </p>
                     <div style="display:flex;align-items:center;justify-content:space-between">
                         <span style="font-size:.8rem;color:var(--text-muted)">
@@ -122,13 +122,13 @@ const NewsPage = {
             <div class="news-card" onclick="Router.go('news/${news.id}')">
                 <div class="news-thumb">
                     ${news.thumbnail_url
-                        ? `<img src="${news.thumbnail_url}" alt="${news.title}" loading="lazy" style="width:100%;height:100%;object-fit:fill;display:block">`
+                        ? `<img src="${news.thumbnail_url}" alt="${Fmt.esc(news.title)}" loading="lazy" style="width:100%;height:100%;object-fit:fill;display:block">`
                         : `<div style="height:100%;background:linear-gradient(135deg,rgba(99,102,241,.08),rgba(139,92,246,.08));display:flex;align-items:center;justify-content:center;font-size:3rem">📰</div>`}
                 </div>
                 <div class="news-body">
-                    <div class="news-category">${news.category || 'Загальні'}</div>
-                    <h4 class="news-title">${news.title}</h4>
-                    <p class="news-excerpt">${news.excerpt || (news.content || '').replace(/<[^>]+>/g, '').slice(0, 150)}</p>
+                    <div class="news-category">${Fmt.esc(news.category) || 'Загальні'}</div>
+                    <h4 class="news-title">${Fmt.esc(news.title)}</h4>
+                    <p class="news-excerpt">${Fmt.esc(news.excerpt || (news.content || '').replace(/<[^>]+>/g, '').slice(0, 150))}</p>
                 </div>
                 <div class="news-footer">
                     <span>👤 ${news.author?.full_name || '—'}</span>
@@ -138,7 +138,7 @@ const NewsPage = {
                         <button class="res-star-btn${Bookmarks.isBookmarked('news/'+news.id) ? ' active' : ''}"
                             data-bm-route="news/${news.id}"
                             title="${Bookmarks.isBookmarked('news/'+news.id) ? 'Видалити з закладок' : 'Зберегти в закладки'}"
-                            onclick="event.stopPropagation();Bookmarks.toggleNews('${news.id}','${news.title.replace(/'/g,"\\'").replace(/"/g,'\\"')}','${(news.category||'').replace(/'/g,"\\'")}')">★</button>
+                            onclick="event.stopPropagation();Bookmarks.toggleNews('${news.id}',${JSON.stringify(news.title||'').replace(/"/g,'&quot;')},${JSON.stringify(news.category||'').replace(/"/g,'&quot;')})">★</button>
                         ${news.allow_reactions !== false ? `
                             <div style="display:flex;gap:.25rem" onclick="event.stopPropagation()">
                                 <button id="cr-up-${news.id}" class="btn btn-ghost btn-sm" onclick="event.stopPropagation();NewsPage._reactCard('${news.id}','up')" style="font-size:.85rem;padding:.2rem .5rem">
@@ -150,7 +150,7 @@ const NewsPage = {
                             </div>` : ''}
                         ${AppState.isStaff() ? `
                             <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();NewsPage.openEdit('${news.id}')">✏️</button>
-                            <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();NewsPage.deleteNews('${news.id}','${news.title.replace(/'/g,"\\'").replace(/"/g,'\\"')}')">🗑</button>
+                            <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();NewsPage.deleteNews('${news.id}',${JSON.stringify(news.title||'').replace(/"/g,'&quot;')})">🗑</button>
                         ` : ''}
                     </div>
                 </div>
@@ -213,7 +213,7 @@ const NewsPage = {
                             ${AppState.isStaff() ? `
                             <div style="display:flex;gap:.75rem;justify-content:flex-end">
                                 <button class="btn btn-secondary" onclick="NewsPage.openEdit('${news.id}')">✏️ Редагувати</button>
-                                <button class="btn btn-danger" onclick="NewsPage.deleteNews('${news.id}','${news.title}')">🗑️ Видалити</button>
+                                <button class="btn btn-danger" onclick="NewsPage.deleteNews('${news.id}',${JSON.stringify(news.title||'').replace(/"/g,'&quot;')})">🗑️ Видалити</button>
                             </div>` : ''}
                                 <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
                                     <span class="badge badge-primary">${news.category || 'Загальні'}</span>
@@ -221,7 +221,7 @@ const NewsPage = {
                                     ${!news.is_published ? '<span class="badge badge-muted">Чернетка</span>' : ''}
                                 </div>
                                 
-                                <h1 style="font-size:2rem;line-height:1.3;margin-bottom:1rem">${news.title}</h1>
+                                <h1 style="font-size:2rem;line-height:1.3;margin-bottom:1rem">${Fmt.esc(news.title)}</h1>
 
                                 <div style="display:flex;align-items:center;justify-content:space-between;color:var(--text-muted);font-size:.875rem;margin-bottom:2rem;padding-bottom:1.5rem;border-bottom:1px solid var(--border)">
                                     <div style="display:flex;align-items:center;gap:1.5rem;">
@@ -244,7 +244,7 @@ const NewsPage = {
                                 </div>
 
                                 
-                                ${news.excerpt ? `<p style="font-size:1.1rem;color:var(--text-secondary);margin-bottom:1.5rem;font-style:italic">${news.excerpt}</p>` : ''}
+                                ${news.excerpt ? `<p style="font-size:1.1rem;color:var(--text-secondary);margin-bottom:1.5rem;font-style:italic">${Fmt.esc(news.excerpt)}</p>` : ''}
 
                                 <div class="news-content-body">
                                     ${this._fixImgUrls(news.content)}
@@ -252,7 +252,7 @@ const NewsPage = {
 
                                 ${news.tags?.length ? `
                                     <div style="margin-top:2rem;display:flex;gap:.5rem;flex-wrap:wrap">
-                                        ${news.tags.map(t => `<span class="badge badge-muted">#${t}</span>`).join('')}
+                                        ${news.tags.map(t => `<span class="badge badge-muted">#${Fmt.esc(t)}</span>`).join('')}
                                     </div>` : ''}
                             </div>
                         </div>
@@ -272,7 +272,7 @@ const NewsPage = {
                                             : `<div class="nv-recent-thumb-ph">📰</div>`}
                                     </div>
                                     <div class="nv-recent-info">
-                                        <div class="nv-recent-title">${n.title}</div>
+                                        <div class="nv-recent-title">${Fmt.esc(n.title)}</div>
                                         <div class="nv-recent-date">${Fmt.date(n.published_at || n.created_at, { day:'numeric', month:'short' })}</div>
                                     </div>
                                 </div>`).join('')}

@@ -675,7 +675,7 @@ ${this._styles()}`;
         <span class="sg-loc-name-ico">🏪</span>
         <span class="sg-loc-name-text">${locName}</span>
         ${viewOnly ? `<span class="sg-view-only-badge">👁 Тільки перегляд</span>` : `
-        <button class="sg-loc-name-edit" onclick="ScheduleGraphPage._renameLocation('${this._locId}','${locName.replace(/'/g,"\\'")}')" title="Перейменувати">✏️</button>`}
+        <button class="sg-loc-name-edit" onclick="ScheduleGraphPage._renameLocation('${this._locId}',${JSON.stringify(locName||'').replace(/"/g,'&quot;')})" title="Перейменувати">✏️</button>`}
         <span class="sg-wh-sep">·</span>
         <span class="sg-wh-label">🕐 Час роботи:</span>
         <span class="sg-wh-time" id="sg-wh-display">${wStart} — ${wEnd}</span>
@@ -1400,7 +1400,7 @@ ${this._styles()}`;
                 <div class="sg-viewer-dropdown" id="sg-partner-dropdown">
                     ${this._partnerAllProfiles.map(p => `
                     <div class="sg-viewer-drop-item" data-id="${p.id}" data-name="${(p.full_name||'').replace(/"/g,'&quot;')}"
-                        onmousedown="ScheduleGraphPage._pickPartnerUser('${p.id}','${(p.full_name||p.id).replace(/'/g,"\\'")}')">
+                        onmousedown="ScheduleGraphPage._pickPartnerUser('${p.id}',${JSON.stringify(p.full_name||p.id).replace(/"/g,'&quot;')})">
                         ${p.full_name || p.id}
                     </div>`).join('')}
                 </div>
@@ -1727,7 +1727,7 @@ ${this._styles()}`;
 
             if (isFree) {
                 const onclick = isPartner
-                    ? `ScheduleGraphPage._confirmPartnerSubstitute('${a.user_id}','${(name).replace(/'/g,"\\'")}')`
+                    ? `ScheduleGraphPage._confirmPartnerSubstitute('${a.user_id}',${JSON.stringify(name||'').replace(/"/g,'&quot;')})`
                     : `ScheduleGraphPage._assignSubstitute('${a.user_id}')`;
                 return `<div class="sg-subst-person sg-subst-free-card${wantsSub?' sg-subst-wants-sub':''}${isPartner?' sg-subst-partner':''}"
                     onclick="${onclick}" title="Натисніть щоб призначити на підміну">
@@ -1976,7 +1976,7 @@ ${this._styles()}`;
 
     <div class="sg-modal-actions">
         <button class="sg-btn-save sg-resolve-confirm-btn"
-            onclick="ScheduleGraphPage._confirmSubstResolved('${userId}','${date}','${locId}',${isSub},'${name.replace(/'/g,"\\'")}')">
+            onclick="ScheduleGraphPage._confirmSubstResolved('${userId}','${date}','${locId}',${isSub},${JSON.stringify(name||'').replace(/"/g,'&quot;')})">
             ✓ ${actionLabel}
         </button>
         <button class="sg-btn-cancel" onclick="document.getElementById('sg-subst-resolve-modal').remove()">
@@ -2035,7 +2035,7 @@ ${this._styles()}`;
             const color = this._avatarColor(p.id);
             const meta = [p.role ? Fmt.role(p.role) : '', p.label || ''].filter(Boolean).join(' · ');
             return `<div class="sg-emp-row" data-name="${(p.full_name || '').toLowerCase()}"
-                onclick="ScheduleGraphPage._applySubstShift('${originalUserId}','${date}','${locId}','${p.id}','${originalEmpName.replace(/'/g,"\\'")}','${(p.full_name||'').replace(/'/g,"\\'")}')">
+                onclick="ScheduleGraphPage._applySubstShift('${originalUserId}','${date}','${locId}','${p.id}',${JSON.stringify(originalEmpName||'').replace(/"/g,'&quot;')},${JSON.stringify(p.full_name||'').replace(/"/g,'&quot;')})">
                 <div class="sg-av sm" style="background:${color}">${initials}</div>
                 <div>
                     <div class="sg-emp-fn">${p.full_name || 'Без імені'}</div>
@@ -2775,7 +2775,7 @@ ${this._styles()}`;
             <div class="sg-viewer-dropdown" id="sg-viewer-dropdown">
                 ${this._viewerProfiles.map(p => `
                 <div class="sg-viewer-drop-item" data-id="${p.id}" data-name="${(p.full_name||'').replace(/"/g,'&quot;')}"
-                    onmousedown="ScheduleGraphPage._pickViewerUser('${p.id}','${(p.full_name||p.id).replace(/'/g,"\\'")}')">
+                    onmousedown="ScheduleGraphPage._pickViewerUser('${p.id}',${JSON.stringify(p.full_name||p.id).replace(/"/g,'&quot;')})">
                     ${p.full_name || p.id}
                 </div>`).join('')}
             </div>
@@ -5290,7 +5290,7 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
     </div>` : ''}
     <div class="sg-modal-actions">
         <button class="sg-btn-save sg-resolve-confirm-btn" ${conflictLoc ? 'disabled style="opacity:.45;cursor:not-allowed;box-shadow:none"' : ''}
-            onclick="ScheduleGraphEmployee._confirmMgrHelp('${date}','${info.entryId}','${info.locId || ''}','${info.managerId || ''}','${(info.locName||'').replace(/'/g,"\\'")}')">
+            onclick="ScheduleGraphEmployee._confirmMgrHelp('${date}','${info.entryId}','${info.locId || ''}','${info.managerId || ''}',${JSON.stringify(info.locName||'').replace(/"/g,'&quot;')})">
             ✓ Можу вийти
         </button>
         <button class="sg-btn-cancel"

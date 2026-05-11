@@ -157,6 +157,8 @@ const BookmarksPage = {
 
     ${HelpTip.render('bookmarks', {
         icon: 'fa-star',
+        gradient: '135deg,#f59e0b,#ef4444',
+        cols: 1,
         title: 'Як користуватись Закладками',
         items: [
             { icon: 'fa-star', color: '#f59e0b', text: 'Тут зберігаються матеріали, які ви позначили зірочкою в Базі знань або на сторінці уроку.' },
@@ -173,7 +175,7 @@ const BookmarksPage = {
 </div>
 
 <style>
-.bm-page { max-width:1200px;animation:bm-in .35s cubic-bezier(.16,1,.3,1); }
+.bm-page { animation:bm-in .35s cubic-bezier(.16,1,.3,1); }
 @keyframes bm-in { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
 
 .bm-hero {

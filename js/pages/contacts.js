@@ -71,6 +71,7 @@ const ContactsPage = {
 
     ${HelpTip.render('contacts', {
         icon: 'fa-address-book',
+        gradient: '135deg,#0ea5e9,#10b981',
         title: 'Як користуватись розділом «Контакти»',
         items: [
             { icon: 'fa-magnifying-glass', text: 'Шукайте співробітників за іменем, посадою, містом або телефоном через рядок пошуку.' },

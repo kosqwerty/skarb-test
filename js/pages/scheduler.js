@@ -206,6 +206,7 @@ const SchedulerPage = {
     </div>
     ${HelpTip.render('scheduler', {
         icon: 'fa-calendar-days',
+        gradient: '135deg,#10b981,#0ea5e9',
         title: 'Як користуватись розділом «Планування»',
         items: [
             { icon: 'fa-calendar-week', color: '#6366f1', text: 'Графік роботи ломбарду — перегляд та редагування змін співробітників по локаціях (для менеджерів та адміністраторів).' },

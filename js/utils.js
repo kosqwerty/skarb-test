@@ -1188,24 +1188,43 @@ const ImpersonationBanner = {
 
 // ── HelpTip — collapsible page manual ────────────────────────────────────────
 const HelpTip = {
-    render(key, { icon = 'fa-circle-info', title, items = [] }) {
+    render(key, { icon = 'fa-circle-info', title, gradient = '135deg,#6366f1,#8b5cf6', cols, items = [] }) {
         const stored = localStorage.getItem(`helptip_${key}`);
-        const open   = stored === null ? false : stored === '1';
+        const open   = stored === null ? true : stored === '1';
         return `
-        <details class="helptip" ${open ? 'open' : ''} onToggle="HelpTip._save('${key}',this.open)">
-            <summary class="helptip-sum">
-                <i class="fa-solid ${icon}" style="color:var(--primary)"></i>
-                <span>${title}</span>
-                <i class="fa-solid fa-chevron-down helptip-arr"></i>
-            </summary>
-            <div class="helptip-body">
-                ${items.map(it => `
-                <div class="helptip-row">
-                    <i class="fa-solid ${it.icon}" style="color:${it.color||'var(--primary)'};width:1.1rem;text-align:center;flex-shrink:0"></i>
-                    <span>${it.text}</span>
-                </div>`).join('')}
+        <div class="ht-wrap${open ? ' ht-open' : ''}" id="ht-${key}">
+            <div class="ht-banner" style="background:linear-gradient(${gradient});cursor:pointer" onclick="HelpTip._toggle('${key}')">
+                <div class="ht-banner-glow"></div>
+                <div class="ht-banner-left">
+                    <div class="ht-banner-ico"><i class="fa-solid ${icon}"></i></div>
+                    <div>
+                        <div class="ht-banner-label">Підказка</div>
+                        <div class="ht-banner-title">${title}</div>
+                    </div>
+                </div>
+                <button class="ht-toggle" onclick="event.stopPropagation();HelpTip._toggle('${key}')" title="${open ? 'Згорнути' : 'Розгорнути'}">
+                    <i class="fa-solid fa-chevron-up ht-chevron"></i>
+                </button>
             </div>
-        </details>`;
+            <div class="ht-body">
+                <div class="ht-items" style="${cols ? `grid-template-columns:repeat(${cols},1fr)` : ''}">
+                    ${items.map((it, i) => `
+                    <div class="ht-item" style="animation-delay:${i * 0.06}s">
+                        <div class="ht-item-ico" style="background:${it.color || '#6366f1'}22;color:${it.color || '#6366f1'}">
+                            <i class="fa-solid ${it.icon}"></i>
+                        </div>
+                        <span class="ht-item-text">${it.text}</span>
+                    </div>`).join('')}
+                </div>
+            </div>
+        </div>`;
+    },
+    _toggle(key) {
+        const el = document.getElementById(`ht-${key}`);
+        if (!el) return;
+        const isOpen = el.classList.toggle('ht-open');
+        el.querySelector('.ht-toggle').title = isOpen ? 'Згорнути' : 'Розгорнути';
+        localStorage.setItem(`helptip_${key}`, isOpen ? '1' : '0');
     },
     _save(key, open) {
         localStorage.setItem(`helptip_${key}`, open ? '1' : '0');

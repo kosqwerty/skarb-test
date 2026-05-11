@@ -160,6 +160,7 @@ const NotificationsPage = {
 
     ${HelpTip.render('notifications', {
         icon: 'fa-bell',
+        gradient: '135deg,#8b5cf6,#6366f1',
         title: 'Як користуватись Сповіщеннями',
         items: [
             { icon: 'fa-circle-dot', color: '#6366f1', text: 'Непрочитані сповіщення виділені синьою точкою. Натисніть на сповіщення, щоб позначити як прочитане.' },

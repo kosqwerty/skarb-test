@@ -88,8 +88,8 @@ const ResourcesPage = {
                                 <option value="status_asc">✅ Ознайомлені першими</option>
                             </select>
                         </div>
-                        ${AppState.isStaff() ? '<button class="btn btn-primary" onclick="ResourcesPage.openForm()">+ Додати</button>' : ''}
-                            ${AppState.isOwner() ? '<button class="btn btn-ghost btn-sm" onclick="ResourcesPage._openTrash()" title="Кошик">🗑️ Кошик</button>' : ''}
+                        ${AppState.isStaff() ? '<button class="btn btn-primary" onclick="ResourcesPage.openForm()"><i class="fa-solid fa-plus"></i> Додати</button>' : ''}
+                            ${AppState.isOwner() ? '<button class="btn btn-ghost btn-sm" onclick="ResourcesPage._openTrash()" title="Кошик"><i class="fa-solid fa-trash"></i> Кошик</button>' : ''}
                     </div>
                 </div>
                 ${isManager ? `
@@ -272,8 +272,8 @@ const ResourcesPage = {
     <select id="resource-course" class="kb-filter-sel" onchange="ResourcesPage.applyFilters()">
         <option value="">Всі курси</option>
     </select>
-    ${AppState.isStaff() ? '<button class="btn btn-primary kb-add-btn" onclick="ResourcesPage.openForm()">+ Додати ресурс</button>' : ''}
-    ${AppState.isOwner() ? '<button class="btn btn-ghost btn-sm kb-add-btn" onclick="ResourcesPage._openTrash()" title="Кошик" style="margin-left:.25rem">🗑️ Кошик</button>' : ''}
+    ${AppState.isStaff() ? '<button class="btn btn-primary kb-add-btn" onclick="ResourcesPage.openForm()"><i class="fa-solid fa-plus"></i> Додати ресурс</button>' : ''}
+    ${AppState.isOwner() ? '<button class="btn btn-ghost btn-sm kb-add-btn" onclick="ResourcesPage._openTrash()" title="Кошик" style="margin-left:.25rem"><i class="fa-solid fa-trash"></i> Кошик</button>' : ''}
 </div>
 
 <div id="resource-list"></div>
@@ -435,12 +435,12 @@ const ResourcesPage = {
                 return `<div style="background:var(--bg-raised);border:1px solid var(--border);border-radius:var(--radius-md);padding:.875rem 1rem;display:flex;flex-direction:column;gap:.4rem">
                     <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap">
                         <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;flex:1;min-width:0">
-                            <span style="font-weight:600;font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">📄 ${doc.title}</span>
+                            <span style="font-weight:600;font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><i class="fa-regular fa-file-pdf"></i> ${Fmt.esc(doc.title)}</span>
                             ${versionBadge}${deadlineInfo}
                         </div>
                         <div style="display:flex;align-items:center;gap:.75rem;flex-shrink:0">
                             <span style="font-size:.85rem;color:${countColor};font-weight:700">${ackedCount}/${total}</span>
-                            <button class="btn btn-ghost btn-sm" onclick="ResourcesPage._openStatusModal('${doc.id}')">👁 Деталі</button>
+                            <button class="btn btn-ghost btn-sm" onclick="ResourcesPage._openStatusModal('${doc.id}')"><i class="fa-solid fa-eye"></i> Деталі</button>
                         </div>
                     </div>
                     <div style="background:var(--bg-base);border-radius:4px;height:6px;overflow:hidden">
@@ -571,7 +571,7 @@ const ResourcesPage = {
         const pagesHtml = totalPages > 1 ? `
             <div style="display:flex;align-items:center;justify-content:center;gap:.5rem;margin-top:.75rem;flex-wrap:wrap">
                 <button class="btn btn-ghost btn-sm" ${curPage === 0 ? 'disabled' : ''}
-                    onclick="ResourcesPage._statusModalPage(${curPage - 1})">‹</button>
+                    onclick="ResourcesPage._statusModalPage(${curPage - 1})" style="display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i></button>
                 <span style="font-size:.8rem;color:var(--text-muted)">${curPage + 1} / ${totalPages}</span>
                 <button class="btn btn-ghost btn-sm" ${curPage >= totalPages - 1 ? 'disabled' : ''}
                     onclick="ResourcesPage._statusModalPage(${curPage + 1})">›</button>
@@ -587,11 +587,14 @@ const ResourcesPage = {
                     </div>
                     <span style="font-size:.875rem;font-weight:700;color:${barColor};white-space:nowrap">${counts.acked}/${rows.length} (${pct}%)</span>
                 </div>
-                <div style="display:flex;gap:.4rem;flex-wrap:wrap">
-                    <button class="${tabStyle('all')}" onclick="ResourcesPage._statusModalFilter('all')">Всі (${counts.all})</button>
-                    <button class="${tabStyle('acked')}" onclick="ResourcesPage._statusModalFilter('acked')">✅ Ознайомились (${counts.acked})</button>
-                    <button class="${tabStyle('pending')}" onclick="ResourcesPage._statusModalFilter('pending')">⏳ Не ознайомились (${counts.all - counts.acked})</button>
-                    ${counts.overdue ? `<button class="${tabStyle('overdue')}" onclick="ResourcesPage._statusModalFilter('overdue')">🔴 Прострочені (${counts.overdue})</button>` : ''}
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;flex-wrap:wrap">
+                    <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+                        <button class="${tabStyle('all')}" onclick="ResourcesPage._statusModalFilter('all')">Всі (${counts.all})</button>
+                        <button class="${tabStyle('acked')}" onclick="ResourcesPage._statusModalFilter('acked')">✅ Ознайомились (${counts.acked})</button>
+                        <button class="${tabStyle('pending')}" onclick="ResourcesPage._statusModalFilter('pending')">⏳ Не ознайомились (${counts.all - counts.acked})</button>
+                        ${counts.overdue ? `<button class="${tabStyle('overdue')}" onclick="ResourcesPage._statusModalFilter('overdue')">🔴 Прострочені (${counts.overdue})</button>` : ''}
+                    </div>
+                    <button class="btn btn-ghost btn-sm" onclick="ResourcesPage._exportStatusList()" style="white-space:nowrap"><i class="fa-solid fa-download"></i> Експорт</button>
                 </div>
                 <input type="text" placeholder="Пошук за іменем або посадою…" value="${search}"
                     style="width:100%" oninput="ResourcesPage._statusModalSearch(this.value)">
@@ -622,6 +625,56 @@ const ResourcesPage = {
         if (body) body.innerHTML = this._buildStatusModalBody();
     },
 
+    _exportStatusList() {
+        const { docId, filter, search } = this._modalState;
+        const { docs, employees, ackMap } = this._statusCache;
+        const doc = docs.find(d => d.id === docId);
+        if (!doc) return;
+
+        const acks = ackMap[docId] || [];
+        const ackedMap = {};
+        acks.filter(a => (a.version || 1) >= (doc.doc_version || 1))
+            .forEach(a => { ackedMap[a.userId] = a; });
+
+        const deadlineMs = doc.deadline_days
+            ? new Date(doc.created_at).getTime() + doc.deadline_days * 86400000
+            : null;
+
+        let rows = employees.map(e => {
+            if (ackedMap[e.id]) return { ...e, status: 'acked', ackAt: ackedMap[e.id].at };
+            if (deadlineMs && deadlineMs < Date.now()) return { ...e, status: 'overdue', ackAt: null };
+            return { ...e, status: 'pending', ackAt: null };
+        });
+
+        if (filter === 'acked')   rows = rows.filter(r => r.status === 'acked');
+        if (filter === 'pending') rows = rows.filter(r => r.status !== 'acked');
+        if (filter === 'overdue') rows = rows.filter(r => r.status === 'overdue');
+        if (search) {
+            const q = search.toLowerCase();
+            rows = rows.filter(r => r.full_name?.toLowerCase().includes(q) || r.job_position?.toLowerCase().includes(q));
+        }
+        rows.sort((a, b) => (a.full_name || '').localeCompare(b.full_name || '', 'uk'));
+
+        const statusLabel = { acked: 'Ознайомлений', pending: 'Не ознайомлено', overdue: 'Прострочено' };
+        const data = [
+            ['ПІБ', 'Посада', 'Місто', 'Підрозділ', 'Статус', 'Дата ознайомлення'],
+            ...rows.map(r => [
+                r.full_name || '',
+                r.job_position || '',
+                r.city || '',
+                r.subdivision || '',
+                statusLabel[r.status] || '',
+                r.ackAt ? Fmt.dateShort(r.ackAt) : ''
+            ])
+        ];
+
+        const ws = XLSX.utils.aoa_to_sheet(data);
+        ws['!cols'] = [40, 30, 20, 25, 20, 20].map(w => ({ wch: w }));
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Ознайомлення');
+        const filterSuffix = filter === 'pending' ? '_не_ознайомились' : filter === 'overdue' ? '_прострочені' : filter === 'acked' ? '_ознайомились' : '_всі';
+        XLSX.writeFile(wb, `${Fmt.slug(doc.title)}${filterSuffix}.xlsx`);
+    },
 
     async _loadFilters() {
         try {
@@ -710,7 +763,15 @@ const ResourcesPage = {
     },
 
     _kbTypeIcon(key) {
-        return { pdf:'📄', video:'🎬', image:'🖼', link:'🔗', scorm:'🧩', file:'📎' }[key] || '📎';
+        return {
+            pdf:      '<i class="fa-regular fa-file-pdf"></i>',
+            video:    '<i class="fa-solid fa-video"></i>',
+            image:    '<i class="fa-regular fa-file-image"></i>',
+            scorm:    '<i class="fa-regular fa-file-zipper"></i>',
+            document: '<i class="fa-regular fa-file-word"></i>',
+            link:     '<i class="fa-regular fa-link"></i>',
+            file:     '<i class="fa-regular fa-file"></i>',
+        }[key] || '<i class="fa-regular fa-file"></i>';
     },
 
     _isNew(resource) {
@@ -802,14 +863,14 @@ const ResourcesPage = {
     </div>
     <div class="kb-card-footer" onclick="event.stopPropagation()">
         <div class="kb-card-actions">
-            <button class="kb-btn-open" onclick="ResourcesPage.openViewer('${resource.id}')">Відкрити →</button>
-            ${resource.download_allowed ? `<button class="kb-btn-dl" title="Завантажити" onclick="ResourcesPage.downloadResource('${resource.id}')">⬇</button>` : ''}
-            ${AppState.isStaff() ? `<button class="kb-btn-edit" title="Редагувати" onclick="ResourcesPage.openEdit('${resource.id}')">✏️</button><button class="kb-btn-del" title="Видалити" onclick="ResourcesPage.deleteResource('${resource.id}',${safeTitle})">🗑️</button>` : ''}
+            <button class="kb-btn-open" onclick="ResourcesPage.openViewer('${resource.id}')"><i class="fa-solid fa-eye"></i> Відкрити</button>
+            ${resource.download_allowed ? `<button class="kb-btn-dl" title="Завантажити" onclick="ResourcesPage.downloadResource('${resource.id}')"><i class="fa-solid fa-download"></i></button>` : ''}
+            ${AppState.isStaff() ? `<button class="kb-btn-edit" title="Редагувати" onclick="ResourcesPage.openEdit('${resource.id}')"><i class="fa-solid fa-pen"></i></button><button class="kb-btn-del" title="Видалити" onclick="ResourcesPage.deleteResource('${resource.id}',${safeTitle})"><i class="fa-solid fa-trash"></i></button>` : ''}
         </div>
         <button class="kb-star res-star-btn${isBm?' active':''}"
             data-bm-route="resource/${resource.id}"
             title="${isBm?'Видалити з закладок':'Зберегти в закладки'}"
-            onclick="Bookmarks.toggleResource('${resource.id}',${safeTitle},${safeIcon},${safeCat})">★</button>
+            onclick="Bookmarks.toggleResource('${resource.id}',${safeTitle},${safeIcon},${safeCat})">${isBm ? '<i class="fa-solid fa-star"></i>' : '<i class="fa-regular fa-star"></i>'}</button>
     </div>
 </div>`;
     },
@@ -834,13 +895,13 @@ const ResourcesPage = {
         </div>
     </div>
     <div class="kb-row-actions" onclick="event.stopPropagation()">
-        <button class="kb-btn-open" onclick="ResourcesPage.openViewer('${resource.id}')">Відкрити →</button>
-        ${resource.download_allowed ? `<button class="kb-btn-dl" title="Завантажити" onclick="ResourcesPage.downloadResource('${resource.id}')">⬇</button>` : ''}
-        ${AppState.isStaff() ? `<button class="kb-btn-edit" title="Редагувати" onclick="ResourcesPage.openEdit('${resource.id}')">✏️</button><button class="kb-btn-del" title="Видалити" onclick="ResourcesPage.deleteResource('${resource.id}',${safeTitle})">🗑️</button>` : ''}
+        <button class="kb-btn-open" onclick="ResourcesPage.openViewer('${resource.id}')"><i class="fa-solid fa-eye"></i> Відкрити</button>
+        ${resource.download_allowed ? `<button class="kb-btn-dl" title="Завантажити" onclick="ResourcesPage.downloadResource('${resource.id}')"><i class="fa-solid fa-download"></i></button>` : ''}
+        ${AppState.isStaff() ? `<button class="kb-btn-edit" title="Редагувати" onclick="ResourcesPage.openEdit('${resource.id}')"><i class="fa-solid fa-pen"></i></button><button class="kb-btn-del" title="Видалити" onclick="ResourcesPage.deleteResource('${resource.id}',${safeTitle})"><i class="fa-solid fa-trash"></i></button>` : ''}
         <button class="kb-star res-star-btn${isBm?' active':''}"
             data-bm-route="resource/${resource.id}"
             title="${isBm?'Видалити з закладок':'Зберегти в закладки'}"
-            onclick="Bookmarks.toggleResource('${resource.id}',${safeTitle},${safeIcon},${safeCat})">★</button>
+            onclick="Bookmarks.toggleResource('${resource.id}',${safeTitle},${safeIcon},${safeCat})">${isBm ? '<i class="fa-solid fa-star"></i>' : '<i class="fa-regular fa-star"></i>'}</button>
     </div>
 </div>`;
     },
@@ -921,7 +982,7 @@ const ResourcesPage = {
             }
 
             if (!filtered || !filtered.length) {
-                list.className = '';
+                list.className = this._view === 'docs' ? 'resource-list-docs' : '';
                 list.innerHTML = `
                     <div class="${this._view === 'kb' ? 'kb-empty' : 'empty-state'}" style="${this._view!=='kb'?'grid-column:1/-1':''}">
                         <div class="${this._view==='kb'?'kb-empty-ico':'empty-icon'}">${this._view === 'docs' ? '📋' : '📚'}</div>
@@ -944,6 +1005,7 @@ const ResourcesPage = {
                 filtered = this._sortDocs(filtered);
             }
 
+            if (this._view === 'docs') list.className = 'resource-list-docs';
             list.innerHTML = filtered.map(resource => this._renderResourceItem(resource)).join('');
             this._renderPagination(count);
         } catch (e) {
@@ -990,7 +1052,7 @@ const ResourcesPage = {
                 : '';
 
             return `
-                <div class="resource-item ${docClass}" onclick="ResourcesPage.openViewer('${resource.id}')" style="cursor:pointer">
+                <div class="resource-item ${docClass}" data-id="${resource.id}" onclick="ResourcesPage.openViewer('${resource.id}')" style="cursor:pointer">
                     <div class="resource-icon ${resource.type || 'file'}">${icon}</div>
                     <div class="resource-info">
                         <div class="resource-title">${Fmt.esc(resource.title)}</div>
@@ -1002,11 +1064,11 @@ const ResourcesPage = {
                                 ? ` · <span style="color:var(--primary);font-weight:500">${resource.access_group.is_public ? '🌐' : '🔐'} ${resource.access_group.name}</span>`
                                 : ''}
                         </div>
-                        <div style="margin-top:.3rem;display:flex;align-items:center;gap:.4rem;flex-wrap:wrap">${statusBadge}${deadlineBadge}</div>
+                        <div data-status-row style="margin-top:.3rem;display:flex;align-items:center;gap:.4rem;flex-wrap:wrap">${statusBadge}${deadlineBadge}</div>
                     </div>
                     <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center" onclick="event.stopPropagation()">
-                        <button class="btn btn-ghost btn-sm" onclick="ResourcesPage.openViewer('${resource.id}')">Відкрити</button>
-                        ${AppState.isStaff() ? `<button class="btn btn-ghost btn-sm" onclick="ResourcesPage.openEdit('${resource.id}')">✏️</button><button class="btn btn-ghost btn-sm res-del-btn" title="Видалити" onclick="ResourcesPage.deleteResource('${resource.id}',${JSON.stringify(resource.title||'').replace(/"/g,'&quot;')})">🗑️</button>` : ''}
+                        <button class="btn btn-ghost btn-sm" onclick="ResourcesPage.openViewer('${resource.id}')"><i class="fa-solid fa-eye"></i> Відкрити</button>
+                        ${AppState.isStaff() ? `<button class="btn btn-ghost btn-sm" onclick="ResourcesPage.openEdit('${resource.id}')"><i class="fa-solid fa-pen"></i></button><button class="btn btn-ghost btn-sm res-del-btn" title="Видалити" onclick="ResourcesPage.deleteResource('${resource.id}',${JSON.stringify(resource.title||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-trash"></i></button>` : ''}
                     </div>
                 </div>`;
         }
@@ -1066,11 +1128,13 @@ const ResourcesPage = {
 
     _resourceIcon(type) {
         switch (type) {
-            case 'pdf': return '📄';
-            case 'video': return '🎥';
-            case 'image': return '🖼️';
-            case 'scorm': return '🧩';
-            default: return '📎';
+            case 'pdf':      return '<i class="fa-regular fa-file-pdf"></i>';
+            case 'video':    return '<i class="fa-solid fa-video"></i>';
+            case 'image':    return '<i class="fa-regular fa-file-image"></i>';
+            case 'scorm':    return '<i class="fa-regular fa-file-zipper"></i>';
+            case 'document': return '<i class="fa-regular fa-file-word"></i>';
+            case 'file':     return '<i class="fa-regular fa-file"></i>';
+            default:         return '<i class="fa-regular fa-file"></i>';
         }
     },
 
@@ -1097,7 +1161,7 @@ const ResourcesPage = {
         if (resource.type === 'pdf' || ext === 'pdf') {
             const downloadAllowed = resource.download_allowed !== false ? '1' : '0';
             const viewerUrl = `pdf-viewer.html?file=${encodeURIComponent(url)}&title=${encodeURIComponent(resource.title || 'PDF')}&download=${downloadAllowed}`;
-            return `${description}<iframe src="${viewerUrl}" style="width:100%;height:75vh;border:none"></iframe>`;
+            return `${description}<iframe src="${viewerUrl}" style="width:100%;height:85vh;border:none"></iframe>`;
         }
 
         if (resource.type === 'video' || ['mp4','webm','ogg'].includes(ext)) {
@@ -1115,14 +1179,14 @@ const ResourcesPage = {
                 <div style="padding:2rem;text-align:center;color:var(--text-muted)">
                     <p style="margin-bottom:1rem">Попередній перегляд ${ext.toUpperCase()}-файлів недоступний онлайн.</p>
                     <div style="display:flex;gap:.75rem;justify-content:center;flex-wrap:wrap">
-                        <a href="${Fmt.safeUrl(url)}" target="_blank" rel="noopener noreferrer" class="btn btn-primary">⬇ Завантажити</a>
+                        <a href="${Fmt.safeUrl(url)}" target="_blank" rel="noopener noreferrer" class="btn btn-primary"><i class="fa-solid fa-download"></i> Завантажити</a>
                         <a href="${gViewUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-ghost">🔗 Відкрити в Google Docs</a>
                     </div>
                 </div>`;
         }
 
         return `${description}<div style="padding:2rem;text-align:center;color:var(--text-muted)">Файл не підтримується для перегляду онлайн.</div>
-            <div style="text-align:center;margin-top:1rem"><a href="${Fmt.safeUrl(url)}" target="_blank" rel="noopener noreferrer" class="btn btn-primary">Відкрити в новому вікні</a></div>`;
+            <div style="text-align:center;margin-top:1rem"><a href="${Fmt.safeUrl(url)}" target="_blank" rel="noopener noreferrer" class="btn btn-primary"><i class='fa-solid fa-arrow-up-right-from-square'></i> Відкрити в новому вікні</a></div>`;
     },
 
     async downloadResource(id) {
@@ -1243,6 +1307,7 @@ const ResourcesPage = {
             await API.documentDownloads.track(resource.id, { locationId, isOffShift, docVersion: resource.doc_version || 1 });
 
             this._myDownloads[resource.id] = { at: new Date().toISOString(), version: resource.doc_version || 1 };
+            UI.loadDocBadge();
 
             // Update viewer action footer if currently open
             const viewerAction = document.getElementById('doc-viewer-action');
@@ -1253,19 +1318,25 @@ const ResourcesPage = {
                     ? `<button onclick="ResourcesPage.downloadTracked('${resource.id}')"
                             style="${btnBase};border:1.5px solid var(--border);background:transparent;color:var(--text-muted)"
                             onmouseenter="this.style.background='var(--bg-raised)'"
-                            onmouseleave="this.style.background='transparent'">⬇ Завантажити повторно</button>`
+                            onmouseleave="this.style.background='transparent'"><i class="fa-solid fa-download"></i> Завантажити повторно</button>`
                     : '';
                 viewerAction.style.cssText = 'flex-shrink:0;display:inline-flex;align-items:center;gap:.6rem';
                 viewerAction.innerHTML = `<span style="display:inline-flex;align-items:center;gap:.3rem;color:#10b981;font-weight:500;font-size:.85rem;white-space:nowrap">✅ ${this._ackLabel()} ${dateStr}</span>${reDownload}`;
             }
 
-            // Refresh status badge in list
+            // Update only the acknowledged item in the list (no re-fetch needed)
             const listEl = document.getElementById('resource-list');
             if (listEl) {
-                const { data } = await API.resources.getAll({ trackedOnly: true, pageSize: this._pageSize, page: this._page,
-                    search: this._search || undefined, category: this._category || undefined }).catch(() => ({ data: [] }));
-                const filtered = AppState.canSchedule() ? data : data.filter(r => AccessGroupsPage.checkAccess(r.access_group));
-                listEl.innerHTML = filtered.map(r => this._renderResourceItem(r)).join('');
+                const itemEl = listEl.querySelector(`[data-id="${resource.id}"]`);
+                if (itemEl) {
+                    itemEl.classList.remove('doc-needs-ack');
+                    itemEl.classList.add('doc-acked');
+                    const dateStr = Fmt.dateShort(this._myDownloads[resource.id].at);
+                    const statusRow = itemEl.querySelector('[data-status-row]');
+                    if (statusRow) {
+                        statusRow.innerHTML = `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.75rem;color:#10b981;font-weight:500">✅ ${this._ackLabel()} ${dateStr}</span>`;
+                    }
+                }
             }
         } catch (e) {
             Toast.error('Помилка', e.message);
@@ -1294,7 +1365,7 @@ const ResourcesPage = {
         const courseOptions = this._courses.map(c => `<option value="${c.id}" ${resource?.course_id === c.id ? 'selected' : ''}>${c.title}</option>`).join('');
 
         Modal.open({
-            title: isEdit ? '✏️ Редагувати ресурс' : '+ Додати ресурс',
+            title: isEdit ? '<i class="fa-solid fa-pen"></i> Редагувати ресурс' : '<i class="fa-solid fa-plus"></i> Додати ресурс',
             size: 'lg',
             body: `
                 <style>
@@ -1381,7 +1452,7 @@ const ResourcesPage = {
                 </div>`,
             footer: `
                 <button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
-                <button class="btn btn-primary" onclick="ResourcesPage.saveResource(${resource ? `'${resource.id}'` : ''})">${isEdit ? 'Зберегти' : 'Додати'}</button>`
+                <button class="btn btn-primary" onclick="ResourcesPage.saveResource(${resource ? `'${resource.id}'` : ''})">${isEdit ? '<i class="fa-regular fa-floppy-disk"></i> Зберегти' : '<i class="fa-solid fa-plus"></i> Додати'}</button>`
         });
 
         const selectedDovs = (resource?.resource_dovirenosti || [])
@@ -1517,7 +1588,7 @@ const ResourcesPage = {
             size: 'sm',
             body: `
                 <div style="text-align:center;padding:.5rem 0 .25rem">
-                    <div style="width:64px;height:64px;border-radius:50%;background:rgba(239,68,68,.1);border:2px solid rgba(239,68,68,.2);display:flex;align-items:center;justify-content:center;font-size:2rem;margin:0 auto 1rem">🗑️</div>
+                    <div style="width:64px;height:64px;border-radius:50%;background:rgba(239,68,68,.1);border:2px solid rgba(239,68,68,.2);display:flex;align-items:center;justify-content:center;font-size:2rem;margin:0 auto 1rem"><i class="fa-solid fa-trash"></i></div>
                     <div style="font-size:1.05rem;font-weight:700;color:var(--text-primary);margin-bottom:.5rem">Видалити файл?</div>
                     <div style="color:var(--text-muted);font-size:.875rem;line-height:1.5">
                         «<strong style="color:var(--text-primary)">${title}</strong>» буде переміщено до кошика.<br>
@@ -1546,7 +1617,7 @@ const ResourcesPage = {
 
     async _openTrash() {
         Modal.open({
-            title: '🗑️ Кошик',
+            title: '<i class="fa-solid fa-trash"></i> Кошик',
             size: 'lg',
             body: `<div style="text-align:center;padding:2rem"><div class="spinner"></div></div>`,
             footer: `<button class="btn btn-ghost" onclick="Modal.close()">Закрити</button>`
@@ -1556,7 +1627,7 @@ const ResourcesPage = {
             const body = document.getElementById('modal-body');
             if (!body) return;
             if (!items.length) {
-                body.innerHTML = `<div style="text-align:center;padding:2rem;color:var(--text-muted)"><div style="font-size:2.5rem;margin-bottom:.5rem">🗑️</div>Кошик порожній</div>`;
+                body.innerHTML = `<div style="text-align:center;padding:2rem;color:var(--text-muted)"><div style="font-size:2.5rem;margin-bottom:.5rem"><i class="fa-solid fa-trash"></i></div>Кошик порожній</div>`;
                 return;
             }
             body.innerHTML = `
@@ -1632,7 +1703,7 @@ const ResourceViewPage = {
                 <div class="empty-state">
                     <div class="empty-icon">⚠️</div>
                     <h3>${e.message}</h3>
-                    <button class="btn btn-primary" onclick="Router.back()">← Назад</button>
+                    <button class="btn btn-primary" onclick="Router.back()" style="display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i> Назад</button>
                 </div>`;
         }
     },
@@ -1665,7 +1736,7 @@ const ResourceViewPage = {
         if (isPdf) {
             const dl = resource.download_allowed !== false ? '1' : '0';
             const viewerUrl = `pdf-viewer.html?file=${encodeURIComponent(url)}&title=${encodeURIComponent(resource.title || 'PDF')}&download=${dl}`;
-            viewerHtml = `<iframe src="${viewerUrl}" style="width:90%;height:calc(90vh - 198px);min-height:450px;border:none;display:block"></iframe>`;
+            viewerHtml = `<iframe src="${viewerUrl}" style="width:90%;height:calc(90vh - 130px);min-height:450px;border:none;display:block"></iframe>`;
 
         } else if (isVideo) {
             const noDownload = resource.download_allowed === false ? 'controlsList="nodownload"' : '';
@@ -1685,7 +1756,7 @@ const ResourceViewPage = {
             const gOpenUrl = `https://docs.google.com/gview?url=${encodeURIComponent(url)}`;
             const dlName   = ResourcesPage._buildFilename(resource);
             const dlBtn    = resource.download_allowed !== false
-                ? `<a href="${Fmt.safeUrl(url)}" download="${Fmt.esc(dlName)}" class="btn btn-primary">⬇ Завантажити</a>`
+                ? `<a href="${Fmt.safeUrl(url)}" download="${Fmt.esc(dlName)}" class="btn btn-primary"><i class="fa-solid fa-download"></i> Завантажити</a>`
                 : '';
             viewerHtml = `
                 <div style="position:relative;width:100%;height:calc(100vh - 220px);min-height:500px;border-radius:var(--radius-lg);overflow:hidden;border:1px solid var(--border)">
@@ -1713,7 +1784,7 @@ const ResourceViewPage = {
                 <div style="text-align:center;padding:3rem;background:var(--bg-raised);border-radius:var(--radius-lg);border:1px solid var(--border);color:var(--text-muted)">
                     <div style="font-size:3rem;margin-bottom:1rem">📎</div>
                     <p style="margin-bottom:1.5rem">Цей тип файлу не підтримується для перегляду онлайн.</p>
-                    <a href="${Fmt.safeUrl(url)}" target="_blank" rel="noopener noreferrer" class="btn btn-primary">Відкрити в новому вікні</a>
+                    <a href="${Fmt.safeUrl(url)}" target="_blank" rel="noopener noreferrer" class="btn btn-primary"><i class='fa-solid fa-arrow-up-right-from-square'></i> Відкрити в новому вікні</a>
                 </div>`;
         }
 
@@ -1724,16 +1795,14 @@ const ResourceViewPage = {
 
                 <!-- Header -->
                 <div style="display:flex;align-items:flex-start;gap:1rem;flex-wrap:wrap">
-                    <button class="btn btn-ghost btn-sm" onclick="Router.back()" style="flex-shrink:0;margin-top:.2rem">
-                        ← Назад
-                    </button>
+                    <button class="btn btn-ghost btn-sm" onclick="Router.back()" style="flex-shrink:0;margin-top:.2rem;display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i> Назад</button>
                     <div style="flex:1;min-width:0">
                         <div style="display:flex;align-items:center;gap:10px;margin-bottom:.4rem">
                             <h1 style="margin:0;font-size:1.4rem;font-weight:700;line-height:1.3">${Fmt.esc(resource.title)}</h1>
                             <button class="res-star-btn${Bookmarks.isBookmarked('resource/'+resource.id) ? ' active' : ''}"
                                 data-bm-route="resource/${resource.id}"
                                 title="${Bookmarks.isBookmarked('resource/'+resource.id) ? 'Видалити з закладок' : 'Зберегти в закладки'}"
-                                onclick="Bookmarks.toggleResource('${resource.id}',${JSON.stringify(resource.title||'').replace(/"/g,'&quot;')},${JSON.stringify(ResourcesPage._resourceIcon(resource.type||resource.file_type||'file')).replace(/"/g,'&quot;')},${JSON.stringify(resource.category||'').replace(/"/g,'&quot;')})">★</button>
+                                onclick="Bookmarks.toggleResource('${resource.id}',${JSON.stringify(resource.title||'').replace(/"/g,'&quot;')},${JSON.stringify(ResourcesPage._resourceIcon(resource.type||resource.file_type||'file')).replace(/"/g,'&quot;')},${JSON.stringify(resource.category||'').replace(/"/g,'&quot;')})">${Bookmarks.isBookmarked('resource/'+resource.id) ? '<i class="fa-solid fa-star"></i>' : '<i class="fa-regular fa-star"></i>'}</button>
                         </div>
                         <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
                             ${categoryBadge}
@@ -1748,7 +1817,7 @@ const ResourceViewPage = {
                             style="flex-shrink:0;width:40px;height:40px;border-radius:50%;border:2px solid var(--border);background:var(--bg-raised);color:var(--text-primary);font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background var(--transition),border-color var(--transition)"
                             onmouseenter="this.style.background='var(--bg-hover)';this.style.borderColor='var(--primary)'"
                             onmouseleave="this.style.background='var(--bg-raised)';this.style.borderColor='var(--border)'">
-                        ✏️
+                        <i class="fa-solid fa-pen"></i>
                     </button>` : ''}
                 </div>
 
@@ -1764,7 +1833,7 @@ const ResourceViewPage = {
                             style="display:inline-flex;align-items:center;gap:8px;padding:10px 32px;background:var(--primary);color:#fff;border-radius:24px;font-size:.95rem;font-weight:600;text-decoration:none;box-shadow:0 2px 8px rgba(0,0,0,.15);transition:background var(--transition)"
                             onmouseenter="this.style.background='var(--primary-dark,#1d4ed8)'"
                             onmouseleave="this.style.background='var(--primary)'">
-                            ⬇ Завантажити
+                            <i class="fa-solid fa-download"></i> Завантажити
                         </a>
                     </div>`
                     : ''}
@@ -1795,7 +1864,7 @@ const ResourceViewPage = {
                     ? `<button onclick="ResourcesPage.downloadTracked('${id}')"
                             style="${btnBase};border:1.5px solid var(--border);background:transparent;color:var(--text-muted)"
                             onmouseenter="this.style.background='var(--bg-raised)'"
-                            onmouseleave="this.style.background='transparent'">⬇ Завантажити повторно</button>`
+                            onmouseleave="this.style.background='transparent'"><i class="fa-solid fa-download"></i> Завантажити повторно</button>`
                     : '';
                 return `<div id="doc-viewer-action" style="flex-shrink:0;display:inline-flex;align-items:center;gap:.6rem">
                     <span style="display:inline-flex;align-items:center;gap:.3rem;color:#10b981;font-weight:500;font-size:.85rem;white-space:nowrap">✅ ${ResourcesPage._ackLabel()} ${Fmt.dateShort(dlStatus.at)}</span>
@@ -1818,15 +1887,16 @@ const ResourceViewPage = {
                     50%{opacity:.55;transform:scale(.97)}
                 }
                 @keyframes doc-lock-glow {
-                    0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,0)}
-                    50%{box-shadow:0 0 0 6px rgba(245,158,11,.18)}
+                    0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,0)}
+                    50%{box-shadow:0 0 0 6px rgba(239,68,68,.22)}
                 }
                 #doc-viewer-lock {
                     animation:doc-lock-pulse 2s ease-in-out infinite,doc-lock-glow 2s ease-in-out infinite;
                     display:inline-flex;align-items:center;gap:6px;
                     padding:5px 14px;border-radius:20px;
-                    background:rgba(245,158,11,.1);border:1.5px solid rgba(245,158,11,.35);
-                    color:#f59e0b;font-weight:600;font-size:.82rem;white-space:nowrap;
+                    background:rgba(239,68,68,.1);border:1.5px solid rgba(239,68,68,.35);
+                    color:#ef4444;font-weight:600;font-size:.82rem;white-space:nowrap;
+                    margin-left:-100px;
                 }
                 </style>
                 <span id="doc-viewer-lock">${lockHint}</span>

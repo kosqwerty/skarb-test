@@ -1,4 +1,4 @@
-// ================================================================
+﻿// ================================================================
 // EduFlow LMS — Мої сповіщення
 // Access: all authenticated users
 //
@@ -154,7 +154,7 @@ const NotificationsPage = {
         </div>
         <div style="display:flex;gap:8px">
             ${unread ? `<button class="ntf-btn-outline" onclick="NotificationsPage._markAllRead()">✓ Всі прочитані</button>` : ''}
-            <button class="ntf-btn-outline danger" onclick="NotificationsPage._deleteAll()">🗑 Очистити</button>
+            <button class="ntf-btn-outline danger" onclick="NotificationsPage._deleteAll()">​<i class="fa-solid fa-trash"></i> Очистити</button>
         </div>
     </div>
 
@@ -229,7 +229,7 @@ const NotificationsPage = {
             </div>
             <div class="ntf-actions" onclick="event.stopPropagation()">
                 ${!n.is_read ? `<button class="ntf-act" title="Позначити прочитаним" onclick="NotificationsPage._markRead('${n.id}', this.closest('.ntf-item'))">✓</button>` : ''}
-                <button class="ntf-act" title="Видалити" onclick="NotificationsPage._deleteOne('${n.id}', this.closest('.ntf-item'))">🗑</button>
+                <button class="ntf-act" title="Видалити" onclick="NotificationsPage._deleteOne('${n.id}', this.closest('.ntf-item'))"><i class="fa-solid fa-trash"></i></button>
             </div>
         </div>`;
     },

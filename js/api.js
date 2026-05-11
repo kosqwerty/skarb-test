@@ -276,7 +276,14 @@ const API = {
             if (!includeLessonResources) q = q.is('lesson_id', null);
             if (courseId) q = q.eq('course_id', courseId);
             if (category) q = q.eq('category', category);
-            if (search) q = q.or(`title.ilike.%${search}%,description.ilike.%${search}%`);
+            if (search) {
+                // Normalize spaces between digits so "12 105" and "12105" match each other
+                let compact = search.trim();
+                while (/\d\s+\d/.test(compact)) compact = compact.replace(/(\d)\s+(\d)/g, '$1$2');
+                const esc = compact.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const pattern = esc.replace(/(\d)(?=\d)/g, '$1\\s*');
+                q = q.or(`title.imatch.${pattern},description.imatch.${pattern}`);
+            }
             if (studentOnly) q = q.is('course_id', null);
             if (trackedOnly) q = q.eq('is_tracked_download', true);
             // docs section: exclude video, link, scorm — keep pdf/file/image/doc types
@@ -853,7 +860,12 @@ const API = {
     news: {
         async getAll({ published, page = 0, pageSize = 12 } = {}) {
             let q = supabase.from('news')
-                .select(`*, author:profiles!author_id(full_name)`, { count: 'exact' });
+                .select(`*, author:profiles!author_id(full_name),
+                    access_group:access_groups(id,name,is_public,
+                        cities:access_group_cities(city),
+                        positions:access_group_positions(position),
+                        departments:access_group_departments(department),
+                        labels:access_group_labels(label))`, { count: 'exact' });
             if (published !== undefined) q = q.eq('is_published', published);
             q = q.order('published_at', { ascending: false, nullsFirst: false })
                  .order('created_at', { ascending: false })
@@ -863,26 +875,58 @@ const API = {
             return { data, count };
         },
 
-        async getById(id) {
-            const { data, error } = await supabase.from('news')
-                .select(`*, author:profiles!author_id(full_name)`)
-                .eq('id', id).single();
-            if (error) throw error;
-            return data;
+        async getById(idOrSlug) {
+            if (!idOrSlug) throw new Error('news id or slug required');
+            const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrSlug);
+            const sel = `*, author:profiles!author_id(full_name),
+                    access_group:access_groups(id,name,is_public,
+                        cities:access_group_cities(city),
+                        positions:access_group_positions(position),
+                        departments:access_group_departments(department),
+                        labels:access_group_labels(label))`;
+            if (isUuid) {
+                const { data, error } = await supabase.from('news').select(sel).eq('id', idOrSlug).single();
+                if (error) throw error;
+                return data;
+            }
+            // slug lookup with full fallback to id on any error
+            const { data, error } = await supabase.from('news').select(sel).eq('slug', idOrSlug).maybeSingle();
+            if (!error && data) return data;
+            // fallback: try as id (column missing, no rows, old links)
+            const { data: d2, error: e2 } = await supabase.from('news').select(sel).eq('id', idOrSlug).single();
+            if (e2) throw e2;
+            return d2;
         },
 
         async create(fields) {
-            const slug = Fmt.slug(fields.title) + '-' + Date.now().toString(36);
+            let slug = Fmt.slug(fields.title);
             const { data, error } = await supabase.from('news')
                 .insert({ ...fields, slug, author_id: AppState.profile.id })
                 .select().single();
-            if (error) throw error;
+            if (error) {
+                if (error.code === '23505') {
+                    // slug collision — append short unique suffix
+                    slug = slug + '-' + Date.now().toString(36).slice(-4);
+                    const { data: d2, error: e2 } = await supabase.from('news')
+                        .insert({ ...fields, slug, author_id: AppState.profile.id })
+                        .select().single();
+                    if (e2) throw e2;
+                    return d2;
+                }
+                throw error;
+            }
             return data;
         },
 
         async update(id, fields) {
+            // generate slug if title changed and slug not yet set
+            const updateFields = { ...fields };
+            if (fields.title && !fields.slug) {
+                const { data: current } = await supabase.from('news').select('slug').eq('id', id).single();
+                if (!current?.slug) updateFields.slug = Fmt.slug(fields.title);
+            }
             const { data, error } = await supabase.from('news')
-                .update(fields).eq('id', id).select().single();
+                .update(updateFields).eq('id', id).select().single();
             if (error) throw error;
             return data;
         },
@@ -1061,7 +1105,7 @@ const API = {
         // Returns all employee profiles (for "who hasn't acknowledged" calculation)
         async getAllEmployees() {
             const { data, error } = await supabase.from('profiles')
-                .select('id, full_name, job_position, role, manager_id, profile_dovirenosti(dovirenost_id)')
+                .select('id, full_name, job_position, city, subdivision, role, manager_id, profile_dovirenosti(dovirenost_id)')
                 .in('role', ['user', 'teacher', 'smm', 'manager'])
                 .order('full_name');
             if (error) throw error;

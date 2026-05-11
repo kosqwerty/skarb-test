@@ -1,4 +1,4 @@
-// ================================================================
+﻿// ================================================================
 // EduFlow LMS — Перегляд уроку
 // ================================================================
 
@@ -18,7 +18,7 @@ const LessonViewPage = {
 
             const courseRoute = `courses/${lesson.course?.id}${fromExpert ? '?from=expert-path' : ''}`;
             UI.setBreadcrumb([
-                { label: fromExpert ? 'Шлях експерта' : 'Курси', route: fromExpert ? 'expert-path' : 'courses' },
+                { label: fromExpert ? 'Skill Up' : 'Курси', route: fromExpert ? 'expert-path' : 'courses' },
                 { label: lesson.course?.title || 'Курс', route: courseRoute },
                 { label: lesson.title }
             ]);
@@ -59,9 +59,9 @@ const LessonViewPage = {
             <div style="display:grid;grid-template-columns:1fr 280px;gap:2rem;align-items:start" class="lesson-layout">
                 <div>
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:.75rem">
-                        <button class="btn btn-ghost btn-sm" onclick="Router.go('${courseUrl}')">← Назад до курсу</button>
+                        <button class="btn btn-ghost btn-sm" onclick="Router.go('${courseUrl}')" style="display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i> Назад до курсу</button>
                         <div style="display:flex;gap:.5rem">
-                            ${prevLesson ? `<button class="btn btn-secondary btn-sm" onclick="Router.go('lessons/${prevLesson.id}${fromSuffix}')">← Попередній</button>` : ''}
+                            ${prevLesson ? `<button class="btn btn-secondary btn-sm" onclick="Router.go('lessons/${prevLesson.id}${fromSuffix}')" style="display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i> Попередній</button>` : ''}
                             ${nextLesson ? `<button class="btn btn-secondary btn-sm" onclick="Router.go('lessons/${nextLesson.id}${fromSuffix}')">Наступний →</button>` : ''}
                         </div>
                     </div>
@@ -74,7 +74,7 @@ const LessonViewPage = {
                             </div>
                             ${AppState.isStaff() ? `
                                 <div style="display:flex;gap:.5rem">
-                                    <button class="btn btn-ghost btn-sm" onclick="CourseViewPage.openEditLesson('${lesson.id}')">✏️</button>
+                                    <button class="btn btn-ghost btn-sm" onclick="CourseViewPage.openEditLesson('${lesson.id}')"><i class="fa-solid fa-pen"></i></button>
                                     <button class="btn btn-secondary btn-sm" onclick="LessonViewPage.openAddResource('${lesson.id}')">+ Матеріал</button>
                                 </div>` : ''}
                         </div>
@@ -96,7 +96,7 @@ const LessonViewPage = {
                                     : '<span style="color:var(--text-muted)">Відмітьте урок як завершений</span>'}
                             </div>
                             <div style="display:flex;gap:.75rem">
-                                ${prevLesson ? `<button class="btn btn-secondary" onclick="Router.go('lessons/${prevLesson.id}${fromSuffix}')">← Попередній</button>` : ''}
+                                ${prevLesson ? `<button class="btn btn-secondary" onclick="Router.go('lessons/${prevLesson.id}${fromSuffix}')" style="display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i> Попередній</button>` : ''}
                                 ${!completed ? `
                                     <button class="btn btn-success" id="complete-btn" onclick="LessonViewPage.markComplete('${lesson.id}','${lesson.course_id}')">
                                         ✓ Відмітити як завершений
@@ -129,10 +129,18 @@ const LessonViewPage = {
             return AppState.isStaff()
                 ? `<div class="empty-state" style="padding:1.5rem">
                        <p style="color:var(--text-muted)">Немає матеріалів. Додайте PDF, відео, SCORM або посилання.</p>
-                       <button class="btn btn-primary btn-sm" onclick="LessonViewPage.openAddResource('${lessonId}')">+ Додати матеріал</button>
+                       <button class="btn btn-primary btn-sm" onclick="LessonViewPage.openAddResource('${lessonId}')"><i class="fa-solid fa-plus"></i> Додати матеріал</button>
                    </div>` : '';
         }
-        const typeIcons = { pdf:'📄', video:'🎬', scorm:'🎯', link:'🔗', file:'📁' };
+        const typeIcons = {
+            pdf:      '<i class="fa-regular fa-file-pdf"></i>',
+            video:    '<i class="fa-solid fa-video"></i>',
+            image:    '<i class="fa-regular fa-file-image"></i>',
+            scorm:    '<i class="fa-regular fa-file-zipper"></i>',
+            document: '<i class="fa-regular fa-file-word"></i>',
+            link:     '<i class="fa-regular fa-link"></i>',
+            file:     '<i class="fa-regular fa-file"></i>',
+        };
         return `
             <h3 style="margin-bottom:1rem">📎 Матеріали уроку</h3>
             <div class="resource-list">
@@ -143,8 +151,8 @@ const LessonViewPage = {
                             <div class="resource-title">${r.title}</div>
                             <div class="resource-meta">${r.type.toUpperCase()} ${r.file_size ? '• ' + Fmt.fileSize(r.file_size) : ''}</div>
                         </div>
-                        <button class="btn btn-ghost btn-sm" style="flex-shrink:0">▶ Відкрити</button>
-                        ${AppState.isStaff() ? `<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();LessonViewPage.deleteResource('${r.id}')" style="flex-shrink:0">🗑</button>` : ''}
+                        <button class="btn btn-ghost btn-sm" style="flex-shrink:0"><i class="fa-solid fa-eye"></i> Відкрити</button>
+                        ${AppState.isStaff() ? `<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();LessonViewPage.deleteResource('${r.id}')" style="flex-shrink:0"><i class="fa-solid fa-trash"></i></button>` : ''}
                     </div>`).join('')}
             </div>`;
     },
@@ -166,7 +174,7 @@ const LessonViewPage = {
                         <div class="card"><div class="card-body" style="text-align:center">
                             <div style="font-size:3rem;margin-bottom:1rem">🔗</div>
                             <h3>${resource.title}</h3>
-                            <a href="${Fmt.safeUrl(resource.url)}" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="margin-top:1rem">Відкрити посилання ↗</a>
+                            <a href="${Fmt.safeUrl(resource.url)}" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="margin-top:1rem"><i class="fa-solid fa-arrow-up-right-from-square"></i> Відкрити посилання</a>
                         </div></div>`;
                     break;
                 default:      await this._openFile(viewer, resource);
@@ -183,7 +191,7 @@ const LessonViewPage = {
             <div class="card">
                 <div class="card-header">
                     <h3>📄 ${resource.title}</h3>
-                    <a href="${url}" target="_blank" class="btn btn-ghost btn-sm">Завантажити ↓</a>
+                    <a href="${url}" target="_blank" class="btn btn-ghost btn-sm"><i class="fa-solid fa-download"></i> Завантажити</a>
                 </div>
                 <div class="card-body" style="padding:0">
                     <iframe src="${url}" style="width:100%;height:700px;border:none" title="${resource.title}"></iframe>
@@ -232,13 +240,13 @@ const LessonViewPage = {
                 <div style="font-size:3rem;margin-bottom:1rem">📁</div>
                 <h3>${resource.title}</h3>
                 <p style="color:var(--text-muted);margin:.5rem 0 1.5rem">${Fmt.fileSize(resource.file_size)}</p>
-                <a href="${Fmt.safeUrl(url)}" download="${Fmt.esc(resource.title)}" class="btn btn-primary">⬇ Завантажити файл</a>
+                <a href="${Fmt.safeUrl(url)}" download="${Fmt.esc(resource.title)}" class="btn btn-primary"><i class="fa-solid fa-download"></i> Завантажити файл</a>
             </div></div>`;
     },
 
     openAddResource(lessonId) {
         Modal.open({
-            title: '+ Додати матеріал',
+            title: '<i class="fa-solid fa-plus"></i> Додати матеріал',
             size: 'lg',
             body: `
                 <div class="form-group">

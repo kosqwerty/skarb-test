@@ -184,30 +184,29 @@ const UI = {
         if (bellBtn) bellBtn.classList.toggle('has-unread', count > 0);
     },
     _getNavItems(role) {
-        const expertItem   = { icon: '<img src="icons/road_up.png" style="width:33px;height:33px;object-fit:contain;vertical-align:middle;border-radius:3px;padding:1px">', label: 'Шлях експерта', route: 'expert-path' };
+        const expertItem   = { icon: '<img src="icons/road_up.png" style="width:33px;height:33px;object-fit:contain;vertical-align:middle;border-radius:3px;padding:1px">', label: 'Skill Up', route: 'expert-path' };
         const common = [
-            { icon: '🏠', label: 'Головна', route: 'dashboard' },
+            { icon: '<i class="fa-solid fa-house" style="color:#C9A227"></i>',        label: 'Головна',  route: 'dashboard' },
             expertItem,
-            { icon: '📰', label: 'Новини',  route: 'news' }
+            { icon: '<i class="fa-solid fa-newspaper" style="color:#60a5fa"></i>',    label: 'Новини',   route: 'news' }
         ];
         const contentItems = [
             ...common,
-            { icon: '📂', label: 'База знань',   route: 'knowledge-base' },
-            { icon: '📋', label: 'Документи',    route: 'documents' },
+            { icon: '<i class="fa-solid fa-folder-open" style="color:#C9A227"></i>',  label: 'База знань',  route: 'knowledge-base' },
+            { icon: '<i class="fa-solid fa-file-lines"></i>',   label: 'Документи',   route: 'documents', badgeId: 'nav-doc-badge' },
             { icon: '<i class="fa-solid fa-wand-magic-sparkles" style="background:linear-gradient(135deg,#818cf8,#c084fc);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-size:1rem"></i>', label: 'Меню порталу', route: 'collections' }
         ];
-        const ntfItem      = { icon: '🔔', label: 'Сповіщення',   route: 'notifications', badgeId: 'nav-ntf-badge' };
-        const contactsItem = { icon: '👥', label: 'Контакти',     route: 'contacts' };
-        const bmItem       = { icon: '⭐', label: 'Закладки',     route: 'bookmarks', noStar: true };
+        const ntfItem      = { icon: '<i class="fa-solid fa-bell" style="color:#C9A227"></i>',        label: 'Сповіщення', route: 'notifications', badgeId: 'nav-ntf-badge' };
+        const contactsItem = { icon: '<i class="fa-solid fa-address-book"></i>', label: 'Контакти',   route: 'contacts' };
+        const bmItem       = { icon: '<i class="fa-solid fa-bookmark" style="color:#C9A227"></i>',    label: 'Закладки',   route: 'bookmarks', noStar: true };
 
         if (role === 'owner' || role === 'admin') {
             return [
                 { title: 'Навчання', items: contentItems },
                 { title: 'Управління', items: [
-                    { icon: '📊', label: 'Аналітика',         route: 'analytics' },
-                    { icon: '📅', label: 'Розділ планування', route: 'scheduler' },
-                    { icon: '⚙️', label: 'Адміністрування',  route: 'admin' },
-                    { icon: '🔒', label: 'Обмеження доступу', route: 'label-access', noStar: true }
+                    { icon: '<i class="fa-solid fa-chart-bar"></i>',     label: 'Аналітика',         route: 'analytics' },
+                    { icon: '<i class="fa-solid fa-calendar-days" style="color:#60a5fa"></i>', label: 'Розділ планування', route: 'scheduler' },
+                    { icon: '<i class="fa-solid fa-gear" style="color:#f87171"></i>',          label: 'Адміністрування',   route: 'admin' }
                 ]},
                 { title: 'Особисте', items: [ contactsItem, bmItem, ntfItem ] }
             ];
@@ -216,7 +215,7 @@ const UI = {
             return [
                 { title: 'Навчання', items: contentItems },
                 { title: 'Управління', items: [
-                    { icon: '📅', label: 'Розділ планування', route: 'scheduler' }
+                    { icon: '<i class="fa-solid fa-calendar-days" style="color:#60a5fa"></i>', label: 'Розділ планування', route: 'scheduler' }
                 ]},
                 { title: 'Особисте', items: [ contactsItem, bmItem, ntfItem ] }
             ];
@@ -225,9 +224,9 @@ const UI = {
             return [
                 { title: 'Навчання', items: contentItems },
                 { title: 'Управління', items: [
-                    { icon: '📊', label: 'Аналітика',        route: 'analytics' },
-                    { icon: '⚙️', label: 'Контент',          route: 'admin' },
-                    { icon: '📅', label: 'Розділ планування', route: 'scheduler', noStar: true }
+                    { icon: '<i class="fa-solid fa-chart-bar"></i>',     label: 'Аналітика',        route: 'analytics' },
+                    { icon: '<i class="fa-solid fa-gear"></i>',          label: 'Контент',          route: 'admin' },
+                    { icon: '<i class="fa-solid fa-calendar-days" style="color:#60a5fa"></i>', label: 'Розділ планування', route: 'scheduler', noStar: true }
                 ]},
                 { title: 'Особисте', items: [ contactsItem, bmItem, ntfItem ] }
             ];
@@ -236,8 +235,8 @@ const UI = {
             return [
                 { title: 'Навчання', items: contentItems },
                 { title: 'Управління', items: [
-                    { icon: '📊', label: 'Аналітика',        route: 'analytics' },
-                    { icon: '📅', label: 'Розділ планування', route: 'scheduler', noStar: true }
+                    { icon: '<i class="fa-solid fa-chart-bar"></i>',     label: 'Аналітика',        route: 'analytics' },
+                    { icon: '<i class="fa-solid fa-calendar-days" style="color:#60a5fa"></i>', label: 'Розділ планування', route: 'scheduler', noStar: true }
                 ]},
                 { title: 'Особисте', items: [ contactsItem, bmItem, ntfItem ] }
             ];
@@ -246,14 +245,19 @@ const UI = {
             { title: 'Навчання', items: contentItems },
             { title: 'Особисте', items: [
                 contactsItem,
-                { icon: '📅', label: 'Розділ планування', route: 'scheduler', noStar: true },
+                { icon: '<i class="fa-solid fa-calendar-days" style="color:#60a5fa"></i>', label: 'Розділ планування', route: 'scheduler', noStar: true },
                 bmItem, ntfItem
             ]}
         ];
     },
     updateActiveNav(route) {
+        const parentRoute = {
+            'schedule-graph': 'scheduler',
+            'schedule-view':  'scheduler',
+            'my-calendar':    'scheduler',
+        }[route] || route;
         document.querySelectorAll('.nav-item').forEach(el => {
-            el.classList.toggle('active', el.dataset.route === route);
+            el.classList.toggle('active', el.dataset.route === parentRoute);
         });
     },
     renderSidebarUser(profile) {
@@ -261,26 +265,82 @@ const UI = {
         const avatarHtml = profile?.avatar_url
             ? `<img src="${profile.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
             : initials;
-        const avatarSmHtml = profile?.avatar_url
-            ? `<img src="${profile.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
-            : initials;
 
-        document.getElementById('sidebar-user').innerHTML = `
-            <div class="avatar">${avatarHtml}</div>
-            <div class="user-info">
-                <div class="user-name truncate">${profile?.full_name || 'Користувач'}</div>
-                <div class="user-role">${(profile?.role === 'owner' || profile?.role === 'admin') ? '👑 ' : ''}${Fmt.role(profile?.role)}</div>
-            </div>`;
-        document.getElementById('sidebar-user').style.cursor = 'pointer';
-        document.getElementById('sidebar-user').onclick = () => Router.go('profile');
+        const isTopRole = profile?.role === 'owner' || profile?.role === 'admin';
+        const crownHtml = isTopRole ? '<i class="fa-solid fa-crown" style="color:#C9A227;font-size:.65rem"></i>' : '';
+        const meta = profile?.city || '';
+
         const headerUser = document.getElementById('header-user');
         if (headerUser) {
             headerUser.innerHTML = `
-                <div class="avatar" style="width:32px;height:32px;font-size:.8rem;overflow:hidden">${avatarSmHtml}</div>
-                <span style="font-size:.875rem;font-weight:500;">${profile?.full_name?.split(' ')[0] || ''}</span>`;
-            headerUser.style.cursor = 'pointer';
-            headerUser.onclick = () => Router.go('profile');
+                <div class="tb-user-avatar">${avatarHtml}</div>
+                <div class="tb-user-info">
+                    <div class="tb-user-name">${Fmt.esc(profile?.full_name || 'Користувач')}</div>
+                    <div class="tb-user-sub">${crownHtml}${Fmt.esc(Fmt.role(profile?.role))}${meta ? ` · ${Fmt.esc(meta)}` : ''}</div>
+                </div>
+                <i class="fa-solid fa-chevron-down tb-user-chevron" id="su-chevron-icon"></i>`;
         }
+        this._updateThemeLabel();
+    },
+
+    toggleUserPopup() {
+        const popup = document.getElementById('su-popup');
+        if (!popup) return;
+        const isOpen = popup.classList.contains('open');
+        if (isOpen) { this.closeUserPopup(); return; }
+        popup.classList.remove('hidden');
+        requestAnimationFrame(() => popup.classList.add('open'));
+        document.getElementById('su-chevron-icon')?.classList.add('su-rotated');
+        setTimeout(() => document.addEventListener('click', this._popupOutsideHandler, { once: true }), 0);
+    },
+
+    closeUserPopup() {
+        const popup = document.getElementById('su-popup');
+        if (!popup) return;
+        popup.classList.remove('open');
+        document.getElementById('su-chevron-icon')?.classList.remove('su-rotated');
+        setTimeout(() => popup.classList.add('hidden'), 180);
+    },
+
+    _popupOutsideHandler(e) {
+        if (!document.getElementById('su-popup')?.contains(e.target) &&
+            !document.getElementById('header-user')?.contains(e.target)) {
+            UI.closeUserPopup();
+        }
+    },
+
+    _updateThemeLabel() {
+        const btn = document.getElementById('su-theme-btn');
+        if (!btn) return;
+        const isDark = !document.body.classList.contains('light-theme');
+        btn.querySelector('i').className = isDark ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
+        btn.querySelector('span').textContent = isDark ? 'Світла тема' : 'Темна тема';
+    },
+
+    async loadDocBadge() {
+        if (!AppState.user?.id) return;
+        try {
+            const { data: docs } = await supabase
+                .from('resources')
+                .select('id, doc_version')
+                .eq('is_tracked_download', true)
+                .is('deleted_at', null)
+                .is('lesson_id', null);
+            if (!docs?.length) return;
+            const ackMap = await API.documentDownloads.getMyLatest(docs.map(d => d.id));
+            const unread = docs.filter(d => {
+                const dl = ackMap[d.id];
+                return !dl || (dl.version || 1) < (d.doc_version || 1);
+            }).length;
+            const badge = document.getElementById('nav-doc-badge');
+            if (!badge) return;
+            if (unread > 0) {
+                badge.textContent = unread > 99 ? '99+' : unread;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+        } catch { /* silent */ }
     }
 };
 
@@ -327,7 +387,10 @@ const Fmt = {
     pct(n)  { return `${Math.round(n || 0)}%`; },
     num(n)  { if (n === null || n === undefined) return '—'; return Number(n).toLocaleString('uk-UA'); },
     initials(name = '') { return name.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase() || '?'; },
-    slug(str) { return str.toLowerCase().replace(/[^a-zа-яёії0-9]+/gi, '-').replace(/^-|-$/g, ''); },
+    slug(str) {
+        const map = {'а':'a','б':'b','в':'v','г':'h','ґ':'g','д':'d','е':'e','є':'ye','ж':'zh','з':'z','и':'y','і':'i','ї':'yi','й':'y','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'kh','ц':'ts','ч':'ch','ш':'sh','щ':'shch','ь':'','ю':'yu','я':'ya','ё':'yo'};
+        return str.toLowerCase().split('').map(c => map[c] ?? c).join('').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    },
     completionStatus(s) {
         return { 'completed': 'Завершено', 'incomplete': 'В процесі', 'not attempted': 'Не розпочато', 'unknown': '—' }[s] || s || '—';
     },

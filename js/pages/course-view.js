@@ -1,4 +1,4 @@
-// ================================================================
+﻿// ================================================================
 // EduFlow LMS — Сторінка перегляду курсу
 // ================================================================
 
@@ -11,7 +11,7 @@ const CourseViewPage = {
         const courseId = params.id;
         this._from = params.from || null;
         const fromExpert = this._from === 'expert-path';
-        const backLabel = fromExpert ? 'Шлях експерта' : 'Курси';
+        const backLabel = fromExpert ? 'Skill Up' : 'Курси';
         const backRoute = fromExpert ? 'expert-path' : 'courses';
         UI.setBreadcrumb([{ label: backLabel, route: backRoute }, { label: 'Завантаження...' }]);
         container.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
@@ -37,7 +37,7 @@ const CourseViewPage = {
                 <div class="empty-state">
                     <div class="empty-icon">⚠️</div>
                     <h3>Курс не знайдено</h3>
-                    <button class="btn btn-primary" onclick="Router.go('${fromExpert ? 'expert-path' : 'courses'}')">← Назад</button>
+                    <button class="btn btn-primary" onclick="Router.go('${fromExpert ? 'expert-path' : 'courses'}')" style="display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i> Назад</button>
                 </div>`;
         }
     },
@@ -149,8 +149,8 @@ const CourseViewPage = {
                         ${lesson.duration_minutes ? `<span class="lesson-duration">⏱ ${Fmt.duration(lesson.duration_minutes)}</span>` : ''}
                         ${!canOpen ? '<span style="color:var(--text-muted)">🔒</span>' : ''}
                         ${AppState.isStaff() ? `
-                            <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();CourseViewPage.openEditLesson('${lesson.id}')">✏️</button>
-                            <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();CourseViewPage.deleteLesson('${lesson.id}',${JSON.stringify(lesson.title||'').replace(/"/g,'&quot;')})">🗑</button>
+                            <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();CourseViewPage.openEditLesson('${lesson.id}')"><i class="fa-solid fa-pen"></i></button>
+                            <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();CourseViewPage.deleteLesson('${lesson.id}',${JSON.stringify(lesson.title||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-trash"></i></button>
                         ` : ''}
                     </div>
                 </div>`;
@@ -185,8 +185,8 @@ const CourseViewPage = {
             <div class="card" style="margin-top:1rem">
                 <div class="card-header"><h4>Управління</h4></div>
                 <div class="card-body" style="display:flex;flex-direction:column;gap:.5rem">
-                    <button class="btn btn-secondary" onclick="CourseViewPage.openAddLesson()">+ Додати урок</button>
-                    <button class="btn btn-secondary" onclick="CourseViewPage.openAddTest()">+ Додати тест</button>
+                    <button class="btn btn-secondary" onclick="CourseViewPage.openAddLesson()"><i class="fa-solid fa-plus"></i> Додати урок</button>
+                    <button class="btn btn-secondary" onclick="CourseViewPage.openAddTest()"><i class="fa-solid fa-plus"></i> Додати тест</button>
                     <button class="btn btn-secondary" onclick="Router.go('analytics?course=${course.id}')">📊 Аналітика курсу</button>
                     <button class="btn btn-secondary" onclick="CourseViewPage.manageEnrollments('${course.id}')">👥 Стажери</button>
                     <button class="btn btn-ghost" onclick="CoursesPage.openEdit('${course.id}')">⚙️ Налаштування</button>
@@ -218,8 +218,8 @@ const CourseViewPage = {
                             <div style="display:flex;gap:.5rem">
                                 ${!t.is_published ? '<span class="badge badge-muted">Чернетка</span>' : ''}
                                 ${AppState.isStaff() ? `
-                                    <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();TestsPage.openEdit('${t.id}')">✏️</button>
-                                    <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();TestsPage.deleteTest('${t.id}',${JSON.stringify(t.title||'').replace(/"/g,'&quot;')})">🗑</button>
+                                    <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();TestsPage.openEdit('${t.id}')"><i class="fa-solid fa-pen"></i></button>
+                                    <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();TestsPage.deleteTest('${t.id}',${JSON.stringify(t.title||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-trash"></i></button>
                                 ` : ''}
                             </div>
                         </div>`).join('')}
@@ -247,7 +247,7 @@ const CourseViewPage = {
 
     _openLessonForm(lesson) {
         Modal.open({
-            title: lesson ? '✏️ Редагувати урок' : '+ Додати урок',
+            title: lesson ? '<i class="fa-solid fa-pen"></i> Редагувати урок' : '<i class="fa-solid fa-plus"></i> Додати урок',
             size: 'lg',
             body: `
                 <div class="form-group">
@@ -280,7 +280,7 @@ const CourseViewPage = {
                 </div>`,
             footer: `
                 <button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
-                <button class="btn btn-primary" onclick="CourseViewPage.saveLesson('${lesson?.id || ''}','${this._course.id}')">Зберегти</button>`
+                <button class="btn btn-primary" onclick="CourseViewPage.saveLesson('${lesson?.id || ''}','${this._course.id}')"><i class="fa-regular fa-floppy-disk"></i> Зберегти</button>`
         });
     },
 

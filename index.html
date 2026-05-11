@@ -46,11 +46,11 @@
                 <div class="auth-header">
                     <span class="auth-system-label">LMS СИСТЕМА</span>
                     <h1 class="auth-title">Ласкаво просимо</h1>
-                    <p class="auth-subtitle-text">Вхід до системи навчання</p>
+                    <p class="auth-subtitle-text">Вхід до системи</p>
                 </div>
                 <div id="login-form">
                     <div class="form-group">
-                        <label>Логін / Email</label>
+                        <label>Логін</label>
                         <div class="auth-input-wrap">
                             <span class="auth-input-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
                             <input type="text" id="login-username" placeholder="Введіть логін або email" autocomplete="username">
@@ -144,14 +144,6 @@
 
         <nav id="sidebar-nav" class="sidebar-nav"></nav>
 
-        <div class="sidebar-footer">
-            <div id="sidebar-user" class="sidebar-user"></div>
-            <button class="theme-toggle-btn sidebar-theme-btn" onclick="Theme.toggle()" title="Світла тема">☀️</button>
-            <button class="btn-logout" onclick="Auth.logout()">
-                <span class="icon">↩</span>
-                <span>Вийти</span>
-            </button>
-        </div>
     </aside>
 
     <div id="sidebar-overlay" class="sidebar-overlay" onclick="UI.closeSidebar()"></div>
@@ -171,6 +163,21 @@
                     </svg>
                     <span class="ntf-bell-badge hidden" id="ntf-bell-badge">0</span>
                 </button>
+                <div class="tb-user-wrap">
+                    <div id="header-user" class="tb-user" onclick="UI.toggleUserPopup()"></div>
+                    <div id="su-popup" class="su-popup hidden">
+                        <button class="su-popup-item" onclick="UI.closeUserPopup();Router.go('profile')">
+                            <i class="fa-solid fa-user"></i><span>Профіль</span>
+                        </button>
+                        <button class="su-popup-item" id="su-theme-btn" onclick="Theme.toggle();UI._updateThemeLabel()">
+                            <i class="fa-solid fa-sun"></i><span>Світла тема</span>
+                        </button>
+                        <div class="su-popup-divider"></div>
+                        <button class="su-popup-item su-popup-danger" onclick="Auth.logout()">
+                            <i class="fa-solid fa-right-from-bracket"></i><span>Вийти</span>
+                        </button>
+                    </div>
+                </div>
             </div>
         </header>
 

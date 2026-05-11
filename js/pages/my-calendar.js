@@ -1,4 +1,4 @@
-// ================================================================
+﻿// ================================================================
 // EduFlow LMS — Мій календар
 // Personal calendar with event management and viewer access
 // ================================================================
@@ -163,11 +163,11 @@ const MyCalendarPage = {
     <div class="mc-header">
         <div class="mc-title-row">
             <h1 class="mc-title">📅 Мій календар</h1>
-            ${readOnly ? `<span class="mc-readonly-badge">👁 Перегляд</span>` : `
+            ${readOnly ? `<span class="mc-readonly-badge"><i class="fa-solid fa-eye"></i> Перегляд</span>` : `
             <button class="mc-access-btn" onclick="MyCalendarPage._openAccessModal()">👥 Доступ${this._viewers.length ? ` <span class="mc-access-count">${this._viewers.length}</span>` : ''}</button>`}
         </div>
         <div class="mc-nav">
-            <button class="mc-nav-btn" onclick="MyCalendarPage._prevMonth()">‹</button>
+            <button class="mc-nav-btn" onclick="MyCalendarPage._prevMonth()"><i class="fa-solid fa-angle-left"></i></button>
             <span class="mc-month-label">${MONTHS[this._month]} ${this._year}</span>
             <button class="mc-nav-btn" onclick="MyCalendarPage._nextMonth()">›</button>
         </div>
@@ -238,9 +238,14 @@ ${this._styles()}`;
                 style="background:${c}" data-color="${c}"
                 onclick="MyCalendarPage._pickColor('${c}')"></div>`).join('')}
         </div>
+
+        <label class="checkbox-item" style="cursor:pointer;margin-top:.5rem;padding:.6rem .75rem;background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.25);border-radius:var(--radius-md)">
+            <input type="checkbox" id="mc-ev-important" ${ev?.is_important ? 'checked' : ''}>
+            <span>⚡ Важлива подія — нагадувати весь день</span>
+        </label>
     </div>
     <div class="mc-modal-actions">
-        <button class="mc-btn-save" onclick="MyCalendarPage._saveEvent(${ev ? `'${ev.id}'` : 'null'})">${ev ? 'Зберегти' : 'Додати'}</button>
+        <button class="mc-btn-save" onclick="MyCalendarPage._saveEvent(${ev ? `'${ev.id}'` : 'null'})">${ev ? '<i class="fa-regular fa-floppy-disk"></i> Зберегти' : '<i class="fa-solid fa-plus"></i> Додати'}</button>
         ${ev ? `<button class="mc-btn-danger" onclick="MyCalendarPage._deleteEvent('${ev.id}')">Видалити</button>` : ''}
         <button class="mc-btn-cancel" onclick="document.getElementById('mc-event-modal').remove()">Скасувати</button>
     </div>
@@ -261,6 +266,7 @@ ${this._styles()}`;
         const notes       = document.getElementById('mc-ev-notes')?.value.trim() || null;
         const color       = document.querySelector('#mc-ev-colors .mc-color-dot.active')?.dataset.color || '#6366f1';
         const repeat_type = document.getElementById('mc-ev-repeat')?.value || 'none';
+        const is_important = document.getElementById('mc-ev-important')?.checked || false;
 
         if (!title) { Toast.error('Введіть назву події'); return; }
         if (!date)  { Toast.error('Оберіть дату'); return; }
@@ -268,10 +274,10 @@ ${this._styles()}`;
         let error;
         if (id) {
             ({ error } = await supabase.from('personal_cal_events')
-                .update({ title, date, time, notes, color, repeat_type }).eq('id', id));
+                .update({ title, date, time, notes, color, repeat_type, is_important }).eq('id', id));
         } else {
             ({ error } = await supabase.from('personal_cal_events')
-                .insert({ user_id: AppState.user.id, title, date, time, notes, color, repeat_type }));
+                .insert({ user_id: AppState.user.id, title, date, time, notes, color, repeat_type, is_important }));
         }
         if (error) { Toast.error('Помилка збереження'); return; }
 
@@ -317,7 +323,7 @@ ${this._styles()}`;
     </div>
     ${readOnly ? '' : `
     <div class="mc-modal-actions" style="margin-top:16px">
-        <button class="mc-btn-save" onclick="document.getElementById('mc-view-modal').remove();MyCalendarPage._openEventModal(null,'${ev.id}')">✏️ Редагувати</button>
+        <button class="mc-btn-save" onclick="document.getElementById('mc-view-modal').remove();MyCalendarPage._openEventModal(null,'${ev.id}')"><i class="fa-solid fa-pen"></i> Редагувати</button>
         <button class="mc-btn-cancel" onclick="document.getElementById('mc-view-modal').remove()">Закрити</button>
     </div>`}
 </div>`;
@@ -402,6 +408,8 @@ ${this._styles()}`;
 
     async showTodayReminder() {
         const today = new Date().toISOString().slice(0, 10);
+        const ntfKey = `mc_ntf_${AppState.user.id}_${today}`;
+
         const { data } = await supabase
             .from('personal_cal_events')
             .select('*')
@@ -411,31 +419,61 @@ ${this._styles()}`;
 
         if (!data?.length) return;
 
-        // Send notifications for upcoming events (with time set, in next 2h)
-        const ntfKey = `mc_ntf_${AppState.user.id}_${today}`;
-        if (!sessionStorage.getItem(ntfKey)) {
-            sessionStorage.setItem(ntfKey, '1');
-            const now = new Date();
-            const upcoming = data.filter(e => {
-                if (!e.time) return false;
-                const [hh, mm] = e.time.split(':').map(Number);
-                const evTime = new Date(); evTime.setHours(hh, mm, 0, 0);
-                const diffMin = (evTime - now) / 60000;
-                return diffMin >= 0 && diffMin <= 120;
-            });
-            if (upcoming.length) {
+        // Show only if event count increased since last dismissal
+        const seenCount = parseInt(sessionStorage.getItem(ntfKey) || '0');
+        if (data.length <= seenCount) return;
+
+        // Create DB notifications only for new events (not yet notified)
+        const withTime = data.filter(e => e.time);
+        const newWithTime = withTime.slice(seenCount);
+        if (newWithTime.length) {
+            try {
                 await supabase.from('notifications').insert(
-                    upcoming.map(e => ({
+                    newWithTime.map(e => ({
                         user_id:    AppState.user.id,
-                        title:      `⏰ Скоро: ${e.title}`,
-                        message:    `Сьогодні о ${e.time.slice(0,5)}${e.notes ? ' — ' + e.notes : ''}`,
+                        title:      `📅 Сьогодні: ${e.title}`,
+                        message:    `о ${e.time.slice(0,5)}${e.notes ? ' — ' + e.notes : ''}`,
                         type:       'general',
                         created_by: AppState.user.id,
                     }))
-                ).catch(() => {});
-                UI.loadNotificationCount?.();
-            }
+                );
+            } catch (_) {}
+            UI.loadNotificationCount?.();
         }
+
+        // Play soft calendar chime
+        try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const notes = [
+                { freq: 440.00, start: 0.00, dur: 0.5 },
+                { freq: 554.37, start: 0.20, dur: 0.5 },
+                { freq: 659.25, start: 0.40, dur: 0.7 },
+            ];
+            notes.forEach(({ freq, start, dur }) => {
+                const osc  = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.type = 'sine';
+                osc.frequency.value = freq;
+                const t = ctx.currentTime + start;
+                gain.gain.setValueAtTime(0, t);
+                gain.gain.linearRampToValueAtTime(0.18, t + 0.05);
+                gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+                osc.start(t);
+                osc.stop(t + dur);
+            });
+        } catch (_) {}
+
+        // Inject styles if calendar page hasn't been opened yet
+        if (!document.getElementById('mc-styles')) {
+            document.head.insertAdjacentHTML('beforeend', MyCalendarPage._styles().replace('<style>', '<style id="mc-styles">'));
+        }
+
+        const dismiss = () => {
+            sessionStorage.setItem(ntfKey, String(data.length));
+            document.getElementById('mc-reminder-modal')?.remove();
+        };
 
         const el = document.createElement('div');
         el.id = 'mc-reminder-modal';
@@ -449,25 +487,26 @@ ${this._styles()}`;
             <div class="mc-reminder-title">Ваші події на сьогодні</div>
             <div class="mc-reminder-date">${dateLabel}</div>
         </div>
-        <button class="mc-mclose" onclick="document.getElementById('mc-reminder-modal').remove()">✕</button>
     </div>
     <div class="mc-reminder-list">
         ${data.map(e => `
         <div class="mc-reminder-item" style="border-left:4px solid ${e.color}">
             <div class="mc-reminder-item-top">
                 ${e.time ? `<span class="mc-reminder-time">${e.time.slice(0,5)}</span>` : '<span class="mc-reminder-time" style="color:var(--text-muted)">Весь день</span>'}
-                <span class="mc-reminder-item-title">${e.title}</span>
+                <span class="mc-reminder-item-title">${Fmt.esc(e.title)}</span>
             </div>
-            ${e.notes ? `<div class="mc-reminder-notes">${e.notes}</div>` : ''}
+            ${e.notes ? `<div class="mc-reminder-notes">${Fmt.esc(e.notes)}</div>` : ''}
         </div>`).join('')}
     </div>
     <div style="display:flex;justify-content:flex-end;margin-top:16px">
-        <button class="mc-btn-save" onclick="document.getElementById('mc-reminder-modal').remove();Router.go('my-calendar')">Відкрити календар</button>
-        <button class="mc-btn-cancel" onclick="document.getElementById('mc-reminder-modal').remove()" style="margin-left:8px">Закрити</button>
+        <button class="mc-btn-save" id="mc-reminder-open">Відкрити календар</button>
+        <button class="mc-btn-cancel" id="mc-reminder-close" style="margin-left:8px">Закрити</button>
     </div>
 </div>`;
         document.body.appendChild(el);
-        el.addEventListener('click', e => { if (e.target === el) el.remove(); });
+        el.querySelector('#mc-reminder-open').onclick  = () => { dismiss(); Router.go('my-calendar'); };
+        el.querySelector('#mc-reminder-close').onclick = () => dismiss();
+        el.addEventListener('click', e => { if (e.target === el) dismiss(); });
     },
 
     // ── Styles ───────────────────────────────────────────────────

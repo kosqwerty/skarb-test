@@ -1,4 +1,4 @@
-// ================================================================
+﻿// ================================================================
 // EduFlow LMS — Планувальник сповіщень
 // Access: owner, admin, manager
 // Owner extra: see who created what, full send log
@@ -230,7 +230,7 @@ const SchedulerPage = {
         </button>` : ''}
         
         <button class="planner-hub-card" onclick="Router.go('schedule-view')">
-            <div class="planner-hub-card-ico" style="background:rgba(99,102,241,.12);color:#6366f1">👁</div>
+            <div class="planner-hub-card-ico" style="background:rgba(99,102,241,.12);color:#6366f1"><i class="fa-solid fa-eye"></i></div>
             <div class="planner-hub-card-title">Огляд</div>
             <div class="planner-hub-card-desc">Перегляд графіків, до яких надано доступ</div>
         </button>
@@ -498,14 +498,14 @@ const SchedulerPage = {
                 ${authorHtml}
                 <td>
                     <div class="sch-actions">
-                        <button class="sch-act-btn" onclick="SchedulerPage._preview('${t.id}')" title="Передперегляд">👁</button>
+                        <button class="sch-act-btn" onclick="SchedulerPage._preview('${t.id}')" title="Передперегляд"><i class="fa-solid fa-eye"></i></button>
                         ${t.status !== 'sent' ? `
-                        <button class="sch-act-btn" onclick="SchedulerPage._openEdit('${t.id}')" title="Редагувати">✏️</button>
+                        <button class="sch-act-btn" onclick="SchedulerPage._openEdit('${t.id}')" title="Редагувати"><i class="fa-solid fa-pen"></i></button>
                         <button class="sch-act-btn success" onclick="SchedulerPage._sendNow('${t.id}')" title="Відправити зараз">📤</button>
                         ` : ''}
                         ${t.status === 'sent' ? `<button class="sch-act-btn" onclick="SchedulerPage._viewUnread('${t.id}')" title="Хто не прочитав">📊</button>` : ''}
                         ${isOwner ? `<button class="sch-act-btn" onclick="SchedulerPage._viewLog('${t.id}')" title="Лог відправки">📋</button>` : ''}
-                        <button class="sch-act-btn danger" onclick="SchedulerPage._deleteTask('${t.id}')" title="Видалити">🗑</button>
+                        <button class="sch-act-btn danger" onclick="SchedulerPage._deleteTask('${t.id}')" title="Видалити"><i class="fa-solid fa-trash"></i></button>
                     </div>
                 </td>
             </tr>`;
@@ -541,7 +541,7 @@ const SchedulerPage = {
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
             Назад
         </button>
-        <h2 class="sch-form-title">${isEdit ? '✏️ Редагувати завдання' : '➕ Нове сповіщення'}</h2>
+        <h2 class="sch-form-title">${isEdit ? '<i class="fa-solid fa-pen"></i> Редагувати завдання' : '➕ Нове сповіщення'}</h2>
     </div>
 
     <div class="sch-form-grid">
@@ -650,7 +650,7 @@ const SchedulerPage = {
             Скасувати
         </button>
         <button class="sch-btn-secondary" onclick="SchedulerPage._saveTask(${task ? `'${task.id}'` : 'null'}, false)">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v14a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/></svg>
+            <i class="fa-regular fa-floppy-disk"></i>
             Зберегти
         </button>
         <button class="sch-btn-primary" onclick="SchedulerPage._saveTask(${task ? `'${task.id}'` : 'null'}, true)">
@@ -1007,7 +1007,7 @@ const SchedulerPage = {
         const typeIconMap = { general: '🔔', gold: '🏆', tech: '🔧' };
         const tIcon = typeIconMap[task.type] || '🔔';
         Modal.open({
-            title: '👁 Передперегляд повідомлення',
+            title: '<i class="fa-solid fa-eye"></i> Передперегляд повідомлення',
             body: `
             <div style="padding:.5rem">
                 <div style="background:var(--bg-raised);border-radius:16px;padding:16px;margin-bottom:1rem;border:1px solid var(--border)">

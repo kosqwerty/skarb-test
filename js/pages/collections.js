@@ -1,4 +1,4 @@
-// ================================================================
+﻿// ================================================================
 // EduFlow LMS — Сторінки (Custom Pages) з HTML/CSS редактором
 // ================================================================
 
@@ -106,12 +106,12 @@ const CollectionsPage = {
                         style="width:30px;height:30px;border-radius:50%;border:1.5px solid var(--border);background:var(--bg-raised);color:var(--text-secondary);font-size:.85rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:border-color var(--transition)"
                         onmouseenter="this.style.borderColor='var(--primary)'"
                         onmouseleave="this.style.borderColor='var(--border)'"
-                        title="Редагувати">✏️</button>
+                        title="Редагувати"><i class="fa-solid fa-pen"></i></button>
                 <button onclick="CollectionsPage.deletePage('${p.id}')"
                         style="width:30px;height:30px;border-radius:50%;border:1.5px solid var(--border);background:var(--bg-raised);color:var(--text-secondary);font-size:.85rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:border-color var(--transition)"
                         onmouseenter="this.style.borderColor='var(--danger)'"
                         onmouseleave="this.style.borderColor='var(--border)'"
-                        title="Видалити">🗑</button>
+                        title="Видалити"><i class="fa-solid fa-trash"></i></button>
             </div>` : '';
 
         return `
@@ -125,7 +125,7 @@ const CollectionsPage = {
                         <button class="res-star-btn${Bookmarks.isBookmarked('collections/'+p.id) ? ' active' : ''}"
                             data-bm-route="collections/${p.id}"
                             title="${Bookmarks.isBookmarked('collections/'+p.id) ? 'Видалити з закладок' : 'Зберегти в закладки'}"
-                            onclick="Bookmarks.toggleCollection('${p.id}',${JSON.stringify(p.title||'').replace(/"/g,'&quot;')})">★</button>
+                            onclick="Bookmarks.toggleCollection('${p.id}',${JSON.stringify(p.title||'').replace(/"/g,'&quot;')})"><i class="fa-regular fa-star"></i></button>
                         ${adminBtns}
                     </div>
                 </div>
@@ -166,7 +166,7 @@ const CollectionsPage = {
                             <div class="empty-icon">🔒</div>
                             <h3>Доступ обмежено</h3>
                             <p style="color:var(--text-muted)">Ця сторінка доступна лише для певних груп користувачів</p>
-                            <button class="btn btn-primary" onclick="Router.back()" style="margin-top:1rem">← Назад</button>
+                            <button class="btn btn-primary" onclick="Router.back()" style="display:inline-flex;align-items:center;gap:.35rem;margin-top:1rem"><i class="fa-solid fa-angle-left"></i> Назад</button>
                         </div>`;
                     return;
                 }
@@ -184,7 +184,7 @@ const CollectionsPage = {
             this._renderView(container, { ...page, html_content: resolvedHtml });
         } catch (e) {
             container.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>${e.message}</h3>
-                <button class="btn btn-primary" onclick="Router.go('collections')">← Назад</button></div>`;
+                <button class="btn btn-primary" onclick="Router.go('collections')" style="display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i> Назад</button></div>`;
         }
     },
 
@@ -200,18 +200,18 @@ const CollectionsPage = {
                     title="Редагувати"
                     style="flex-shrink:0;width:32px;height:32px;border-radius:50%;border:1.5px solid var(--border);background:var(--bg-raised);color:var(--text-secondary);font-size:.9rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background var(--transition),border-color var(--transition)"
                     onmouseenter="this.style.background='var(--bg-hover)';this.style.borderColor='var(--primary)'"
-                    onmouseleave="this.style.background='var(--bg-raised)';this.style.borderColor='var(--border)'">✏️</button>` : '';
+                    onmouseleave="this.style.background='var(--bg-raised)';this.style.borderColor='var(--border)'"><i class="fa-solid fa-pen"></i></button>` : '';
 
         container.innerHTML = `
             <div style="display:flex;flex-direction:column;gap:1rem">
                 <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
-                    ${page.is_home ? '' : '<button class="btn btn-ghost btn-sm" onclick="Router.back()" style="flex-shrink:0">← Назад</button>'}
+                    ${page.is_home ? '' : '<button class="btn btn-ghost btn-sm" onclick="Router.back()" style="display:inline-flex;align-items:center;gap:.35rem;flex-shrink:0"><i class="fa-solid fa-angle-left"></i> Назад</button>'}
                     <div style="display:flex;align-items:center;gap:.5rem;flex:1;min-width:0">
                         <h1 style="margin:0;font-size:1.4rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${page.title}</h1>
                         <button class="res-star-btn${Bookmarks.isBookmarked('collections/'+page.id) ? ' active' : ''}"
                             data-bm-route="collections/${page.id}"
                             title="${Bookmarks.isBookmarked('collections/'+page.id) ? 'Видалити з закладок' : 'Зберегти в закладки'}"
-                            onclick="Bookmarks.toggleCollection('${page.id}',${JSON.stringify(page.title||'').replace(/"/g,'&quot;')})">★</button>
+                            onclick="Bookmarks.toggleCollection('${page.id}',${JSON.stringify(page.title||'').replace(/"/g,'&quot;')})"><i class="fa-regular fa-star"></i></button>
                         ${editBtn}
                     </div>
                 </div>
@@ -405,7 +405,7 @@ document.addEventListener('click', function(e) {
 
             <!-- Top bar -->
             <div style="display:flex;align-items:center;gap:.75rem;padding:.75rem 1rem;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);margin-bottom:.75rem;flex-wrap:wrap">
-                <button class="btn btn-ghost btn-sm" onclick="Router.back()">← Назад</button>
+                <button class="btn btn-ghost btn-sm" onclick="Router.back()" style="display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i> Назад</button>
                 <input id="page-title-input" type="text" value="${page?.title || ''}" placeholder="Назва сторінки..."
                        style="flex:1;min-width:160px;font-size:1rem;font-weight:600;border:none;background:transparent;color:var(--text-primary);outline:none">
                 <label style="display:flex;align-items:center;gap:.4rem;font-size:.85rem;color:var(--text-secondary);cursor:pointer;flex-shrink:0">
@@ -414,8 +414,8 @@ document.addEventListener('click', function(e) {
                 </label>
                 <div style="position:relative;flex-shrink:0">${tagPickerHtml}</div>
                 <button class="btn btn-ghost btn-sm" onclick="CollectionsPage._insertResourceLink()">+ Ресурс</button>
-                <button class="btn btn-secondary btn-sm" onclick="CollectionsPage._openPreviewModal()">👁 Перегляд</button>
-                <button class="btn btn-primary btn-sm" onclick="CollectionsPage.savePage('${page?.id || ''}')">💾 Зберегти</button>
+                <button class="btn btn-secondary btn-sm" onclick="CollectionsPage._openPreviewModal()"><i class="fa-solid fa-eye"></i> Перегляд</button>
+                <button class="btn btn-primary btn-sm" onclick="CollectionsPage.savePage('${page?.id || ''}')"><i class="fa-regular fa-floppy-disk"></i> Зберегти</button>
             </div>
 
             <!-- Code panel (full width) -->
@@ -470,7 +470,7 @@ document.addEventListener('click', function(e) {
 
         box.innerHTML = `
             <div style="display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.25rem;border-bottom:1px solid var(--border);background:var(--bg-raised);flex-shrink:0">
-                <span style="font-weight:600;font-size:.95rem">👁 Попередній перегляд</span>
+                <span style="font-weight:600;font-size:.95rem"><i class="fa-solid fa-eye"></i> Попередній перегляд</span>
                 <button onclick="document.getElementById('preview-modal').remove()"
                         style="width:32px;height:32px;border-radius:50%;border:1px solid var(--border);background:var(--bg-surface);color:var(--text-primary);cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center">✕</button>
             </div>
@@ -521,7 +521,7 @@ document.addEventListener('click', function(e) {
                 ${[11,12,13,14,16,18,20,24,28,32,36,48,64].map(s => `<option value="${s}">${s}px</option>`).join('')}
             </select>
             ${S}
-            ${B('←≡', "CollectionsPage._wrapLeft()",   'Ліворуч')}
+            ${B('<i class="fa-solid fa-angle-left"></i>≡', "CollectionsPage._wrapLeft()",   'Ліворуч')}
             ${B('≡',   "CollectionsPage._wrapCenter()", 'По центру')}
             ${B('≡→',  "CollectionsPage._wrapRight()",  'Праворуч')}
             ${S}
@@ -662,7 +662,7 @@ document.addEventListener('click', function(e) {
         const groups = [
             { label: 'Емоції',  items: ['😀','😂','😊','😍','🤔','😎','🥳','😢','😡','🤩','🙄','😴','🤗','😇','🫡'] },
             { label: 'Жести',   items: ['👍','👎','👏','🙌','🤝','✌️','☝️','💪','🖐','🫶','👋','🤜','🤞','🫵','✅'] },
-            { label: 'Символи', items: ['❌','⚠️','ℹ️','❓','❗','🔴','🟡','🟢','🔵','⭐','🔥','💡','💯','🆕','🔝'] },
+            { label: 'Символи', items: ['❌','⚠️','ℹ️','❓','❗','🔴','🟡','🟢','🔵','<i class="fa-solid fa-star"></i>','🔥','💡','💯','🆕','🔝'] },
             { label: 'Робота',  items: ['📌','📎','🔗','📊','📋','📁','📝','📅','💼','🔑','🔒','📢','📞','✉️','💻'] },
             { label: 'Інше',    items: ['🚀','🎯','🏆','🎉','❤️','💰','🌐','🕐','🖨','🔔','📢','🎓','🏅','🎁','🌟'] },
         ];

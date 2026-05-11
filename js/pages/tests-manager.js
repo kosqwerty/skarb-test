@@ -425,7 +425,7 @@ const TestsManagerPage = {
     <div class="tset-topbar">
         <button class="tset-back" onclick="TestsManagerPage._goBack(TestsManagerPage._container)"><i class="fa-solid fa-arrow-left"></i> Назад</button>
         <span style="font-size:1.1rem;font-weight:700;color:var(--text-primary);flex:1">${isEdit ? '<i class="fa-solid fa-gear"></i> ' + test.title : '<i class="fa-solid fa-plus"></i> Новий тест'}</span>
-        <button class="btn btn-primary" onclick="TestsManagerPage._saveMeta(${isEdit ? `'${test.id}'` : 'null'})">${isEdit ? 'Зберегти' : 'Створити'}</button>
+        <button class="btn btn-primary" onclick="TestsManagerPage._saveMeta(${isEdit ? `'${test.id}'` : 'null'})">${isEdit ? '<i class="fa-regular fa-floppy-disk"></i> Зберегти' : '<i class="fa-solid fa-plus"></i> Створити'}</button>
     </div>
     <div class="tm-cover-frame">
         <div id="tm-cover-wrap" class="tm-cover-upload">
@@ -1980,7 +1980,7 @@ ${this._opts.map((o,i) => `
     <div class="tasgn-topbar">
         <button class="tasgn-back" onclick="TestsManagerPage._goBack(TestsManagerPage._container)"><i class="fa-solid fa-arrow-left"></i> Назад</button>
         <span style="font-size:1.1rem;font-weight:700;color:var(--text-primary);flex:1"><i class="fa-solid fa-users"></i> ${testTitle}</span>
-        <button class="btn btn-primary" onclick="TestsManagerPage._doAssign('${testId}')">Зберегти</button>
+        <button class="btn btn-primary" onclick="TestsManagerPage._doAssign('${testId}')"><i class="fa-regular fa-floppy-disk"></i> Зберегти</button>
     </div>
     <div class="tasgn-controls">
         <div style="display:grid;grid-template-columns:repeat(${filterCols},1fr);gap:8px;margin-bottom:10px">

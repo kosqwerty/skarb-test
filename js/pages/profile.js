@@ -1,4 +1,4 @@
-// ================================================================
+﻿// ================================================================
 // EduFlow LMS — Unified Profile Editor
 // Used by both AdminPage.openEditUser (isAdminEdit=true)
 // and App.editProfile (isAdminEdit=false, editing own profile)
@@ -59,8 +59,8 @@ const ProfilePage = {
             : `<span id="pe-avatar-initials" style="font-size:2rem;font-weight:700;color:#fff">${Fmt.initials(user.full_name)}</span>`;
 
         const titleText = isAdminEdit
-            ? `✏️ Редагувати користувача`
-            : `✏️ Мій профіль`;
+            ? `<i class="fa-solid fa-pen"></i> Редагувати користувача`
+            : `<i class="fa-solid fa-pen"></i> Мій профіль`;
 
         container.innerHTML = `
     <div class="user-create-container">
@@ -92,7 +92,7 @@ const ProfilePage = {
                     <input id="pe-avatar-input" type="file" accept="image/*" style="display:none" onchange="ProfilePage._previewAvatar('${user.id}', this)">
                     <div style="display:flex;gap:.5rem">
                         <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('pe-avatar-input').click()">📷 Змінити</button>
-                        ${user.avatar_url ? `<button id="pe-avatar-delete-btn" type="button" class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="ProfilePage._removeAvatarPreview('${user.id}')">🗑 Видалити</button>` : ''}
+                        ${user.avatar_url ? `<button id="pe-avatar-delete-btn" type="button" class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="ProfilePage._removeAvatarPreview('${user.id}')">​<i class="fa-solid fa-trash"></i> Видалити</button>` : ''}
                     </div>
                 </div>
 
@@ -131,8 +131,8 @@ const ProfilePage = {
                         <span>Новий пароль</span>
                         <div style="position:relative">
                             <input id="pe-password" type="password" placeholder="Залиште порожнім щоб не змінювати" autocomplete="new-password" style="width:100%;box-sizing:border-box;padding-right:42px">
-                            <button type="button" onclick="const i=document.getElementById('pe-password');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'👁':'🙈'"
-                                style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:1.1rem;padding:0;line-height:1;color:var(--text-muted)">👁</button>
+                            <button type="button" onclick="const i=document.getElementById('pe-password');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'<i class="fa-solid fa-eye"></i>':'<i class="fa-solid fa-eye-slash"></i>'"
+                                
                         </div>
                         <small class="field-hint">Мінімум 6 символів</small>
                     </label>
@@ -141,8 +141,8 @@ const ProfilePage = {
                         <span>Підтвердження пароля</span>
                         <div style="position:relative">
                             <input id="pe-password2" type="password" placeholder="Повторіть пароль" style="width:100%;box-sizing:border-box;padding-right:42px">
-                            <button type="button" onclick="const i=document.getElementById('pe-password2');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'👁':'🙈'"
-                                style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:1.1rem;padding:0;line-height:1;color:var(--text-muted)">👁</button>
+                            <button type="button" onclick="const i=document.getElementById('pe-password2');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'<i class="fa-solid fa-eye"></i>':'<i class="fa-solid fa-eye-slash"></i>'"
+                                
                         </div>
                     </label>` : ''}
                     ${canRole ? `
@@ -266,7 +266,7 @@ const ProfilePage = {
         }
         if (!document.getElementById('pe-avatar-delete-btn')) {
             document.querySelector('[onclick*="pe-avatar-input"]')
-                ?.insertAdjacentHTML('afterend', `<button id="pe-avatar-delete-btn" type="button" class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="ProfilePage._removeAvatarPreview('${userId}')">🗑 Видалити</button>`);
+                ?.insertAdjacentHTML('afterend', `<button id="pe-avatar-delete-btn" type="button" class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="ProfilePage._removeAvatarPreview('${userId}')">​<i class="fa-solid fa-trash"></i> Видалити</button>`);
         }
     },
 

@@ -3,8 +3,6 @@
 // ================================================================
 
 const App = {
-    _reminderShown: false,
-
     async boot() {
         Theme.init();
         SearchSelect.init();
@@ -43,6 +41,7 @@ const App = {
 
         // Load unread notification count
         UI.loadNotificationCount();
+        UI.loadDocBadge();
 
         // Start scheduler background ticker (owner/admin/manager only)
         if (AppState.canSchedule()) SchedulerPage.startTimer();
@@ -146,8 +145,8 @@ const App = {
                 await BookmarksPage.init(container);
             },
 
-            'label-access': async ({ container }) => {
-                await LabelAccessPage.init(container);
+            'label-access': async () => {
+                Router.go('admin?tab=label-access');
             },
 
             'schedule-graph': async ({ container, params }) => {
@@ -184,14 +183,8 @@ const App = {
             Router.go('dashboard');
         }
 
-        // Show personal calendar reminder after initial page renders
-        this._reminderShown = false;
-        setTimeout(() => {
-            if (!this._reminderShown) {
-                this._reminderShown = true;
-                MyCalendarPage.showTodayReminder();
-            }
-        }, 800);
+        // Show personal calendar reminder after first render
+        setTimeout(() => MyCalendarPage.showTodayReminder(), 300);
     },
 
     // ── Results Page (quick inline) ───────────────────────────────

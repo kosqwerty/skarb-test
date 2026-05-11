@@ -1,4 +1,4 @@
-// ================================================================
+﻿// ================================================================
 // EduFlow LMS — Обмеження доступу по мітках
 // Access: owner, admin
 //
@@ -27,7 +27,7 @@ const RESTRICTION_SECTIONS = [
     { route: 'documents',       label: 'Документи',      icon: '📋' },
     { route: 'collections',     label: 'Меню порталу',   icon: '🪄' },
     { route: 'analytics',       label: 'Аналітика',      icon: '📊' },
-    { route: 'bookmarks',       label: 'Закладки',       icon: '⭐' },
+    { route: 'bookmarks',       label: 'Закладки',       icon: '<i class="fa-solid fa-star"></i>' },
     { route: 'results',         label: 'Результати',     icon: '🏆' },
 ];
 

@@ -1,4 +1,4 @@
-// ================================================================
+﻿// ================================================================
 // EduFlow LMS — Тести (проходження + управління)
 // ================================================================
 
@@ -24,7 +24,7 @@ const TestsPage = {
 
             if (this._from === 'expert-path') {
                 UI.setBreadcrumb([
-                    { label: 'Шлях експерта', route: 'expert-path' },
+                    { label: 'Skill Up', route: 'expert-path' },
                     { label: test.title }
                 ]);
             } else {
@@ -65,7 +65,7 @@ const TestsPage = {
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">
                     <h2 style="margin:0"><i class="fa-solid fa-file-pen" style="color:var(--primary);margin-right:.4rem"></i>${test.title}</h2>
                     <button class="btn btn-ghost btn-sm" onclick="Router.go('${this._from==='expert-path'?'expert-path':test.course_id?'courses/'+test.course_id:'dashboard'}')">
-                        <i class="fa-solid fa-arrow-left"></i> ${this._from==='expert-path'?'Шлях експерта':test.course_id?'Назад до курсу':'Головна'}
+                        <i class="fa-solid fa-arrow-left"></i> ${this._from==='expert-path'?'Skill Up':test.course_id?'Назад до курсу':'Головна'}
                     </button>
                 </div>
                 <div>
@@ -672,7 +672,7 @@ const TestsPage = {
                                     </div>`).join('')}
                             </div>
                             <div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap">
-                                <button class="btn btn-secondary" onclick="Router.go('courses/${this._test.course_id}')">← До курсу</button>
+                                <button class="btn btn-secondary" onclick="Router.go('courses/${this._test.course_id}')" style="display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i> До курсу</button>
                                 <button class="btn btn-ghost" onclick="TestsPage.init(document.getElementById('page-content'),{id:'${this._test.id}'})">🔄 Спробувати знову</button>
                                 ${this._test.show_results ? `<button class="btn btn-primary" onclick="TestsPage.showAnswerReview()">📋 Розбір відповідей</button>` : ''}
                             </div>
@@ -792,7 +792,7 @@ const TestsPage = {
     // ── Управління тестами ────────────────────────────────────────
     _openTestForm(test, courseId) {
         Modal.open({
-            title: test ? '✏️ Редагувати тест' : '+ Створити тест',
+            title: test ? '<i class="fa-solid fa-pen"></i> Редагувати тест' : '+ Створити тест',
             size: 'lg',
             body: `
                 <div class="form-group">
@@ -839,7 +839,7 @@ const TestsPage = {
             footer: `
                 <button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
                 ${test ? `<button class="btn btn-info" onclick="TestsPage.openQuestionEditor('${test.id}')">📝 Запитання</button>` : ''}
-                <button class="btn btn-primary" onclick="TestsPage.saveTest('${test?.id || ''}')">Зберегти</button>`
+                <button class="btn btn-primary" onclick="TestsPage.saveTest('${test?.id || ''}')"><i class="fa-regular fa-floppy-disk"></i> Зберегти</button>`
         });
     },
 
@@ -896,7 +896,7 @@ const TestsPage = {
                 body: `
                     <div id="questions-editor">${this._renderQuestionsEditor(test.questions || [])}</div>
                     <button class="btn btn-secondary" style="margin-top:1rem;width:100%"
-                            onclick="TestsPage.addQuestion('${testId}')">+ Додати запитання</button>`,
+                            onclick="TestsPage.addQuestion('${testId}')"><i class="fa-solid fa-plus"></i> Додати запитання</button>`,
                 footer: `<button class="btn btn-secondary" onclick="Modal.close()">Закрити</button>`
             });
         } finally { Loader.hide(); }
@@ -910,7 +910,7 @@ const TestsPage = {
                     <span style="font-weight:600">Запитання ${i + 1}</span>
                     <div style="display:flex;gap:.5rem">
                         <span class="badge ${q.question_type === 'multiple' ? 'badge-info' : 'badge-primary'}">${q.question_type === 'multiple' ? 'Кілька' : 'Одна'}</span>
-                        <button class="btn btn-danger btn-sm" onclick="TestsPage.deleteQuestion('${q.id}')">🗑</button>
+                        <button class="btn btn-danger btn-sm" onclick="TestsPage.deleteQuestion('${q.id}')"><i class="fa-solid fa-trash"></i></button>
                     </div>
                 </div>
                 <div class="card-body">
@@ -922,7 +922,7 @@ const TestsPage = {
                                 <span style="font-size:.875rem">${a.answer_text}</span>
                             </div>`).join('')}
                     </div>
-                    <button class="btn btn-ghost btn-sm" style="margin-top:.75rem" onclick="TestsPage.editQuestion(${JSON.stringify(q).replace(/"/g,'&quot;')})">✏️ Змінити</button>
+                    <button class="btn btn-ghost btn-sm" style="margin-top:.75rem" onclick="TestsPage.editQuestion(${JSON.stringify(q).replace(/"/g,'&quot;')})"><i class="fa-solid fa-pen"></i> Змінити</button>
                 </div>
             </div>`).join('');
     },
@@ -942,7 +942,7 @@ const TestsPage = {
                 </div>`).join('');
 
         Modal.open({
-            title: q ? '✏️ Змінити запитання' : '+ Нове запитання',
+            title: q ? '<i class="fa-solid fa-pen"></i> Змінити запитання' : '+ Нове запитання',
             size: 'lg',
             body: `
                 <div class="form-group">
@@ -971,13 +971,13 @@ const TestsPage = {
                     <div id="answers-list">${answersHTML}</div>
                     <button class="btn btn-ghost btn-sm" style="margin-top:.5rem"
                             onclick="document.getElementById('answers-list').insertAdjacentHTML('beforeend','<div class=\\'answer-row\\' style=\\'display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem\\'><input type=\\'text\\' placeholder=\\'Варіант\\' class=\\'ans-text\\' style=\\'flex:1\\'><label style=\\'display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap\\'><input type=\\'checkbox\\' class=\\'ans-correct\\'> Правильна</label><button class=\\'btn btn-danger btn-sm\\' onclick=\\'this.closest(\\\\\\'.answer-row\\\\\\').remove()\\'>✕</button></div>')">
-                        + Додати варіант
+                        <i class="fa-solid fa-plus"></i> Додати варіант
                     </button>
                 </div>
                 <input type="hidden" id="qf-test-id" value="${testId}">`,
             footer: `
-                <button class="btn btn-secondary" onclick="TestsPage.openQuestionEditor('${testId}')">← Назад</button>
-                <button class="btn btn-primary" onclick="TestsPage.saveQuestion('${q?.id || ''}','${testId}')">Зберегти</button>`
+                <button class="btn btn-secondary" onclick="TestsPage.openQuestionEditor('${testId}')" style="display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i> Назад</button>
+                <button class="btn btn-primary" onclick="TestsPage.saveQuestion('${q?.id || ''}','${testId}')"><i class="fa-regular fa-floppy-disk"></i> Зберегти</button>`
         });
     },
 

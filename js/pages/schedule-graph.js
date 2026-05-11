@@ -1,4 +1,4 @@
-// ================================================================
+﻿// ================================================================
 // EduFlow LMS — Графік роботи ломбарду
 // Manager: locations, employees, schedule matrix, change log
 // Employee: view + edit own schedule
@@ -512,7 +512,7 @@ const ScheduleGraphPage = {
             <div class="sg-controls">
                 ${this._tab !== 'trash' && this._locId ? `
                 <div class="sg-month-nav">
-                    <button class="sg-mnav" onclick="ScheduleGraphPage._prevMonth()">‹</button>
+                    <button class="sg-mnav" onclick="ScheduleGraphPage._prevMonth()"><i class="fa-solid fa-angle-left"></i></button>
                     <span class="sg-mlabel">
                         ${MONTHS_UA[this._month]} ${this._year}
                         ${(() => {
@@ -538,7 +538,7 @@ const ScheduleGraphPage = {
                 ` : ''}
                 <button class="sg-tab sg-trash-tab ${this._tab==='trash'?'active':''}"
                     onclick="ScheduleGraphPage._switchTab(${this._tab==='trash'?`'schedule'`:`'trash'`})">
-                    🗑 Кошик${this._deletedLocations.length ? `<span class="sg-trash-badge">${this._deletedLocations.length}</span>` : ''}
+                    <i class="fa-solid fa-trash"></i> Кошик${this._deletedLocations.length ? `<span class="sg-trash-badge">${this._deletedLocations.length}</span>` : ''}
                 </button>
             </div>
             ${this._tab === 'trash'
@@ -612,12 +612,12 @@ ${this._styles()}`;
             ${viewOnly ? '' : `<span class="sg-loc-drag-handle" title="Перетягнути">⠿</span>`}
             <button class="sg-loc-item ${isActive ? 'active' : ''}${hasHelp ? ' has-help' : ''}"
                 onclick="ScheduleGraphPage._selectLocation('${l.id}')">
-                <span class="sg-loc-item-ico">${viewOnly ? '👁' : '🏪'}</span>
+                <span class="sg-loc-item-ico">${viewOnly ? '<i class="fa-solid fa-eye"></i>' : '🏪'}</span>
                 <span class="sg-loc-item-name" title="${l.name}">${l.name.slice(0,3)}</span>
                 <span class="sg-loc-item-meta">
                     ${whText ? `<span class="sg-loc-item-wh">${whText}</span>` : ''}
                     ${hasHelp ? `<span class="sg-loc-item-helpdot"></span>` : ''}
-                    ${viewOnly ? `<span class="sg-loc-item-ro" title="Тільки перегляд">👁</span>` : ''}
+                    ${viewOnly ? `<span class="sg-loc-item-ro" title="Тільки перегляд"><i class="fa-solid fa-eye"></i></span>` : ''}
                 </span>
             </button>
         </div>`;
@@ -674,18 +674,18 @@ ${this._styles()}`;
     <div class="sg-work-hours-bar${locked ? ' sg-locked-bar' : ''}">
         <span class="sg-loc-name-ico">🏪</span>
         <span class="sg-loc-name-text">${locName}</span>
-        ${viewOnly ? `<span class="sg-view-only-badge">👁 Тільки перегляд</span>` : `
-        <button class="sg-loc-name-edit" onclick="ScheduleGraphPage._renameLocation('${this._locId}',${JSON.stringify(locName||'').replace(/"/g,'&quot;')})" title="Перейменувати">✏️</button>`}
+        ${viewOnly ? `<span class="sg-view-only-badge"><i class="fa-solid fa-eye"></i> Тільки перегляд</span>` : `
+        <button class="sg-loc-name-edit" onclick="ScheduleGraphPage._renameLocation('${this._locId}',${JSON.stringify(locName||'').replace(/"/g,'&quot;')})" title="Перейменувати"><i class="fa-solid fa-pen"></i></button>`}
         <span class="sg-wh-sep">·</span>
         <span class="sg-wh-label">🕐 Час роботи:</span>
         <span class="sg-wh-time" id="sg-wh-display">${wStart} — ${wEnd}</span>
         ${viewOnly ? '' : `
-        <button class="sg-wh-edit" onclick="ScheduleGraphPage._editWorkHours()" title="Редагувати">✏️</button>
+        <button class="sg-wh-edit" onclick="ScheduleGraphPage._editWorkHours()" title="Редагувати"><i class="fa-solid fa-pen"></i></button>
         <div class="sg-wh-inputs" id="sg-wh-inputs" style="display:none">
             <input type="time" id="sg-wh-start" class="sg-tinput" style="width:110px">
             <span style="color:var(--text-muted)">—</span>
             <input type="time" id="sg-wh-end" class="sg-tinput" style="width:110px">
-            <button class="sg-wh-save" onclick="ScheduleGraphPage._saveWorkHours()">Зберегти</button>
+            <button class="sg-wh-save" onclick="ScheduleGraphPage._saveWorkHours()"><i class="fa-regular fa-floppy-disk"></i> Зберегти</button>
             <button class="sg-wh-cancel" onclick="ScheduleGraphPage._cancelWorkHours()">✕</button>
         </div>
         <button class="sg-lock-btn ${locked ? 'locked' : ''}"
@@ -693,7 +693,7 @@ ${this._styles()}`;
             title="${locked ? 'Графік заблоковано — натисніть щоб розблокувати' : 'Заблокувати зміни для співробітників'}">
             ${locked ? '🔒' : '🔓'}
         </button>
-        <button class="sg-loc-del-btn" onclick="ScheduleGraphPage._deleteLocation('${this._locId}')" title="Видалити локацію">🗑</button>`}
+        <button class="sg-loc-del-btn" onclick="ScheduleGraphPage._deleteLocation('${this._locId}')" title="Видалити локацію"><i class="fa-solid fa-trash"></i></button>`}
     </div>
     <div class="sg-toolbar">
         <div class="sg-legend">
@@ -714,7 +714,7 @@ ${this._styles()}`;
                 🆘 Потрібна підміна
             </button>
             <button class="sg-viewers-btn" onclick="ScheduleGraphPage._showViewersModal()">
-                👁 Доступ
+                <i class="fa-solid fa-eye"></i> Доступ
             </button>
             <button class="sg-add-btn" onclick="ScheduleGraphPage._addEmployee()">
                 <span class="sg-add-ico">＋</span> Співробітник
@@ -810,7 +810,7 @@ ${this._styles()}`;
                         ${viewOnly ? '' : `<td class="sg-td-del">
                             <button class="sg-rm" title="Видалити зі списку"
                                 onclick="ScheduleGraphPage._removeEmployee('${a.id}','${a.user_id}',event)">
-                                🗑 <span>Видалити</span>
+                                <i class="fa-solid fa-trash"></i> <span>Видалити</span>
                             </button>
                         </td>`}
                     </tr>`;
@@ -886,7 +886,7 @@ ${this._styles()}`;
         <p class="sg-loc-hint">Наприклад: Магазин на Хрещатику, Відділення №3, Ломбард Центр</p>
     </div>
     <div class="sg-modal-actions">
-        <button class="sg-btn-save" id="sg-loc-save-btn">✓ Зберегти</button>
+        <button class="sg-btn-save" id="sg-loc-save-btn"><i class="fa-regular fa-floppy-disk"></i> Зберегти</button>
         <button class="sg-btn-cancel" onclick="document.getElementById('sg-loc-modal').remove()">Скасувати</button>
     </div>
 </div>`;
@@ -959,7 +959,7 @@ ${this._styles()}`;
         el.innerHTML = `
 <div class="sg-modal sg-del-modal">
     <div class="sg-del-modal-ico-wrap">
-        <div class="sg-del-modal-ico">🗑</div>
+        <div class="sg-del-modal-ico"><i class="fa-solid fa-trash"></i></div>
     </div>
     <h3 class="sg-del-modal-title">Перемістити в кошик?</h3>
     <p class="sg-del-modal-desc">Локацію <strong>«${name}»</strong> буде переміщено в кошик.<br>Ви зможете відновити її протягом <strong>2 днів</strong>.</p>
@@ -969,7 +969,7 @@ ${this._styles()}`;
     </div>
     <div class="sg-modal-actions">
         <button class="sg-btn-cancel" onclick="document.getElementById('sg-del-confirm-modal').remove()">Скасувати</button>
-        <button class="sg-del-confirm-btn" onclick="ScheduleGraphPage._confirmDeleteLocation('${id}')">🗑 В кошик</button>
+        <button class="sg-del-confirm-btn" onclick="ScheduleGraphPage._confirmDeleteLocation('${id}')"><i class="fa-solid fa-trash"></i> В кошик</button>
     </div>
 </div>`;
         document.body.appendChild(el);
@@ -1330,7 +1330,7 @@ ${this._styles()}`;
         </div>
         ${this._isBlockOwner || !this._blockOwnerId && (this._partnerRows.length || this._pendingOutgoing.length) ? `
         <button class="sg-block-rename-btn" onclick="ScheduleGraphPage._renameBlock()" title="Змінити назву блоку">
-            ✏️ Змінити
+            <i class="fa-solid fa-pen"></i> Змінити
         </button>` : ''}
     </div>
 
@@ -1381,7 +1381,7 @@ ${this._styles()}`;
                     <div class="sg-partners-name">${name}</div>
                     <div class="sg-partners-status accepted">${pos || 'партнер'}</div>
                 </div>
-                <button class="sg-partners-del" onclick="ScheduleGraphPage._removePartner('${r.id}')" title="Розірвати партнерство">🗑</button>
+                <button class="sg-partners-del" onclick="ScheduleGraphPage._removePartner('${r.id}')" title="Розірвати партнерство"><i class="fa-solid fa-trash"></i></button>
             </div>`;
         }).join('') : '<div class="sg-partners-empty">Немає активних партнерів</div>'}
         </div>
@@ -1451,7 +1451,7 @@ ${this._styles()}`;
         const uid = AppState.user.id;
         const current = this._blockName || '';
         this._showLocModal({
-            title: '✏️ Назва блоку',
+            title: '<i class="fa-solid fa-pen"></i> Назва блоку',
             placeholder: 'Наприклад: Блок Центр, Мережа Південь…',
             value: current,
             onSave: async name => {
@@ -2360,7 +2360,7 @@ ${this._styles()}`;
                 🆘 Потрібна підміна
             </button>
             <button class="sg-viewers-btn" onclick="ScheduleGraphPage._showViewersModal()">
-                👁 Доступ
+                <i class="fa-solid fa-eye"></i> Доступ
             </button>
             <button class="sg-partners-btn${(this._pendingIncoming||[]).length?' sg-partners-btn--badge':''}"
                 onclick="ScheduleGraphPage._showPartnersModal()"
@@ -2758,7 +2758,7 @@ ${this._styles()}`;
 <div class="sg-modal sg-viewers-modal-box">
     <div class="sg-mhdr">
         <div>
-            <h3 style="margin:0;font-size:1.05rem">👁 Доступ для перегляду</h3>
+            <h3 style="margin:0;font-size:1.05rem"><i class="fa-solid fa-eye"></i> Доступ для перегляду</h3>
             <p style="margin:4px 0 0;font-size:.78rem;color:var(--text-muted)">Користувачі можуть переглядати графік без права редагування</p>
         </div>
         <button class="sg-mclose" onclick="document.getElementById('sg-viewers-modal').remove()">✕</button>
@@ -3044,8 +3044,8 @@ ${this._styles()}`;
     <span class="sg-leg-short" style="background:${v.bg};color:${v.color};flex-shrink:0">${v.short}</span>
     <span class="sg-type-row-label">${v.label}</span>
     <span style="background:${v.color};width:12px;height:12px;border-radius:50%;display:inline-block;flex-shrink:0"></span>
-    <button class="sg-type-edit-btn" onclick="ScheduleGraphPage._editTypeRow('${key}')">✏️</button>
-    ${!isBuiltin ? `<button class="sg-type-del-btn" onclick="ScheduleGraphPage._deleteShiftType('${key}')">🗑</button>` : ''}
+    <button class="sg-type-edit-btn" onclick="ScheduleGraphPage._editTypeRow('${key}')"><i class="fa-solid fa-pen"></i></button>
+    ${!isBuiltin ? `<button class="sg-type-del-btn" onclick="ScheduleGraphPage._deleteShiftType('${key}')"><i class="fa-solid fa-trash"></i></button>` : ''}
 </div>`;
         };
         const el = document.createElement('div');
@@ -3086,7 +3086,7 @@ ${this._styles()}`;
         </div>
     </div>
     <div style="display:flex;gap:8px">
-        <button class="sg-btn-save" onclick="${submitFn}" style="flex:1">Зберегти</button>
+        <button class="sg-btn-save" onclick="${submitFn}" style="flex:1"><i class="fa-regular fa-floppy-disk"></i> Зберегти</button>
         <button class="sg-btn-cancel" onclick="${cancelFn}">Скасувати</button>
     </div>
 </div>`;
@@ -3114,8 +3114,8 @@ ${this._styles()}`;
     <span class="sg-leg-short" style="background:${v.bg};color:${v.color};flex-shrink:0">${v.short}</span>
     <span class="sg-type-row-label">${v.label}</span>
     <span style="background:${v.color};width:12px;height:12px;border-radius:50%;display:inline-block;flex-shrink:0"></span>
-    <button class="sg-type-edit-btn" onclick="ScheduleGraphPage._editTypeRow('${key}')">✏️</button>
-    ${!isBuiltin ? `<button class="sg-type-del-btn" onclick="ScheduleGraphPage._deleteShiftType('${key}')">🗑</button>` : ''}`;
+    <button class="sg-type-edit-btn" onclick="ScheduleGraphPage._editTypeRow('${key}')"><i class="fa-solid fa-pen"></i></button>
+    ${!isBuiltin ? `<button class="sg-type-del-btn" onclick="ScheduleGraphPage._deleteShiftType('${key}')"><i class="fa-solid fa-trash"></i></button>` : ''}`;
     },
 
     _saveTypeEdit(key) {
@@ -3233,13 +3233,13 @@ ${this._styles()}`;
     <div class="sg-modal-actions">
         <button class="sg-btn-save"
             onclick="ScheduleGraphPage._saveEntry('${userId}','${date}',${isEmployee})">
-            ✓ Зберегти
+            <i class="fa-regular fa-floppy-disk"></i> Зберегти
         </button>
         <button class="sg-btn-cancel"
             onclick="document.getElementById('sg-shift-modal').remove()">Скасувати</button>
         ${entry ? `<button class="sg-del-btn"
             onclick="ScheduleGraphPage._deleteEntry('${userId}','${date}',${isEmployee ? `'${ScheduleGraphEmployee._locId}'` : 'null'})"
-            title="Видалити запис">🗑</button>` : ''}
+            title="Видалити запис"><i class="fa-solid fa-trash"></i></button>` : ''}
     </div>
 </div>`;
         document.body.appendChild(el);
@@ -3425,7 +3425,7 @@ ${this._styles()}`;
             ? `<button class="sg-primary-btn${a.is_primary ? ' active' : ''}"
                 title="${a.is_primary ? 'Основний — клік щоб зробити тимчасовим' : 'Тимчасовий — клік щоб зробити основним'}"
                 onclick="ScheduleGraphPage._togglePrimary('${a.id}',${!a.is_primary},event)">
-                ${a.is_primary ? '★' : '☆'}
+                ${a.is_primary ? '<i class="fa-regular fa-star"></i>' : '<i class="fa-regular fa-star"></i>'}
                </button>`
             : '';
 
@@ -3527,7 +3527,7 @@ ${this._styles()}`;
         if (!this._deletedLocations.length) return `
 <div class="sg-section">
     <div class="empty-state" style="margin:3rem 0">
-        <div class="empty-icon">🗑</div>
+        <div class="empty-icon"><i class="fa-solid fa-trash"></i></div>
         <h3>Кошик порожній</h3>
         <p>Видалені локації зберігаються тут 2 дні — після цього видаляються автоматично</p>
     </div>
@@ -3561,7 +3561,7 @@ ${this._styles()}`;
                     ↩ Відновити
                 </button>
                 <button class="sg-trash-permdel" onclick="ScheduleGraphPage._hardDeleteLocation('${loc.id}')">
-                    🗑
+                    <i class="fa-solid fa-trash"></i>
                 </button>
             </div>
         </div>`;
@@ -5018,7 +5018,7 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
 
     <div class="sg-controls" style="margin-bottom:16px">
         <div class="sg-month-nav">
-            <button class="sg-mnav" onclick="ScheduleGraphEmployee._prevMonth()">‹</button>
+            <button class="sg-mnav" onclick="ScheduleGraphEmployee._prevMonth()"><i class="fa-solid fa-angle-left"></i></button>
             <span class="sg-mlabel">${MONTHS_UA[this._month]} ${this._year}</span>
             <button class="sg-mnav" onclick="ScheduleGraphEmployee._nextMonth()">›</button>
         </div>
@@ -5062,7 +5062,7 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
             <span>📋</span> Графік на цей місяць ще порожній — натисніть на будь-який день щоб додати запис
         </div>` : `
         <div class="sge-no-data" style="border-top:1px solid var(--border)">
-            ✏️ Натисніть на день щоб переглянути або редагувати запис
+            <i class="fa-solid fa-pen"></i> Натисніть на день щоб переглянути або редагувати запис
         </div>`}
     </div>
 </div>
@@ -5086,8 +5086,7 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
             </div>
         </div>
         ${isManager ? `
-        <button class="sg-my-sched-btn" onclick="ScheduleGraphPage.init(ScheduleGraphEmployee._container)">
-            ← Керування графіком
+        <button class="sg-my-sched-btn" onclick="ScheduleGraphPage.init(ScheduleGraphEmployee._container)"><i class="fa-solid fa-angle-left"></i> Керування графіком
         </button>` : ''}
     </div>
 </div>`;
@@ -5295,7 +5294,7 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
         </button>
         <button class="sg-btn-cancel"
             onclick="document.getElementById('sg-mgrhelp-resp-modal').remove();ScheduleGraphEmployee._editDay('${date}')">
-            ✏️ Редагувати день
+            <i class="fa-solid fa-pen"></i> Редагувати день
         </button>
     </div>
 </div>`;
@@ -5556,7 +5555,7 @@ ${ScheduleGraphPage._styles()}${this._styles()}`;
         container.innerHTML = `
 <div class="sgv-page">
     ${this._hero(`
-        <button class="sgv-back-btn" onclick="ScheduleViewPage._backToManagers()">← Назад</button>
+        <button class="sgv-back-btn" onclick="ScheduleViewPage._backToManagers()"><i class="fa-solid fa-angle-left"></i> Назад</button>
         <div class="sgv-manager-badge">
             <div class="sg-av sm" style="background:${mColor}">
                 ${mp.avatar_url ? `<img src="${mp.avatar_url}">` : mInit}
@@ -5578,7 +5577,7 @@ ${ScheduleGraphPage._styles()}${this._styles()}`;
         <div class="sgv-header-bar">
             <span class="sgv-loc-name">🏪 ${locName}</span>
             <div class="sg-month-nav" style="margin-left:auto">
-                <button class="sg-mnav" onclick="ScheduleViewPage._prevMonth()">‹</button>
+                <button class="sg-mnav" onclick="ScheduleViewPage._prevMonth()"><i class="fa-solid fa-angle-left"></i></button>
                 <span class="sg-mlabel" style="min-width:140px">${MONTHS_UA[this._month]} ${this._year}</span>
                 <button class="sg-mnav" onclick="ScheduleViewPage._nextMonth()">›</button>
             </div>
@@ -5648,7 +5647,7 @@ ${ScheduleGraphPage._styles()}${this._styles()}`;
     _hero(extra = '') {
         return `
 <div class="sgv-hero">
-    <div class="sgv-hero-ico">👁</div>
+    <div class="sgv-hero-ico"><i class="fa-solid fa-eye"></i></div>
     <div style="flex:1">
         <h1 class="sgv-hero-title">Огляд</h1>
         <p class="sgv-hero-sub">Перегляд графіку роботи</p>

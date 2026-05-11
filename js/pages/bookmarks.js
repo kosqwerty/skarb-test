@@ -1,4 +1,4 @@
-// ================================================================
+﻿// ================================================================
 // EduFlow LMS — Закладки
 // Access: all authenticated users
 //
@@ -94,7 +94,7 @@ const Bookmarks = {
         try {
             const added = await this.toggle({
                 type: 'news', route: `news/${id}`,
-                title, icon: '📰', subtitle: category || 'Новина'
+                title, icon: '<i class="fa-solid fa-newspaper"></i>', subtitle: category || 'Новина'
             });
             Toast[added ? 'success' : 'info'](added ? 'Додано до закладок' : 'Закладку видалено', title);
         } catch (e) { Toast.error('Помилка', e.message); }
@@ -104,7 +104,7 @@ const Bookmarks = {
         try {
             const added = await this.toggle({
                 type: 'collection', route: `collections/${id}`,
-                title, icon: '🪄', subtitle: 'Меню порталу'
+                title, icon: '<i class="fa-solid fa-wand-magic-sparkles"></i>', subtitle: 'Меню порталу'
             });
             Toast[added ? 'success' : 'info'](added ? 'Додано до закладок' : 'Закладку видалено', title);
         } catch (e) { Toast.error('Помилка', e.message); }
@@ -116,6 +116,9 @@ const Bookmarks = {
             const active = this.isBookmarked(route);
             btn.classList.toggle('active', active);
             btn.title = active ? 'Видалити з закладок' : 'Зберегти в закладки';
+            btn.innerHTML = active
+                ? '<i class="fa-solid fa-star"></i>'
+                : '<i class="fa-regular fa-star"></i>';
         });
     }
 };
@@ -140,7 +143,7 @@ const BookmarksPage = {
     <div class="bm-hero">
         <div class="bm-hero-glow"></div>
         <div class="bm-hero-inner">
-            <div class="bm-hero-icon">⭐</div>
+            <div class="bm-hero-icon"><i class="fa-solid fa-star"></i></div>
             <div>
                 <h1 class="bm-hero-title">Мої закладки</h1>
                 <p class="bm-hero-sub" id="bm-hero-sub">${all.length} ${this._plural(all.length)}</p>
@@ -277,10 +280,10 @@ const BookmarksPage = {
 
     _filterChips(all) {
         const types = [
-            { f: 'all',        label: 'Всі',       icon: '⭐' },
-            { f: 'resource',   label: 'Ресурси',   icon: '📎' },
-            { f: 'news',       label: 'Новини',    icon: '📰' },
-            { f: 'collection', label: 'Портал',    icon: '🪄' }
+            { f: 'all',        label: 'Всі',       icon: '<i class="fa-solid fa-star"></i>' },
+            { f: 'resource',   label: 'Ресурси',   icon: '<i class="fa-regular fa-file"></i>' },
+            { f: 'news',       label: 'Новини',    icon: '<i class="fa-solid fa-newspaper"></i>' },
+            { f: 'collection', label: 'Портал',    icon: '<i class="fa-solid fa-wand-magic-sparkles"></i>' }
         ];
         return types.map(t => {
             const cnt = t.f === 'all' ? all.length : all.filter(b => b.type === t.f).length;
@@ -293,20 +296,20 @@ const BookmarksPage = {
     _gridHtml(items) {
         if (!items.length) return `
             <div class="bm-empty">
-                <div class="bm-empty-ico">⭐</div>
+                <div class="bm-empty-ico"><i class="fa-solid fa-star"></i></div>
                 <div class="bm-empty-head">Закладок поки немає</div>
-                <div class="bm-empty-txt">Натисніть ★ на ресурсі, новині або сторінці порталу, щоб зберегти тут</div>
+                <div class="bm-empty-txt">Натисніть <i class="fa-regular fa-star"></i> на ресурсі, новині або сторінці порталу, щоб зберегти тут</div>
             </div>`;
         return items.map(b => this._cardHtml(b)).join('');
     },
 
     _cardHtml(b) {
-        const labels = { resource: '📎 Ресурс', news: '📰 Новина', collection: '🪄 Портал' };
+        const labels = { resource: '<i class="fa-regular fa-file"></i> Ресурс', news: '<i class="fa-solid fa-newspaper"></i> Новина', collection: '<i class="fa-solid fa-wand-magic-sparkles"></i> Портал' };
         return `
 <div class="bm-card tp-${b.type}" onclick="Router.go('${b.route}')">
     <div class="bm-card-accent"></div>
     <div class="bm-card-body">
-        <div class="bm-card-ico">${b.icon || '📌'}</div>
+        <div class="bm-card-ico">${b.icon || '<i class="fa-solid fa-bookmark"></i>'}</div>
         <div class="bm-card-text">
             <div class="bm-card-title">${b.title}</div>
             ${b.subtitle ? `<div class="bm-card-sub">${b.subtitle}</div>` : ''}
@@ -314,8 +317,8 @@ const BookmarksPage = {
         </div>
     </div>
     <div class="bm-card-footer" onclick="event.stopPropagation()">
-        <button class="bm-go" onclick="Router.go('${b.route}')">Перейти →</button>
-        <button class="bm-del" title="Видалити" onclick="BookmarksPage._remove('${b.route}')">🗑</button>
+        <button class="bm-go" onclick="Router.go('${b.route}')"><i class="fa-solid fa-eye"></i> Відкрити</button>
+        <button class="bm-del" title="Видалити" onclick="BookmarksPage._remove('${b.route}')"><i class="fa-solid fa-trash"></i></button>
     </div>
 </div>`;
     },

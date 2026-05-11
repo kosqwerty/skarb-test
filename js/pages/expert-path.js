@@ -6,7 +6,7 @@ const ExpertPathPage = {
     _courseCardsFn: null,
 
     async init(container) {
-        UI.setBreadcrumb([{ label: 'Шлях експерта' }]);
+        UI.setBreadcrumb([{ label: 'Skill Up' }]);
         this._tab          = 'courses';
         this._courseSubTab = 'all';
         this._coursesData  = null;

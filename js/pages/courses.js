@@ -1,4 +1,4 @@
-// ================================================================
+﻿// ================================================================
 // EduFlow LMS — Сторінка курсів
 // ================================================================
 
@@ -144,8 +144,8 @@ const CoursesPage = {
                 </div>
                 ${AppState.isStaff() ? `
                     <div class="card-footer" onclick="event.stopPropagation()" style="display:flex;gap:.5rem">
-                        <button class="btn btn-secondary btn-sm" onclick="CoursesPage.openEdit('${course.id}')">✏️ Редагувати</button>
-                        <button class="btn btn-danger btn-sm" onclick="CoursesPage.deleteCourse('${course.id}',${JSON.stringify(course.title||'').replace(/"/g,'&quot;')})">🗑️</button>
+                        <button class="btn btn-secondary btn-sm" onclick="CoursesPage.openEdit('${course.id}')"><i class="fa-solid fa-pen"></i> Редагувати</button>
+                        <button class="btn btn-danger btn-sm" onclick="CoursesPage.deleteCourse('${course.id}',${JSON.stringify(course.title||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-trash"></i></button>
                     </div>` : ''}
             </div>`;
     },
@@ -170,7 +170,7 @@ const CoursesPage = {
     _openForm(course) {
         const isEdit = !!course;
         Modal.open({
-            title: isEdit ? '✏️ Редагувати курс' : '+ Створити курс',
+            title: isEdit ? '<i class="fa-solid fa-pen"></i> Редагувати курс' : '+ Створити курс',
             size: 'lg',
             body: `
                 <div class="form-row">
@@ -219,7 +219,7 @@ const CoursesPage = {
             footer: `
                 <button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
                 <button class="btn btn-primary" onclick="CoursesPage.saveCourse('${course?.id || ''}')">
-                    ${isEdit ? 'Зберегти' : 'Створити'}
+                    ${isEdit ? '<i class="fa-regular fa-floppy-disk"></i> Зберегти' : '<i class="fa-solid fa-plus"></i> Створити'}
                 </button>`
         });
 

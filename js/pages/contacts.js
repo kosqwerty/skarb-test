@@ -258,7 +258,7 @@ const ContactsPage = {
             ${reminder ? `<button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="ContactsPage._removeBdReminder('${userId}')">Видалити</button>` : ''}
             <button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
             <button class="btn btn-primary" onclick="ContactsPage._saveBdReminder('${userId}',${JSON.stringify(fullName||'').replace(/"/g,'&quot;')})">
-                ${reminder ? 'Оновити' : 'Зберегти'}
+                <i class="fa-regular fa-floppy-disk"></i> ${reminder ? 'Оновити' : 'Зберегти'}
             </button>`
         });
     },

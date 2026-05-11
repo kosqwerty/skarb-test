@@ -1,4 +1,4 @@
-// ================================================================
+﻿// ================================================================
 // LMS — Групи доступу до ресурсів
 // ================================================================
 
@@ -126,9 +126,9 @@ const AccessGroupsPage = {
                 ${g.description ? `<p class="ag-desc">${g.description}</p>` : ''}
                 <div class="ag-card-ft">
                     <button class="btn btn-ghost btn-sm" onclick="AccessGroupsPage.openMembers('${g.id}')">👥 Учасники</button>
-                    <button class="btn btn-ghost btn-sm" onclick="AccessGroupsPage.openForm(${esc})">✏️ Редагувати</button>
+                    <button class="btn btn-ghost btn-sm" onclick="AccessGroupsPage.openForm(${esc})"><i class="fa-solid fa-pen"></i> Редагувати</button>
                     <button class="btn btn-danger btn-sm" style="margin-left:auto"
-                            onclick="AccessGroupsPage.deleteGroup('${g.id}',${JSON.stringify(g.name||'').replace(/"/g,'&quot;')})">🗑</button>
+                            onclick="AccessGroupsPage.deleteGroup('${g.id}',${JSON.stringify(g.name||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-trash"></i></button>
                 </div>
             </div>`;
     },
@@ -174,7 +174,7 @@ const AccessGroupsPage = {
         container.innerHTML = `
             <!-- Breadcrumb row -->
             <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem">
-                <button class="btn btn-ghost btn-sm" onclick="AccessGroupsPage.cancelForm()">← Назад</button>
+                <button class="btn btn-ghost btn-sm" onclick="AccessGroupsPage.cancelForm()" style="display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i> Назад</button>
                 <span style="color:var(--text-muted)">›</span>
                 <span style="font-weight:600">${isEdit ? 'Редагувати групу' : 'Нова група доступу'}</span>
             </div>
@@ -182,7 +182,7 @@ const AccessGroupsPage = {
             <div class="ag-form">
                 <!-- Header -->
                 <div class="ag-form-hd">
-                    <div class="ag-ico" style="font-size:1.5rem">${isEdit ? '✏️' : '🔐'}</div>
+                    <div class="ag-ico" style="font-size:1.5rem">${isEdit ? '<i class="fa-solid fa-pen"></i>' : '🔐'}</div>
                     <div>
                         <div class="ag-form-title">${isEdit ? 'Редагувати групу доступу' : 'Нова група доступу'}</div>
                         <div style="font-size:.8rem;color:var(--text-muted)">
@@ -228,7 +228,7 @@ const AccessGroupsPage = {
                 <div class="ag-form-actions">
                     <button class="btn btn-secondary" onclick="AccessGroupsPage.cancelForm()">Скасувати</button>
                     <button class="btn btn-primary" onclick="AccessGroupsPage.save()">
-                        ${isEdit ? '💾 Зберегти зміни' : '✓ Створити групу'}
+                        ${isEdit ? '<i class="fa-regular fa-floppy-disk"></i> Зберегти зміни' : '✓ Створити групу'}
                     </button>
                 </div>
             </div>`;

@@ -1,4 +1,4 @@
-// ================================================================
+﻿// ================================================================
 // EduFlow LMS — News / Portal Page
 // ================================================================
 
@@ -21,24 +21,14 @@ const NewsPage = {
                     <h1>📰 Новини та оголошення</h1>
                     <p>Останні події</p>
                 </div>
-                <div class="page-actions">
-                    ${AppState.isStaff() ? `<button class="btn btn-primary" onclick="NewsPage.openCreate()">+ Додати новину</button>` : ''}
+                <div class="page-actions" style="display:flex;align-items:center;gap:.75rem">
+                    <input type="text" id="news-search" placeholder="Пошук..." style="width:200px"
+                           onkeyup="NewsPage.onSearch(event)">
+                    ${AppState.isStaff() ? `<button class="btn btn-primary" onclick="NewsPage.openCreate()"><i class="fa-solid fa-plus"></i> Додати новину</button>` : ''}
                 </div>
             </div>
 
             <div id="featured-news" style="margin-bottom:2rem"></div>
-
-            <div style="display:flex;gap:1rem;margin-bottom:1.5rem;flex-wrap:wrap">
-                <input type="text" id="news-search" placeholder="Пошук новин..." style="flex:1;min-width:200px"
-                       onkeyup="NewsPage.onSearch(event)">
-                <select id="news-category" onchange="NewsPage.load()" style="width:auto">
-                    <option value="">Всі категорії</option>
-                    <option value="general">Загальні</option>
-                    <option value="announcements">Оголошення</option>
-                    <option value="updates">Оновлення</option>
-                    <option value="events">Події</option>
-                </select>
-            </div>
 
             <div id="news-grid" class="news-grid"></div>
             <div id="news-pagination" style="display:flex;justify-content:center;gap:.5rem;margin-top:2rem"></div>`;
@@ -60,11 +50,16 @@ const NewsPage = {
         try {
             const { data, count } = await API.news.getAll({ published: !AppState.isStaff() || undefined, page: this._page });
 
+            // Access group filter for non-staff
+            const filtered = AppState.isStaff()
+                ? data
+                : data.filter(n => !n.access_group || AccessGroupsPage.checkAccess(n.access_group));
+
             // Featured news (is_featured)
-            const featured = data.filter(n => n.is_featured).slice(0, 1)[0];
+            const featured = filtered.filter(n => n.is_featured).slice(0, 1)[0];
             if (featured) this._renderFeatured(featured);
 
-            const regular = data.filter(n => !n.is_featured || data.indexOf(n) > 0);
+            const regular = filtered.filter(n => !n.is_featured || filtered.indexOf(n) > 0);
 
             if (!regular.length && !featured) {
                 grid.innerHTML = `
@@ -88,70 +83,78 @@ const NewsPage = {
     _renderFeatured(news) {
         const el = document.getElementById('featured-news');
         if (!el) return;
+        const excerpt = Fmt.esc((news.excerpt || '').replace(/<[^>]+>/g, '').slice(0, 220)).replace(/\n/g, '<br>');
 
         el.innerHTML = `
-            <div onclick="Router.go('news/${news.id}')" style="
-                display:grid;grid-template-columns:1fr 1fr;gap:2rem;
-                background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);
-                overflow:hidden;cursor:pointer;transition:all var(--transition)" class="featured-card"
+            <div onclick="Router.go('news/${news.slug || news.id}')" class="featured-card" style="
+                position:relative;height:420px;border-radius:var(--radius-xl);overflow:hidden;
+                cursor:pointer;background:#0f0c29;border:1px solid var(--border);transition:border-color var(--transition)"
                 onmouseenter="this.style.borderColor='var(--primary)'" onmouseleave="this.style.borderColor='var(--border)'">
                 ${news.thumbnail_url ? `
-                    <div style="height:280px;overflow:hidden">
-                        <img src="${news.thumbnail_url}" style="width:100%;height:100%;object-fit:fill;display:block">
-                    </div>` : `<div style="height:280px;background:linear-gradient(135deg,rgba(99,102,241,.1),rgba(139,92,246,.1));display:flex;align-items:center;justify-content:center;font-size:5rem">📰</div>`}
-                <div style="padding:2rem;display:flex;flex-direction:column;justify-content:center">
-                    <span style="color:var(--primary);font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.75rem">
-                        ⭐ ${Fmt.esc(news.category) || 'Головна новина'}
-                    </span>
-                    <h2 style="margin-bottom:1rem;line-height:1.4">${Fmt.esc(news.title)}</h2>
-                    <p style="color:var(--text-secondary);font-size:.9rem;line-height:1.7;margin-bottom:1.5rem;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">
-                        ${Fmt.esc(news.excerpt || news.content.slice(0, 200).replace(/<[^>]+>/g, ''))}...
-                    </p>
-                    <div style="display:flex;align-items:center;justify-content:space-between">
-                        <span style="font-size:.8rem;color:var(--text-muted)">
-                            👤 ${news.author?.full_name || 'Редагувати'} • ${Fmt.date(news.published_at || news.created_at, { day:'numeric',month:'long' })}
+                    <div style="position:absolute;inset:-20px;background-image:url('${news.thumbnail_url}');background-size:cover;background-position:center;filter:blur(18px) brightness(.45) saturate(1.2);transform:scale(1.05)"></div>
+                    <img src="${news.thumbnail_url}" style="position:relative;width:100%;height:100%;object-fit:contain;object-position:${news.thumbnail_position || 'center'} center;display:block;z-index:1;filter:brightness(1.15) saturate(1.1)">>
+                ` : `<div style="position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1e1b4b,#312e81);z-index:1"><i class="fa-regular fa-newspaper" style="font-size:5rem;color:rgba(255,255,255,.15)"></i></div>`}
+                <div style="position:absolute;inset:0;background:linear-gradient(to right,rgba(0,0,0,.75) 0%,rgba(0,0,0,.3) 45%,transparent 100%);z-index:2"></div>
+                <div style="position:absolute;inset:0;z-index:3;display:flex;flex-direction:column;justify-content:space-between;padding:1.75rem 2.5rem;max-width:55%">
+                    <!-- top -->
+                    <div>
+                        <span style="color:#fbbf24;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;display:block;margin-bottom:.55rem">
+                            <i class="fa-solid fa-star"></i> Головна новина
                         </span>
-                        <span class="btn btn-primary btn-sm">Читати →</span>
+                        <h2 style="margin:0;line-height:1.3;color:#fff;font-size:1.5rem;text-shadow:0 2px 8px rgba(0,0,0,.4)">${Fmt.esc(news.title)}</h2>
+                        ${excerpt ? `<p style="color:rgba(255,255,255,.75);font-size:.88rem;line-height:1.65;margin:.65rem 0 0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${excerpt}</p>` : ''}
                     </div>
+                    <!-- bottom -->
+                    <span style="font-size:.78rem;color:rgba(255,255,255,.55)">
+                        <i class="fa-regular fa-user" style="margin-right:.3rem"></i>${Fmt.esc(news.author?.full_name || '—')}<br>
+                        <i class="fa-regular fa-calendar" style="margin-right:.3rem"></i>${Fmt.date(news.published_at || news.created_at)}
+                    </span>
+                </div>
+                <!-- читати — правий нижній кут -->
+                <span class="btn btn-primary btn-sm" style="position:absolute;bottom:1.75rem;right:2rem;z-index:3;flex-shrink:0"><i class="fa-solid fa-eye"></i> Читати</span>
                 </div>
             </div>`;
     },
 
     _renderCard(news) {
+        const excerpt = Fmt.esc((news.excerpt || '').replace(/<[^>]+>/g, '').slice(0, 120)).replace(/\n/g, '<br>');
+        const thumb = news.thumbnail_url;
         return `
-            <div class="news-card" onclick="Router.go('news/${news.id}')">
-                <div class="news-thumb">
-                    ${news.thumbnail_url
-                        ? `<img src="${news.thumbnail_url}" alt="${Fmt.esc(news.title)}" loading="lazy" style="width:100%;height:100%;object-fit:fill;display:block">`
-                        : `<div style="height:100%;background:linear-gradient(135deg,rgba(99,102,241,.08),rgba(139,92,246,.08));display:flex;align-items:center;justify-content:center;font-size:3rem">📰</div>`}
+            <div class="news-card" onclick="Router.go('news/${news.slug || news.id}')">
+                <div class="news-thumb" style="position:relative;overflow:hidden;background:#0f0c29">
+                    ${thumb ? `
+                        <div style="position:absolute;inset:-10px;background-image:url('${thumb}');background-size:cover;background-position:center;filter:blur(14px) brightness(.4) saturate(1.2);transform:scale(1.05)"></div>
+                        <img src="${thumb}" alt="${Fmt.esc(news.title)}" loading="lazy" style="position:relative;width:100%;height:100%;object-fit:contain;display:block;z-index:1">
+                    ` : `<div style="height:100%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,rgba(99,102,241,.08),rgba(139,92,246,.08));font-size:3rem">📰</div>`}
+                    ${!news.is_published ? '<span class="badge badge-muted" style="position:absolute;top:.5rem;left:.5rem;z-index:2">Чернетка</span>' : ''}
+                    ${AppState.isStaff() ? `
+                        <div class="news-card-actions" onclick="event.stopPropagation()">
+                            <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();NewsPage.openEdit('${news.id}')" title="Редагувати"><i class="fa-solid fa-pen"></i></button>
+                            <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();NewsPage.deleteNews('${news.id}',${JSON.stringify(news.title||'').replace(/"/g,'&quot;')})" title="Видалити"><i class="fa-solid fa-trash"></i></button>
+                        </div>` : ''}
                 </div>
                 <div class="news-body">
-                    <div class="news-category">${Fmt.esc(news.category) || 'Загальні'}</div>
                     <h4 class="news-title">${Fmt.esc(news.title)}</h4>
-                    <p class="news-excerpt">${Fmt.esc(news.excerpt || (news.content || '').replace(/<[^>]+>/g, '').slice(0, 150))}</p>
+                    <p class="news-excerpt">${excerpt}</p>
                 </div>
                 <div class="news-footer">
-                    <span>👤 ${news.author?.full_name || '—'}</span>
-                    <div style="display:flex;align-items:center;gap:.75rem">
-                        ${!news.is_published ? '<span class="badge badge-muted">Чернетка</span>' : ''}
-                        <span>${Fmt.date(news.published_at || news.created_at, { day:'numeric', month:'short' })}</span>
-                        <button class="res-star-btn${Bookmarks.isBookmarked('news/'+news.id) ? ' active' : ''}"
+                    <span style="display:flex;align-items:center;gap:.35rem;font-size:.78rem;color:var(--text-muted)">
+                        <i class="fa-regular fa-calendar"></i>${Fmt.date(news.published_at || news.created_at, { day:'numeric', month:'short' })}
+                    </span>
+                    <div style="display:flex;align-items:center;gap:.4rem" onclick="event.stopPropagation()">
+                        <button class="kb-star res-star-btn${Bookmarks.isBookmarked('news/'+news.id) ? ' active' : ''}"
                             data-bm-route="news/${news.id}"
                             title="${Bookmarks.isBookmarked('news/'+news.id) ? 'Видалити з закладок' : 'Зберегти в закладки'}"
-                            onclick="event.stopPropagation();Bookmarks.toggleNews('${news.id}',${JSON.stringify(news.title||'').replace(/"/g,'&quot;')},${JSON.stringify(news.category||'').replace(/"/g,'&quot;')})">★</button>
+                            onclick="event.stopPropagation();Bookmarks.toggleNews('${news.id}',${JSON.stringify(news.title||'').replace(/"/g,'&quot;')},'')">
+                            ${Bookmarks.isBookmarked('news/'+news.id) ? '<i class="fa-solid fa-star"></i>' : '<i class="fa-regular fa-star"></i>'}
+                        </button>
                         ${news.allow_reactions !== false ? `
-                            <div style="display:flex;gap:.25rem" onclick="event.stopPropagation()">
-                                <button id="cr-up-${news.id}" class="btn btn-ghost btn-sm" onclick="event.stopPropagation();NewsPage._reactCard('${news.id}','up')" style="font-size:.85rem;padding:.2rem .5rem">
-                                    👍 <span id="cu-${news.id}">·</span>
-                                </button>
-                                <button id="cr-dn-${news.id}" class="btn btn-ghost btn-sm" onclick="event.stopPropagation();NewsPage._reactCard('${news.id}','down')" style="font-size:.85rem;padding:.2rem .5rem">
-                                    👎 <span id="cd-${news.id}">·</span>
-                                </button>
-                            </div>` : ''}
-                        ${AppState.isStaff() ? `
-                            <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();NewsPage.openEdit('${news.id}')">✏️</button>
-                            <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();NewsPage.deleteNews('${news.id}',${JSON.stringify(news.title||'').replace(/"/g,'&quot;')})">🗑</button>
-                        ` : ''}
+                            <button id="cr-up-${news.id}" class="nv-react-btn" onclick="event.stopPropagation();NewsPage._reactCard('${news.id}','up')" style="font-size:.8rem;padding:.3rem .7rem">
+                                👍 <span id="cu-${news.id}" class="nv-react-count">0</span>
+                            </button>
+                            <button id="cr-dn-${news.id}" class="nv-react-btn" onclick="event.stopPropagation();NewsPage._reactCard('${news.id}','down')" style="font-size:.8rem;padding:.3rem .7rem">
+                                👎 <span id="cd-${news.id}" class="nv-react-count">0</span>
+                            </button>` : ''}
                     </div>
                 </div>
             </div>`;
@@ -172,124 +175,124 @@ const NewsPage = {
         container.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
 
         try {
-            const [news, { data: latest }] = await Promise.all([
-                API.news.getById(id),
-                supabase.from('news')
-                    .select('id,title,thumbnail_url,published_at,created_at,category')
+            const news = await API.news.getById(id);
+            const { data: latest } = await supabase.from('news')
+                    .select('id,slug,title,thumbnail_url,published_at,created_at')
                     .eq('is_published', true)
-                    .neq('id', id)
+                    .neq('id', news.id)
                     .order('published_at', { ascending: false, nullsFirst: false })
-                    .limit(3)
-            ]);
+                    .limit(3);
 
             UI.setBreadcrumb([{ label: 'Новини', route: 'news' }, { label: news.title }]);
 
             container.innerHTML = `
                 <style>
-                    .nv-layout{display:grid;grid-template-columns:1fr 330px;gap:1.5rem;align-items:start;margin: 5px;}
-                    .nv-sidebar{position:sticky;top:1rem;}
-                    .nv-sidebar-title{font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.75rem;padding-left:.25rem}
-                    .nv-recent-item{display:flex;flex-direction:column;gap:.6rem;padding:1rem;border-radius:var(--radius-md);cursor:pointer;transition:all var(--transition);border:1px solid var(--border);background:var(--bg-surface)}
-                    .nv-recent-item:hover{background:var(--bg-raised);border-color:var(--primary)}
-                    .nv-recent-thumb{width:100%;height:130px;border-radius:var(--radius-sm);overflow:hidden;flex-shrink:0;background:var(--bg-raised)}
-                    .nv-recent-thumb img{width:100%;height:100%;object-fit:fill;display:block}
-                    .nv-recent-thumb-ph{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:2.5rem}
-                    .nv-recent-info{flex:1;min-width:0}
-                    .nv-recent-title{font-size:.92rem;font-weight:600;line-height:1.4;color:var(--text-primary);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-                    .nv-recent-date{font-size:.78rem;color:var(--text-muted);margin-top:.35rem}
-                    @media(max-width:900px){.nv-layout{grid-template-columns:1fr}.nv-sidebar{position:static}}
+                    .nv-top{display:grid;grid-template-columns:1fr 280px;gap:1.5rem;align-items:start;margin-bottom:2rem}
+                    .nv-hero{position:relative;width:100%;height:420px;border-radius:var(--radius-xl);overflow:hidden;background:#0f0c29}
+                    .nv-hero-bg{position:absolute;inset:-20px;background-size:cover;background-position:center;filter:blur(18px) brightness(.45) saturate(1.2);transform:scale(1.05)}
+                    .nv-hero img{position:relative;width:100%;height:100%;object-fit:contain;display:block;z-index:1}
+                    .nv-hero-ph{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1e1b4b,#312e81);z-index:1}
+                    .nv-hero-overlay{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.72) 0%,rgba(0,0,0,.15) 40%,transparent 100%);z-index:2}
+                    .nv-hero-content{position:absolute;bottom:0;left:0;right:0;padding:1.75rem 2rem;z-index:3}
+                    .nv-hero-badges{display:flex;gap:.5rem;margin-bottom:.65rem;flex-wrap:wrap}
+                    .nv-hero-title{font-size:2rem;font-weight:800;color:#fff;line-height:1.25;margin:0;text-shadow:0 2px 12px rgba(0,0,0,.4)}
+                    .nv-hero-meta{display:flex;align-items:center;gap:1.25rem;margin-top:.65rem;color:rgba(255,255,255,.75);font-size:.82rem}
+                    .nv-hero-actions{position:absolute;top:1rem;left:1rem;display:flex;gap:.5rem;z-index:3}
+                    .nv-article{min-width:0;display:grid;grid-template-columns:1fr 280px;gap:1.5rem;column-gap:1.5rem}
+                    .nv-article-body{min-width:0}
+                    .nv-excerpt{font-size:1.1rem;color:var(--text-secondary);font-style:italic;border-left:3px solid var(--primary);padding-left:1rem;margin-bottom:2rem;line-height:1.7}
+                    .nv-reactions{display:flex;align-items:center;gap:.75rem;padding:1.25rem 1.5rem;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);margin-top:2.5rem}
+                    .nv-react-label{font-size:.82rem;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-right:.25rem}
+                    .nv-sidebar{position:sticky;top:1rem;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden}
+                    .nv-sidebar-head{padding:.75rem 1rem;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--primary);border-bottom:1px solid var(--border);background:rgba(99,102,241,.05)}
+                    .nv-sidebar-body{padding:.5rem}
+                    .nv-staff-actions{padding:.75rem 1rem;border-top:1px solid var(--border);display:flex;gap:.5rem}
+                    .nv-recent-item{display:flex;gap:.75rem;padding:.65rem .5rem;border-radius:var(--radius-md);cursor:pointer;transition:all var(--transition)}
+                    .nv-recent-item:hover{background:var(--bg-raised)}
+                    .nv-recent-thumb{width:60px;height:44px;border-radius:var(--radius-sm);overflow:hidden;flex-shrink:0;background:var(--bg-raised)}
+                    .nv-recent-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+                    .nv-recent-title{font-size:.83rem;font-weight:600;line-height:1.4;color:var(--text-primary);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+                    .nv-recent-date{font-size:.73rem;color:var(--text-muted);margin-top:.2rem}
+                    @media(max-width:900px){.nv-top,.nv-article{grid-template-columns:1fr}.nv-sidebar{position:static}.nv-hero{height:260px}.nv-hero-title{font-size:1.5rem}.nv-hero-content{padding:1.25rem}}
                 </style>
 
-                <div class="nv-layout">
+                <!-- ── Top: Hero + Sidebar ── -->
+                <div class="nv-top">
 
-                    <!-- ── Основний контент ── -->
-                    <div>
-                        <button class="btn btn-ghost btn-sm" onclick="Router.go('news')" style="margin-bottom:1.5rem">
-                            ← Назад до новин
-                        </button>
-
-                        <div class="card">
-                            <div class="card-body" style="padding:2.5rem">
-                            ${AppState.isStaff() ? `
-                            <div style="display:flex;gap:.75rem;justify-content:flex-end">
-                                <button class="btn btn-secondary" onclick="NewsPage.openEdit('${news.id}')">✏️ Редагувати</button>
-                                <button class="btn btn-danger" onclick="NewsPage.deleteNews('${news.id}',${JSON.stringify(news.title||'').replace(/"/g,'&quot;')})">🗑️ Видалити</button>
-                            </div>` : ''}
-                                <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
-                                    <span class="badge badge-primary">${news.category || 'Загальні'}</span>
-                                    ${news.is_featured ? '<span class="badge badge-warning">⭐ Головна</span>' : ''}
-                                    ${!news.is_published ? '<span class="badge badge-muted">Чернетка</span>' : ''}
-                                </div>
-                                
-                                <h1 style="font-size:2rem;line-height:1.3;margin-bottom:1rem">${Fmt.esc(news.title)}</h1>
-
-                                <div style="display:flex;align-items:center;justify-content:space-between;color:var(--text-muted);font-size:.875rem;margin-bottom:2rem;padding-bottom:1.5rem;border-bottom:1px solid var(--border)">
-                                    <div style="display:flex;align-items:center;gap:1.5rem;">
-                                    <span>📅 ${Fmt.date(news.published_at || news.created_at)}</span>    
-                                    <span>👤 ${news.author?.full_name || 'Редагування'}</span>
-                                        
-                                        ${news.views ? `<span>👁 ${news.views} переглядів</span>` : ''}
-                                    </div>
-                                    ${news.allow_reactions !== false ? `
-                                        <div style="display:flex;align-items:center;gap:1rem;">
-                                            <span>Оцінити:</span>
-                                            <button id="btn-react-up" class="btn btn-ghost btn-sm" onclick="NewsPage._react('${news.id}','up')" style="font-size:.95rem; padding:.2rem .6rem;">
-                                                👍 <span id="react-up-count">—</span>
-                                            </button>
-                                            <button id="btn-react-down" class="btn btn-ghost btn-sm" onclick="NewsPage._react('${news.id}','down')" style="font-size:.95rem; padding:.2rem .6rem;">
-                                                👎 <span id="react-down-count">—</span>
-                                            </button>
-                                        </div>
-                                    ` : ''}
-                                </div>
-
-                                
-                                ${news.excerpt ? `<p style="font-size:1.1rem;color:var(--text-secondary);margin-bottom:1.5rem;font-style:italic">${Fmt.esc(news.excerpt)}</p>` : ''}
-
-                                <div class="news-content-body">
-                                    ${this._fixImgUrls(news.content)}
-                                </div>
-
-                                ${news.tags?.length ? `
-                                    <div style="margin-top:2rem;display:flex;gap:.5rem;flex-wrap:wrap">
-                                        ${news.tags.map(t => `<span class="badge badge-muted">#${Fmt.esc(t)}</span>`).join('')}
-                                    </div>` : ''}
+                    <!-- Hero -->
+                    <div class="nv-hero">
+                        ${news.thumbnail_url
+                            ? `<div class="nv-hero-bg" style="background-image:url('${news.thumbnail_url}');background-position:${news.thumbnail_position || 'center'} center"></div>
+                               <img src="${news.thumbnail_url}" alt="${Fmt.esc(news.title)}" style="object-position:${news.thumbnail_position || 'center'} center">`
+                            : `<div class="nv-hero-ph"><i class="fa-regular fa-newspaper" style="font-size:5rem;color:rgba(255,255,255,.15)"></i></div>`}
+                        <div class="nv-hero-overlay"></div>
+                        <div class="nv-hero-content">
+                            <div class="nv-hero-badges">
+                                ${news.is_featured ? '<span class="badge badge-warning"><i class="fa-solid fa-star"></i> Головна</span>' : ''}
+                                ${!news.is_published ? '<span class="badge badge-muted">Чернетка</span>' : ''}
+                            </div>
+                            <h1 class="nv-hero-title">${Fmt.esc(news.title)}</h1>
+                            <div class="nv-hero-meta">
+                                <span><i class="fa-regular fa-calendar" style="margin-right:.35rem"></i>${Fmt.date(news.published_at || news.created_at)}</span>
+                                <span><i class="fa-regular fa-user" style="margin-right:.35rem"></i>${Fmt.esc(news.author?.full_name || '—')}</span>
+                                ${news.views ? `<span><i class="fa-regular fa-eye" style="margin-right:.35rem"></i>${news.views}</span>` : ''}
                             </div>
                         </div>
-
-                        
+                        ${news.allow_reactions !== false ? `
+                        <div style="position:absolute;bottom:1.75rem;right:2rem;display:flex;align-items:center;gap:.6rem;z-index:3">
+                            <button id="btn-react-up" class="nv-react-btn" onclick="NewsPage._react('${news.id}','up')" style="background:rgba(0,0,0,.35);border-color:rgba(255,255,255,.2);color:#fff;backdrop-filter:blur(6px)">
+                                <span id="react-up-label">Подобається </span>👍 <span id="react-up-count" class="nv-react-count">—</span>
+                            </button>
+                            <button id="btn-react-down" class="nv-react-btn" onclick="NewsPage._react('${news.id}','down')" style="background:rgba(0,0,0,.35);border-color:rgba(255,255,255,.2);color:#fff;backdrop-filter:blur(6px)">
+                                <span id="react-down-label">Ну таке… </span>👎 <span id="react-down-count" class="nv-react-count">—</span>
+                            </button>
+                        </div>` : ''}
+                        <div class="nv-hero-actions">
+                            <button class="btn btn-ghost btn-sm" onclick="Router.go('news')" style="backdrop-filter:blur(6px);background:rgba(0,0,0,.35);border-color:rgba(255,255,255,.2);color:#fff">
+                                <i class="fa-solid fa-angle-left"></i> Назад
+                            </button>
+                        </div>
+                        ${AppState.isStaff() ? `
+                        <div style="position:absolute;top:1rem;right:1rem;display:flex;gap:.5rem;z-index:3">
+                            <button class="btn btn-secondary btn-sm" onclick="NewsPage.openEdit('${news.id}')" style="backdrop-filter:blur(6px);background:rgba(0,0,0,.35);border-color:rgba(255,255,255,.2);color:#fff"><i class="fa-solid fa-pen"></i> Редагувати</button>
+                            <button class="btn btn-danger btn-sm" onclick="NewsPage.deleteNews('${news.id}',${JSON.stringify(news.title||'').replace(/"/g,'&quot;')})" style="backdrop-filter:blur(6px)"><i class="fa-solid fa-trash"></i></button>
+                        </div>` : ''}
                     </div>
 
-                    <!-- ── Права колонка ── -->
+                    <!-- Sidebar -->
                     <aside class="nv-sidebar">
-                        <div class="nv-sidebar-title">Останні новини</div>
-                        <div style="display:flex;flex-direction:column;gap:.25rem">
+                        <div class="nv-sidebar-head">Читайте також</div>
+                        <div class="nv-sidebar-body">
                             ${(latest || []).map(n => `
-                                <div class="nv-recent-item" onclick="Router.go('news/${n.id}')">
+                                <div class="nv-recent-item" onclick="Router.go('news/${n.slug || n.id}')">
                                     <div class="nv-recent-thumb">
                                         ${n.thumbnail_url
-                                            ? `<img src="${n.thumbnail_url}" loading="lazy" style="width:100%;height:100%;object-fit:fill;display:block">`
-                                            : `<div class="nv-recent-thumb-ph">📰</div>`}
+                                            ? `<img src="${n.thumbnail_url}" loading="lazy">`
+                                            : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:1.5rem">📰</div>`}
                                     </div>
-                                    <div class="nv-recent-info">
+                                    <div>
                                         <div class="nv-recent-title">${Fmt.esc(n.title)}</div>
                                         <div class="nv-recent-date">${Fmt.date(n.published_at || n.created_at, { day:'numeric', month:'short' })}</div>
                                     </div>
                                 </div>`).join('')}
-                            ${!latest?.length ? `<p style="font-size:.82rem;color:var(--text-muted);padding:.5rem .25rem">Немає інших новин</p>` : ''}
+                            ${!latest?.length ? `<p style="font-size:.82rem;color:var(--text-muted);padding:.5rem">Немає інших новин</p>` : ''}
                         </div>
-                        <div style="margin-top:1rem;padding-top:.75rem;border-top:1px solid var(--border)">
-                            <button class="btn btn-ghost btn-sm" style="width:100%" onclick="Router.go('news')">
-                                Всі новини →
-                            </button>
+                        <div style="padding:.6rem .75rem;border-top:1px solid var(--border)">
+                            <button class="btn btn-ghost btn-sm" style="width:100%" onclick="Router.go('news')">Всі новини →</button>
                         </div>
                     </aside>
+                </div>
 
-                </div>`;
+                <!-- ── Article body ── -->
+                <article class="nv-article">
+                    <div class="nv-article-body">
+                        <div class="news-content-body">${this._fixImgUrls(news.content)}</div>
+                    </div>
+                </article>`;
 
-            if (news.allow_reactions !== false) this._loadReactions(id);
+            if (news.allow_reactions !== false) this._loadReactions(news.id);
         } catch(e) {
-            container.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>Новину не знайдено</h3><button class="btn btn-primary" onclick="Router.go('news')">← Назад</button></div>`;
+            container.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>Новину не знайдено</h3><button class="btn btn-primary" onclick="Router.go('news')" style="display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i> Назад</button></div>`;
         }
     },
 
@@ -310,10 +313,12 @@ const NewsPage = {
                 const myR  = mine?.find(r => r.news_id === id)?.type || null;
                 upEl.textContent = up;
                 dnEl.textContent = down;
-                upBtn.classList.toggle('btn-primary', myR === 'up');
-                upBtn.classList.toggle('btn-ghost',   myR !== 'up');
-                dnBtn.classList.toggle('btn-primary', myR === 'down');
-                dnBtn.classList.toggle('btn-ghost',   myR !== 'down');
+                upBtn.classList.toggle('active-up',   myR === 'up');
+                dnBtn.classList.toggle('active-down', myR === 'down');
+                if (myR) {
+                    upBtn.onclick = null; upBtn.style.cursor = 'default';
+                    dnBtn.onclick = null; dnBtn.style.cursor = 'default';
+                }
             }
         } catch { /* ігноруємо якщо таблиці ще немає */ }
     },
@@ -328,17 +333,26 @@ const NewsPage = {
     async _loadReactions(newsId) {
         try {
             const { up, down, mine } = await API.news.getReactions(newsId);
-            const upEl   = document.getElementById('react-up-count');
-            const downEl = document.getElementById('react-down-count');
-            const upBtn  = document.getElementById('btn-react-up');
-            const dnBtn  = document.getElementById('btn-react-down');
+            const upEl    = document.getElementById('react-up-count');
+            const downEl  = document.getElementById('react-down-count');
+            const upBtn   = document.getElementById('btn-react-up');
+            const dnBtn   = document.getElementById('btn-react-down');
+            const upLabel = document.getElementById('react-up-label');
+            const dnLabel = document.getElementById('react-down-label');
             if (!upEl) return;
-            upEl.textContent   = up;
-            downEl.textContent = down;
-            upBtn.classList.toggle('btn-primary', mine === 'up');
-            upBtn.classList.toggle('btn-ghost',   mine !== 'up');
-            dnBtn.classList.toggle('btn-primary', mine === 'down');
-            dnBtn.classList.toggle('btn-ghost',   mine !== 'down');
+            upEl.textContent   = up || 0;
+            downEl.textContent = down || 0;
+            upBtn.classList.toggle('active-up',   mine === 'up');
+            dnBtn.classList.toggle('active-down', mine === 'down');
+            // After vote: hide text labels, lock buttons
+            if (mine) {
+                if (upLabel)  upLabel.style.display = 'none';
+                if (dnLabel)  dnLabel.style.display = 'none';
+                upBtn.onclick = null;
+                dnBtn.onclick = null;
+                upBtn.style.cursor = 'default';
+                dnBtn.style.cursor = 'default';
+            }
         } catch { /* ігноруємо якщо таблиці ще немає */ }
     },
 
@@ -364,10 +378,15 @@ const NewsPage = {
         } finally { Loader.hide(); }
     },
 
-    _openForm(news) {
-        const isEdit = !!news?.id;
-        const catLabels = { general:'Загальні', announcements:'Оголошення', updates:'Оновлення', events:'Події' };
+    _accessGroups: [],
 
+    _openForm(news) {
+        // Destroy previous Quill instance before wiping the DOM
+        if (this._quill) {
+            if (this._resizeAbort) { this._resizeAbort.abort(); this._resizeAbort = null; }
+            this._quill = null;
+        }
+        const isEdit = !!news?.id;
         const pubDateVal = news?.published_at
             ? new Date(news.published_at).toISOString().slice(0,16)
             : new Date().toISOString().slice(0,16);
@@ -383,7 +402,7 @@ const NewsPage = {
         const container = document.getElementById('page-content');
         container.innerHTML = `
             <style>
-                .nf-layout{display:grid;grid-template-columns:1fr 250px;gap:1.5rem;align-items:start}
+                .nf-layout{display:grid;grid-template-columns:1fr 280px;gap:1.5rem;align-items:start}
                 .nf-main{display:flex;flex-direction:column;gap:1rem}
                 .nf-sidebar{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;position:sticky;top:1rem}
                 .nf-sidebar-title{padding:.65rem 1rem;font-size:.8rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--primary);border-bottom:1px solid var(--border);background:rgba(99,102,241,.06);text-align:center}
@@ -394,14 +413,20 @@ const NewsPage = {
                 .nf-img-preview{border-radius:var(--radius-md);overflow:hidden;max-height:140px}
                 .nf-img-preview img{width:100%;height:140px;object-fit:cover;display:block}
                 .nf-img-change{text-align:center;margin-top:.5rem}
+                .nf-date{font-size:.82rem;padding:.45rem .6rem;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-raised);color:var(--text-primary);width:100%;outline:none;transition:border-color var(--transition);cursor:pointer;font-family:inherit}
+                .nf-date:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(99,102,241,.12)}
+                .nf-date::-webkit-calendar-picker-indicator{opacity:.5;cursor:pointer;filter:var(--icon-filter,none)}
                 .nf-title-input{background:transparent;border:none;border-bottom:2px solid var(--border);padding:.5rem 0;font-size:1.4rem;font-weight:600;color:var(--text-primary);width:100%;outline:none;transition:border-color var(--transition);font-family:inherit}
                 .nf-title-input:focus{border-bottom-color:var(--primary)}
                 .nf-title-input::placeholder{color:var(--text-muted)}
-                .nf-editor-wrap{display:grid;grid-template-columns:1fr 210px;border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden}
+                .nf-editor-wrap{display:grid;grid-template-columns:1fr 200px;border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden}
                 .nf-editor-left{display:flex;flex-direction:column;border-right:1px solid var(--border);min-width:0}
-                .nf-html-bar{display:flex;align-items:center;gap:.5rem;background:var(--bg-raised);border-bottom:1px solid var(--border);padding:.3rem .5rem}
-                .nf-html-bar-label{font-size:.75rem;font-weight:600;color:var(--text-secondary);padding:0 .25rem;display:flex;align-items:center;gap:.35rem}
-                .nf-html-bar-sep{width:1px;height:18px;background:var(--border);flex-shrink:0}
+                .nf-quill-wrap{flex:1;display:flex;flex-direction:column}
+                .nf-quill-wrap .ql-toolbar{border:none;border-bottom:1px solid var(--border);background:var(--bg-raised);flex-shrink:0}
+                .nf-quill-wrap .ql-container{border:none;flex:1;font-size:1rem;font-family:inherit;min-height:440px}
+                .nf-quill-wrap .ql-editor{min-height:440px;line-height:1.8;color:var(--text-primary);padding:1rem 1.25rem}
+                .nf-quill-wrap .ql-editor.ql-blank::before{color:var(--text-muted);font-style:normal}
+                .nf-html-toggle{display:flex;align-items:center;gap:.5rem;background:var(--bg-raised);border-top:1px solid var(--border);padding:.3rem .75rem;flex-shrink:0}
                 .nf-media-panel{background:var(--bg-raised);display:flex;flex-direction:column;min-width:0}
                 .nf-media-bar{display:flex;flex-direction:column;gap:.4rem;padding:.6rem .75rem;border-bottom:1px solid var(--border)}
                 .nf-media-bar-title{font-size:.78rem;font-weight:600;color:var(--text-secondary)}
@@ -417,12 +442,12 @@ const NewsPage = {
 
             <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.5rem">
                 
-                <h2 style="margin:0">${isEdit ? '✏️ Редагувати новину' : 'Додати новину'}</h2>
+                <h2 style="margin:0">${isEdit ? '<i class="fa-solid fa-pen"></i> Редагувати новину' : 'Додати новину'}</h2>
                 <div style="display:flex;gap:.75rem;padding-top:.5rem">
                         <button class="btn btn-secondary" onclick="Router.go('news')">Скасувати</button>
-                        <button class="btn btn-ghost" onclick="NewsPage._previewNews()">👁 Перегляд</button>
+                        <button class="btn btn-ghost" onclick="NewsPage._previewNews()"><i class="fa-solid fa-eye"></i> Перегляд</button>
                         <button class="btn btn-primary" onclick="NewsPage.saveNews('${news?.id || ''}')">
-                            ${isEdit ? 'Зберегти зміни' : 'Опублікувати'}
+                            ${isEdit ? '<i class="fa-solid fa-floppy-disk" style="font-size:1rem;filter:drop-shadow(0 0 4px rgba(99,102,241,.7))"></i> Зберегти зміни' : '<i class="fa-regular fa-newspaper" style="color:#1e40af"></i> Опублікувати'}
                         </button>
                     </div>
             </div>
@@ -439,33 +464,41 @@ const NewsPage = {
                     </div>
 
                     <div class="nf-field">
-                        <label>Категорія</label>
-                        <select id="n-category">
-                            ${Object.entries(catLabels).map(([v,l]) =>
-                                `<option value="${v}" ${news?.category===v?'selected':''}>${l}</option>`
-                            ).join('')}
-                        </select>
+                        <label><i class="fa-regular fa-image" style="color:var(--primary);margin-right:.3rem"></i>Текст на картинці <span style="font-weight:400;color:var(--text-muted)">(превью)</span></label>
+                        <textarea id="n-excerpt" rows="2" maxlength="220" placeholder="Короткий опис — відображається на картці та у герої…" style="resize:vertical;font-size:.9rem;line-height:1.6"
+                            oninput="const l=this.value.length;const c=document.getElementById('n-excerpt-count');c.textContent=l+' / 220';c.style.color=l>200?'var(--danger)':l>160?'var(--warning)':'var(--text-muted)'"
+                        >${Fmt.esc(news?.excerpt || '')}</textarea>
+                        <div style="display:flex;justify-content:space-between;align-items:center">
+                            <span style="font-size:.72rem;color:var(--text-muted)">Якщо порожньо — текст не відображається на картці.</span>
+                            <span id="n-excerpt-count" style="font-size:.72rem;color:var(--text-muted)">${(news?.excerpt||'').length} / 220</span>
+                        </div>
                     </div>
 
                     <div class="nf-field">
                         <label>Текст *</label>
                         <div class="nf-editor-wrap">
-                            <!-- Ліва частина: панель + textarea -->
+                            <!-- Quill WYSIWYG -->
                             <div class="nf-editor-left">
-                                <div class="nf-html-bar">
-                                    <span class="nf-html-bar-label">&#60;/&#62; HTML + CSS</span>
-                                    <div class="nf-html-bar-sep"></div>
-                                    <button type="button" class="btn btn-ghost btn-sm" onclick="NewsPage._previewNews()">👁 Перегляд</button>
+                                <div class="nf-quill-wrap">
+                                    <div id="n-quill-editor"></div>
                                 </div>
-                                <textarea id="n-html-src" style="flex:1;width:100%;min-height:460px;padding:1rem;font-family:monospace;font-size:.85rem;background:var(--bg-raised);color:var(--text-primary);border:none;outline:none;resize:none;line-height:1.6;tab-size:2;box-sizing:border-box" placeholder="Введіть HTML+CSS тут..."></textarea>
+                                <div class="nf-html-toggle">
+                                    <button type="button" class="btn btn-ghost btn-sm" onclick="NewsPage._toggleHtmlMode()" id="n-html-toggle-btn" style="font-size:.75rem">
+                                        <i class="fa-solid fa-code"></i> HTML
+                                    </button>
+                                    <button type="button" class="btn btn-ghost btn-sm" onclick="NewsPage._previewNews()" style="font-size:.75rem">
+                                        <i class="fa-solid fa-eye"></i> Перегляд
+                                    </button>
+                                </div>
+                                <textarea id="n-html-src" style="display:none;flex:1;width:100%;min-height:460px;padding:1rem;font-family:monospace;font-size:.82rem;background:var(--bg-raised);color:var(--text-primary);border:none;border-top:1px solid var(--border);outline:none;resize:none;line-height:1.6;tab-size:2;box-sizing:border-box" placeholder="HTML..."></textarea>
                             </div>
-                            <!-- Права частина: медіатека -->
+                            <!-- Медіатека -->
                             <div class="nf-media-panel" id="n-media-panel">
                                 <div class="nf-media-bar">
-                                    <div class="nf-media-bar-title">📁 Медіатека</div>
+                                    <div class="nf-media-bar-title"><i class="fa-regular fa-images"></i> Медіатека</div>
                                     <label class="btn btn-ghost btn-sm" style="cursor:pointer;display:flex;align-items:center;gap:.3rem;margin:0;font-size:.78rem;padding:.3rem .5rem">
-                                        📎 Додати файл
-                                        <input id="n-attach-input" type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.mp4,.mp3" style="display:none" onchange="NewsPage._attachFile(this)">
+                                        <i class="fa-solid fa-plus"></i> Додати
+                                        <input id="n-attach-input" type="file" accept="image/*" style="display:none" onchange="NewsPage._attachFile(this)">
                                     </label>
                                 </div>
                                 <div class="nf-media-grid" id="n-media-grid">
@@ -484,22 +517,13 @@ const NewsPage = {
                     <div class="nf-sidebar-body">
 
                         <div class="nf-field">
-                            <label>Мітки</label>
-                            <input id="n-tags" type="text"
-                                   value="${news?.tags?.join(', ') || ''}"
-                                   placeholder="тег1, тег2...">
-                        </div>
-
-                        <div class="nf-sep"></div>
-
-                        <div class="nf-field">
-                            <label>Опубліковано</label>
-                            <input id="n-published-at" type="datetime-local" value="${pubDateVal}">
+                            <label><i class="fa-regular fa-calendar" style="color:var(--primary);margin-right:.3rem"></i>Опубліковано</label>
+                            <input id="n-published-at" type="datetime-local" value="${pubDateVal}" class="nf-date">
                         </div>
 
                         <div class="nf-field">
-                            <label>Актуально до</label>
-                            <input id="n-expires-at" type="datetime-local" value="${expDateVal}">
+                            <label><i class="fa-regular fa-calendar-xmark" style="color:var(--text-muted);margin-right:.3rem"></i>Актуально до</label>
+                            <input id="n-expires-at" type="datetime-local" value="${expDateVal}" class="nf-date">
                         </div>
 
                         <div class="nf-sep"></div>
@@ -522,6 +546,15 @@ const NewsPage = {
                         <div class="nf-sep"></div>
 
                         <div class="nf-field">
+                            <label>Група доступу</label>
+                            <select id="n-access-group">
+                                <option value="">— Всі (без обмежень) —</option>
+                            </select>
+                        </div>
+
+                        <div class="nf-sep"></div>
+
+                        <div class="nf-field">
                             <label>Головне зображення</label>
                             <div style="font-size:.7rem;color:var(--text-muted);line-height:1.5;margin-bottom:.4rem">
                                 Рекомендований розмір: <strong style="color:var(--text-secondary)">1200 × 630 px</strong><br>
@@ -535,13 +568,50 @@ const NewsPage = {
                                    onchange="NewsPage._onImgChange(this)">
                         </div>
 
+                        <div class="nf-field">
+                            <label><i class="fa-solid fa-align-center" style="color:var(--primary);margin-right:.3rem"></i>Позиція зображення</label>
+                            <div style="display:flex;gap:.4rem">
+                                ${['left','center','right'].map(pos => {
+                                    const cur = news?.thumbnail_position || 'center';
+                                    const icon = pos === 'left' ? 'fa-align-left' : pos === 'center' ? 'fa-align-center' : 'fa-align-right';
+                                    const label = pos === 'left' ? 'Ліво' : pos === 'center' ? 'Центр' : 'Право';
+                                    return `<button type="button" id="n-pos-${pos}" onclick="NewsPage._setThumbPos('${pos}')"
+                                        class="btn btn-sm ${cur === pos ? 'btn-primary' : 'btn-ghost'}" style="flex:1">
+                                        <i class="fa-solid ${icon}"></i> ${label}
+                                    </button>`;
+                                }).join('')}
+                            </div>
+                            <input type="hidden" id="n-thumbnail-position" value="${news?.thumbnail_position || 'center'}">
+                        </div>
+
                     </div>
                 </div>
             </div>`;
 
-        // Заповнюємо textarea наявним контентом
-        const ta = document.getElementById('n-html-src');
-        if (news?.content) ta.value = news.content;
+        // Завантажуємо групи доступу
+        API.accessGroups.getAll().then(groups => {
+            this._accessGroups = groups || [];
+            const sel = document.getElementById('n-access-group');
+            if (!sel) return;
+            sel.innerHTML = `<option value="">— Всі (без обмежень) —</option>` +
+                groups.map(g => `<option value="${g.id}" ${news?.access_group_id === g.id ? 'selected' : ''}>${Fmt.esc(g.name)}${g.is_public ? '' : ' 🔐'}</option>`).join('');
+        }).catch(() => {});
+
+        // If content has complex HTML that Quill can't represent in its Delta model,
+        // open directly in HTML mode to avoid Quill stripping it on normalization
+        const rawContent = news?.content || '';
+        const isComplexHtml = /position\s*:|overflow\s*:|radial-gradient|linear-gradient.*\(|display\s*:\s*grid|display\s*:\s*flex.*position/i.test(rawContent)
+            && /<div/i.test(rawContent);
+        this._initQuill(isComplexHtml ? '' : rawContent);
+        if (isComplexHtml) {
+            this._htmlMode = true;
+            const ta  = document.getElementById('n-html-src');
+            const qw  = document.querySelector('.nf-quill-wrap');
+            const btn = document.getElementById('n-html-toggle-btn');
+            if (ta)  { ta.value = rawContent; ta.style.display = 'block'; }
+            if (qw)  qw.style.display = 'none';
+            if (btn) { btn.classList.add('btn-primary'); btn.classList.remove('btn-ghost'); }
+        }
 
         // Папка медіатеки: для існуючої новини — news-{id}, для нової — draft-{timestamp}
         this._mediaFolder = news?.id ? `news-${news.id}` : `draft-${Date.now().toString(36)}`;
@@ -576,7 +646,7 @@ const NewsPage = {
             return;
         }
         Modal.open({
-            title: '👁 Перегляд новини',
+            title: '<i class="fa-solid fa-eye"></i> Перегляд новини',
             size: 'xl',
             body: `
                 <div style="padding:1rem 0">
@@ -607,7 +677,11 @@ const NewsPage = {
                 const isImg = /^(jpg|jpeg|png|gif|webp|svg)$/.test(ext);
                 const icon  = { pdf:'📄', doc:'📝', docx:'📝', xls:'📊', xlsx:'📊', zip:'🗜', mp4:'🎬', mp3:'🎵' }[ext] || '📎';
                 if (isImg) return `
-                    <div class="nf-media-thumb" onclick="NewsPage._insertMediaFile('${url}','${f.name}',true)" title="${f.name}">
+                    <div class="nf-media-thumb" draggable="true"
+                        onclick="NewsPage._insertMediaFile('${url}','${f.name}',true)"
+                        ondragstart="NewsPage._draggedImgUrl='${url}'"
+                        ondragend="NewsPage._draggedImgUrl=null"
+                        title="${f.name}">
                         <img src="${url}" loading="lazy">
                     </div>`;
                 return `
@@ -623,15 +697,27 @@ const NewsPage = {
 
 
     _insertMediaFile(url, name, isImage) {
-        const ta  = document.getElementById('n-html-src');
-        if (!ta) return;
-        const pos = ta.selectionStart ?? ta.value.length;
-        const ins = isImage
-            ? `<img src="${url}" alt="${name}" style="max-width:100%">`
-            : `<a href="${url}" target="_blank" rel="noopener">${name}</a>`;
-        ta.value = ta.value.slice(0, pos) + ins + ta.value.slice(pos);
-        ta.selectionStart = ta.selectionEnd = pos + ins.length;
-        ta.focus();
+        if (this._htmlMode) {
+            const ta  = document.getElementById('n-html-src');
+            if (!ta) return;
+            const pos = ta.selectionStart ?? ta.value.length;
+            const ins = isImage
+                ? `<img src="${url}" alt="${name}" style="max-width:100%">`
+                : `<a href="${url}" target="_blank" rel="noopener">${name}</a>`;
+            ta.value = ta.value.slice(0, pos) + ins + ta.value.slice(pos);
+            ta.selectionStart = ta.selectionEnd = pos + ins.length;
+            ta.focus();
+            return;
+        }
+        if (!this._quill) return;
+        const range = this._quill.getSelection(true) || { index: this._quill.getLength() };
+        if (isImage) {
+            this._quill.insertEmbed(range.index, 'image', url);
+        } else {
+            this._quill.insertText(range.index, name, 'link', url);
+        }
+        this._quill.setSelection(range.index + 1);
+        this._quill.focus();
     },
 
     async _attachFile(input) {
@@ -674,8 +760,248 @@ const NewsPage = {
         return html.replace(/(<img[^>]+src=")(\/)([^"]+)"/gi, `$1${SUPABASE_URL}/$3"`);
     },
 
+    _quill: null,
+    _htmlMode: false,
+
+    _initQuill(content) {
+        // Register fonts/sizes once
+        if (!NewsPage._quillSetupDone) {
+            NewsPage._quillSetupDone = true;
+            const FontStyle = Quill.import('attributors/style/font');
+            FontStyle.whitelist = ['Arial', 'Georgia', 'Courier New', 'Tahoma', 'Verdana'];
+            Quill.register(FontStyle, true);
+            const SizeStyle = Quill.import('attributors/style/size');
+            SizeStyle.whitelist = ['12px','14px',false,'18px','20px','24px','28px','36px'];
+            Quill.register(SizeStyle, true);
+        }
+
+        this._quill = new Quill('#n-quill-editor', {
+            theme: 'snow',
+            placeholder: 'Введіть текст новини...',
+            modules: {
+                toolbar: {
+                    container: [
+                        [{ font: ['Arial','Georgia','Courier New','Tahoma','Verdana'] }],
+                        [{ size: ['12px','14px',false,'18px','20px','24px','28px','36px'] }],
+                        ['bold','italic','underline','strike'],
+                        [{ color: [] },{ background: [] }],
+                        [{ align: [] }],
+                        [{ list: 'ordered'},{ list: 'bullet' }],
+                        ['blockquote'],
+                        ['link','image'],
+                        ['clean'],
+                    ],
+                    handlers: {
+                        image: () => this._quillImageHandler()
+                    }
+                }
+            }
+        });
+
+        if (content) setTimeout(() => {
+            if (!this._quill) return;
+            this._quill.disable();
+            this._quill.root.innerHTML = content;
+            this._quill.enable();
+        }, 0);
+
+        // Image resize + alignment overlay
+        if (this._resizeAbort) this._resizeAbort.abort();
+        this._resizeAbort = this._initImageResize(this._quill);
+
+        // Paste image
+        this._quill.root.addEventListener('paste', async e => {
+            const item = Array.from(e.clipboardData?.items || []).find(i => i.type.startsWith('image/'));
+            if (!item) return;
+            e.preventDefault();
+            const file = item.getAsFile();
+            if (file) await this._quillUploadAndInsert(file);
+        });
+
+        // Drag from media grid → drop into editor
+        this._quill.root.addEventListener('dragover', e => {
+            if (NewsPage._draggedImgUrl) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }
+        });
+        this._quill.root.addEventListener('drop', e => {
+            const url = NewsPage._draggedImgUrl;
+            if (!url) return;
+            e.preventDefault();
+            const range = this._quill.getSelection(true) || { index: this._quill.getLength() };
+            this._quill.insertEmbed(range.index, 'image', url);
+            this._quill.setSelection(range.index + 1);
+        });
+    },
+
+    _draggedImgUrl: null,
+
+    async _quillImageHandler() {
+        const input = document.createElement('input');
+        input.type = 'file'; input.accept = 'image/*';
+        input.onchange = async () => {
+            if (input.files[0]) await this._quillUploadAndInsert(input.files[0]);
+        };
+        input.click();
+    },
+
+    async _quillUploadAndInsert(file) {
+        Loader.show();
+        try {
+            const comp = await this._compressImage(file);
+            const url  = await API.news.uploadImage(this._mediaFolder, comp);
+            const range = this._quill.getSelection(true) || { index: this._quill.getLength() };
+            this._quill.insertEmbed(range.index, 'image', url);
+            this._quill.setSelection(range.index + 1);
+            this._loadMedia();
+        } catch(e) { Toast.error('Помилка', e.message); }
+        finally { Loader.hide(); }
+    },
+
+    _initImageResize(quill) {
+        const ac  = new AbortController();
+        const sig = ac.signal;
+        let activeImg = null;
+
+        const wrap = quill.root.parentElement;
+        wrap.style.position = 'relative';
+
+        const ov = document.createElement('div');
+        ov.style.cssText = 'position:absolute;box-sizing:border-box;border:2px solid var(--primary,#6366f1);pointer-events:none;display:none;z-index:5;border-radius:2px';
+        const handle = document.createElement('div');
+        handle.title = 'Змінити розмір';
+        handle.style.cssText = 'position:absolute;bottom:-6px;right:-6px;width:12px;height:12px;background:var(--primary,#6366f1);border:2px solid #fff;border-radius:2px;cursor:se-resize;pointer-events:all';
+        ov.appendChild(handle);
+        wrap.appendChild(ov);
+
+        const tbar = document.createElement('div');
+        tbar.className = 'ql-img-toolbar';
+        tbar.innerHTML = [
+            ['block',  '<i class="fa-solid fa-expand"></i>',       'Блок (повна ширина)'],
+            ['center', '<i class="fa-solid fa-align-center"></i>',  'По центру'],
+            ['left',   '<i class="fa-solid fa-align-left"></i>',   'Обтікання ліворуч'],
+            ['right',  '<i class="fa-solid fa-align-right"></i>',  'Обтікання праворуч'],
+        ].map(([a, ic, t]) => `<button data-align="${a}" title="${t}">${ic}</button>`).join('');
+        wrap.appendChild(tbar);
+
+        const hideAll = () => { ov.style.display = 'none'; tbar.style.display = 'none'; activeImg = null; };
+
+        const syncOv = () => {
+            if (!activeImg || !quill.root.contains(activeImg)) { hideAll(); return; }
+            const ir = activeImg.getBoundingClientRect();
+            const wr = wrap.getBoundingClientRect();
+            const top = ir.top - wr.top, left = ir.left - wr.left;
+            ov.style.cssText += `;top:${top}px;left:${left}px;width:${ir.width}px;height:${ir.height}px;display:block`;
+            const tbW = tbar.offsetWidth || 172, tbH = tbar.offsetHeight || 46;
+            tbar.style.top  = (top + ir.height / 2 - tbH / 2) + 'px';
+            tbar.style.left = Math.max(0, Math.min(left + ir.width / 2 - tbW / 2, wr.width - tbW - 4)) + 'px';
+            tbar.style.display = 'flex';
+            const fl = activeImg.style.float, centered = !fl && activeImg.style.marginLeft === 'auto';
+            tbar.querySelectorAll('button').forEach(btn => {
+                const a = btn.dataset.align;
+                btn.classList.toggle('on',
+                    (a === 'left'   && fl === 'left') ||
+                    (a === 'right'  && fl === 'right') ||
+                    (a === 'center' && centered) ||
+                    (a === 'block'  && !fl && !centered)
+                );
+            });
+        };
+
+        quill.root.addEventListener('click', e => {
+            if (e.target.tagName !== 'IMG') { hideAll(); return; }
+            activeImg = e.target; syncOv();
+        }, { signal: sig });
+        quill.root.addEventListener('scroll', syncOv, { signal: sig });
+
+        tbar.addEventListener('click', e => {
+            const btn = e.target.closest('button[data-align]');
+            if (!btn || !activeImg) return;
+            e.stopPropagation();
+            activeImg.style.float = activeImg.style.display = activeImg.style.margin = '';
+            const a = btn.dataset.align;
+            if (a === 'block')  { activeImg.style.display = 'block'; activeImg.style.margin = '8px 0'; }
+            if (a === 'center') { activeImg.style.display = 'block'; activeImg.style.margin = '8px auto'; }
+            if (a === 'left')   { activeImg.style.float = 'left';  activeImg.style.margin = '0 12px 8px 0'; }
+            if (a === 'right')  { activeImg.style.float = 'right'; activeImg.style.margin = '0 0 8px 12px'; }
+            syncOv();
+        }, { signal: sig });
+
+        handle.addEventListener('mousedown', e => {
+            if (!activeImg) return;
+            e.preventDefault();
+            const startX = e.clientX, startW = activeImg.getBoundingClientRect().width;
+            const onMove = ev => { activeImg.style.width = Math.max(40, startW + ev.clientX - startX) + 'px'; activeImg.style.height = 'auto'; syncOv(); };
+            const onUp   = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+        }, { signal: sig });
+
+        document.addEventListener('click', e => { if (!wrap.contains(e.target)) hideAll(); }, { signal: sig });
+
+        return ac;
+    },
+
+    _compressImage(file, maxWidth = 1400, quality = 0.85) {
+        return new Promise(resolve => {
+            const img = new Image();
+            const obj = URL.createObjectURL(file);
+            img.onload = () => {
+                URL.revokeObjectURL(obj);
+                if (img.width <= maxWidth) { resolve(file); return; }
+                const scale = maxWidth / img.width;
+                const c = document.createElement('canvas');
+                c.width = Math.round(img.width * scale);
+                c.height = Math.round(img.height * scale);
+                c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+                c.toBlob(blob => {
+                    if (!blob) { resolve(file); return; }
+                    resolve(new File([blob], file.name.replace(/\.[^.]+$/,'')+'.jpg', { type:'image/jpeg' }));
+                }, 'image/jpeg', quality);
+            };
+            img.onerror = () => { URL.revokeObjectURL(obj); resolve(file); };
+            img.src = obj;
+        });
+    },
+
+    _toggleHtmlMode() {
+        this._htmlMode = !this._htmlMode;
+        const ta  = document.getElementById('n-html-src');
+        const qw  = document.querySelector('.nf-quill-wrap');
+        const btn = document.getElementById('n-html-toggle-btn');
+        if (this._htmlMode) {
+            // Only overwrite textarea if Quill actually has content typed by the user.
+            // If Quill is empty (it stripped complex HTML on load), keep the existing textarea value.
+            const quillHtml = this._quill.root.innerHTML;
+            const quillEmpty = !quillHtml || quillHtml === '<p><br></p>';
+            if (!quillEmpty) ta.value = quillHtml;
+            ta.style.display = 'block';
+            if (qw) qw.style.display = 'none';
+            btn.classList.add('btn-primary');
+            btn.classList.remove('btn-ghost');
+        } else {
+            // Disable Quill's MutationObserver before setting innerHTML to prevent
+            // it from normalizing away custom HTML/CSS that it doesn't know about
+            this._quill.disable();
+            this._quill.root.innerHTML = ta.value;
+            this._quill.enable();
+            ta.style.display = 'none';
+            if (qw) qw.style.display = 'flex';
+            btn.classList.remove('btn-primary');
+            btn.classList.add('btn-ghost');
+        }
+    },
+
     _getContent() {
-        return document.getElementById('n-html-src')?.value || '';
+        if (this._htmlMode) return document.getElementById('n-html-src')?.value || '';
+        return this._quill ? this._quill.root.innerHTML : '';
+    },
+
+    _setThumbPos(pos) {
+        document.getElementById('n-thumbnail-position').value = pos;
+        ['left','center','right'].forEach(p => {
+            const btn = document.getElementById(`n-pos-${p}`);
+            if (!btn) return;
+            btn.className = `btn btn-sm ${p === pos ? 'btn-primary' : 'btn-ghost'}`;
+        });
     },
 
     _onImgChange(input) {
@@ -704,25 +1030,29 @@ const NewsPage = {
         if (!title) { Toast.error('Помилка', 'Додайте заголовок'); return; }
 
         const content = this._getContent();
-        if (!content || !content.trim()) { Toast.error('Помилка', 'Додайте зміст'); return; }
+        const contentText = content.replace(/<[^>]+>/g, '').trim();
+        if (!content || !contentText) { Toast.error('Помилка', 'Додайте зміст'); return; }
 
-        const tagsRaw = Dom.val('n-tags').trim();
-        const tags    = tagsRaw ? tagsRaw.split(',').map(t => t.trim()).filter(Boolean) : [];
 
         const isPublished = document.getElementById('n-published').checked;
         const pubAt = Dom.val('n-published-at');
         const expAt = Dom.val('n-expires-at');
 
+        const accessGroupId = Dom.val('n-access-group') || null;
+
+        const excerpt = (document.getElementById('n-excerpt')?.value || '').trim().slice(0, 220) || null;
+
         const fields = {
             title,
             content,
-            category:        Dom.val('n-category'),
-            tags:            tags.length ? tags : null,
-            is_published:    isPublished,
-            is_featured:     document.getElementById('n-featured').checked,
-            allow_reactions: document.getElementById('n-reactions').checked,
-            published_at:    isPublished ? (pubAt ? new Date(pubAt).toISOString() : new Date().toISOString()) : null,
-            expires_at:      expAt ? new Date(expAt).toISOString() : null
+            excerpt,
+            is_published:        isPublished,
+            is_featured:         document.getElementById('n-featured').checked,
+            allow_reactions:     document.getElementById('n-reactions').checked,
+            published_at:        isPublished ? (pubAt ? new Date(pubAt).toISOString() : new Date().toISOString()) : null,
+            expires_at:          expAt ? new Date(expAt).toISOString() : null,
+            access_group_id:     accessGroupId,
+            thumbnail_position:  Dom.val('n-thumbnail-position') || 'center',
         };
 
         Loader.show();
@@ -738,12 +1068,7 @@ const NewsPage = {
 
             AuditLog.write(id ? 'news_update' : 'news_create', 'news', title);
             Toast.success('Успішно!', `Новина "${title}" ${id ? 'оновлена' : 'додана'}`);
-            const target = `#/news/${news.id}`;
-            if (location.hash === target) {
-                Router._navigate(); // хеш не змінився — форсуємо рендер
-            } else {
-                Router.go(`news/${news.id}`);
-            }
+            Router.go('news');
         } catch(e) {
             Toast.error('Помилка', e.message);
         } finally { Loader.hide(); }

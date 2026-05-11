@@ -30,7 +30,8 @@ const AdminPage = {
                 <button class="tab" data-tab="news" onclick="AdminPage.switchTab('news', this)">📰 Новини</button>
                 <button class="tab" data-tab="enrollments" onclick="AdminPage.switchTab('enrollments', this)">🎓 Записи</button>
                 ${canManageUsers ? `<button class="tab" data-tab="access-groups" onclick="AdminPage.switchTab('access-groups', this)">🔐 Групи доступу</button>` : ''}
-                ${AppState.isOwner() ? `<button class="tab" data-tab="trash" onclick="AdminPage.switchTab('trash', this)">🗑 Кошик</button>` : ''}
+                ${AppState.isOwner() ? `<button class="tab" data-tab="label-access" onclick="AdminPage.switchTab('label-access', this)"><i class="fa-solid fa-lock"></i> Обмеження доступу</button>` : ''}
+                ${AppState.isOwner() ? `<button class="tab" data-tab="trash" onclick="AdminPage.switchTab('trash', this)"><i class="fa-solid fa-trash"></i> Кошик</button>` : ''}
                 ${AppState.isOwner() ? `<button class="tab" data-tab="logs" onclick="AdminPage.switchTab('logs', this)">📋 Логи</button>` : ''}
             </div>
 
@@ -43,7 +44,7 @@ const AdminPage = {
     },
 
     async switchTab(tab, el) {
-        if ((tab === 'users' || tab === 'access-groups') && !AppState.isAdmin()) {
+        if ((tab === 'users' || tab === 'access-groups' || tab === 'label-access') && !AppState.isAdmin()) {
             Toast.error('Заборонено', 'Недостатньо прав');
             return;
         }
@@ -65,7 +66,8 @@ const AdminPage = {
                 case 'tests':       await this._renderTests(el);       break;
                 case 'news':        await this._renderNews(el);        break;
                 case 'enrollments': await this._renderEnrollments(el); break;
-                case 'access-groups': await AccessGroupsPage.renderTab(el);         break;
+                case 'access-groups': await AccessGroupsPage.renderTab(el);  break;
+                case 'label-access':  await LabelAccessPage.init(el);              break;
                 case 'trash':         await this._renderTrash(el);                  break;
                 case 'logs':          await this._renderLogs(el);                   break;
             }
@@ -163,14 +165,14 @@ const AdminPage = {
 
         el.innerHTML = `
             <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem">
-                <button class="btn btn-ghost btn-sm" onclick="AdminPage._renderUsers(document.getElementById('admin-content'))">← Назад</button>
+                <button class="btn btn-ghost btn-sm" onclick="AdminPage._renderUsers(document.getElementById('admin-content'))" style="display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i> Назад</button>
                 <h3 style="margin:0">👥 Всі користувачі</h3>
             </div>
             <div style="display:flex;gap:.75rem;margin-bottom:.75rem;flex-wrap:wrap;align-items:center;justify-content:space-between">
                 <div style="display:flex;gap:.75rem;flex-wrap:wrap">
-                    <button class="btn btn-primary" onclick="AdminPage.openCreateUser()">+ Створити користувача</button>
-                    <button class="btn btn-ghost"   onclick="AdminPage.importUsers()">📥 Імпорт</button>
-                    <button class="btn btn-success"  onclick="AdminPage.exportUsers(${JSON.stringify(list).replace(/"/g,'&quot;')})">📊 Експорт</button>
+                    <button class="btn btn-primary" onclick="AdminPage.openCreateUser()"><i class="fa-solid fa-plus"></i> Створити користувача</button>
+                    <button class="btn btn-ghost"   onclick="AdminPage.importUsers()"><i class="fa-solid fa-upload"></i> Імпорт</button>
+                    <button class="btn btn-success"  onclick="AdminPage.exportUsers(${JSON.stringify(list).replace(/"/g,'&quot;')})"><i class="fa-solid fa-download"></i> Експорт</button>
                 </div>
                 <div style="display:flex;align-items:center;gap:.75rem">
                     <span style="font-size:.8rem;color:var(--text-muted)">Показано <span id="users-shown">0</span> з <span id="users-total">${list.length}</span></span>
@@ -230,7 +232,7 @@ const AdminPage = {
                 <button class="btn btn-ghost btn-sm" onclick="AdminPage._bulkChangeRole()">🎭 Змінити роль</button>
                 <button class="btn btn-ghost btn-sm" onclick="AdminPage._bulkExport()">📊 Експорт вибраних</button>
                 <div class="bulk-sep"></div>
-                <button class="btn btn-danger btn-sm" onclick="AdminPage._bulkDelete()">🗑 Видалити</button>
+                <button class="btn btn-danger btn-sm" onclick="AdminPage._bulkDelete()">​<i class="fa-solid fa-trash"></i> Видалити</button>
                 <div class="bulk-sep"></div>
                 <button class="btn btn-ghost btn-sm" onclick="AdminPage._clearSelection()">✕ Скасувати вибір</button>
             </div>`;
@@ -304,7 +306,7 @@ const AdminPage = {
                
                 <td>
                     <div style="display:flex;gap:.3rem">
-                        ${canEdit ? `<button class="btn btn-ghost btn-sm" onclick="AdminPage.openEditUser(${JSON.stringify(u).replace(/"/g,'&quot;')})">✏️</button>` : ''}
+                        ${canEdit ? `<button class="btn btn-ghost btn-sm" onclick="AdminPage.openEditUser(${JSON.stringify(u).replace(/"/g,'&quot;')})"><i class="fa-solid fa-pen"></i></button>` : ''}
                         ${!isSelf && !isOwnerRow ? `
                             <button class="btn btn-ghost btn-sm" onclick="AdminPage.toggleBlock('${u.id}',${u.is_active !== false})" title="${u.is_active !== false ? 'Заблокувати' : 'Розблокувати'}">
                                 ${u.is_active !== false ? '🔒' : '🔓'}
@@ -381,8 +383,8 @@ const AdminPage = {
                 ${canSetBdReminder ? this._birthdayReminderBlock(u, bdReminder) : ''}`,
             footer: `
                 <button class="btn btn-secondary" onclick="Modal.close()">Закрити</button>
-                ${AppState.isAdmin() && u.id !== AppState.user?.id ? `<button class="btn btn-ghost" onclick="Modal.close();AppState.impersonate(${JSON.stringify(u).replace(/"/g,'&quot;')})" title="Переглянути інтерфейс від імені цього користувача">👁 Переглянути як</button>` : ''}
-                ${(u.role !== 'owner' || AppState.isOwner()) ? `<button class="btn btn-primary" onclick="Modal.close();AdminPage.openEditUser(${JSON.stringify(u).replace(/"/g,'&quot;')})">✏️ Редагувати</button>` : ''}
+                ${AppState.isAdmin() && u.id !== AppState.user?.id ? `<button class="btn btn-ghost" onclick="Modal.close();AppState.impersonate(${JSON.stringify(u).replace(/"/g,'&quot;')})" title="Переглянути інтерфейс від імені цього користувача"><i class="fa-solid fa-eye"></i> Переглянути як</button>` : ''}
+                ${(u.role !== 'owner' || AppState.isOwner()) ? `<button class="btn btn-primary" onclick="Modal.close();AdminPage.openEditUser(${JSON.stringify(u).replace(/"/g,'&quot;')})"><i class="fa-solid fa-pen"></i> Редагувати</button>` : ''}
             `
         });
     },
@@ -433,7 +435,7 @@ const AdminPage = {
                 ${chips}
                 <input type="hidden" id="bd-days-val" value="7">
                 <button data-n="${Fmt.esc(u.full_name||'')}" onclick="AdminPage._saveBirthdayReminder('${u.id}',this.dataset.n)"
-                    style="margin-left:auto;padding:6px 14px;background:var(--primary);color:#fff;border:none;border-radius:40px;font-size:.82rem;font-weight:600;cursor:pointer">Зберегти</button>
+                    style="margin-left:auto;padding:6px 14px;background:var(--primary);color:#fff;border:none;border-radius:40px;font-size:.82rem;font-weight:600;cursor:pointer"><i class="fa-regular fa-floppy-disk"></i> Зберегти</button>
             </div>`}
         </div>
         <style>
@@ -685,8 +687,8 @@ const AdminPage = {
                         <span>Пароль <span class="required-star">*</span></span>
                         <div style="position:relative">
                             <input id="cu-password" type="password" placeholder="••••••••" autocomplete="new-password" style="width:100%;box-sizing:border-box;padding-right:42px">
-                            <button type="button" onclick="const i=document.getElementById('cu-password');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'👁':'🙈'"
-                                style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:1.1rem;padding:0;line-height:1;color:var(--text-muted)">👁</button>
+                            <button type="button" onclick="const i=document.getElementById('cu-password');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'<i class="fa-solid fa-eye"></i>':'<i class="fa-solid fa-eye-slash"></i>'"
+                                
                         </div>
                         <small class="field-hint">Мінімум 6 символів</small>
                     </label>
@@ -1176,7 +1178,7 @@ const AdminPage = {
         pages.sort((a, b) => a - b);
 
         let html = '<div class="pagination">';
-        html += `<button class="pg-btn" ${cur===1?'disabled':''} onclick="AdminPage._goPage(${cur-1})">‹</button>`;
+        html += `<button class="pg-btn" ${cur===1?'disabled':''} onclick="AdminPage._goPage(${cur-1})"><i class="fa-solid fa-angle-left"></i></button>`;
         let prev = 0;
         for (const p of pages) {
             if (p - prev > 1) html += `<span class="pg-gap">…</span>`;
@@ -1500,7 +1502,7 @@ const AdminPage = {
             : '';
 
         const ok = await Modal.confirm({
-            title: '🗑 Видалити користувачів',
+            title: '<i class="fa-solid fa-trash"></i> Видалити користувачів',
             message: `Ви впевнені, що хочете <strong>остаточно видалити ${toDelete.length} користувач(ів)</strong>?
                       ${adminNote}
                       <br><br>Дія незворотна.${AppState.isOwner() ? ' Дані будуть збережені в Кошику на 7 днів.' : ''}`,
@@ -1556,7 +1558,7 @@ const AdminPage = {
                 </p>
                 <div style="display:flex;gap:.75rem;margin-bottom:1.25rem;align-items:center">
                     <button class="btn btn-ghost btn-sm" onclick="AdminPage._downloadImportExample()">📄 Завантажити приклад файлу</button>
-                    <span style="color:var(--text-muted);font-size:.78rem">← рекомендуємо відкрити у Excel або Google Sheets</span>
+                    <span style="color:var(--text-muted);font-size:.78rem"><i class="fa-solid fa-angle-left"></i> рекомендуємо відкрити у Excel або Google Sheets</span>
                 </div>
                 <div class="file-upload-frame">
                     <label for="import-file-input" class="file-upload-area">
@@ -1837,9 +1839,9 @@ const AdminPage = {
                                 <td style="color:var(--text-muted);font-size:.8rem">${Fmt.dateShort(c.created_at)}</td>
                                 <td>
                                     <div style="display:flex;gap:.4rem">
-                                        <button class="btn btn-ghost btn-sm" onclick="Router.go('courses/${c.id}')">👁</button>
-                                        <button class="btn btn-ghost btn-sm" onclick="AdminPage._loadCourseForm('${c.id}')">✏️</button>
-                                        <button class="btn btn-danger btn-sm" onclick="AdminPage._deleteCourse('${c.id}',${JSON.stringify(c.title||'').replace(/"/g,'&quot;')})">🗑</button>
+                                        <button class="btn btn-ghost btn-sm" onclick="Router.go('courses/${c.id}')"><i class="fa-solid fa-eye"></i></button>
+                                        <button class="btn btn-ghost btn-sm" onclick="AdminPage._loadCourseForm('${c.id}')"><i class="fa-solid fa-pen"></i></button>
+                                        <button class="btn btn-danger btn-sm" onclick="AdminPage._deleteCourse('${c.id}',${JSON.stringify(c.title||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-trash"></i></button>
                                     </div>
                                 </td>
                             </tr>`).join('')}
@@ -1865,7 +1867,7 @@ const AdminPage = {
                 <button class="btn btn-ghost btn-sm" onclick="AdminPage._renderCourses(AdminPage._coursesEl)">
                     <i class="fa-solid fa-arrow-left"></i> Назад
                 </button>
-                <h3 style="margin:0">${isEdit ? '✏️ Редагувати курс' : '+ Створити курс'}</h3>
+                <h3 style="margin:0">${isEdit ? '<i class="fa-solid fa-pen"></i> Редагувати курс' : '+ Створити курс'}</h3>
             </div>
             <div style="max-width:680px">
                 <div style="display:flex;flex-direction:column;gap:1rem">
@@ -1915,7 +1917,7 @@ const AdminPage = {
                     <div style="display:flex;gap:.75rem;justify-content:flex-end;padding-top:.5rem;border-top:1px solid var(--border)">
                         <button class="btn btn-secondary" onclick="AdminPage._renderCourses(AdminPage._coursesEl)">Скасувати</button>
                         <button class="btn btn-primary" onclick="AdminPage._saveCourse('${course?.id || ''}')">
-                            ${isEdit ? 'Зберегти' : 'Створити'}
+                            ${isEdit ? '<i class="fa-regular fa-floppy-disk"></i> Зберегти' : '<i class="fa-solid fa-plus"></i> Створити'}
                         </button>
                     </div>
                 </div>
@@ -1995,9 +1997,9 @@ const AdminPage = {
                                 <td style="color:var(--text-muted);font-size:.8rem">${Fmt.dateShort(n.published_at || n.created_at)}</td>
                                 <td>
                                     <div style="display:flex;gap:.4rem">
-                                        <button class="btn btn-ghost btn-sm" onclick="Router.go('news/${n.id}')">👁</button>
-                                        <button class="btn btn-ghost btn-sm" onclick="NewsPage.openEdit('${n.id}')">✏️</button>
-                                        <button class="btn btn-danger btn-sm" onclick="NewsPage.deleteNews('${n.id}',${JSON.stringify(n.title||'').replace(/"/g,'&quot;')})">🗑</button>
+                                        <button class="btn btn-ghost btn-sm" onclick="Router.go('news/${n.id}')"><i class="fa-solid fa-eye"></i></button>
+                                        <button class="btn btn-ghost btn-sm" onclick="NewsPage.openEdit('${n.id}')"><i class="fa-solid fa-pen"></i></button>
+                                        <button class="btn btn-danger btn-sm" onclick="NewsPage.deleteNews('${n.id}',${JSON.stringify(n.title||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-trash"></i></button>
                                     </div>
                                 </td>
                             </tr>`).join('')}
@@ -2071,7 +2073,7 @@ const AdminPage = {
 
         el.innerHTML = `
             <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem">
-                <button class="btn btn-ghost btn-sm" onclick="AdminPage._renderUsers(document.getElementById('admin-content'))">← Назад</button>
+                <button class="btn btn-ghost btn-sm" onclick="AdminPage._renderUsers(document.getElementById('admin-content'))" style="display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i> Назад</button>
                 <h3 style="margin:0">📋 Довідник</h3>
             </div>
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.5rem">
@@ -2086,15 +2088,15 @@ const AdminPage = {
             <div class="card">
                 <div class="card-header">
                     <h3>${icon} ${title}</h3>
-                    <button class="btn btn-primary btn-sm" onclick="AdminPage.openAddDir('${table}','${title}')">+ Додати</button>
+                    <button class="btn btn-primary btn-sm" onclick="AdminPage.openAddDir('${table}','${title}')"><i class="fa-solid fa-plus"></i> Додати</button>
                 </div>
                 <div class="card-body" style="padding:0;max-height:350px;overflow-y:auto">
                     ${items.length ? items.map(i => `
                         <div style="display:flex;align-items:center;justify-content:space-between;padding:.625rem 1rem;border-bottom:1px solid var(--border)">
                             <span style="font-size:.875rem">${i.name}</span>
                             <div style="display:flex;gap:.3rem">
-                                <button class="btn btn-ghost btn-sm" onclick="AdminPage.openEditDir('${table}','${i.id}',${JSON.stringify(i.name||'').replace(/"/g,'&quot;')})">✏️</button>
-                                <button class="btn btn-danger btn-sm" onclick="AdminPage.deleteDir('${table}','${i.id}',${JSON.stringify(i.name||'').replace(/"/g,'&quot;')})">🗑</button>
+                                <button class="btn btn-ghost btn-sm" onclick="AdminPage.openEditDir('${table}','${i.id}',${JSON.stringify(i.name||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-pen"></i></button>
+                                <button class="btn btn-danger btn-sm" onclick="AdminPage.deleteDir('${table}','${i.id}',${JSON.stringify(i.name||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-trash"></i></button>
                             </div>
                         </div>`).join('')
                     : `<div style="padding:1.5rem;text-align:center;color:var(--text-muted);font-size:.85rem">Список порожній</div>`}
@@ -2104,7 +2106,7 @@ const AdminPage = {
 
     openAddDir(table, title) {
         Modal.open({
-            title: `+ Додати — ${title}`,
+            title: `<i class="fa-solid fa-plus"></i> Додати — ${title}`,
             size: 'sm',
             body: `
                 <div class="form-group">
@@ -2119,7 +2121,7 @@ const AdminPage = {
 
     openEditDir(table, id, name) {
         Modal.open({
-            title: '✏️ Редагувати',
+            title: '<i class="fa-solid fa-pen"></i> Редагувати',
             size: 'sm',
             body: `
                 <div class="form-group">
@@ -2128,7 +2130,7 @@ const AdminPage = {
                 </div>`,
             footer: `
                 <button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
-                <button class="btn btn-primary" onclick="AdminPage.saveDir('${table}','${id}')">Зберегти</button>`
+                <button class="btn btn-primary" onclick="AdminPage.saveDir('${table}','${id}')"><i class="fa-regular fa-floppy-disk"></i> Зберегти</button>`
         });
     },
 
@@ -2309,9 +2311,9 @@ const AdminPage = {
                     <td style="font-size:.82rem;font-weight:500;white-space:nowrap">${item.deleted_by_name}</td>
                     <td style="font-size:.78rem;white-space:nowrap">${daysLeft(item.expires_at)}</td>
                     <td style="white-space:nowrap">
-                        <button class="btn btn-ghost btn-sm" onclick="AdminPage._previewTrashItem(${JSON.stringify(item).replace(/"/g,'&quot;')})">👁 Перегляд</button>
+                        <button class="btn btn-ghost btn-sm" onclick="AdminPage._previewTrashItem(${JSON.stringify(item).replace(/"/g,'&quot;')})"><i class="fa-solid fa-eye"></i> Перегляд</button>
                         <button class="btn btn-primary btn-sm" style="margin-left:.3rem" onclick="AdminPage._restoreTrashItem('${item.id}','${item.item_id}','${item.type}')">↩ Відновити</button>
-                        <button class="btn btn-danger btn-sm" style="margin-left:.3rem" onclick="AdminPage._deleteTrashItem('${item.id}')">🗑 Видалити</button>
+                        <button class="btn btn-danger btn-sm" style="margin-left:.3rem" onclick="AdminPage._deleteTrashItem('${item.id}')">​<i class="fa-solid fa-trash"></i> Видалити</button>
                     </td>
                 </tr>`;
         };
@@ -2319,15 +2321,15 @@ const AdminPage = {
         if (!items.length) {
             el.innerHTML = `
                 <div class="page-header">
-                    <div class="page-title"><h1>🗑 Кошик</h1><p>Видалені об'єкти зберігаються 7 днів</p></div>
+                    <div class="page-title"><h1><i class="fa-solid fa-trash"></i> Кошик</h1><p>Видалені об'єкти зберігаються 7 днів</p></div>
                 </div>
-                <div class="empty-state"><div class="empty-icon">🗑</div><h3>Кошик порожній</h3></div>`;
+                <div class="empty-state"><div class="empty-icon"><i class="fa-solid fa-trash"></i></div><h3>Кошик порожній</h3></div>`;
             return;
         }
 
         el.innerHTML = `
             <div class="page-header">
-                <div class="page-title"><h1>🗑 Кошик</h1><p>Видалені об'єкти зберігаються 7 днів. Всього: ${items.length}</p></div>
+                <div class="page-title"><h1><i class="fa-solid fa-trash"></i> Кошик</h1><p>Видалені об'єкти зберігаються 7 днів. Всього: ${items.length}</p></div>
             </div>
             ${Object.entries(grouped).map(([type, list]) => `
                 <div style="margin-bottom:2rem">
@@ -2381,13 +2383,22 @@ const AdminPage = {
                 </div>`;
 
         } else if (item.type === 'resource') {
-            const icons = { pdf:'📄', video:'🎬', link:'🔗', scorm:'📦', file:'📎' };
+            const icons     = { pdf:'📄', video:'🎬', link:'🔗', scorm:'📦', file:'📎', document:'📝' };
+            const iconsHtml = {
+                pdf:      '<i class="fa-regular fa-file-pdf"></i>',
+                video:    '<i class="fa-solid fa-video"></i>',
+                image:    '<i class="fa-regular fa-file-image"></i>',
+                scorm:    '<i class="fa-regular fa-file-zipper"></i>',
+                document: '<i class="fa-regular fa-file-word"></i>',
+                link:     '<i class="fa-regular fa-link"></i>',
+                file:     '<i class="fa-regular fa-file"></i>',
+            };
             title = `${icons[d.type] || '📎'} ${d.title || 'Ресурс'}`;
             const link = d.url || d.file_url;
             body += `
                 <div style="display:flex;flex-direction:column;gap:.75rem">
                     <div style="display:flex;align-items:center;gap:1rem;padding:1rem;background:var(--bg-raised);border-radius:var(--radius-lg);border:1px solid var(--border)">
-                        <span style="font-size:2.5rem">${icons[d.type] || '📎'}</span>
+                        <span style="font-size:2.5rem">${iconsHtml[d.type] || iconsHtml.file}</span>
                         <div>
                             <div style="font-weight:600;font-size:1rem">${d.title}</div>
                             <div style="font-size:.8rem;color:var(--text-muted)">${d.type?.toUpperCase() || ''}${d.file_size ? ' · ' + (d.file_size/1024).toFixed(0) + ' КБ' : ''}${d.duration_seconds ? ' · ' + Math.round(d.duration_seconds/60) + ' хв' : ''}</div>

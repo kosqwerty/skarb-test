@@ -580,22 +580,22 @@ const API = {
             const { count, error } = await supabase.from('notifications')
                 .select('id', { count: 'exact', head: true })
                 .eq('user_id', AppState.user.id)
-                .is('read_at', null);
+                .eq('is_read', false);
             if (error) return 0;
             return count || 0;
         },
 
         async markRead(id) {
             await supabase.from('notifications')
-                .update({ read_at: new Date().toISOString() })
+                .update({ is_read: true })
                 .eq('id', id).eq('user_id', AppState.user.id);
         },
 
         async markAllRead() {
             await supabase.from('notifications')
-                .update({ read_at: new Date().toISOString() })
+                .update({ is_read: true })
                 .eq('user_id', AppState.user.id)
-                .is('read_at', null);
+                .eq('is_read', false);
         }
     },
 

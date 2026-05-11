@@ -204,6 +204,18 @@ const SchedulerPage = {
             <p class="planner-hub-sub">Оберіть розділ</p>
         </div>
     </div>
+    ${HelpTip.render('scheduler', {
+        icon: 'fa-calendar-days',
+        title: 'Як користуватись розділом «Планування»',
+        items: [
+            { icon: 'fa-calendar-week', color: '#6366f1', text: 'Графік роботи ломбарду — перегляд та редагування змін співробітників по локаціях (для менеджерів та адміністраторів).' },
+            { icon: 'fa-user-clock', color: '#10b981', text: 'Мій графік — ваш особистий розклад змін на поточний місяць.' },
+            { icon: 'fa-calendar-plus', color: '#f59e0b', text: 'Мій календар — особисті події та нагадування, які видно тільки вам.' },
+            { icon: 'fa-bell', color: '#8b5cf6', text: 'Планові сповіщення — надсилання повідомлень команді за розкладом.' },
+            { icon: 'fa-share-nodes', text: 'Спільні календарі — перегляд календарів колег, якщо вони надали вам доступ.' },
+        ]
+    })}
+
     <div class="planner-hub-cards">
         ${isManager ? `
         <button class="planner-hub-card" onclick="Router.go('schedule-graph')">

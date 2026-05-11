@@ -158,6 +158,17 @@ const NotificationsPage = {
         </div>
     </div>
 
+    ${HelpTip.render('notifications', {
+        icon: 'fa-bell',
+        title: 'Як користуватись Сповіщеннями',
+        items: [
+            { icon: 'fa-circle-dot', color: '#6366f1', text: 'Непрочитані сповіщення виділені синьою точкою. Натисніть на сповіщення, щоб позначити як прочитане.' },
+            { icon: 'fa-check-double', color: '#10b981', text: 'Кнопка «Всі прочитані» миттєво знімає значок непрочитаних на дашборді.' },
+            { icon: 'fa-filter', text: 'Фільтруйте за типом: Загальне, ЗОЛ (золотарський відділ), ТЕХ (технічний), Системні.' },
+            { icon: 'fa-trash', color: '#ef4444', text: 'Очистити — видаляє всі сповіщення. Дію не можна скасувати.' },
+        ]
+    })}
+
     <div class="ntf-filters" id="ntf-filters">
         ${['all','general','gold','tech','system'].map(tp => `
             <button class="ntf-filter-btn${tp==='all'?' active':''}" data-type="${tp}"

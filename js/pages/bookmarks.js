@@ -155,6 +155,17 @@ const BookmarksPage = {
         ${this._filterChips(all)}
     </div>
 
+    ${HelpTip.render('bookmarks', {
+        icon: 'fa-star',
+        title: 'Як користуватись Закладками',
+        items: [
+            { icon: 'fa-star', color: '#f59e0b', text: 'Тут зберігаються матеріали, які ви позначили зірочкою в Базі знань або на сторінці уроку.' },
+            { icon: 'fa-filter', color: '#6366f1', text: 'Фільтруйте закладки за типом (PDF, відео, посилання тощо) кнопками-чіпами вище.' },
+            { icon: 'fa-hand-pointer', text: 'Натисніть на картку, щоб одразу відкрити матеріал.' },
+            { icon: 'fa-trash', color: '#ef4444', text: 'Щоб видалити закладку — натисніть іконку ⭐ ще раз на сторінці матеріалу.' },
+        ]
+    })}
+
     <div class="bm-grid" id="bm-grid">
         ${this._gridHtml(all)}
     </div>

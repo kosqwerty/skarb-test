@@ -69,6 +69,17 @@ const ContactsPage = {
         </div>
     </div>
 
+    ${HelpTip.render('contacts', {
+        icon: 'fa-address-book',
+        title: 'Як користуватись розділом «Контакти»',
+        items: [
+            { icon: 'fa-magnifying-glass', text: 'Шукайте співробітників за іменем, посадою, містом або телефоном через рядок пошуку.' },
+            { icon: 'fa-phone', color: '#10b981', text: 'Натисніть на номер телефону, щоб одразу зателефонувати (на мобільному пристрої).' },
+            { icon: 'fa-cake-candles', color: '#f59e0b', text: 'Натисніть 🎂 на картці співробітника, щоб додати нагадування про день народження.' },
+            { icon: 'fa-table-cells', text: 'Переключайтесь між виглядом карток та таблицею кнопками у верхньому правому куті.' },
+        ]
+    })}
+
     <div class="ct-grid" id="ct-grid">
         ${this._cardsHtml(this._users)}
     </div>

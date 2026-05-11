@@ -2868,3 +2868,13 @@ select {
 .drag-over-top    { border-top: 2px solid var(--primary); }
 .drag-over-bottom { border-bottom: 2px solid var(--primary); }
 .btn .fa-angle-left { position:relative; top:1.5px; }
+
+/* ── HelpTip ────────────────────────────────────────────────────── */
+.helptip{border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--bg-raised);margin-bottom:1.25rem;overflow:hidden}
+.helptip-sum{display:flex;align-items:center;gap:.6rem;padding:.65rem 1rem;cursor:pointer;list-style:none;user-select:none;font-size:.8rem;font-weight:600;color:var(--text-primary)}
+.helptip-sum::-webkit-details-marker{display:none}
+.helptip-sum:hover{background:var(--bg-surface)}
+.helptip-arr{margin-left:auto;font-size:.65rem;color:var(--text-muted);transition:transform .2s}
+details.helptip[open] .helptip-arr{transform:rotate(180deg)}
+.helptip-body{padding:.6rem 1rem .75rem;display:flex;flex-direction:column;gap:.45rem;border-top:1px solid var(--border)}
+.helptip-row{display:flex;align-items:flex-start;gap:.6rem;font-size:.8rem;color:var(--text-secondary);line-height:1.45}

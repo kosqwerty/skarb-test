@@ -92,6 +92,17 @@ const ResourcesPage = {
                             ${AppState.isOwner() ? '<button class="btn btn-ghost btn-sm" onclick="ResourcesPage._openTrash()" title="Кошик"><i class="fa-solid fa-trash"></i> Кошик</button>' : ''}
                     </div>
                 </div>
+                ${HelpTip.render('docs', {
+                    icon: 'fa-file-lines',
+                    title: 'Як користуватись розділом «Документи»',
+                    items: [
+                        { icon: 'fa-eye', text: 'Перегляньте документ — натисніть на нього, щоб відкрити та ознайомитись.' },
+                        { icon: 'fa-check-circle', color: '#10b981', text: 'Після прочитання підтвердіть ознайомлення кнопкою «Ознайомився». Це знімає сповіщення на дашборді.' },
+                        { icon: 'fa-circle-exclamation', color: '#ef4444', text: 'Документи з червоним індикатором — нові або оновлені, потребують підтвердження.' },
+                        { icon: 'fa-magnifying-glass', text: 'Використовуйте пошук та фільтр категорій для швидкого знаходження потрібного документа.' },
+                        { icon: 'fa-chart-bar', color: '#6366f1', text: 'Вкладка «Статус» (для менеджерів) — показує хто з команди ознайомився з кожним документом.' },
+                    ]
+                })}
                 ${isManager ? `
                 <div style="display:flex;gap:.5rem;margin-bottom:1.25rem;border-bottom:1px solid var(--border);padding-bottom:.75rem">
                     <button id="docs-tab-list" class="btn btn-primary btn-sm" onclick="ResourcesPage.switchTab('list',this)">📋 Документи</button>
@@ -239,6 +250,18 @@ const ResourcesPage = {
         ${AppState.isAdmin() ? '<div id="kb-db-size" style="margin-left:auto;align-self:center"></div>' : ''}
     </div>
 </div>
+
+${HelpTip.render('kb', {
+    icon: 'fa-book-open',
+    title: 'Як користуватись Базою знань',
+    items: [
+        { icon: 'fa-magnifying-glass', text: 'Шукайте матеріали за назвою через рядок пошуку або фільтруйте за типом (PDF, відео, посилання, SCORM) та категорією.' },
+        { icon: 'fa-hand-pointer', color: '#6366f1', text: 'Натисніть на картку, щоб відкрити матеріал. Для PDF та відео — перегляд прямо в браузері.' },
+        { icon: 'fa-star', color: '#f59e0b', text: 'Додавайте матеріали в закладки (⭐), щоб швидко знаходити їх у розділі «Закладки».' },
+        { icon: 'fa-table-list', text: 'Перемикайте вигляд між сіткою та списком кнопками у правому кутку панелі інструментів.' },
+        { icon: 'fa-graduation-cap', color: '#10b981', text: 'Матеріали з позначкою «Курс» прив\'язані до конкретного курсу — прогрес враховується автоматично.' },
+    ]
+})}
 
 <div class="kb-search-bar">
     <div class="kb-search-wrap">

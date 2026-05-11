@@ -1185,3 +1185,29 @@ const ImpersonationBanner = {
         document.body.style.paddingBottom = '';
     }
 };
+
+// ── HelpTip — collapsible page manual ────────────────────────────────────────
+const HelpTip = {
+    render(key, { icon = 'fa-circle-info', title, items = [] }) {
+        const stored = localStorage.getItem(`helptip_${key}`);
+        const open   = stored === null ? false : stored === '1';
+        return `
+        <details class="helptip" ${open ? 'open' : ''} onToggle="HelpTip._save('${key}',this.open)">
+            <summary class="helptip-sum">
+                <i class="fa-solid ${icon}" style="color:var(--primary)"></i>
+                <span>${title}</span>
+                <i class="fa-solid fa-chevron-down helptip-arr"></i>
+            </summary>
+            <div class="helptip-body">
+                ${items.map(it => `
+                <div class="helptip-row">
+                    <i class="fa-solid ${it.icon}" style="color:${it.color||'var(--primary)'};width:1.1rem;text-align:center;flex-shrink:0"></i>
+                    <span>${it.text}</span>
+                </div>`).join('')}
+            </div>
+        </details>`;
+    },
+    _save(key, open) {
+        localStorage.setItem(`helptip_${key}`, open ? '1' : '0');
+    }
+};

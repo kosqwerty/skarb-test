@@ -31,7 +31,26 @@ Hash-based: `#/courses/123` → route `courses/:id`. Defined in `js/app.js` via 
 
 ### Role system
 
-Six roles checked via `AppState`: `owner > admin > smm > teacher > manager > user`. Key helpers: `AppState.isAdmin()`, `AppState.isStaff()`, `AppState.canSchedule()`. Pages redirect to dashboard if the user lacks the required role.
+Six roles checked via `AppState`: `owner > admin > smm > teacher > manager > user`. Key helpers:
+
+| Helper | Roles included |
+|--------|---------------|
+| `AppState.isOwner()` | owner |
+| `AppState.isAdmin()` | admin, owner |
+| `AppState.isStaff()` | owner, admin, smm, teacher |
+| `AppState.canSchedule()` | owner, admin, manager |
+| `AppState.isManager()` | manager only |
+
+Default redirect after login: staff → `dashboard`, user/manager → `knowledge-base`. Pages redirect to `dashboard` (or `knowledge-base`) if the user lacks the required role.
+
+### Impersonation
+
+Admins can preview the app as another user. Key methods on `AppState`:
+- `AppState.impersonate(targetProfile)` — saves real profile to `_realProfile`, swaps `AppState.profile`, re-renders sidebar and navigation
+- `AppState.stopImpersonating()` — restores real profile
+- `AppState.isImpersonating()` — returns `true` when impersonation is active
+
+`ImpersonationBanner` (global, defined in `js/app.js`) shows/hides the banner UI. When writing permission checks, use `AppState.profile.role` — it already reflects the impersonated role.
 
 ### Global objects (all window-scoped)
 
@@ -66,22 +85,219 @@ const SomePage = {
 
 ### API layer (`js/api.js`)
 
-All Supabase calls live here, grouped by domain: `API.profiles`, `API.courses`, `API.lessons`, `API.tests`, `API.questions`, `API.testImages`, `API.notifications`, `API.attempts`, etc. Always throws on error so callers can try/catch.
+All Supabase calls live here, grouped by domain. Always throws on error so callers can try/catch.
+
+Full namespace list: `API.profiles`, `API.courses`, `API.enrollments`, `API.lessons`, `API.resources`, `API.scorm`, `API.tests`, `API.questions`, `API.testImages`, `API.notifications`, `API.attempts`, `API.progress`, `API.pages`, `API.pageAttachments`, `API.news`, `API.directories`, `API.dovirenosti`, `API.documentDownloads`, `API.birthdays`, `API.accessGroups`, `API.analytics`, `API.system`.
 
 ### Database migrations
 
-`sql/migration_v*.sql` — incremental, numbered. The current schema is the result of applying all migrations in order. When adding a new column/table, create `migration_v{N+1}.sql` and run it in the Supabase SQL Editor. Latest is v33 (`answers.image_align`).
+`sql/migration_v*.sql` — incremental, numbered. The current schema is the result of applying all migrations in order. When adding a new column/table, create `migration_v{N+1}.sql` and run it in the Supabase SQL Editor. Latest is v41 (`tests.allow_skip`).
 
 ## Key files
 
 | File | What it does |
 |------|-------------|
-| `js/config.js` | Supabase credentials, `AppState`, `APP_CONFIG` (buckets, roles) |
-| `js/app.js` | Route definitions, sidebar rendering, post-login bootstrap |
+| `js/config.js` | Supabase credentials, `AppState`, `APP_CONFIG` (buckets, roles, `pageSize: 12`) |
+| `js/app.js` | Route definitions, sidebar rendering, post-login bootstrap, `ImpersonationBanner` |
 | `js/api.js` | All DB/storage access — add new methods here, never call `supabase` from page files |
 | `js/pages/tests-manager.js` | Largest page (~2300 lines): test builder, question editor (Quill), auto-assign, results |
 | `js/pages/admin.js` | Multi-tab admin panel: users, courses, tests, logs |
+| `js/pages/scheduler.js` | Schedule management (owner/admin/manager only — `canSchedule()`) |
+| `js/pages/schedule-graph.js` | Visual schedule graph |
+| `js/pages/access-groups.js` | Access group management (city/position/department/label filters) |
+| `js/pages/label-access.js` | Label-based content access rules |
+| `js/pages/expert-path.js` | Expert learning paths |
+| `js/pages/analytics.js` | Usage analytics dashboard |
 | `css/main.css` | Single stylesheet, CSS variables for light/dark theming (`--primary`, `--bg-surface`, `--border`, etc.) |
+
+### Pagination
+
+`APP_CONFIG.pageSize = 12`. Use this constant (not a hardcoded number) when fetching paginated lists.
+
+## CDN dependencies (available globally)
+
+| Global | Library | Version |
+|--------|---------|---------|
+| `supabase` | Supabase JS | 2.x |
+| `Quill` | Quill editor | 1.3.7 |
+| `Chart` | Chart.js | 4.4.0 |
+| `XLSX` | SheetJS | 0.20.1 |
+| `JSZip` | JSZip | 3.10.1 |
+| `FontAwesome` | FA 6 (CSS) | — |
+
+No npm, no build step — all loaded from CDN in `index.html`.
+
+## Database schema (key tables)
+
+All PKs are UUID. All tables have `created_at TIMESTAMPTZ DEFAULT NOW()`. Tables with mutable data also have `updated_at` maintained by trigger. snake_case everywhere.
+
+| Table | Key columns | Notes |
+|-------|-------------|-------|
+| `profiles` | `id` (= auth.uid), `email`, `full_name`, `role`, `avatar_url`, `is_active`, `is_blocked`, `job_position`, `city`, `subdivision` | Extends `auth.users`; auto-created by trigger on signup |
+| `courses` | `title`, `teacher_id`, `category`, `level`, `is_published`, `is_featured`, `tags TEXT[]` | |
+| `enrollments` | `user_id`, `course_id`, `progress_percentage`, `completed_at` | UNIQUE(user_id, course_id) |
+| `lessons` | `course_id`, `title`, `order_index`, `is_published`, `is_free_preview` | |
+| `resources` | `lesson_id`, `course_id`, `title`, `type` (pdf/video/link/scorm/file/image/document), `storage_path`, `url`, `requires_ack`, `deadline_days`, `is_deleted` | Used for both KB and documents |
+| `tests` | `course_id`, `lesson_id`, `title`, `passing_score`, `max_attempts`, `time_limit_minutes`, `randomize_questions`, `is_published`, `allow_skip` | |
+| `questions` | `test_id`, `question_text`, `question_type` (single/multiple/true_false), `points`, `order_index` | |
+| `answers` | `question_id`, `answer_text`, `is_correct`, `order_index`, `image_url`, `image_align` | `answer_text` stores Quill HTML |
+| `test_attempts` | `user_id`, `test_id`, `attempt_number`, `score`, `percentage`, `passed`, `completed_at` | |
+| `news` | `title`, `content`, `excerpt`, `thumbnail_url`, `author_id`, `is_published`, `is_pinned` | |
+| `notifications` | `user_id`, `title`, `message`, `type`, `is_read`, `link` | |
+| `pages` | `title`, `slug`, `content` (HTML), `is_published`, `access_type` | CMS pages for collections |
+| `schedule_events` | `title`, `start_time`, `end_time`, `location_id`, `created_by` | |
+| `access_groups` | `name`, `cities`, `positions`, `departments`, `labels` | Filter groups for content access |
+| `dovirenosti` | document approval/acknowledgement records | |
+
+> `schema.sql` is the baseline. Migrations `v2–v41` add columns — check the latest migration for the most current column list on any table.
+
+## All routes
+
+| Route | Page module | Notes |
+|-------|-------------|-------|
+| `dashboard` | `DashboardPage` | |
+| `knowledge-base` | `ResourcesPage` | `view: 'kb'`; default for user/manager |
+| `documents` | `ResourcesPage` | `view: 'docs'` |
+| `resource/:id` | `ResourceViewPage` | |
+| `courses` | `CoursesPage` | |
+| `courses/:id` | `CourseViewPage` | |
+| `lessons/:id` | `LessonViewPage` | |
+| `tests/:id` | `TestsPage` | |
+| `my-tests` | `MyTestsPage` | |
+| `tests-manager` | — | Redirects → `admin?tab=tests` |
+| `analytics` | `AnalyticsPage` | Has `destroy()` cleanup |
+| `admin` | `AdminPage` | Accepts `?tab=` param |
+| `collections` | `CollectionsPage` | |
+| `collections/:id` | `CollectionsPage.initView` | |
+| `news` / `news/:id` | `NewsPage` | |
+| `scheduler` | `SchedulerPage` | canSchedule() roles |
+| `schedule-graph` | `ScheduleGraphPage` / `ScheduleGraphEmployee` | `?view=employee` switches module |
+| `schedule-view` | `ScheduleViewPage` | |
+| `my-calendar` | `MyCalendarPage` | |
+| `notifications` | `NotificationsPage` | Has `destroy()` cleanup |
+| `contacts` | `ContactsPage` | |
+| `bookmarks` | `BookmarksPage` | |
+| `label-access` | `LabelAccessPage` | owner/admin only |
+| `expert-path` | `ExpertPathPage` | |
+| `profile` | inline in `App` | |
+| `results` | inline in `App` | |
+
+## Utility API reference
+
+### Toast
+```js
+Toast.success(title, message?)
+Toast.error(title, message?)
+Toast.warning(title, message?)
+Toast.info(title, message?)
+```
+
+### Modal
+```js
+Modal.open({ title, body, footer, size, onClose })
+// size: 'sm' | 'lg' | 'xl' | '' (default)
+// body/footer accept raw HTML
+
+Modal.close()
+
+const confirmed = await Modal.confirm({ title?, message, confirmText?, danger? })
+// Returns Promise<boolean>. danger:true → red confirm button.
+```
+
+### Loader
+```js
+Loader.show()   // ref-counted
+Loader.hide()   // decrement; hides when count reaches 0
+```
+
+### Fmt
+```js
+Fmt.date(d)              // '12 травня 2026'
+Fmt.dateShort(d)         // '12.05.26'
+Fmt.time(d)              // '14:30'
+Fmt.datetime(d)          // '12.05.26 14:30'
+Fmt.duration(minutes)    // '2год 15хв'
+Fmt.fileSize(bytes)      // '1.4 МБ'
+Fmt.pct(n)               // '73%'
+Fmt.num(n)               // localized number
+Fmt.role(r)              // 'Адміністратор'
+Fmt.roleBadge(r)         // HTML <span class="badge ...">
+Fmt.level(l)             // 'Початковий'
+Fmt.initials(name)       // 'ІП'
+Fmt.slug(str)            // url-safe slug
+Fmt.esc(str)             // HTML-escape for innerHTML
+Fmt.safeUrl(url)         // blocks javascript:/data: schemes
+Fmt.parseDatePaste(e, input)  // handles DD.MM.YYYY paste into date input
+Fmt.completionStatus(s)  // SCORM completion label
+Fmt.successStatus(s)     // SCORM success label
+```
+
+### Dom
+```js
+Dom.val(id)              // getElementById(id).value
+Dom.setVal(id, val)      // getElementById(id).value = val
+Dom.qs(sel, parent?)     // querySelector
+Dom.qsa(sel, parent?)    // querySelectorAll → Array
+Dom.on(el, event, fn)    // addEventListener helper
+Dom.createDropZone(container, { accept, label, hint })
+```
+
+### Page cleanup pattern
+
+Pages with timers or subscriptions implement an optional `destroy()` method. The router calls it on navigation away:
+
+```js
+// In app.js route definition:
+'my-route': async ({ container }) => {
+    await MyPage.init(container);
+    return () => MyPage.destroy?.();
+}
+
+// In the page module:
+const MyPage = {
+    _timer: null,
+    async init(container) { this._timer = setInterval(...); },
+    destroy() { clearInterval(this._timer); }
+};
+```
+
+Currently only `analytics` and `notifications` routes use this pattern.
+
+## Adding a new page
+
+1. Create `js/pages/my-page.js` with the page module pattern (see above)
+2. Add `<script src="js/pages/my-page.js"></script>` in `index.html` **before** `<script src="js/app.js"></script>` (last script)
+3. Add a route in `js/app.js` inside `Router.define({...})`
+4. Add a sidebar entry in `UI._getNavItems(role)` in **`js/utils.js`** (not app.js) for the appropriate role(s)
+
+## Sidebar navigation
+
+`UI.renderNavigation(role)` and `UI._getNavItems(role)` live in `js/utils.js`, not `js/app.js`.
+
+Nav items visible per role:
+
+| Role | Sections |
+|------|---------|
+| owner / admin | Навчання, Управління (Аналітика + Планування + Адміністрування + Обмеження доступу), Особисте |
+| manager | Навчання, Управління (Планування only), Особисте |
+| smm | Навчання, Управління (Аналітика + **Контент** + Планування), Особисте |
+| teacher | Навчання, Управління (Аналітика + Планування), Особисте |
+| user | Навчання, Особисте (+ Планування hidden) |
+
+Note: `smm` sees the `admin` route labelled **"Контент"** — same page, different label.
+
+## Storage URLs
+
+- **Public buckets** (`course-thumbnails`, `news-images`, `avatars`): use `APP_CONFIG.storagePublicUrl + '/' + bucket + '/' + path`
+- **Private buckets** (`lesson-resources`, `scorm-packages`, `page-files`, `test-images`): use `API.*` methods that call `createSignedUrl()` — URLs expire in 1 hour (`APP_CONFIG.signedUrlExpiry = 3600`). Never cache signed URLs between user sessions.
+
+## RLS reminder
+
+Every new table needs RLS enabled + at least one policy or all queries will be silently blocked. Include in every migration:
+```sql
+ALTER TABLE my_table ENABLE ROW LEVEL SECURITY;
+-- then add policies
+```
 
 ## Tests-manager specifics (most complex module)
 

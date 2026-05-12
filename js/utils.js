@@ -1188,7 +1188,21 @@ const ImpersonationBanner = {
 
 // ── HelpTip — collapsible page manual ────────────────────────────────────────
 const HelpTip = {
+    _roleMatch(roles) {
+        if (!roles) return true;
+        const r = AppState.profile?.role;
+        return roles.some(rl => {
+            if (rl === 'admin')   return AppState.isAdmin();
+            if (rl === 'staff')   return AppState.isStaff();
+            if (rl === 'manager') return AppState.isManager() || AppState.isAdmin();
+            if (rl === 'owner')   return AppState.isOwner();
+            return r === rl;
+        });
+    },
+
     render(key, { icon = 'fa-circle-info', title, gradient = '135deg,#6366f1,#8b5cf6', cols, items = [] }) {
+        const visible = items.filter(it => this._roleMatch(it.roles));
+        if (!visible.length) return '';
         const stored = localStorage.getItem(`helptip_${key}`);
         const open   = stored === null ? true : stored === '1';
         return `
@@ -1208,7 +1222,7 @@ const HelpTip = {
             </div>
             <div class="ht-body">
                 <div class="ht-items" style="${cols ? `grid-template-columns:repeat(${cols},1fr)` : ''}">
-                    ${items.map((it, i) => `
+                    ${visible.map((it, i) => `
                     <div class="ht-item" style="animation-delay:${i * 0.06}s">
                         <div class="ht-item-ico" style="background:${it.color || '#6366f1'}22;color:${it.color || '#6366f1'}">
                             <i class="fa-solid ${it.icon}"></i>

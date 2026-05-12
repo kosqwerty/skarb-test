@@ -168,7 +168,7 @@ const ContactsPage = {
         const managerName = u.manager_id ? (this._nameMap[u.manager_id] || null) : null;
 
         return `
-<div class="ct-card" data-uid="${u.id}">
+<div class="ct-card" data-uid="${u.id}" style="cursor:pointer" onclick="ContactsPage._openProfile('${u.id}')">
     <div class="ct-card-head">
         <div class="ct-avatar">
             ${u.avatar_url ? `<img src="${u.avatar_url}" alt="">` : Fmt.initials(u.full_name)}
@@ -191,7 +191,7 @@ const ContactsPage = {
             <span>${bdStr}${daysUntil <= 7 ? `<span class="ct-bd-soon">через ${daysUntil} дн.</span>` : ''}</span>
             <button class="ct-bd-btn${reminder ? ' active' : ''}"
                 title="${reminder ? `Нагадування за ${reminder.days_before} дн.` : 'Додати нагадування'}"
-                onclick="ContactsPage._openBdModal('${u.id}',${JSON.stringify(u.full_name||'').replace(/"/g,'&quot;')},'${u.birth_date}')">
+                onclick="event.stopPropagation();ContactsPage._openBdModal('${u.id}',${JSON.stringify(u.full_name||'').replace(/"/g,'&quot;')},'${u.birth_date}')">
                 🔔
             </button>
         </div>` : ''}
@@ -225,6 +225,89 @@ const ContactsPage = {
             grid.innerHTML = this._cardsHtml(filtered);
             count.textContent = `${filtered.length} із ${this._users.length} співробітників`;
         }
+    },
+
+    // ── Profile modal ────────────────────────────────────────────
+
+    _openProfile(uid) {
+        const u = this._users.find(x => x.id === uid);
+        if (!u) return;
+
+        document.getElementById('ct-profile-modal')?.remove();
+
+        const reminder   = this._reminders[uid];
+        const managerName = u.manager_id ? (this._nameMap[u.manager_id] || null) : null;
+        const loc = [u.city, u.subdivision].filter(Boolean).join(' · ');
+
+        let bdStr = '', daysUntil = null;
+        if (u.birth_date) {
+            const bd = new Date(u.birth_date);
+            const today = new Date(); today.setHours(0,0,0,0);
+            let upcoming = new Date(today.getFullYear(), bd.getMonth(), bd.getDate());
+            if (upcoming <= today) upcoming.setFullYear(today.getFullYear() + 1);
+            daysUntil = Math.round((upcoming - today) / 86400000);
+            bdStr = upcoming.toLocaleDateString('uk-UA', { day:'2-digit', month:'long' });
+        }
+
+        const row = (icon, label, val) => val
+            ? `<div class="ctp-row"><div class="ctp-row-ico">${icon}</div><div><div class="ctp-row-label">${label}</div><div class="ctp-row-val">${val}</div></div></div>`
+            : '';
+
+        const el = document.createElement('div');
+        el.id = 'ct-profile-modal';
+        el.className = 'mc-overlay';
+        el.innerHTML = `
+<div class="ctp-modal">
+    <button class="mc-mclose" onclick="document.getElementById('ct-profile-modal').remove()" style="position:absolute;top:1rem;right:1rem">✕</button>
+
+    <div class="ctp-hero">
+        <div class="ctp-avatar">
+            ${u.avatar_url ? `<img src="${u.avatar_url}" alt="">` : `<span>${Fmt.initials(u.full_name)}</span>`}
+        </div>
+        <div class="ctp-hero-info">
+            <div class="ctp-name">${Fmt.esc(u.full_name || '—')}</div>
+            <div style="margin-top:.35rem">${Fmt.roleBadge(u.role)}</div>
+            ${u.job_position ? `<div class="ctp-position">${Fmt.esc(u.job_position)}</div>` : ''}
+        </div>
+    </div>
+
+    <div class="ctp-body">
+        ${u.phone    ? `${row('📞', 'Телефон', `<a href="tel:${u.phone}" onclick="event.stopPropagation()" style="color:var(--primary);text-decoration:none">${Fmt.esc(u.phone)}</a>`)}` : ''}
+        ${row('🏙️', 'Локація', Fmt.esc(loc))}
+        ${row('👤', 'Керівник', managerName ? Fmt.esc(managerName) : null)}
+        ${row('📅', 'В компанії з', u.hired_at ? Fmt.date(u.hired_at) : null)}
+        ${row('🗓️', 'На посаді з', u.position_since ? Fmt.date(u.position_since) : null)}
+        ${u.birth_date ? `${row('🎂', 'День народження', `${bdStr}${daysUntil <= 30 ? `<span class="ct-bd-soon" style="margin-left:.5rem">через ${daysUntil} дн.</span>` : ''}`)}` : ''}
+        ${AppState.isStaff() && u.email ? `${row('✉️', 'Email', `<a href="mailto:${u.email}" onclick="event.stopPropagation()" style="color:var(--primary);text-decoration:none">${Fmt.esc(u.email)}</a>`)}` : ''}
+    </div>
+
+    ${u.birth_date ? `
+    <div class="ctp-footer">
+        <button class="ct-bd-btn${reminder ? ' active' : ''}" style="width:auto;padding:.4rem .9rem;gap:.4rem;font-size:.8rem;display:flex;align-items:center"
+            onclick="event.stopPropagation();ContactsPage._openBdModal('${u.id}',${JSON.stringify(u.full_name||'').replace(/"/g,'&quot;')},'${u.birth_date}')">
+            🔔 ${reminder ? 'Нагадування налаштовано' : 'Додати нагадування про ДН'}
+        </button>
+    </div>` : ''}
+</div>
+
+<style>
+.ctp-modal{position:relative;background:var(--bg-surface);border-radius:var(--radius-xl);width:100%;max-width:420px;overflow:hidden;box-shadow:var(--shadow-lg);animation:fadeSlideUp .25s ease}
+.ctp-hero{padding:2rem 1.5rem 1.25rem;background:linear-gradient(135deg,var(--primary),#8b5cf6);display:flex;align-items:center;gap:1.25rem}
+.ctp-avatar{width:72px;height:72px;border-radius:20px;background:rgba(255,255,255,.2);border:2px solid rgba(255,255,255,.35);display:flex;align-items:center;justify-content:center;font-size:1.6rem;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden}
+.ctp-avatar img{width:100%;height:100%;object-fit:cover}
+.ctp-avatar span{font-size:1.5rem;font-weight:800;color:#fff}
+.ctp-name{font-size:1.15rem;font-weight:800;color:#fff;line-height:1.2}
+.ctp-position{font-size:.8rem;color:rgba(255,255,255,.75);margin-top:.35rem}
+.ctp-body{padding:1rem 1.5rem;display:flex;flex-direction:column;gap:.5rem}
+.ctp-row{display:flex;align-items:flex-start;gap:.85rem;padding:.5rem .6rem;border-radius:var(--radius-md);transition:background .15s}
+.ctp-row:hover{background:var(--bg-raised)}
+.ctp-row-ico{font-size:1.1rem;width:1.5rem;text-align:center;flex-shrink:0;margin-top:.05rem}
+.ctp-row-label{font-size:.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.1rem}
+.ctp-row-val{font-size:.88rem;color:var(--text-primary);font-weight:500}
+.ctp-footer{padding:.75rem 1.5rem 1.25rem;border-top:1px solid var(--border)}
+</style>`;
+        document.body.appendChild(el);
+        el.addEventListener('click', e => { if (e.target === el) el.remove(); });
     },
 
     // ── Birthday reminder modal ──────────────────────────────────

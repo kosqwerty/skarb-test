@@ -134,26 +134,33 @@ const NotificationsPage = {
     },
 
     async _render(container) {
-        const { data: items, error } = await supabase
-            .from('notifications')
-            .select('*, sender:profiles!created_by(full_name, avatar_url)')
-            .eq('user_id', AppState.user.id)
-            .order('created_at', { ascending: false })
-            .limit(100);
+        const [{ data: items, error }] = await Promise.all([
+            supabase
+                .from('notifications')
+                .select('*, sender:profiles!created_by(full_name, avatar_url)')
+                .eq('user_id', AppState.user.id)
+                .order('created_at', { ascending: false })
+                .limit(100),
+            // Автоматично позначаємо всі як прочитані при відкритті сторінки
+            supabase.from('notifications')
+                .update({ is_read: true })
+                .eq('user_id', AppState.user.id)
+                .eq('is_read', false)
+                .then(() => { UI.updateNotificationBadge(0, true); NotificationsPage.stopReminder(); })
+                .catch(() => {}),
+        ]);
 
         if (error) { container.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>${error.message}</h3></div>`; return; }
 
-        const unread = (items || []).filter(n => !n.is_read).length;
-
+        // Всі вже позначені як прочитані вище (паралельний запит)
         container.innerHTML = `
 <div class="ntf-page">
     <div class="ntf-header">
         <div>
             <h1 class="ntf-title">🔔 Мої сповіщення</h1>
-            <p class="ntf-subtitle">${unread ? `<span class="ntf-unread-count">${unread} непрочитаних</span>` : 'Всі прочитано'}</p>
+            <p class="ntf-subtitle">Всі прочитано</p>
         </div>
         <div style="display:flex;gap:8px">
-            ${unread ? `<button class="ntf-btn-outline" onclick="NotificationsPage._markAllRead()">✓ Всі прочитані</button>` : ''}
             <button class="ntf-btn-outline danger" onclick="NotificationsPage._deleteAll()">​<i class="fa-solid fa-trash"></i> Очистити</button>
         </div>
     </div>
@@ -226,8 +233,7 @@ const NotificationsPage = {
         const timeAgo   = this._timeAgo(n.created_at);
         const sender    = n.sender?.full_name || 'Система';
 
-        return `<div class="ntf-item${n.is_read ? '' : ' unread'}" data-id="${n.id}" data-type="${n.type}" onclick="NotificationsPage._markRead('${n.id}', this)">
-            ${!n.is_read ? '<div class="ntf-dot"></div>' : ''}
+        return `<div class="ntf-item" data-id="${n.id}" data-type="${n.type}">
             <div class="ntf-icon ntf-icon-${n.type}">${typeIcon}</div>
             <div class="ntf-body">
                 <div class="ntf-item-title">${n.title}</div>
@@ -240,7 +246,6 @@ const NotificationsPage = {
                 </div>
             </div>
             <div class="ntf-actions" onclick="event.stopPropagation()">
-                ${!n.is_read ? `<button class="ntf-act" title="Позначити прочитаним" onclick="NotificationsPage._markRead('${n.id}', this.closest('.ntf-item'))">✓</button>` : ''}
                 <button class="ntf-act" title="Видалити" onclick="NotificationsPage._deleteOne('${n.id}', this.closest('.ntf-item'))"><i class="fa-solid fa-trash"></i></button>
             </div>
         </div>`;
@@ -256,36 +261,14 @@ const NotificationsPage = {
 
     // ── Actions ──────────────────────────────────────────────────
 
-    async _markRead(id, el) {
-        if (el && !el.classList.contains('unread')) return;
+    async _markRead(id) {
         await supabase.from('notifications').update({ is_read: true }).eq('id', id);
-        if (el) {
-            el.classList.remove('unread');
-            el.querySelector('.ntf-dot')?.remove();
-            el.querySelector('[title="Позначити прочитаним"]')?.remove();
-        }
         UI.updateNotificationBadge(-1);
-    },
-
-    async _markAllRead() {
-        await supabase.from('notifications').update({ is_read: true }).eq('user_id', AppState.user.id).eq('is_read', false);
-        document.querySelectorAll('.ntf-item.unread').forEach(el => {
-            el.classList.remove('unread');
-            el.querySelector('.ntf-dot')?.remove();
-            el.querySelector('[title="Позначити прочитаним"]')?.remove();
-        });
-        document.querySelector('.ntf-unread-count')?.closest('p')
-            ?.replaceWith(Object.assign(document.createElement('p'), { className: 'ntf-subtitle', textContent: 'Всі прочитано' }));
-        document.querySelector('[onclick*="markAllRead"]')?.remove();
-        UI.updateNotificationBadge(0, true);
-        this.stopReminder();
     },
 
     async _deleteOne(id, el) {
         await supabase.from('notifications').delete().eq('id', id);
-        const wasUnread = el?.classList.contains('unread');
         el?.remove();
-        if (wasUnread) UI.updateNotificationBadge(-1);
         if (!document.querySelector('.ntf-item')) {
             document.getElementById('ntf-list').innerHTML = this._emptyHtml();
         }

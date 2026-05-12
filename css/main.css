@@ -2875,7 +2875,7 @@ select {
 @keyframes ht-ack{0%{transform:scale(1)}40%{transform:scale(1.06)}100%{transform:scale(1)}}
 @keyframes ht-check-pop{0%{transform:scale(0) rotate(-20deg);opacity:0}70%{transform:scale(1.2) rotate(5deg);opacity:1}100%{transform:scale(1) rotate(0);opacity:1}}
 
-.ht-wrap{border-radius:var(--radius-xl);overflow:hidden;margin-bottom:1.5rem;box-shadow:0 4px 28px rgba(99,102,241,.2);transition:box-shadow .3s}
+.ht-wrap{border-radius:var(--radius-xl);overflow:hidden;margin-bottom:1.5rem;width:fit-content;box-shadow:0 4px 28px rgba(99,102,241,.2);transition:box-shadow .3s}
 .ht-wrap:hover{box-shadow:0 8px 36px rgba(99,102,241,.32)}
 
 .ht-banner{position:relative;display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1rem 1.25rem;overflow:hidden}

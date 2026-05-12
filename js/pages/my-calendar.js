@@ -431,106 +431,218 @@ ${this._styles()}`;
     // ── Login reminder modal ──────────────────────────────────────
 
     async showTodayReminder() {
-        const today = new Date().toISOString().slice(0, 10);
-        const ntfKey = `mc_ntf_${AppState.user.id}_${today}`;
-
-        const { data } = await supabase
-            .from('personal_cal_events')
-            .select('*')
-            .eq('user_id', AppState.user.id)
-            .eq('date', today)
-            .neq('is_done', true)
-            .order('time', { nullsFirst: true });
-
-        if (!data?.length) return;
-
-        // Show only if event count increased since last dismissal
-        const seenCount = parseInt(sessionStorage.getItem(ntfKey) || '0');
-        if (data.length <= seenCount) return;
-
-        // Create DB notifications only for new events (not yet notified)
-        const withTime = data.filter(e => e.time);
-        const newWithTime = withTime.slice(seenCount);
-        if (newWithTime.length) {
-            try {
-                await supabase.from('notifications').insert(
-                    newWithTime.map(e => ({
-                        user_id:    AppState.user.id,
-                        title:      `📅 Сьогодні: ${e.title}`,
-                        message:    `о ${e.time.slice(0,5)}${e.notes ? ' — ' + e.notes : ''}`,
-                        type:       'general',
-                        created_by: AppState.user.id,
-                    }))
-                );
-            } catch (_) {}
-            UI.loadNotificationCount?.();
-        }
-
-        // Play soft calendar chime
-        try {
-            const ctx = new (window.AudioContext || window.webkitAudioContext)();
-            const notes = [
-                { freq: 440.00, start: 0.00, dur: 0.5 },
-                { freq: 554.37, start: 0.20, dur: 0.5 },
-                { freq: 659.25, start: 0.40, dur: 0.7 },
-            ];
-            notes.forEach(({ freq, start, dur }) => {
-                const osc  = ctx.createOscillator();
-                const gain = ctx.createGain();
-                osc.connect(gain);
-                gain.connect(ctx.destination);
-                osc.type = 'sine';
-                osc.frequency.value = freq;
-                const t = ctx.currentTime + start;
-                gain.gain.setValueAtTime(0, t);
-                gain.gain.linearRampToValueAtTime(0.18, t + 0.05);
-                gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
-                osc.start(t);
-                osc.stop(t + dur);
-            });
-        } catch (_) {}
-
-        // Inject styles if calendar page hasn't been opened yet
-        if (!document.getElementById('mc-styles')) {
-            document.head.insertAdjacentHTML('beforeend', MyCalendarPage._styles().replace('<style>', '<style id="mc-styles">'));
-        }
-
-        const dismiss = () => {
-            sessionStorage.setItem(ntfKey, String(data.length));
-            document.getElementById('mc-reminder-modal')?.remove();
+        const pad = n => String(n).padStart(2, '0');
+        const dateStr = offset => {
+            const d = new Date(); d.setDate(d.getDate() + offset);
+            return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
         };
+        const today = dateStr(0);
+
+        // Mutex: ставимо sessionStorage одразу, щоб повторний виклик в рамках сесії вийшов відразу
+        const sessionKey = `mc_ntf_${AppState.user.id}_${today}`;
+        if (sessionStorage.getItem(sessionKey)) return;
+        sessionStorage.setItem(sessionKey, '1');
+
+        // Кросс-девайс: перевіряємо чи вже показували модалку сьогодні на іншому пристрої
+        const modalKey   = `cal_reminder_shown_${today}`;
+        const modalShown = AppState.profile?.ui_prefs?.[modalKey] === true;
+
+        // Диапазон: сегодня + 3 дня
+        const rangeDates = [0, 1, 2, 3].map(dateStr);
+
+        // Текущее время в формате HH:MM для сравнения
+        const now = new Date();
+        const nowTime = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+
+        // Запрашиваем: обычные события в диапазоне + все повторяющиеся
+        const [{ data: exact }, { data: recurring }] = await Promise.all([
+            supabase.from('personal_cal_events').select('*')
+                .eq('user_id', AppState.user.id)
+                .eq('repeat_type', 'none')
+                .gte('date', rangeDates[0])
+                .lte('date', rangeDates[rangeDates.length - 1])
+                .neq('is_done', true)
+                .order('date').order('time', { nullsFirst: true }),
+            supabase.from('personal_cal_events').select('*')
+                .eq('user_id', AppState.user.id)
+                .neq('repeat_type', 'none')
+                .lte('date', rangeDates[rangeDates.length - 1])
+                .neq('is_done', true),
+        ]);
+
+        // Добавляем виртуальные вхождения повторяющихся событий
+        const allEvents = [...(exact || [])];
+        const exactDateSet = new Set(allEvents.map(e => e.date + e.id));
+        for (const re of (recurring || [])) {
+            const origin = new Date(re.date + 'T00:00:00');
+            for (const ds of rangeDates) {
+                if (exactDateSet.has(ds + re.id)) continue;
+                const cand = new Date(ds + 'T00:00:00');
+                const matches = re.repeat_type === 'weekly'
+                    ? cand.getDay() === origin.getDay()
+                    : re.repeat_type === 'monthly'
+                        ? cand.getDate() === origin.getDate()
+                        : false;
+                if (matches) allEvents.push({ ...re, date: ds, _virtual: true });
+            }
+        }
+
+        allEvents.sort((a, b) =>
+            a.date !== b.date ? (a.date < b.date ? -1 : 1) : (a.time || '') < (b.time || '') ? -1 : 1
+        );
+
+        // Сегодняшние события: без времени (весь день) или время ещё не прошло
+        const todayEvents    = allEvents.filter(e => e.date === today && (!e.time || e.time.slice(0,5) >= nowTime));
+        const upcomingEvents = allEvents.filter(e => e.date > today);
+
+        // Ничего актуального — тихо сохраняем флаг и выходим
+        if (!todayEvents.length && !upcomingEvents.length) {
+            sessionStorage.setItem(sessionKey, '1');
+            return;
+        }
+
+        // DB-уведомления — только один раз в день, проверяем существующие
+        const timedToday = todayEvents.filter(e => e.time && !e._virtual);
+        if (timedToday.length) {
+            try {
+                // Получаем уже созданные сегодня уведомления, чтобы не дублировать
+                // Перетворюємо локальну північ в UTC, щоб уникнути timezone-зсуву
+                const todayLocalMidnightUTC = new Date(today + 'T00:00:00').toISOString();
+                const { data: existingNtf } = await supabase
+                    .from('notifications')
+                    .select('title')
+                    .eq('user_id', AppState.user.id)
+                    .gte('created_at', todayLocalMidnightUTC);
+                const existingTitles = new Set((existingNtf || []).map(n => n.title));
+                const toInsert = timedToday.filter(e => !existingTitles.has(`📅 Сьогодні: ${e.title}`));
+                if (toInsert.length) {
+                    await supabase.from('notifications').insert(
+                        toInsert.map(e => ({
+                            user_id:    AppState.user.id,
+                            title:      `📅 Сьогодні: ${e.title}`,
+                            message:    `о ${e.time.slice(0,5)}${e.end_time ? '–'+e.end_time.slice(0,5) : ''}${e.notes ? ' — ' + e.notes : ''}`,
+                            type:       'general',
+                            created_by: AppState.user.id,
+                        }))
+                    );
+                    UI.loadNotificationCount?.();
+                }
+            } catch (_) {}
+        }
+
+        // Якщо модалку вже показували сьогодні на іншому пристрої — пропускаємо її
+        if (modalShown) return;
+
+        // Звук — только если есть события сегодня
+        if (todayEvents.length) {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                [
+                    { freq: 440.00, start: 0.00, dur: 0.5 },
+                    { freq: 554.37, start: 0.20, dur: 0.5 },
+                    { freq: 659.25, start: 0.40, dur: 0.7 },
+                ].forEach(({ freq, start, dur }) => {
+                    const osc = ctx.createOscillator(), gain = ctx.createGain();
+                    osc.connect(gain); gain.connect(ctx.destination);
+                    osc.type = 'sine'; osc.frequency.value = freq;
+                    const t = ctx.currentTime + start;
+                    gain.gain.setValueAtTime(0, t);
+                    gain.gain.linearRampToValueAtTime(0.18, t + 0.05);
+                    gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+                    osc.start(t); osc.stop(t + dur);
+                });
+            } catch (_) {}
+        }
+
+        if (!document.getElementById('mc-styles'))
+            document.head.insertAdjacentHTML('beforeend', MyCalendarPage._styles().replace('<style>', '<style id="mc-styles">'));
+
+        const dismiss = async () => {
+            document.getElementById('mc-reminder-modal')?.remove();
+            try {
+                const prefs = AppState.profile?.ui_prefs || {};
+                prefs[modalKey] = true;
+                await supabase.from('profiles').update({ ui_prefs: prefs }).eq('id', AppState.user.id);
+                if (AppState.profile) AppState.profile.ui_prefs = prefs;
+                // Чистимо старі ключі (старше 7 днів)
+                const cutoff = dateStr(-7);
+                Object.keys(prefs).forEach(k => {
+                    if (k.startsWith('cal_reminder_shown_') && k.slice(-10) < cutoff) delete prefs[k];
+                });
+            } catch (_) {}
+        };
+
+        // Вспомогательная — одна строка события
+        const eventRow = (e) => `
+<div class="mc-reminder-item${e.is_important ? ' mc-reminder-item--important' : ''}" style="border-left:4px solid ${e.color || 'var(--primary)'}">
+    <div class="mc-reminder-item-top">
+        ${e.time
+            ? `<span class="mc-reminder-time">${e.time.slice(0,5)}${e.end_time ? '–'+e.end_time.slice(0,5) : ''}</span>`
+            : `<span class="mc-reminder-time mc-reminder-allday">Весь день</span>`}
+        <span class="mc-reminder-item-title">${e.is_important ? '⭐ ' : ''}${Fmt.esc(e.title)}</span>
+        ${e._virtual && e.repeat_type ? `<span class="mc-reminder-repeat">🔁</span>` : ''}
+    </div>
+    ${e.notes ? `<div class="mc-reminder-notes">${Fmt.esc(e.notes)}</div>` : ''}
+</div>`;
+
+        // Метка "через N дней"
+        const dayLabel = dateStr => {
+            const diff = Math.round((new Date(dateStr) - new Date(today)) / 86400000);
+            if (diff === 1) return 'Завтра';
+            if (diff === 2) return 'Післязавтра';
+            return new Date(dateStr).toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'short' });
+        };
+
+        // Группируем upcoming по датам
+        const upcomingByDate = {};
+        for (const e of upcomingEvents) {
+            if (!upcomingByDate[e.date]) upcomingByDate[e.date] = [];
+            upcomingByDate[e.date].push(e);
+        }
 
         const el = document.createElement('div');
         el.id = 'mc-reminder-modal';
         el.className = 'mc-overlay';
         const dateLabel = new Date().toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' });
+
         el.innerHTML = `
 <div class="mc-modal mc-reminder-box">
     <div class="mc-reminder-hero">
         <div class="mc-reminder-ico">📅</div>
         <div>
-            <div class="mc-reminder-title">Ваші події на сьогодні</div>
+            <div class="mc-reminder-title">Ваш розклад</div>
             <div class="mc-reminder-date">${dateLabel}</div>
         </div>
+        <button class="mc-reminder-x" id="mc-reminder-close" title="Закрити">✕</button>
     </div>
+
+    ${todayEvents.length ? `
+    <div class="mc-reminder-section-label">Сьогодні · ${todayEvents.length} ${todayEvents.length === 1 ? 'подія' : 'події'}</div>
     <div class="mc-reminder-list">
-        ${data.map(e => `
-        <div class="mc-reminder-item" style="border-left:4px solid ${e.color}">
-            <div class="mc-reminder-item-top">
-                ${e.time ? `<span class="mc-reminder-time">${e.time.slice(0,5)}${e.end_time ? '–'+e.end_time.slice(0,5) : ''}</span>` : '<span class="mc-reminder-time" style="color:var(--text-muted)">Весь день</span>'}
-                <span class="mc-reminder-item-title">${Fmt.esc(e.title)}</span>
-            </div>
-            ${e.notes ? `<div class="mc-reminder-notes">${Fmt.esc(e.notes)}</div>` : ''}
+        ${todayEvents.map(eventRow).join('')}
+    </div>` : `
+    <div class="mc-reminder-empty">Сьогодні подій немає 🎉</div>`}
+
+    ${Object.keys(upcomingByDate).length ? `
+    <div class="mc-reminder-section-label" style="margin-top:12px">Найближчі дні</div>
+    <div class="mc-reminder-list">
+        ${Object.entries(upcomingByDate).map(([ds, evs]) => `
+        <div class="mc-reminder-day-group">
+            <div class="mc-reminder-day-label">${dayLabel(ds)}</div>
+            ${evs.map(eventRow).join('')}
         </div>`).join('')}
-    </div>
-    <div style="display:flex;justify-content:flex-end;margin-top:16px">
-        <button class="mc-btn-save" id="mc-reminder-open">Відкрити календар</button>
-        <button class="mc-btn-cancel" id="mc-reminder-close" style="margin-left:8px">Закрити</button>
+    </div>` : ''}
+
+    <div class="mc-reminder-footer">
+        <button class="mc-btn-save" id="mc-reminder-open"><i class="fa-solid fa-calendar-days"></i> Відкрити календар</button>
+        <button class="mc-btn-cancel" id="mc-reminder-dismiss">Закрити</button>
     </div>
 </div>`;
+
         document.body.appendChild(el);
-        el.querySelector('#mc-reminder-open').onclick  = () => { dismiss(); Router.go('my-calendar'); };
-        el.querySelector('#mc-reminder-close').onclick = () => dismiss();
+        el.querySelector('#mc-reminder-open').onclick    = () => { dismiss(); Router.go('my-calendar'); };
+        el.querySelector('#mc-reminder-dismiss').onclick = () => dismiss();
+        el.querySelector('#mc-reminder-close').onclick   = () => dismiss();
         el.addEventListener('click', e => { if (e.target === el) dismiss(); });
     },
 
@@ -607,17 +719,27 @@ ${this._styles()}`;
 .mc-viewer-remove:hover { background:rgba(239,68,68,.12);color:#ef4444; }
 
 /* Reminder modal */
-.mc-reminder-box { max-width:440px; }
-.mc-reminder-hero { display:flex;align-items:center;gap:14px;margin-bottom:18px; }
-.mc-reminder-ico { font-size:2rem;line-height:1; }
+.mc-reminder-box { max-width:460px;width:100%; }
+.mc-reminder-hero { display:flex;align-items:center;gap:14px;margin-bottom:16px;position:relative; }
+.mc-reminder-ico { font-size:2rem;line-height:1;flex-shrink:0; }
 .mc-reminder-title { font-size:1rem;font-weight:700; }
 .mc-reminder-date { font-size:.8rem;color:var(--text-muted);margin-top:2px;text-transform:capitalize; }
-.mc-reminder-list { display:flex;flex-direction:column;gap:8px; }
-.mc-reminder-item { background:var(--bg-hover);border-radius:10px;padding:10px 14px; }
-.mc-reminder-item-top { display:flex;align-items:center;gap:10px; }
-.mc-reminder-time { font-size:.8rem;font-weight:700;color:var(--primary);min-width:38px;flex-shrink:0; }
-.mc-reminder-item-title { font-size:.9rem;font-weight:600; }
-.mc-reminder-notes { font-size:.78rem;color:var(--text-muted);margin-top:5px;line-height:1.45; }
+.mc-reminder-x { position:absolute;right:0;top:0;background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:1rem;padding:4px 8px;border-radius:6px;line-height:1;transition:color .15s; }
+.mc-reminder-x:hover { color:var(--text-primary); }
+.mc-reminder-section-label { font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:6px; }
+.mc-reminder-list { display:flex;flex-direction:column;gap:6px;max-height:340px;overflow-y:auto; }
+.mc-reminder-item { background:var(--bg-hover);border-radius:10px;padding:9px 13px;transition:background .15s; }
+.mc-reminder-item--important { background:rgba(245,158,11,.08);border-color:var(--warning) !important; }
+.mc-reminder-item-top { display:flex;align-items:center;gap:8px;min-width:0; }
+.mc-reminder-time { font-size:.78rem;font-weight:700;color:var(--primary);white-space:nowrap;flex-shrink:0; }
+.mc-reminder-allday { color:var(--text-muted);font-weight:500; }
+.mc-reminder-item-title { font-size:.88rem;font-weight:600;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.mc-reminder-repeat { font-size:.72rem;flex-shrink:0;opacity:.6; }
+.mc-reminder-notes { font-size:.76rem;color:var(--text-muted);margin-top:4px;line-height:1.45;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.mc-reminder-day-group { display:flex;flex-direction:column;gap:4px; }
+.mc-reminder-day-label { font-size:.75rem;font-weight:600;color:var(--text-secondary);padding:4px 2px 2px;margin-top:4px; }
+.mc-reminder-empty { text-align:center;padding:16px 0;color:var(--text-muted);font-size:.88rem; }
+.mc-reminder-footer { display:flex;justify-content:flex-end;gap:8px;margin-top:16px;padding-top:12px;border-top:1px solid var(--border); }
 </style>`;
     },
 };

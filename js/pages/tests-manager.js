@@ -286,8 +286,8 @@ const TestsManagerPage = {
 .tm-btn-edit:hover{background:var(--primary);color:#fff}
 .tm-btn-assign{padding:7px 14px;border-radius:10px;border:1.5px solid #C9A227;background:transparent;color:#C9A227;font-size:.82rem;font-weight:600;cursor:pointer;transition:all .15s}
 .tm-btn-assign:hover{background:#C9A227;color:#fff}
-.tm-btn-results{padding:7px;border-radius:10px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:.82rem;cursor:pointer;transition:all .15s}
-.tm-btn-results:hover{border-color:var(--primary);color:var(--primary)}
+.tm-btn-results{padding:7px 10px;border-radius:10px;border:none;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;font-size:.85rem;cursor:pointer;transition:all .2s;box-shadow:0 4px 14px rgba(22,163,74,.35)}
+.tm-btn-results:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(22,163,74,.45)}
 .tm-btn-settings{padding:7px;border-radius:10px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:.82rem;cursor:pointer;transition:all .15s}
 .tm-btn-settings:hover{border-color:#8b5cf6;color:#8b5cf6}
 .tm-btn-del{padding:7px 10px;border-radius:10px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:.82rem;cursor:pointer;transition:all .15s}
@@ -864,7 +864,7 @@ const TestsManagerPage = {
         <button class="btn btn-ghost btn-sm" onclick="TestsManagerPage._renderSettings(TestsManagerPage._container,TestsManagerPage._curTest)"><i class="fa-solid fa-gear"></i> Налаштування</button>
         <button class="btn btn-ghost btn-sm" onclick="TestsManagerPage.openPreview('${this._curTest.id}')"><i class="fa-solid fa-eye"></i> Перегляд</button>
         <button class="btn btn-sm" style="background:#C9A227;color:#fff;border:none;border-radius:10px;padding:7px 16px;font-weight:600;cursor:pointer" onclick="TestsManagerPage.openAssignModal('${this._curTest.id}')"><i class="fa-solid fa-users"></i> Призначити</button>
-        <button class="btn btn-ghost btn-sm" onclick="TestsManagerPage.openResultsModal('${this._curTest.id}')"><i class="fa-solid fa-chart-bar"></i> Результати</button>
+        <button style="display:inline-flex;align-items:center;gap:6px;padding:7px 16px;border-radius:10px;border:none;cursor:pointer;font-size:.82rem;font-weight:700;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;box-shadow:0 4px 14px rgba(22,163,74,.35);transition:all .2s" onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform=''" onclick="TestsManagerPage.openResultsModal('${this._curTest.id}')"><i class="fa-solid fa-chart-bar"></i> Результати</button>
     </div>
     <div class="te-body">
         <div class="te-left">
@@ -2208,7 +2208,7 @@ ${this._opts.map((o,i) => `
     <div class="tres-topbar">
         <button class="tres-back" onclick="TestsManagerPage._goBack(TestsManagerPage._container)"><i class="fa-solid fa-arrow-left"></i> Назад</button>
         <span style="font-size:1.1rem;font-weight:700;color:var(--text-primary);flex:1"><i class="fa-solid fa-chart-bar"></i> ${test.title}</span>
-        ${results.length ? `<button class="btn btn-ghost btn-sm" onclick="TestsManagerPage._exportCSV(TestsManagerPage._lastResults,${JSON.stringify(test.title||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-file-csv"></i> CSV</button>` : ''}
+        ${results.length ? `<button style="display:inline-flex;align-items:center;gap:6px;padding:7px 16px;border-radius:10px;border:none;cursor:pointer;font-size:.82rem;font-weight:700;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;box-shadow:0 4px 14px rgba(22,163,74,.35);transition:all .2s" onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform=''" onclick="TestsManagerPage._exportCSV(TestsManagerPage._lastResults,${JSON.stringify(test.title||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-file-csv"></i> Звіт</button>` : ''}
     </div>
     <div class="tres-stats">
         ${[['<i class="fa-solid fa-users"></i>',users.length,'Співробітників'],['<i class="fa-solid fa-circle-check"></i>',totalPassed,'Пройшли'],['<i class="fa-solid fa-circle-xmark"></i>',users.length-totalPassed,'Не пройшли'],['<i class="fa-solid fa-chart-bar"></i>',avgPct+'%','Середній бал']].map(([ic,v,l]) => `
@@ -2308,7 +2308,7 @@ const MyTestsPage = {
 
         container.innerHTML = `
 <style>
-.mt-page{max-width:900px}
+.mt-page{max-width:900px;}
 .mt-hero{border-radius:22px;padding:30px 36px;margin-bottom:24px;background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 60%,#1e40af 100%);position:relative;overflow:hidden}
 .mt-hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 60% 80% at 80% 20%,rgba(201,162,39,.15),transparent);pointer-events:none}
 .mt-hero-inner{position:relative;display:flex;align-items:center;gap:18px}
@@ -2320,6 +2320,12 @@ const MyTestsPage = {
 .mt-tab{padding:10px 20px;border:none;background:transparent;color:var(--text-muted);font-size:.88rem;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;margin-bottom:-1px}
 .mt-tab.active{color:var(--primary);border-bottom-color:var(--primary);font-weight:700}
 .mt-tab:hover:not(.active){color:var(--text-primary)}
+.mt-tabs.ep-style{border-bottom:none;gap:8px;margin-bottom:20px}
+.mt-tabs.ep-style .mt-tab{padding:7px 18px;border-radius:50px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-muted);font-size:.8rem;font-weight:600;margin-bottom:0;border-bottom:1.5px solid var(--border);display:flex;align-items:center;gap:7px}
+.mt-tabs.ep-style .mt-tab:hover:not(.active){border-color:#3b82f6;color:#3b82f6}
+.mt-tabs.ep-style .mt-tab.active{background:#3b82f6;color:#fff;border-color:#3b82f6;border-bottom-color:#3b82f6}
+.mt-ep-count{padding:1px 8px;border-radius:20px;font-size:.68rem;font-weight:800;line-height:1.6;background:var(--border);color:var(--text-muted)}
+.mt-tab.active .mt-ep-count{background:rgba(255,255,255,.25);color:#fff}
 
 .mt-list{display:flex;flex-direction:column;gap:10px;animation:mt-in .3s ease}
 @keyframes mt-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
@@ -2352,7 +2358,7 @@ const MyTestsPage = {
 </style>
 
 <div class="mt-page">
-    <div class="mt-hero">
+    ${fromExpert ? '' : `<div class="mt-hero">
         <div class="mt-hero-inner">
             <div class="mt-hero-icon"><i class="fa-solid fa-bullseye"></i></div>
             <div>
@@ -2360,14 +2366,16 @@ const MyTestsPage = {
                 <p class="mt-hero-sub">Призначені тести та ваша історія проходжень</p>
             </div>
         </div>
-    </div>
+    </div>`}
 
-    <div class="mt-tabs">
+    <div class="mt-tabs${fromExpert?' ep-style':''}">
         <button class="mt-tab${this._tab==='pending'?' active':''}" onclick="MyTestsPage._switchTab('pending',this)">
-            <i class="fa-solid fa-clipboard-list"></i> Призначені ${assignments.length ? `<span style="background:var(--primary);color:#fff;border-radius:20px;padding:1px 8px;font-size:.7rem;margin-left:4px">${assignments.filter(a => !completedTestIds.has(a.test_id)).length}</span>` : ''}
+            <i class="fa-solid fa-clipboard-list"></i> Призначені
+            <span class="mt-ep-count">${assignments.filter(a=>!completedTestIds.has(a.test_id)).length}</span>
         </button>
         <button class="mt-tab${this._tab==='history'?' active':''}" onclick="MyTestsPage._switchTab('history',this)">
-            <i class="fa-solid fa-trophy"></i> Пройдені (${attempts.length})
+            <i class="fa-solid fa-trophy"></i> Пройдені
+            <span class="mt-ep-count">${attempts.length}</span>
         </button>
     </div>
 

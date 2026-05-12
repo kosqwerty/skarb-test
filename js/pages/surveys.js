@@ -68,9 +68,22 @@ const SurveysPage = {
 @keyframes sv-in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 .sv-list-wrap{animation:sv-in .3s ease}
 .sv-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:1.5rem;flex-wrap:wrap}
-.sv-filters{display:flex;gap:6px;flex-wrap:wrap}
-.sv-filter-btn{padding:5px 16px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:.8rem;font-weight:500;cursor:pointer;transition:all .15s}
-.sv-filter-btn.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+.sv-filters{display:flex;gap:8px;flex-wrap:wrap}
+.sv-filter-btn{
+    padding:7px 18px;border-radius:50px;
+    border:1.5px solid var(--border);
+    background:var(--bg-surface);color:var(--text-muted);
+    font-size:.8rem;font-weight:600;cursor:pointer;
+    transition:all .18s;
+    display:flex;align-items:center;gap:7px;white-space:nowrap
+}
+.sv-filter-btn:hover:not(.active){border-color:#10b981;color:#10b981}
+.sv-filter-btn.active{background:#10b981;color:#fff;border-color:#10b981}
+.sv-filter-count{
+    padding:1px 8px;border-radius:20px;font-size:.68rem;font-weight:800;line-height:1.6;
+}
+.sv-filter-btn:not(.active) .sv-filter-count{background:var(--border);color:var(--text-muted)}
+.sv-filter-btn.active .sv-filter-count{background:rgba(255,255,255,.25);color:#fff}
 .sv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
 .sv-card{border-radius:20px;overflow:hidden;border:1.5px solid var(--border);background:var(--bg-surface);box-shadow:0 2px 10px rgba(0,0,0,.05);transition:transform .2s,box-shadow .2s,border-color .2s;cursor:pointer;display:flex;flex-direction:column}
 .sv-card:hover{transform:translateY(-4px);box-shadow:0 10px 32px rgba(0,0,0,.12)}
@@ -96,10 +109,8 @@ const SurveysPage = {
 
 <div class="sv-list-wrap">
     <div class="sv-toolbar">
-        <div class="sv-filters">
-            <button class="sv-filter-btn ${this._filter==='active'?'active':''}" onclick="SurveysPage._setFilter('active')">Активні</button>
-            <button class="sv-filter-btn ${this._filter==='done'?'active':''}" onclick="SurveysPage._setFilter('done')">Пройдені</button>
-            <button class="sv-filter-btn ${this._filter==='all'?'active':''}" onclick="SurveysPage._setFilter('all')">Усі</button>
+        <div class="sv-filters" id="sv-filters">
+            ${this._filterBtnsHtml()}
         </div>
         ${canManage ? `<button class="sv-btn sv-btn-primary" style="flex:none;padding:7px 18px" onclick="SurveysPage.openBuilder()"><i class="fa-solid fa-plus"></i> Створити</button>` : ''}
     </div>
@@ -107,11 +118,35 @@ const SurveysPage = {
 </div>`;
     },
 
+    _filterCounts() {
+        const now = new Date();
+        let active = 0, done = 0;
+        this._surveys.forEach(s => {
+            const dl = this._effectiveDeadline(s);
+            const expired = dl && new Date(dl) < now;
+            const isDone = this._myDone.has(s.id);
+            if (isDone) done++;
+            else if (s.is_published && !expired) active++;
+        });
+        return { active, done, all: this._surveys.length };
+    },
+
+    _filterBtnsHtml() {
+        const c = this._filterCounts();
+        return [
+            { f: 'active', label: 'Активні',  count: c.active },
+            { f: 'done',   label: 'Пройдені', count: c.done   },
+            { f: 'all',    label: 'Усі',      count: c.all    },
+        ].map(({ f, label, count }) => `
+            <button class="sv-filter-btn${this._filter===f?' active':''}" data-f="${f}" onclick="SurveysPage._setFilter('${f}')">
+                ${label}<span class="sv-filter-count">${count}</span>
+            </button>`).join('');
+    },
+
     _setFilter(f) {
         this._filter = f;
-        document.querySelectorAll('.sv-filter-btn').forEach(b =>
-            b.classList.toggle('active', b.textContent.trim() === {active:'Активні',done:'Пройдені',all:'Усі'}[f])
-        );
+        const wrap = document.getElementById('sv-filters');
+        if (wrap) wrap.innerHTML = this._filterBtnsHtml();
         document.getElementById('sv-grid').innerHTML = this._cardsHtml();
     },
 
@@ -188,13 +223,14 @@ const SurveysPage = {
     </div>
     <div class="sv-card-footer">
         ${done || expired
-            ? `<button class="sv-btn sv-btn-ghost" onclick="SurveysPage.openResults('${s.id}')"><i class="fa-solid fa-chart-bar"></i> ${isStaff ? 'Результати' : 'Переглянути'}</button>`
+            ? `<button onclick="SurveysPage.openResults('${s.id}')" style="display:inline-flex;align-items:center;gap:8px;padding:7px 16px;border-radius:10px;border:none;cursor:pointer;font-size:.8rem;font-weight:700;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;box-shadow:0 4px 14px rgba(22,163,74,.35);transition:all .2s" onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform=''"><i class="fa-solid fa-chart-bar"></i> ${isStaff ? 'Результати' : 'Переглянути'}</button>`
             : s.is_published
                 ? `<button class="sv-btn sv-btn-primary" onclick="SurveysPage.openTake('${s.id}')"><i class="fa-solid fa-pen-to-square"></i> Пройти</button>`
                 : ''}
-        ${isStaff && !done ? `<button class="sv-btn sv-btn-ghost" onclick="SurveysPage.openResults('${s.id}')"><i class="fa-solid fa-chart-bar"></i></button>` : ''}
+        ${isStaff && !done ? `<button onclick="SurveysPage.openResults('${s.id}')" style="display:inline-flex;align-items:center;justify-content:center;padding:7px 10px;border-radius:10px;border:none;cursor:pointer;font-size:.85rem;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;box-shadow:0 4px 14px rgba(22,163,74,.35);transition:all .2s" onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform=''"><i class="fa-solid fa-chart-bar"></i></button>` : ''}
         ${canManage ? `
             <button class="sv-btn sv-btn-ghost" style="flex:none;padding:7px 10px" title="Призначити" onclick="SurveysPage.openAssign('${s.id}')"><i class="fa-solid fa-users"></i></button>
+            <button class="sv-btn sv-btn-ghost" style="flex:none;padding:7px 10px" title="Попередній перегляд" onclick="SurveysPage.openPreview('${s.id}')"><i class="fa-solid fa-eye"></i></button>
             <button class="sv-btn sv-btn-ghost" style="flex:none;padding:7px 10px" title="Редагувати" onclick="SurveysPage.openBuilder('${s.id}')"><i class="fa-solid fa-pen"></i></button>
             <button class="sv-btn sv-btn-danger" style="flex:none;padding:7px 10px" data-title="${Fmt.esc(s.title)}" onclick="SurveysPage._deleteSurvey('${s.id}',this.dataset.title)"><i class="fa-solid fa-trash"></i></button>
         ` : ''}
@@ -228,19 +264,31 @@ const SurveysPage = {
         finally { Loader.hide(); }
     },
 
-    _renderTake(area, survey, questions) {
-        this._takeState = { surveyId: survey.id, questions };
+    async openPreview(surveyId) {
+        const area = document.getElementById('ep-content');
+        if (!area) return;
+        area.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
+        Loader.show();
+        try {
+            const [survey, questions] = await Promise.all([
+                API.surveys.getById(surveyId),
+                API.surveys.getQuestions(surveyId)
+            ]);
+            this._renderTake(area, survey, questions, { preview: true });
+        } catch(e) { Toast.error('Помилка', e.message); }
+        finally { Loader.hide(); }
+    },
+
+    _renderTake(area, survey, questions, opts = {}) {
+        this._takeState = { surveyId: survey.id, questions, preview: !!opts.preview };
         const theme = this._theme(survey);
         area.innerHTML = `
 <style>
-.sv-take-wrap{max-width:680px;margin:0 auto;animation:sv-in .3s ease}
+.sv-take-wrap{max-width:680px;animation:sv-in .3s ease}
 .sv-take-header{border-radius:20px;padding:24px 28px;margin-bottom:1.5rem;background:linear-gradient(135deg,${theme.from},${theme.to});position:relative;overflow:hidden}
 .sv-take-header::after{content:'';position:absolute;inset:0;background:url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23fff' fill-opacity='0.04'%3E%3Cpath d='M20 20h20v20H20z'/%3E%3C/g%3E%3C/svg%3E")}
 .sv-take-title{font-size:1.4rem;font-weight:800;color:#fff;margin-bottom:.4rem;position:relative;z-index:1}
 .sv-take-desc{font-size:.875rem;color:rgba(255,255,255,.8);position:relative;z-index:1}
-.sv-progress-bar{height:5px;background:rgba(255,255,255,.25);border-radius:3px;margin-top:16px;position:relative;z-index:1;overflow:hidden}
-.sv-progress-fill{height:100%;background:#fff;border-radius:3px;transition:width .3s ease}
-.sv-progress-label{font-size:.7rem;color:rgba(255,255,255,.75);margin-top:6px;position:relative;z-index:1}
 .sv-q-card{background:var(--bg-surface);border:1.5px solid var(--border);border-radius:18px;padding:20px 22px;margin-bottom:14px;transition:border-color .2s}
 .sv-q-card.required-error{border-color:var(--danger);animation:sv-shake .3s ease}
 @keyframes sv-shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
@@ -287,28 +335,39 @@ const SurveysPage = {
 
 <div class="sv-take-wrap">
     <button class="sv-back-btn" onclick="SurveysPage._backToList()"><i class="fa-solid fa-arrow-left"></i> Назад до списку</button>
+    ${opts.preview ? `
+    <div style="display:flex;align-items:center;gap:10px;background:rgba(245,158,11,.1);border:1.5px solid rgba(245,158,11,.4);border-radius:14px;padding:10px 16px;margin-bottom:1rem">
+        <i class="fa-solid fa-eye" style="color:#f59e0b;font-size:1.1rem"></i>
+        <div style="flex:1">
+            <div style="font-weight:700;font-size:.88rem;color:#b45309">Режим перегляду</div>
+            <div style="font-size:.78rem;color:#92400e">Відповіді не зберігаються. Так виглядатиме опитник для учасників.</div>
+        </div>
+    </div>` : ''}
     <div class="sv-take-header">
         <div class="sv-take-title">${Fmt.esc(survey.title)}</div>
         ${survey.description ? `<div class="sv-take-desc">${Fmt.esc(survey.description)}</div>` : ''}
-        <div class="sv-progress-bar"><div class="sv-progress-fill" id="sv-prog" style="width:0%"></div></div>
-        <div class="sv-progress-label" id="sv-prog-label">0 із ${questions.filter(q=>q.is_required).length} обов'язкових заповнено</div>
     </div>
     <div id="sv-questions">
         ${questions.map((q, i) => this._questionHtml(q, i, theme)).join('')}
     </div>
     <div class="sv-submit-wrap">
-        <button class="sv-submit-btn" id="sv-submit-btn" onclick="SurveysPage._submitResponse()">
-            <i class="fa-solid fa-paper-plane"></i> Надіслати відповіді
-        </button>
+        ${opts.preview
+            ? `<button class="sv-submit-btn" style="background:linear-gradient(135deg,#f59e0b,#f97316)" onclick="SurveysPage._backToList()">
+                <i class="fa-solid fa-xmark"></i> Закрити перегляд
+               </button>`
+            : `<button class="sv-submit-btn" id="sv-submit-btn" onclick="SurveysPage._submitResponse()">
+                <i class="fa-solid fa-paper-plane"></i> Надіслати відповіді
+               </button>`}
     </div>
 </div>`;
 
-        // wire up progress tracking
-        this._updateProgress(questions);
     },
 
     _questionHtml(q, i, theme) {
-        const reqMark = q.is_required ? `<span class="sv-q-required">*</span>` : '';
+        const reqMark  = q.is_required ? `<span class="sv-q-required">*</span>` : '';
+        const followUp = (q.type === 'rating' || q.type === 'scale')
+            && q.options && !Array.isArray(q.options) && q.options.follow_up
+            ? q.options.follow_up : null;
         let body = '';
 
         if (q.type === 'single') {
@@ -359,12 +418,28 @@ const SurveysPage = {
             </div>`;
         }
 
+        const followUpBlock = followUp ? `
+<div class="sv-followup-wrap" id="sv-fu-${q.id}"
+     data-op="${followUp.operator}" data-val="${followUp.value}"
+     style="display:none;margin-top:14px;padding:14px 16px;background:color-mix(in srgb,${theme.from} 8%,var(--bg-raised));border:1.5px solid color-mix(in srgb,${theme.from} 30%,transparent);border-radius:14px">
+    <div style="font-size:.82rem;font-weight:700;color:var(--text-secondary);margin-bottom:8px;display:flex;align-items:center;gap:6px">
+        <i class="fa-solid fa-comment-dots" style="color:${theme.from}"></i>
+        ${Fmt.esc(followUp.text || 'Розкажіть детальніше...')}
+    </div>
+    <textarea class="sv-textarea" id="sv-fu-ta-${q.id}" maxlength="500"
+              placeholder="Введіть відповідь…"
+              oninput="this.nextElementSibling.textContent=this.value.length+' / 500'"
+              style="border-color:color-mix(in srgb,${theme.from} 35%,transparent)"></textarea>
+    <div style="font-size:.7rem;color:var(--text-muted);text-align:right;margin-top:4px">0 / 500</div>
+</div>` : '';
+
         return `
 <div class="sv-q-card" id="sv-qcard-${q.id}" style="animation:sv-in .3s ease ${i*60}ms both">
     <div class="sv-q-num">Питання ${i+1}${q.is_required ? ' · обов\'язкове' : ''}</div>
     <div class="sv-q-text">${Fmt.esc(q.text)}${reqMark}</div>
     ${q.image_url ? `<div style="margin:10px 0 14px;border-radius:14px;overflow:hidden;max-height:320px;text-align:center;background:var(--bg-raised)"><img src="${Fmt.safeUrl(q.image_url)}" alt="" style="max-width:100%;max-height:320px;object-fit:contain;display:block;margin:0 auto"></div>` : ''}
     ${body}
+    ${followUpBlock}
 </div>`;
     },
 
@@ -383,12 +458,12 @@ const SurveysPage = {
             const m = el.querySelector('.sv-option-marker');
             m.innerHTML = el.classList.contains('selected') ? '<i class="fa-solid fa-check"></i>' : '';
         }
-        this._updateProgress(null);
+
     },
 
     _onTextInput(ta, qid, q) {
         document.getElementById(`sv-cc-${qid}`).textContent = `${ta.value.length} / 1000`;
-        this._updateProgress(null);
+
     },
 
     _rateStar(el) {
@@ -400,7 +475,7 @@ const SurveysPage = {
         const labels = ['','Погано','Незадовільно','Задовільно','Добре','Відмінно'];
         const lbl = document.getElementById(`sv-star-lbl-${qid}`);
         if (lbl) lbl.textContent = labels[n] || '';
-        this._updateProgress(null);
+        this._checkFollowUp(qid, n);
     },
 
     _hoverStar(el) {
@@ -423,37 +498,28 @@ const SurveysPage = {
         input.style.setProperty('--pct', pct);
         const lbl = document.getElementById(`sv-scale-val-${qid}`);
         if (lbl) lbl.textContent = v;
-        this._updateProgress(null);
+        this._checkFollowUp(qid, +v);
     },
 
-    _updateProgress(questions) {
-        // collect current questions from DOM
-        const cards = document.querySelectorAll('.sv-q-card');
-        let req = 0, filled = 0;
-        cards.forEach(card => {
-            const qid = card.id.replace('sv-qcard-','');
-            const isRequired = card.querySelector('.sv-q-required') !== null;
-            if (!isRequired) return;
-            req++;
-            // check if filled
-            const sel = card.querySelector('.sv-option.selected');
-            const ta  = card.querySelector('.sv-textarea');
-            const stars = card.querySelector('[id^="sv-q-"]');
-            const scaleInput = card.querySelector('input[type="range"]');
-            if (sel) { filled++; return; }
-            if (ta && ta.value.trim()) { filled++; return; }
-            if (stars && stars.dataset?.val && stars.dataset.val !== '') { filled++; return; }
-            if (scaleInput) { filled++; } // scale always has a value
-        });
-        const bar = document.getElementById('sv-prog');
-        const lbl = document.getElementById('sv-prog-label');
-        if (bar) bar.style.width = req ? (filled/req*100)+'%' : '100%';
-        if (lbl) lbl.textContent = `${filled} із ${req} обов'язкових заповнено`;
+    _checkFollowUp(qid, value) {
+        const fu = document.getElementById(`sv-fu-${qid}`);
+        if (!fu) return;
+        const op        = fu.dataset.op;
+        const threshold = +fu.dataset.val;
+        const show = op === 'lte' ? value <= threshold
+                   : op === 'gte' ? value >= threshold
+                   : value === threshold;
+        const wasHidden = fu.style.display === 'none';
+        fu.style.display = show ? 'block' : 'none';
+        if (!show) { const ta = document.getElementById(`sv-fu-ta-${qid}`); if (ta) ta.value = ''; }
+        if (show && wasHidden) fu.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     },
+
 
     async _submitResponse() {
-        const { surveyId, questions } = this._takeState || {};
+        const { surveyId, questions, preview } = this._takeState || {};
         if (!surveyId || !questions) return;
+        if (preview) { Toast.info('Режим перегляду', 'Відповіді не зберігаються'); return; }
         const btn = document.getElementById('sv-submit-btn');
         // validate required
         let hasError = false;
@@ -479,6 +545,14 @@ const SurveysPage = {
             } else if (q.type === 'scale') {
                 answer.value = document.getElementById(`sv-q-${q.id}`)?.value || '5';
                 filled = true;
+            }
+
+            // collect follow-up text if visible
+            const fuWrap = document.getElementById(`sv-fu-${q.id}`);
+            const fuTa   = document.getElementById(`sv-fu-ta-${q.id}`);
+            if (fuWrap && fuTa && fuWrap.style.display !== 'none') {
+                const fuText = fuTa.value.trim();
+                if (fuText) answer.selected_options = { follow_up: fuText };
             }
 
             if (q.is_required && !filled) {
@@ -537,28 +611,31 @@ const SurveysPage = {
 
     _renderResults(area, survey, questions, responses, answers) {
         const theme   = this._theme(survey);
-        const isStaff = AppState.isStaff();
         const ansMap  = {};
         answers.forEach(a => {
             if (!ansMap[a.question_id]) ansMap[a.question_id] = [];
             ansMap[a.question_id].push(a);
         });
+        // store for export / tab switching
+        this._resData = { survey, questions, responses, answers, ansMap };
+
+        const showParticipants = !survey.is_anonymous && responses.length > 0;
 
         area.innerHTML = `
 <style>
-.sv-res-wrap{max-width:760px;margin:0 auto;animation:sv-in .3s ease}
-.sv-res-header{border-radius:20px;padding:22px 26px;margin-bottom:1.5rem;background:linear-gradient(135deg,${theme.from},${theme.to});display:flex;align-items:center;gap:16px}
-.sv-res-stat{background:rgba(255,255,255,.18);border-radius:12px;padding:10px 18px;text-align:center}
-.sv-res-stat-n{font-size:1.6rem;font-weight:800;color:#fff}
-.sv-res-stat-l{font-size:.65rem;color:rgba(255,255,255,.75);text-transform:uppercase;letter-spacing:.05em}
+.sv-res-wrap{max-width:820px;animation:sv-in .3s ease}
+.sv-res-header{border-radius:20px;padding:20px 24px;margin-bottom:1.25rem;background:linear-gradient(135deg,${theme.from},${theme.to});display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.sv-res-stat{background:rgba(255,255,255,.18);border-radius:12px;padding:10px 16px;text-align:center;flex-shrink:0}
+.sv-res-stat-n{font-size:1.5rem;font-weight:800;color:#fff}
+.sv-res-stat-l{font-size:.62rem;color:rgba(255,255,255,.75);text-transform:uppercase;letter-spacing:.05em}
 .sv-res-qcard{background:var(--bg-surface);border:1.5px solid var(--border);border-radius:16px;padding:18px 20px;margin-bottom:12px}
 .sv-res-qtext{font-size:.95rem;font-weight:700;color:var(--text-primary);margin-bottom:14px}
 .sv-bar-row{display:flex;align-items:center;gap:10px;margin-bottom:7px}
-.sv-bar-label{font-size:.8rem;color:var(--text-secondary);min-width:120px;flex-shrink:0}
+.sv-bar-label{font-size:.8rem;color:var(--text-secondary);min-width:110px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px}
 .sv-bar-track{flex:1;height:24px;background:var(--bg-raised);border-radius:6px;overflow:hidden;position:relative}
 .sv-bar-fill{height:100%;border-radius:6px;transition:width .6s ease;background:linear-gradient(135deg,${theme.from},${theme.to})}
 .sv-bar-pct{position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:.72rem;font-weight:700;color:#fff;mix-blend-mode:difference}
-.sv-bar-count{font-size:.75rem;color:var(--text-muted);min-width:32px;text-align:right}
+.sv-bar-count{font-size:.75rem;color:var(--text-muted);min-width:28px;text-align:right}
 .sv-text-answers{display:flex;flex-direction:column;gap:8px}
 .sv-text-ans{background:var(--bg-raised);border-radius:10px;padding:10px 14px;font-size:.85rem;color:var(--text-primary);display:flex;align-items:flex-start;gap:10px}
 .sv-text-ans-avatar{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,${theme.from},${theme.to});display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;color:#fff;flex-shrink:0}
@@ -567,34 +644,215 @@ const SurveysPage = {
 .sv-rating-avg-stars{color:#f59e0b;font-size:1.1rem}
 .sv-scale-avg{font-size:2rem;font-weight:800;color:${theme.from};margin-bottom:8px}
 .sv-res-empty{color:var(--text-muted);font-size:.85rem;font-style:italic}
+/* who-selected toggle */
+.sv-who-toggle{font-size:.72rem;color:var(--primary);background:none;border:none;cursor:pointer;padding:2px 0;margin-top:4px;display:inline-flex;align-items:center;gap:4px;font-weight:600}
+.sv-who-list{display:none;flex-wrap:wrap;gap:5px;margin-top:6px}
+.sv-who-list.open{display:flex}
+.sv-who-chip{font-size:.72rem;background:var(--bg-raised);border:1px solid var(--border);border-radius:20px;padding:2px 10px;color:var(--text-secondary)}
+/* tabs */
+.sv-res-tabs{display:flex;gap:4px;background:var(--bg-raised);border-radius:40px;padding:3px;margin-bottom:1.25rem;width:fit-content}
+.sv-res-tab{padding:7px 20px;border-radius:40px;border:none;background:transparent;font-size:.83rem;font-weight:500;cursor:pointer;color:var(--text-muted);transition:all .15s}
+.sv-res-tab.active{background:var(--bg-surface);color:var(--primary);font-weight:700;box-shadow:0 1px 4px rgba(0,0,0,.12)}
+/* participant table */
+.sv-ptable-wrap{overflow-x:auto;border-radius:14px;border:1.5px solid var(--border)}
+.sv-ptable{width:100%;border-collapse:collapse;font-size:.82rem}
+.sv-ptable th{background:var(--bg-raised);padding:10px 14px;text-align:left;font-size:.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;position:sticky;top:0}
+.sv-ptable td{padding:10px 14px;border-top:1px solid var(--border);vertical-align:top;max-width:220px}
+.sv-ptable tr:hover td{background:var(--bg-hover)}
+.sv-ptable td.sv-pt-user{white-space:nowrap;font-weight:600;color:var(--text-primary)}
+.sv-ptable td.sv-pt-date{white-space:nowrap;color:var(--text-muted);font-size:.75rem}
+.sv-ptable td.sv-pt-ans{color:var(--text-secondary)}
 </style>
 
 <div class="sv-res-wrap">
-    <button class="sv-back-btn" style="display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--text-muted);font-size:.85rem;cursor:pointer;padding:0;margin-bottom:1rem" onclick="SurveysPage._backToList()"><i class="fa-solid fa-arrow-left"></i> Назад</button>
-    <div class="sv-res-header">
-        <div style="flex:1">
-            <div style="font-size:1.2rem;font-weight:800;color:#fff;margin-bottom:.35rem">${Fmt.esc(survey.title)}</div>
-            <div style="font-size:.8rem;color:rgba(255,255,255,.75)">Результати опитування</div>
-        </div>
-        <div class="sv-res-stat">
-            <div class="sv-res-stat-n">${responses.length}</div>
-            <div class="sv-res-stat-l">Відповідей</div>
-        </div>
-        <div class="sv-res-stat">
-            <div class="sv-res-stat-n">${questions.length}</div>
-            <div class="sv-res-stat-l">Питань</div>
-        </div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;flex-wrap:wrap">
+        <button class="sv-back-btn" style="display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--text-muted);font-size:.85rem;cursor:pointer;padding:0" onclick="SurveysPage._backToList()"><i class="fa-solid fa-arrow-left"></i> Назад</button>
+        <div style="flex:1"></div>
+        <button onclick="SurveysPage._exportHRReport()" style="display:inline-flex;align-items:center;gap:8px;padding:9px 20px;border-radius:12px;border:none;cursor:pointer;font-size:.85rem;font-weight:700;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;box-shadow:0 4px 14px rgba(22,163,74,.35);transition:all .2s" onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 6px 20px rgba(22,163,74,.45)'" onmouseout="this.style.transform='';this.style.boxShadow='0 4px 14px rgba(22,163,74,.35)'">
+            <i class="fa-solid fa-file-excel"></i> Звіт
+        </button>
     </div>
-    ${questions.map(q => this._resultQuestionHtml(q, ansMap[q.id] || [], responses, survey.is_anonymous)).join('')}
-    ${!responses.length ? `<div style="text-align:center;padding:3rem;color:var(--text-muted)"><i class="fa-solid fa-inbox" style="font-size:2.5rem;opacity:.2;display:block;margin-bottom:.75rem"></i>Відповідей поки немає</div>` : ''}
+
+    <div class="sv-res-header">
+        <div style="flex:1;min-width:160px">
+            <div style="font-size:1.15rem;font-weight:800;color:#fff;margin-bottom:.3rem">${Fmt.esc(survey.title)}</div>
+            <div style="font-size:.78rem;color:rgba(255,255,255,.75)">${survey.is_anonymous ? '🔒 Анонімне' : '👤 Іменне'} · Результати</div>
+        </div>
+        <div class="sv-res-stat"><div class="sv-res-stat-n">${responses.length}</div><div class="sv-res-stat-l">Відповідей</div></div>
+        <div class="sv-res-stat"><div class="sv-res-stat-n">${questions.length}</div><div class="sv-res-stat-l">Питань</div></div>
+        ${responses.length ? `<div class="sv-res-stat"><div class="sv-res-stat-n">${Math.round(answers.length/Math.max(responses.length,1)/Math.max(questions.length,1)*100)}%</div><div class="sv-res-stat-l">Заповненість</div></div>` : ''}
+    </div>
+
+    ${showParticipants ? `
+    <div class="sv-res-tabs">
+        <button class="sv-res-tab active" id="sv-tab-agg" onclick="SurveysPage._switchResTab('agg')"><i class="fa-solid fa-chart-bar"></i> Зведений</button>
+        <button class="sv-res-tab" id="sv-tab-part" onclick="SurveysPage._switchResTab('part')"><i class="fa-solid fa-users"></i> По учасниках</button>
+    </div>` : ''}
+
+    <div id="sv-res-agg">
+        ${questions.map(q => this._resultQuestionHtml(q, ansMap[q.id] || [], responses, survey.is_anonymous)).join('')}
+        ${!responses.length ? `<div style="text-align:center;padding:3rem;color:var(--text-muted)"><i class="fa-solid fa-inbox" style="font-size:2.5rem;opacity:.2;display:block;margin-bottom:.75rem"></i>Відповідей поки немає</div>` : ''}
+    </div>
+    <div id="sv-res-part" style="display:none"></div>
 </div>`;
 
-        // animate bars
         setTimeout(() => {
-            document.querySelectorAll('.sv-bar-fill').forEach(el => {
-                el.style.width = el.dataset.w;
-            });
+            document.querySelectorAll('.sv-bar-fill').forEach(el => { el.style.width = el.dataset.w; });
         }, 100);
+    },
+
+    _switchResTab(tab) {
+        document.getElementById('sv-tab-agg')?.classList.toggle('active', tab === 'agg');
+        document.getElementById('sv-tab-part')?.classList.toggle('active', tab === 'part');
+        document.getElementById('sv-res-agg').style.display  = tab === 'agg'  ? '' : 'none';
+        const partEl = document.getElementById('sv-res-part');
+        partEl.style.display = tab === 'part' ? '' : 'none';
+        if (tab === 'part' && !partEl.innerHTML) {
+            const { survey, questions, responses, answers } = this._resData;
+            partEl.innerHTML = this._participantsTableHtml(questions, responses, answers);
+        }
+    },
+
+    _participantsTableHtml(questions, responses, answers) {
+        const byResp = {};
+        answers.forEach(a => {
+            if (!byResp[a.response_id]) byResp[a.response_id] = {};
+            byResp[a.response_id][a.question_id] = a;
+        });
+
+        const typeLabel = { single:'○', multiple:'☑', text:'T', rating:'★', scale:'~' };
+
+        const answerText = (q, a) => {
+            if (!a) return '—';
+            if (q.type === 'single' || q.type === 'multiple') {
+                const opts = Array.isArray(q.options) ? q.options : [];
+                const sel  = (a.selected_options || []);
+                if (Array.isArray(sel)) return sel.map(i => opts[i] || `#${i}`).join(', ') || '—';
+                return '—';
+            }
+            if (q.type === 'rating') return a.value ? '★'.repeat(+a.value) + `  (${a.value}/5)` : '—';
+            if (q.type === 'scale')  return a.value ? `${a.value}/10` : '—';
+            return a.value || '—';
+        };
+
+        const rows = responses.map(r => {
+            const ans = byResp[r.id] || {};
+            const name = r.user?.full_name || '?';
+            const date = Fmt.datetime(r.submitted_at);
+            const cells = questions.map(q => {
+                const a   = ans[q.id];
+                const txt = answerText(q, a);
+                const fu  = a?.selected_options?.follow_up;
+                return `<td class="sv-pt-ans">${Fmt.esc(txt)}${fu ? `<div style="font-size:.72rem;color:var(--text-muted);margin-top:3px">💬 ${Fmt.esc(fu)}</div>` : ''}</td>`;
+            }).join('');
+            return `<tr>
+                <td class="sv-pt-user">${Fmt.esc(name)}</td>
+                <td class="sv-pt-date">${date}</td>
+                ${cells}
+            </tr>`;
+        }).join('');
+
+        return `
+<div class="sv-ptable-wrap">
+    <table class="sv-ptable">
+        <thead><tr>
+            <th>Учасник</th>
+            <th>Дата</th>
+            ${questions.map((q,i) => `<th title="${Fmt.esc(q.text)}">${typeLabel[q.type]||''} ${i+1}. ${Fmt.esc(q.text.length > 28 ? q.text.slice(0,28)+'…' : q.text)}</th>`).join('')}
+        </tr></thead>
+        <tbody>${rows || `<tr><td colspan="${questions.length+2}" style="text-align:center;padding:2rem;color:var(--text-muted)">Немає відповідей</td></tr>`}</tbody>
+    </table>
+</div>`;
+    },
+
+    _exportHRReport() {
+        const { survey, questions, responses, answers } = this._resData || {};
+        if (!survey) { Toast.error('Помилка', 'Дані не завантажені'); return; }
+        if (typeof XLSX === 'undefined') { Toast.error('Помилка', 'XLSX бібліотека недоступна'); return; }
+
+        const wb = XLSX.utils.book_new();
+        const isAnon = survey.is_anonymous;
+
+        // ── Sheet 1: Загальна інформація ────────────────────────────
+        const infoRows = [
+            ['Назва опитування', survey.title],
+            ['Опис',             survey.description || '—'],
+            ['Тип',              isAnon ? 'Анонімне' : 'Іменне'],
+            ['Статус',           survey.is_published ? 'Опубліковане' : 'Чернетка'],
+            ['Дедлайн',          survey.deadline_at ? Fmt.datetime(survey.deadline_at) : '—'],
+            ['Кількість питань', questions.length],
+            ['Кількість відповідей', responses.length],
+            ['Звіт сформовано', new Date().toLocaleString('uk-UA')],
+        ];
+        const wsInfo = XLSX.utils.aoa_to_sheet(infoRows);
+        wsInfo['!cols'] = [{ wch: 28 }, { wch: 50 }];
+        XLSX.utils.book_append_sheet(wb, wsInfo, 'Загальна інформація');
+
+        // ── Sheet 2: Аналіз по питаннях ────────────────────────────
+        const byResp = {};
+        answers.forEach(a => {
+            if (!byResp[a.response_id]) byResp[a.response_id] = {};
+            byResp[a.response_id][a.question_id] = a;
+        });
+
+        const analysisRows = [['#', 'Питання', 'Тип', 'Всього відповідей', 'Результат', 'Уточнення']];
+        questions.forEach((q, i) => {
+            const qAnswers = answers.filter(a => a.question_id === q.id);
+            const typeNames = { single:'Одна відповідь', multiple:'Кілька відповідей', text:'Текст', rating:'Зірки (1–5)', scale:'Шкала (1–10)' };
+            let result = '';
+            if (q.type === 'single' || q.type === 'multiple') {
+                const opts   = Array.isArray(q.options) ? q.options : [];
+                const counts = new Array(opts.length).fill(0);
+                qAnswers.forEach(a => (a.selected_options || []).forEach(idx => { if (idx < counts.length) counts[idx]++; }));
+                result = opts.map((o, oi) => `${o}: ${counts[oi]} (${responses.length ? Math.round(counts[oi]/responses.length*100) : 0}%)`).join('\n');
+            } else if (q.type === 'text') {
+                result = qAnswers.map(a => a.value || '').filter(Boolean).join(' | ');
+            } else if (q.type === 'rating') {
+                const vals = qAnswers.map(a => +(a.value||0)).filter(v=>v>0);
+                const avg  = vals.length ? (vals.reduce((s,v)=>s+v,0)/vals.length).toFixed(2) : '—';
+                result = `Середнє: ${avg}/5\n` + [1,2,3,4,5].map(n=>`${n}★: ${vals.filter(v=>v===n).length}`).join(', ');
+            } else if (q.type === 'scale') {
+                const vals = qAnswers.map(a => +(a.value||0)).filter(v=>v>0);
+                const avg  = vals.length ? (vals.reduce((s,v)=>s+v,0)/vals.length).toFixed(2) : '—';
+                result = `Середнє: ${avg}/10\n` + Array.from({length:10},(_,i)=>`${i+1}: ${vals.filter(v=>v===i+1).length}`).join(', ');
+            }
+            const fuAnswers = qAnswers.filter(a=>a.selected_options?.follow_up).map(a=>a.selected_options.follow_up).join(' | ');
+            analysisRows.push([i+1, q.text, typeNames[q.type]||q.type, qAnswers.length, result, fuAnswers||'—']);
+        });
+        const wsAnal = XLSX.utils.aoa_to_sheet(analysisRows);
+        wsAnal['!cols'] = [{ wch: 4 }, { wch: 40 }, { wch: 18 }, { wch: 12 }, { wch: 50 }, { wch: 40 }];
+        XLSX.utils.book_append_sheet(wb, wsAnal, 'Аналіз по питаннях');
+
+        // ── Sheet 3: Відповіді учасників (тільки іменне) ───────────
+        if (!isAnon && responses.length) {
+            const answerText = (q, a) => {
+                if (!a) return '';
+                if (q.type === 'single' || q.type === 'multiple') {
+                    const opts = Array.isArray(q.options) ? q.options : [];
+                    const sel  = a.selected_options || [];
+                    return Array.isArray(sel) ? sel.map(i => opts[i]||`#${i}`).join(', ') : '';
+                }
+                if (q.type === 'rating') return a.value ? `${a.value}/5` : '';
+                if (q.type === 'scale')  return a.value ? `${a.value}/10` : '';
+                return a.value || '';
+            };
+
+            const header = ['Учасник', 'Дата відповіді', ...questions.map((q,i) => `${i+1}. ${q.text}`)];
+            const partRows = [header, ...responses.map(r => {
+                const ans = byResp[r.id] || {};
+                return [
+                    r.user?.full_name || '?',
+                    r.submitted_at ? new Date(r.submitted_at).toLocaleString('uk-UA') : '',
+                    ...questions.map(q => answerText(q, ans[q.id])),
+                ];
+            })];
+            const wsPart = XLSX.utils.aoa_to_sheet(partRows);
+            wsPart['!cols'] = [{ wch: 28 }, { wch: 18 }, ...questions.map(() => ({ wch: 30 }))];
+            XLSX.utils.book_append_sheet(wb, wsPart, 'Відповіді учасників');
+        }
+
+        XLSX.writeFile(wb, `survey_${Fmt.slug(survey.title)}_${new Date().toISOString().slice(0,10)}.xlsx`);
+        Toast.success('Готово', 'Звіт завантажено');
     },
 
     _resultQuestionHtml(q, answers, responses, isAnon) {
@@ -602,23 +860,39 @@ const SurveysPage = {
         let body = '';
 
         if (q.type === 'single' || q.type === 'multiple') {
-            const opts = q.options || [];
+            const opts = Array.isArray(q.options) ? q.options : [];
             const counts = new Array(opts.length).fill(0);
+            // who selected each option (for non-anon)
+            const whoSelected = opts.map(() => []);
             answers.forEach(a => {
-                (a.selected_options || []).forEach(idx => { if (idx < counts.length) counts[idx]++; });
+                const resp = responses.find(r => r.id === a.response_id);
+                const name = !isAnon && resp?.user?.full_name ? resp.user.full_name : null;
+                (Array.isArray(a.selected_options) ? a.selected_options : []).forEach(idx => {
+                    if (idx < counts.length) {
+                        counts[idx]++;
+                        if (name) whoSelected[idx].push(name);
+                    }
+                });
             });
             body = opts.map((o, i) => {
                 const n   = counts[i];
                 const pct = total ? Math.round(n / total * 100) : 0;
+                const who = whoSelected[i];
+                const whoBlock = !isAnon && who.length ? `
+                    <button class="sv-who-toggle" onclick="this.nextElementSibling.classList.toggle('open');this.innerHTML=this.nextElementSibling.classList.contains('open')?'<i class=\\'fa-solid fa-chevron-up\\'></i> Сховати':'<i class=\\'fa-solid fa-chevron-down\\'></i> Хто обрав (${who.length})'">
+                        <i class="fa-solid fa-chevron-down"></i> Хто обрав (${who.length})
+                    </button>
+                    <div class="sv-who-list">${who.map(n => `<span class="sv-who-chip">${Fmt.esc(n)}</span>`).join('')}</div>` : '';
                 return `
                 <div class="sv-bar-row">
-                    <div class="sv-bar-label">${Fmt.esc(o)}</div>
+                    <div class="sv-bar-label" title="${Fmt.esc(o)}">${Fmt.esc(o)}</div>
                     <div class="sv-bar-track">
                         <div class="sv-bar-fill" data-w="${pct}%" style="width:0%"></div>
                         <div class="sv-bar-pct">${pct}%</div>
                     </div>
                     <div class="sv-bar-count">${n}</div>
-                </div>`;
+                </div>
+                ${whoBlock}`;
             }).join('');
         } else if (q.type === 'text') {
             if (!answers.length) {
@@ -672,6 +946,33 @@ const SurveysPage = {
             }).join('')}`;
         }
 
+        // follow-up texts (for rating/scale with conditional question)
+        if (q.type === 'rating' || q.type === 'scale') {
+            const fuAnswers = answers.filter(a => a.selected_options?.follow_up);
+            if (fuAnswers.length) {
+                const fuText = q.options?.follow_up?.text;
+                body += `
+                <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
+                    <div style="font-size:.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">
+                        <i class="fa-solid fa-comment-dots"></i> ${fuText ? Fmt.esc(fuText) : 'Уточнюючі відповіді'} (${fuAnswers.length})
+                    </div>
+                    <div class="sv-text-answers">
+                        ${fuAnswers.map(a => {
+                            const resp = responses.find(r => r.id === a.response_id);
+                            const name = !isAnon && resp?.user?.full_name ? resp.user.full_name : null;
+                            return `<div class="sv-text-ans">
+                                <div class="sv-text-ans-avatar">${name ? Fmt.initials(name) : '?'}</div>
+                                <div>
+                                    ${name ? `<div style="font-size:.7rem;font-weight:600;color:var(--text-muted);margin-bottom:3px">${Fmt.esc(name)}</div>` : ''}
+                                    ${Fmt.esc(a.selected_options.follow_up)}
+                                </div>
+                            </div>`;
+                        }).join('')}
+                    </div>
+                </div>`;
+            }
+        }
+
         return `
 <div class="sv-res-qcard">
     <div class="sv-res-qtext">${Fmt.esc(q.text)}</div>
@@ -699,7 +1000,12 @@ const SurveysPage = {
 
     _renderBuilder(area, survey, questions) {
         this._builderSurveyId = survey?.id || null;
-        this._builderQuestions = questions.map(q => ({ ...q, _id: q.id || Math.random().toString(36).slice(2) }));
+        this._builderQuestions = questions.map(q => {
+            const isCondType = q.type === 'rating' || q.type === 'scale';
+            const rawOpts    = q.options || [];
+            const follow_up  = isCondType && rawOpts && !Array.isArray(rawOpts) ? (rawOpts.follow_up || null) : null;
+            return { ...q, _id: q.id || Math.random().toString(36).slice(2), follow_up, options: Array.isArray(rawOpts) ? rawOpts : [] };
+        });
         area.innerHTML = `
 <style>
 .sv-builder{max-width:780px;animation:sv-in .3s ease}
@@ -862,6 +1168,35 @@ const SurveysPage = {
         ${q.type === 'rating' ? `<div class="sv-bld-type-hint"><i class="fa-solid fa-star" style="color:#f59e0b"></i> Шкала оцінок від 1 до 5 зірок</div>` : ''}
         ${q.type === 'scale'  ? `<div class="sv-bld-type-hint"><i class="fa-solid fa-sliders" style="color:var(--primary)"></i> Числова шкала від 1 до 10</div>` : ''}
         ${q.type === 'text'   ? `<div class="sv-bld-type-hint"><i class="fa-solid fa-align-left"></i> Вільна текстова відповідь</div>` : ''}
+        ${(q.type === 'rating' || q.type === 'scale') ? `
+        <div style="margin-top:10px;padding:12px 14px;background:var(--bg-raised);border-radius:12px;border:1.5px solid var(--border)">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.82rem;font-weight:600;color:var(--text-secondary);user-select:none">
+                <input type="checkbox" id="sv-bq-fu-en-${q._id}" ${q.follow_up ? 'checked' : ''}
+                    onchange="SurveysPage._toggleFollowUp('${q._id}',this.checked)"
+                    style="accent-color:var(--primary);width:15px;height:15px">
+                <i class="fa-solid fa-code-branch" style="color:var(--primary);font-size:.85rem"></i>
+                Показати уточнюючe питання якщо оцінка…
+            </label>
+            <div id="sv-bq-fu-${q._id}" style="display:${q.follow_up ? 'flex' : 'none'};flex-direction:column;gap:8px;margin-top:10px">
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <select id="sv-bq-fu-op-${q._id}" class="sv-bld-input" style="width:auto;padding:7px 10px;flex-shrink:0"
+                        onchange="SurveysPage._updateFollowUp('${q._id}')">
+                        <option value="lte" ${q.follow_up?.operator==='lte'?'selected':''}>≤ менше або рівно</option>
+                        <option value="gte" ${q.follow_up?.operator==='gte'?'selected':''}>≥ більше або рівно</option>
+                        <option value="eq"  ${q.follow_up?.operator==='eq' ?'selected':''}>= рівно</option>
+                    </select>
+                    <input type="number" id="sv-bq-fu-val-${q._id}" class="sv-bld-input" style="width:72px;padding:7px 10px"
+                        min="1" max="${q.type==='rating'?5:10}"
+                        value="${q.follow_up?.value ?? (q.type==='rating'?3:5)}"
+                        oninput="SurveysPage._updateFollowUp('${q._id}')">
+                    <span style="font-size:.75rem;color:var(--text-muted)">${q.type==='rating'?'з 5':'з 10'}</span>
+                </div>
+                <input class="sv-bld-q-input" id="sv-bq-fu-txt-${q._id}"
+                    placeholder="Текст уточнюючого питання…"
+                    value="${Fmt.esc(q.follow_up?.text||'')}"
+                    oninput="SurveysPage._updateFollowUp('${q._id}')">
+            </div>
+        </div>` : ''}
         <label class="sv-bld-req-toggle">
             <input type="checkbox" id="sv-bq-req-${q._id}" ${q.is_required!==false?'checked':''}
                 onchange="SurveysPage._toggleRequired('${q._id}',this.checked)">
@@ -957,6 +1292,26 @@ const SurveysPage = {
         if (q) q.is_required = val;
     },
 
+    _toggleFollowUp(id, enabled) {
+        const q = this._builderQuestions.find(q => q._id === id);
+        if (!q) return;
+        q.follow_up = enabled ? { operator: 'lte', value: q.type === 'rating' ? 3 : 5, text: '' } : null;
+        const wrap = document.getElementById(`sv-bq-fu-${id}`);
+        if (wrap) wrap.style.display = enabled ? 'flex' : 'none';
+    },
+
+    _updateFollowUp(id) {
+        const q = this._builderQuestions.find(q => q._id === id);
+        if (!q) return;
+        const enabled = document.getElementById(`sv-bq-fu-en-${id}`)?.checked;
+        if (!enabled) { q.follow_up = null; return; }
+        q.follow_up = {
+            operator: document.getElementById(`sv-bq-fu-op-${id}`)?.value  || 'lte',
+            value:    +(document.getElementById(`sv-bq-fu-val-${id}`)?.value || (q.type === 'rating' ? 3 : 5)),
+            text:     document.getElementById(`sv-bq-fu-txt-${id}`)?.value  || '',
+        };
+    },
+
     _addOption(qid) {
         const q = this._builderQuestions.find(q => q._id === qid);
         if (!q) return;
@@ -1009,10 +1364,11 @@ const SurveysPage = {
         const title = document.getElementById('sb-title')?.value.trim();
         if (!title) { Toast.error('Помилка', 'Введіть назву'); return; }
 
-        // sync current text values from DOM
+        // sync text + follow_up from DOM before saving
         this._builderQuestions.forEach(q => {
             const inp = document.getElementById(`sv-bq-text-${q._id}`);
             if (inp) q.text = inp.value;
+            if (q.type === 'rating' || q.type === 'scale') this._updateFollowUp(q._id);
         });
 
         const fields = {
@@ -1029,12 +1385,16 @@ const SurveysPage = {
                 ? await API.surveys.update(id, fields)
                 : await API.surveys.create(fields);
 
-            const qs = this._builderQuestions.map(q => ({
-                text: q.text, type: q.type,
-                options: q.options || [],
-                is_required: q.is_required !== false,
-                image_url: q.image_url || null
-            })).filter(q => q.text.trim());
+            const qs = this._builderQuestions.map(q => {
+                const isCondType = q.type === 'rating' || q.type === 'scale';
+                return {
+                    text:        q.text,
+                    type:        q.type,
+                    options:     isCondType && q.follow_up ? { follow_up: q.follow_up } : (q.options || []),
+                    is_required: q.is_required !== false,
+                    image_url:   q.image_url || null,
+                };
+            }).filter(q => q.text.trim());
 
             await API.surveys.saveQuestions(survey.id, qs);
             Toast.success('Збережено!');

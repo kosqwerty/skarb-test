@@ -11,34 +11,44 @@ const ExpertPathPage = {
         this._courseSubTab = 'all';
         this._coursesData  = null;
         this._renderShell(container);
-
-        this._fetchCounts().then(c => this._updateTabBadges(c)).catch(() => {});
-
         await this._loadTab('courses');
+        this._fetchAndShowCounts();
     },
 
-    async _fetchCounts() {
-        const [enrollments, assignments, attRes] = await Promise.all([
-            API.enrollments.getMyEnrollments().catch(() => []),
-            TestsManagerAPI.getMyAssignments().catch(() => []),
-            supabase.from('test_attempts')
-                .select('id', { count: 'exact', head: true })
-                .eq('user_id', AppState.user.id)
-                .not('completed_at', 'is', null)
-        ]);
-        return {
-            courses: enrollments.length,
-            tests:   assignments.length,
-            results: attRes.count || 0,
-            surveys: 0
-        };
+    async _fetchAndShowCounts() {
+        try {
+            const uid = AppState.user.id;
+            const [enrRes, testRes, survRes] = await Promise.all([
+                supabase.from('enrollments').select('id', { count: 'exact', head: true }).eq('user_id', uid),
+                supabase.from('test_assignments').select('id', { count: 'exact', head: true }).eq('user_id', uid),
+                supabase.from('survey_responses').select('id', { count: 'exact', head: true }).eq('user_id', uid),
+            ]);
+            this._updateTabBadges({
+                courses: enrRes.count  || 0,
+                tests:   testRes.count || 0,
+                surveys: survRes.count || 0,
+            });
+        } catch(e) {}
     },
 
     _updateTabBadges(counts) {
         Object.entries(counts).forEach(([tab, n]) => {
             const el = document.querySelector(`.ep-tab[data-tab="${tab}"] .ep-tab-count`);
-            if (el) el.textContent = n;
+            if (el) this._animateCount(el, n);
         });
+    },
+
+    _animateCount(el, target) {
+        const n = parseInt(target);
+        if (isNaN(n) || n <= 0) { el.textContent = isNaN(n) ? target : n; return; }
+        let current = 0;
+        const steps = 28;
+        const inc = n / steps;
+        const timer = setInterval(() => {
+            current = Math.min(current + inc, n);
+            el.textContent = Math.round(current);
+            if (current >= n) clearInterval(timer);
+        }, 600 / steps);
     },
 
     _renderShell(container) {
@@ -46,86 +56,190 @@ const ExpertPathPage = {
 <style>
 .ep-wrap{max-width:1100px}
 
-/* ── Tab cards ─────────────────────────────────────────────── */
-.ep-tabs{display:flex;gap:12px;margin-bottom:2rem;flex-wrap:wrap}
+/* ── Hero ────────────────────────────────────────────────────── */
+.ep-hero{
+    position:relative;overflow:hidden;
+    border-radius:24px;padding:40px 44px;margin-bottom:28px;
+    background:linear-gradient(135deg,#1e1b4b 0%,#312e81 40%,#4338ca 72%,#7c3aed 100%);
+    color:#fff
+}
+.ep-hero-orb{
+    position:absolute;border-radius:50%;
+    background:rgba(255,255,255,.07);pointer-events:none
+}
+.ep-hero-orb-1{width:300px;height:300px;top:-90px;right:-70px}
+.ep-hero-orb-2{width:180px;height:180px;bottom:-80px;right:150px}
+.ep-hero-orb-3{width:90px;height:90px;top:30px;right:250px;background:rgba(255,255,255,.04)}
+.ep-hero-body{position:relative;z-index:1}
+.ep-hero-tag{
+    display:inline-flex;align-items:center;gap:6px;
+    background:rgba(255,255,255,.15);backdrop-filter:blur(10px);
+    border:1px solid rgba(255,255,255,.22);border-radius:20px;
+    padding:4px 14px;font-size:.72rem;font-weight:700;
+    letter-spacing:.07em;text-transform:uppercase;margin-bottom:14px;
+    color:rgba(255,255,255,.9)
+}
+.ep-hero-sub{
+    font-size:.93rem;color:rgba(255,255,255,.68);
+    margin:0;max-width:580px;line-height:1.55
+}
+.ep-hero-deco{
+    position:absolute;right:44px;top:50%;transform:translateY(-50%);
+    font-size:6rem;opacity:.1;z-index:0;pointer-events:none;
+    animation:ep-float 4s ease-in-out infinite
+}
+@keyframes ep-float{0%,100%{transform:translateY(-50%) rotate(-4deg)}50%{transform:translateY(calc(-50% - 10px)) rotate(4deg)}}
+
+/* ── Tab cards ───────────────────────────────────────────────── */
+.ep-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:28px}
+
 .ep-tab{
-    flex:1;min-width:150px;
-    padding:18px 20px 16px;
-    border:1.5px solid var(--border);
-    border-radius:var(--radius-lg);
+    position:relative;overflow:hidden;
+    padding:22px 20px 20px;border-radius:20px;
+    border:2px solid var(--border);
     background:var(--bg-surface);
-    color:var(--text-muted);
-    cursor:pointer;
-    transition:all .18s;
-    display:flex;flex-direction:column;align-items:flex-start;gap:2px;
-    text-align:left;
-    position:relative;overflow:hidden
+    cursor:pointer;text-align:left;
+    transition:all .25s cubic-bezier(.4,0,.2,1);
+    display:flex;flex-direction:column;gap:0
 }
-.ep-tab::after{
-    content:'';position:absolute;bottom:0;left:0;right:0;height:3px;
-    background:var(--primary);opacity:0;transition:opacity .18s
+.ep-tab::before{
+    content:'';position:absolute;inset:0;
+    border-radius:18px;opacity:0;transition:opacity .25s
 }
-.ep-tab:hover:not(.active){
-    border-color:var(--primary);
-    color:var(--text-primary);
-    box-shadow:0 2px 12px rgba(0,0,0,.06)
+.ep-tab[data-tab="courses"]::before{background:linear-gradient(135deg,#6366f1,#8b5cf6)}
+.ep-tab[data-tab="tests"]::before  {background:linear-gradient(135deg,#3b82f6,#06b6d4)}
+.ep-tab[data-tab="surveys"]::before{background:linear-gradient(135deg,#10b981,#14b8a6)}
+
+.ep-tab:hover:not(.active){transform:translateY(-3px);box-shadow:0 8px 30px rgba(0,0,0,.1)}
+.ep-tab[data-tab="courses"]:hover:not(.active){border-color:#6366f1}
+.ep-tab[data-tab="tests"]:hover:not(.active)  {border-color:#3b82f6}
+.ep-tab[data-tab="surveys"]:hover:not(.active){border-color:#10b981}
+
+.ep-tab.active{border-color:transparent;color:#fff;transform:translateY(-3px)}
+.ep-tab.active::before{opacity:1}
+.ep-tab[data-tab="courses"].active{box-shadow:0 10px 36px rgba(99,102,241,.45)}
+.ep-tab[data-tab="tests"].active  {box-shadow:0 10px 36px rgba(59,130,246,.45)}
+.ep-tab[data-tab="surveys"].active{box-shadow:0 10px 36px rgba(16,185,129,.45)}
+
+.ep-tab-icon-wrap{
+    font-size:1.4rem;margin-bottom:14px;
+    position:relative;z-index:1;transition:color .25s
 }
-.ep-tab.active{
-    border-color:var(--primary);
-    background:var(--primary);
-    color:#fff;
-    box-shadow:0 4px 18px rgba(0,0,0,.12)
-}
-.ep-tab.active::after{opacity:0}
-.ep-tab-icon{font-size:1.25rem;margin-bottom:8px;opacity:.75}
-.ep-tab.active .ep-tab-icon{opacity:1}
+.ep-tab[data-tab="courses"] .ep-tab-icon-wrap{color:#6366f1}
+.ep-tab[data-tab="tests"] .ep-tab-icon-wrap  {color:#3b82f6}
+.ep-tab[data-tab="surveys"] .ep-tab-icon-wrap{color:#10b981}
+.ep-tab.active .ep-tab-icon-wrap{color:#fff!important}
+
 .ep-tab-count{
-    font-size:2rem;font-weight:800;line-height:1;
-    color:var(--text-primary);letter-spacing:-.03em;
-    transition:color .18s
+    font-size:2.5rem;font-weight:900;line-height:1;
+    color:var(--text-primary);letter-spacing:-.04em;
+    transition:color .25s;position:relative;z-index:1;margin-bottom:4px
 }
-.ep-tab.active .ep-tab-count{color:#fff}
-.ep-tab:hover:not(.active) .ep-tab-count{color:var(--text-primary)}
 .ep-tab-label{
-    font-size:.72rem;font-weight:600;
-    text-transform:uppercase;letter-spacing:.06em;
-    margin-top:4px;opacity:.8
+    font-size:.7rem;font-weight:700;text-transform:uppercase;
+    letter-spacing:.07em;color:var(--text-muted);
+    transition:color .25s;position:relative;z-index:1
+}
+.ep-tab.active .ep-tab-count,
+.ep-tab.active .ep-tab-label{color:#fff}
+
+/* ── Sub-tabs ─────────────────────────────────────────────────── */
+.ep-sub-tabs{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap}
+.ep-sub-tab{
+    padding:7px 18px;border-radius:50px;
+    border:1.5px solid var(--border);
+    background:var(--bg-surface);color:var(--text-muted);
+    font-size:.8rem;font-weight:600;cursor:pointer;transition:all .18s
+}
+.ep-sub-tab:hover{border-color:#6366f1;color:#6366f1}
+.ep-sub-tab.active{background:#6366f1;color:#fff;border-color:#6366f1}
+
+/* ── Course grid ─────────────────────────────────────────────── */
+.ep-course-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px}
+.ep-course-card{
+    background:var(--bg-surface);border:1px solid var(--border);
+    border-radius:18px;overflow:hidden;cursor:pointer;
+    transition:all .25s cubic-bezier(.4,0,.2,1);
+    display:flex;flex-direction:column
+}
+.ep-course-card:hover{
+    transform:translateY(-5px);
+    box-shadow:0 16px 48px rgba(0,0,0,.15);
+    border-color:transparent
+}
+.ep-course-thumb{height:148px;flex-shrink:0;overflow:hidden;position:relative}
+.ep-course-thumb img{width:100%;height:100%;object-fit:cover;transition:transform .35s}
+.ep-course-card:hover .ep-course-thumb img{transform:scale(1.06)}
+.ep-course-body{padding:16px;flex:1;display:flex;flex-direction:column;gap:4px}
+.ep-course-title{
+    font-weight:700;font-size:.9rem;color:var(--text-primary);
+    line-height:1.4;margin-bottom:2px;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden
+}
+.ep-course-teacher{font-size:.73rem;color:var(--text-muted);margin-bottom:8px}
+.ep-prog-bar{height:4px;border-radius:4px;background:var(--border);overflow:hidden;margin-bottom:5px}
+.ep-prog-fill{
+    height:100%;border-radius:4px;
+    background:linear-gradient(90deg,#6366f1,#8b5cf6);
+    transition:width .6s ease
+}
+.ep-prog-fill.done{background:linear-gradient(90deg,#10b981,#14b8a6)}
+.ep-prog-label{font-size:.7rem;color:var(--text-muted)}
+.ep-prog-label.done{color:#10b981;font-weight:600}
+
+/* ── Results stats ───────────────────────────────────────────── */
+.ep-res-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+.ep-res-stat{
+    border-radius:18px;padding:22px 20px;color:#fff;
+    display:flex;flex-direction:column;gap:4px
 }
 
-/* ── Course sub-tabs ────────────────────────────────────────── */
-.ep-sub-tabs{display:flex;gap:6px;margin-bottom:1.25rem;flex-wrap:wrap}
-.ep-sub-tab{padding:5px 14px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:.8rem;font-weight:500;cursor:pointer;transition:all .15s}
-.ep-sub-tab.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+/* ── Fade-in ─────────────────────────────────────────────────── */
+@keyframes ep-fadein{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+#ep-content>*{animation:ep-fadein .28s ease}
 
-/* ── Course grid ────────────────────────────────────────────── */
-.ep-course-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:1rem}
-.ep-course-card{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;cursor:pointer;transition:box-shadow .18s,border-color .18s;display:flex;flex-direction:column}
-.ep-course-card:hover{box-shadow:0 4px 20px rgba(0,0,0,.1);border-color:var(--primary)}
-.ep-course-thumb{height:120px;flex-shrink:0;overflow:hidden}
-.ep-course-body{padding:12px 14px;flex:1;display:flex;flex-direction:column;gap:3px}
-.ep-course-title{font-weight:700;font-size:.9rem;color:var(--text-primary);line-height:1.35;margin-bottom:2px}
-.ep-course-teacher{font-size:.73rem;color:var(--text-muted);margin-bottom:6px}
+/* ── Empty ───────────────────────────────────────────────────── */
+.ep-empty{display:flex;flex-direction:column;align-items:center;padding:64px 24px;gap:12px;text-align:center}
+.ep-empty-icon{
+    width:72px;height:72px;border-radius:50%;background:var(--bg-hover);
+    display:flex;align-items:center;justify-content:center;
+    font-size:1.8rem;color:var(--text-muted);margin-bottom:8px
+}
+.ep-empty-title{font-size:1rem;font-weight:700;color:var(--text-primary)}
+.ep-empty-sub{font-size:.85rem;color:var(--text-muted)}
+
+@media(max-width:680px){
+    .ep-tabs{grid-template-columns:repeat(2,1fr)!important}
+    .ep-hero{padding:28px 24px}
+    .ep-hero-deco{display:none}
+    .ep-res-stats{grid-template-columns:repeat(2,1fr)}
+}
 </style>
 <div class="ep-wrap">
+    <div class="ep-hero">
+        <div class="ep-hero-orb ep-hero-orb-1"></div>
+        <div class="ep-hero-orb ep-hero-orb-2"></div>
+        <div class="ep-hero-orb ep-hero-orb-3"></div>
+        <div class="ep-hero-body">
+            <div class="ep-hero-tag"><i class="fa-solid fa-star"></i>&nbsp; Skill Up</div>
+            <p class="ep-hero-sub">Продовжуй навчатися — кожен крок робить тебе кращим спеціалістом</p>
+        </div>
+        <div class="ep-hero-deco"><i class="fa-solid fa-graduation-cap"></i></div>
+    </div>
     <div class="ep-tabs">
         <button class="ep-tab active" data-tab="courses" onclick="ExpertPathPage.switchTab('courses',this)">
-            <i class="fa-solid fa-graduation-cap ep-tab-icon"></i>
-            <span class="ep-tab-count">—</span>
+            <div class="ep-tab-icon-wrap"><i class="fa-solid fa-graduation-cap"></i></div>
+            <div class="ep-tab-count">—</div>
             <span class="ep-tab-label">Мої курси</span>
         </button>
         <button class="ep-tab" data-tab="tests" onclick="ExpertPathPage.switchTab('tests',this)">
-            <i class="fa-solid fa-clipboard-list ep-tab-icon"></i>
-            <span class="ep-tab-count">—</span>
+            <div class="ep-tab-icon-wrap"><i class="fa-solid fa-clipboard-list"></i></div>
+            <div class="ep-tab-count">—</div>
             <span class="ep-tab-label">Мої тести</span>
         </button>
-        <button class="ep-tab" data-tab="results" onclick="ExpertPathPage.switchTab('results',this)">
-            <i class="fa-solid fa-trophy ep-tab-icon"></i>
-            <span class="ep-tab-count">—</span>
-            <span class="ep-tab-label">Мої результати</span>
-        </button>
         <button class="ep-tab" data-tab="surveys" onclick="ExpertPathPage.switchTab('surveys',this)">
-            <i class="fa-solid fa-square-poll-horizontal ep-tab-icon"></i>
-            <span class="ep-tab-count">0</span>
+            <div class="ep-tab-icon-wrap"><i class="fa-solid fa-square-poll-horizontal"></i></div>
+            <div class="ep-tab-count">0</div>
             <span class="ep-tab-label">Мої опитування</span>
         </button>
     </div>
@@ -146,10 +260,9 @@ const ExpertPathPage = {
         try {
             if      (tab === 'courses') await this._renderCourses(area);
             else if (tab === 'tests')   await this._renderTests(area);
-            else if (tab === 'results') await this._renderResults(area);
             else                        this._renderSurveys(area);
         } catch(e) {
-            area.innerHTML = `<div class="empty-state"><div class="empty-icon"><i class="fa-solid fa-triangle-exclamation"></i></div><p>${e.message}</p></div>`;
+            area.innerHTML = `<div class="ep-empty"><div class="ep-empty-icon"><i class="fa-solid fa-triangle-exclamation"></i></div><div class="ep-empty-title">${Fmt.esc(e.message)}</div></div>`;
         }
     },
 
@@ -165,33 +278,49 @@ const ExpertPathPage = {
         const enrolledMap = new Map(enrollments.map(e => [e.course_id, e]));
         const completed   = enrollments.filter(e => e.completed_at);
 
+        const grads = [
+            'linear-gradient(135deg,#6366f1,#8b5cf6)',
+            'linear-gradient(135deg,#3b82f6,#06b6d4)',
+            'linear-gradient(135deg,#10b981,#14b8a6)',
+            'linear-gradient(135deg,#f59e0b,#ef4444)',
+            'linear-gradient(135deg,#ec4899,#8b5cf6)',
+            'linear-gradient(135deg,#14b8a6,#3b82f6)',
+        ];
+
         const cardsFn = (courses) => {
             if (!courses.length) return `
-                <div class="empty-state">
-                    <div class="empty-icon"><i class="fa-solid fa-graduation-cap" style="font-size:2.5rem;opacity:.2"></i></div>
-                    <p style="color:var(--text-muted)">Немає курсів</p>
+                <div class="ep-empty">
+                    <div class="ep-empty-icon"><i class="fa-solid fa-graduation-cap"></i></div>
+                    <div class="ep-empty-title">Курсів поки немає</div>
+                    <div class="ep-empty-sub">Запишіться на перший курс і починайте навчатися</div>
                 </div>`;
-            return `<div class="ep-course-grid">${courses.map(c => {
+            return `<div class="ep-course-grid">${courses.map((c, i) => {
                 const enr  = enrolledMap.get(c.id);
                 const pct  = enr?.progress_percentage || 0;
                 const done = !!enr?.completed_at;
                 const thumb = c.cover_image
                     ? `<img src="${c.cover_image}" style="width:100%;height:100%;object-fit:cover">`
-                    : `<div style="height:100%;background:linear-gradient(135deg,var(--primary),var(--secondary));display:flex;align-items:center;justify-content:center"><i class="fa-solid fa-graduation-cap" style="font-size:2.2rem;color:rgba(255,255,255,.4)"></i></div>`;
+                    : `<div style="height:100%;background:${grads[i%grads.length]};display:flex;align-items:center;justify-content:center">
+                           <i class="fa-solid fa-graduation-cap" style="font-size:2.5rem;color:rgba(255,255,255,.25)"></i>
+                       </div>`;
                 const footer = enr
-                    ? `<div class="progress-bar" style="height:3px;margin-top:auto;margin-bottom:4px">
-                           <div class="progress-fill${done?' success':''}" style="width:${pct}%"></div>
-                       </div>
-                       <div style="font-size:.7rem;color:${done?'var(--success)':'var(--text-muted)'}">
-                           ${done ? '<i class="fa-solid fa-circle-check"></i> Завершено' : pct+'% пройдено'}
+                    ? `<div class="ep-course-prog-wrap" style="margin-top:auto">
+                           <div class="ep-prog-bar">
+                               <div class="ep-prog-fill${done?' done':''}" style="width:${pct}%"></div>
+                           </div>
+                           <div class="ep-prog-label${done?' done':''}">
+                               ${done ? '<i class="fa-solid fa-circle-check"></i> Завершено' : pct+'% пройдено'}
+                           </div>
                        </div>`
-                    : `<div style="font-size:.7rem;color:var(--text-muted);margin-top:auto"><i class="fa-regular fa-circle"></i> Не записаний</div>`;
+                    : `<div style="font-size:.7rem;color:var(--text-muted);margin-top:auto">
+                           <i class="fa-regular fa-circle"></i> Не записаний
+                       </div>`;
                 return `
                 <div class="ep-course-card" onclick="Router.go('courses/${c.id}?from=expert-path')">
                     <div class="ep-course-thumb">${thumb}</div>
                     <div class="ep-course-body">
-                        <div class="ep-course-title">${c.title}</div>
-                        <div class="ep-course-teacher">${c.teacher?.full_name || ''}</div>
+                        <div class="ep-course-title">${Fmt.esc(c.title)}</div>
+                        <div class="ep-course-teacher">${Fmt.esc(c.teacher?.full_name || '')}</div>
                         ${footer}
                     </div>
                 </div>`;
@@ -236,21 +365,23 @@ const ExpertPathPage = {
 
         this._updateTabBadges({ results: attempts.length });
 
+        const statItems = [
+            { icon:'fa-book',         label:'Курси',         value: enrollments.length,                           grad:'linear-gradient(135deg,#6366f1,#8b5cf6)', shadow:'rgba(99,102,241,.4)' },
+            { icon:'fa-circle-check', label:'Завершено',      value: enrollments.filter(e=>e.completed_at).length, grad:'linear-gradient(135deg,#10b981,#14b8a6)', shadow:'rgba(16,185,129,.4)' },
+            { icon:'fa-file-pen',     label:'Спроби тестів',  value: attempts.length,                              grad:'linear-gradient(135deg,#3b82f6,#06b6d4)', shadow:'rgba(59,130,246,.4)' },
+            { icon:'fa-trophy',       label:'Успішних',       value: attempts.filter(a=>a.passed).length,          grad:'linear-gradient(135deg,#f59e0b,#ef4444)', shadow:'rgba(245,158,11,.4)' },
+        ];
+
         area.innerHTML = `
-        <div class="stats-grid" style="margin-bottom:1.5rem">
-            ${[
-                { icon:'fa-book',         label:'Курси',          value: enrollments.length,                              color:'#6366F1' },
-                { icon:'fa-circle-check', label:'Завершено',       value: enrollments.filter(e=>e.completed_at).length,    color:'#10B981' },
-                { icon:'fa-file-pen',     label:'Спроби тестів',   value: attempts.length,                                 color:'#8B5CF6' },
-                { icon:'fa-trophy',       label:'Успішних',        value: attempts.filter(a=>a.passed).length,             color:'#F59E0B' }
-            ].map(s => `
-                <div class="stat-card" style="--accent-color:${s.color}">
-                    <div class="stat-icon"><i class="fa-solid ${s.icon}"></i></div>
-                    <div class="stat-value">${s.value}</div>
-                    <div class="stat-label">${s.label}</div>
-                </div>`).join('')}
+        <div class="ep-res-stats">
+            ${statItems.map(s => `
+            <div class="ep-res-stat" style="background:${s.grad};box-shadow:0 8px 28px ${s.shadow}">
+                <i class="fa-solid ${s.icon}" style="font-size:1.4rem;opacity:.85;margin-bottom:8px"></i>
+                <div style="font-size:2rem;font-weight:900;line-height:1;letter-spacing:-.03em">${s.value}</div>
+                <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;opacity:.8">${s.label}</div>
+            </div>`).join('')}
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem" class="dash-two-col">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="dash-two-col">
             <div class="card">
                 <div class="card-header"><h3><i class="fa-solid fa-book"></i> Курси</h3></div>
                 <div class="card-body" style="padding:0">
@@ -259,9 +390,9 @@ const ExpertPathPage = {
                             style="display:flex;align-items:center;gap:1rem;padding:.875rem 1.25rem;border-bottom:1px solid var(--border);cursor:pointer;transition:background var(--transition)"
                             onmouseenter="this.style.background='var(--bg-hover)'" onmouseleave="this.style.background=''">
                             <div style="flex:1;min-width:0">
-                                <div style="font-weight:500;font-size:.875rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.course?.title||'—'}</div>
-                                <div class="progress-bar" style="height:3px;margin-top:.4rem">
-                                    <div class="progress-fill${e.completed_at?' success':''}" style="width:${e.progress_percentage||0}%"></div>
+                                <div style="font-weight:500;font-size:.875rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Fmt.esc(e.course?.title||'—')}</div>
+                                <div class="ep-prog-bar" style="margin-top:.4rem">
+                                    <div class="ep-prog-fill${e.completed_at?' done':''}" style="width:${e.progress_percentage||0}%"></div>
                                 </div>
                             </div>
                             <span style="font-size:.8rem;color:var(--text-muted);flex-shrink:0">${e.progress_percentage||0}%</span>
@@ -276,7 +407,7 @@ const ExpertPathPage = {
                     ${attempts.slice(0,15).length ? attempts.slice(0,15).map(a => `
                         <div style="display:flex;align-items:center;gap:1rem;padding:.875rem 1.25rem;border-bottom:1px solid var(--border)">
                             <div style="flex:1;min-width:0">
-                                <div style="font-weight:500;font-size:.875rem">${a.test?.title||'—'}</div>
+                                <div style="font-weight:500;font-size:.875rem">${Fmt.esc(a.test?.title||'—')}</div>
                                 <div style="font-size:.75rem;color:var(--text-muted)">${Fmt.datetime(a.completed_at)}</div>
                             </div>
                             <div style="text-align:right;flex-shrink:0">

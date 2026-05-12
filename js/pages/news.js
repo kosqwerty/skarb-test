@@ -88,12 +88,13 @@ const NewsPage = {
         el.innerHTML = `
             <div onclick="Router.go('news/${news.slug || news.id}')" class="featured-card" style="
                 position:relative;height:420px;border-radius:var(--radius-xl);overflow:hidden;
+                max-width:1300px;
                 cursor:pointer;background:#0f0c29;border:1px solid var(--border);transition:border-color var(--transition)"
                 onmouseenter="this.style.borderColor='var(--primary)'" onmouseleave="this.style.borderColor='var(--border)'">
                 ${news.thumbnail_url ? `
-                    <div style="position:absolute;inset:-20px;background-image:url('${news.thumbnail_url}');background-size:cover;background-position:center;filter:blur(18px) brightness(.45) saturate(1.2);transform:scale(1.05)"></div>
-                    <img src="${news.thumbnail_url}" style="position:relative;width:100%;height:100%;object-fit:contain;object-position:${news.thumbnail_position || 'center'} center;display:block;z-index:1;filter:brightness(1.15) saturate(1.1)">>
-                ` : `<div style="position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1e1b4b,#312e81);z-index:1"><i class="fa-regular fa-newspaper" style="font-size:5rem;color:rgba(255,255,255,.15)"></i></div>`}
+                    <div style="position:absolute;inset:0;background-image:url('${news.thumbnail_url}');background-size:contain;background-repeat:no-repeat;background-position:${news.thumbnail_position || 'center'} center;z-index:1"></div>
+                    <div style="position:absolute;inset:-20px;background-image:url('${news.thumbnail_url}');background-size:cover;background-position:${news.thumbnail_position || 'center'} center;filter:blur(18px) brightness(.45) saturate(1.2);transform:scale(1.05);z-index:0"></div>
+                ` : `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1e1b4b,#312e81);z-index:1"><i class="fa-regular fa-newspaper" style="font-size:5rem;color:rgba(255,255,255,.15)"></i></div>`}
                 <div style="position:absolute;inset:0;background:linear-gradient(to right,rgba(0,0,0,.75) 0%,rgba(0,0,0,.3) 45%,transparent 100%);z-index:2"></div>
                 <div style="position:absolute;inset:0;z-index:3;display:flex;flex-direction:column;justify-content:space-between;padding:1.75rem 2.5rem;max-width:55%">
                     <!-- top -->
@@ -123,8 +124,8 @@ const NewsPage = {
             <div class="news-card" onclick="Router.go('news/${news.slug || news.id}')">
                 <div class="news-thumb" style="position:relative;overflow:hidden;background:#0f0c29">
                     ${thumb ? `
-                        <div style="position:absolute;inset:-10px;background-image:url('${thumb}');background-size:cover;background-position:center;filter:blur(14px) brightness(.4) saturate(1.2);transform:scale(1.05)"></div>
-                        <img src="${thumb}" alt="${Fmt.esc(news.title)}" loading="lazy" style="position:relative;width:100%;height:100%;object-fit:contain;display:block;z-index:1">
+                        <div style="position:absolute;inset:-10px;background-image:url('${thumb}');background-size:cover;background-position:${news.thumbnail_position || 'center'} center;filter:blur(14px) brightness(.4) saturate(1.2);transform:scale(1.05)"></div>
+                        <div style="position:absolute;inset:0;background-image:url('${thumb}');background-size:contain;background-repeat:no-repeat;background-position:${news.thumbnail_position || 'center'} center;z-index:1"></div>
                     ` : `<div style="height:100%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,rgba(99,102,241,.08),rgba(139,92,246,.08));font-size:3rem">📰</div>`}
                     ${!news.is_published ? '<span class="badge badge-muted" style="position:absolute;top:.5rem;left:.5rem;z-index:2">Чернетка</span>' : ''}
                     ${AppState.isStaff() ? `
@@ -366,6 +367,12 @@ const NewsPage = {
     },
 
     // ── Create / Edit ──────────────────────────────────────────────
+    async _backToList() {
+        const container = document.getElementById('page-content');
+        if (container) await this.init(container, {});
+        else Router.go('news');
+    },
+
     openCreate() {
         this._openForm(null);
     },
@@ -386,6 +393,7 @@ const NewsPage = {
             if (this._resizeAbort) { this._resizeAbort.abort(); this._resizeAbort = null; }
             this._quill = null;
         }
+        this._htmlMode = false;
         const isEdit = !!news?.id;
         const pubDateVal = news?.published_at
             ? new Date(news.published_at).toISOString().slice(0,16)
@@ -395,7 +403,7 @@ const NewsPage = {
             : '';
 
         UI.setBreadcrumb([
-            { label: 'Новини', route: 'news' },
+            { label: 'Новини', onClick: () => NewsPage._backToList() },
             { label: isEdit ? 'Редагувати' : 'Нова новина' }
         ]);
 
@@ -411,7 +419,7 @@ const NewsPage = {
                 .nf-field label{font-size:.75rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em}
                 .nf-sep{height:1px;background:var(--border);margin:.25rem 0}
                 .nf-img-preview{border-radius:var(--radius-md);overflow:hidden;max-height:140px}
-                .nf-img-preview img{width:100%;height:140px;object-fit:cover;display:block}
+                .nf-img-preview img{width:100%;height:140px;object-fit:cover;object-position:center center;display:block}
                 .nf-img-change{text-align:center;margin-top:.5rem}
                 .nf-date{font-size:.82rem;padding:.45rem .6rem;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-raised);color:var(--text-primary);width:100%;outline:none;transition:border-color var(--transition);cursor:pointer;font-family:inherit}
                 .nf-date:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(99,102,241,.12)}
@@ -444,7 +452,7 @@ const NewsPage = {
                 
                 <h2 style="margin:0">${isEdit ? '<i class="fa-solid fa-pen"></i> Редагувати новину' : 'Додати новину'}</h2>
                 <div style="display:flex;gap:.75rem;padding-top:.5rem">
-                        <button class="btn btn-secondary" onclick="Router.go('news')">Скасувати</button>
+                        <button class="btn btn-secondary" onclick="NewsPage._backToList()">Скасувати</button>
                         <button class="btn btn-ghost" onclick="NewsPage._previewNews()"><i class="fa-solid fa-eye"></i> Перегляд</button>
                         <button class="btn btn-primary" onclick="NewsPage.saveNews('${news?.id || ''}')">
                             ${isEdit ? '<i class="fa-solid fa-floppy-disk" style="font-size:1rem;filter:drop-shadow(0 0 4px rgba(99,102,241,.7))"></i> Зберегти зміни' : '<i class="fa-regular fa-newspaper" style="color:#1e40af"></i> Опублікувати'}
@@ -561,7 +569,7 @@ const NewsPage = {
                                 Формат: JPG, PNG · до 5 МБ
                             </div>
                             ${news?.thumbnail_url
-                                ? `<div class="nf-img-preview"><img id="n-img-preview" src="${news.thumbnail_url}"></div>
+                                ? `<div class="nf-img-preview"><img id="n-img-preview" src="${news.thumbnail_url}" style="object-fit:cover;object-position:${news.thumbnail_position || 'center'} center"></div>
                                    <div class="nf-img-change"><button class="btn btn-ghost btn-sm" onclick="document.getElementById('n-img-input').click()">Змінити</button></div>`
                                 : `<div id="news-img-zone"></div>`}
                             <input id="n-img-input" type="file" accept="image/*" style="display:none"
@@ -1002,6 +1010,8 @@ const NewsPage = {
             if (!btn) return;
             btn.className = `btn btn-sm ${p === pos ? 'btn-primary' : 'btn-ghost'}`;
         });
+        const img = document.getElementById('n-img-preview');
+        if (img) img.style.objectPosition = `${pos} center`;
     },
 
     _onImgChange(input) {
@@ -1068,7 +1078,9 @@ const NewsPage = {
 
             AuditLog.write(id ? 'news_update' : 'news_create', 'news', title);
             Toast.success('Успішно!', `Новина "${title}" ${id ? 'оновлена' : 'додана'}`);
-            Router.go('news');
+            const container = document.getElementById('page-content');
+            if (container) await this.init(container, {});
+            else Router.go('news');
         } catch(e) {
             Toast.error('Помилка', e.message);
         } finally { Loader.hide(); }

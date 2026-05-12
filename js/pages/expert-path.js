@@ -290,13 +290,8 @@ const ExpertPathPage = {
         </div>`;
     },
 
-    // ── Опитування (заглушка) ────────────────────────────────────────
+    // ── Опитування ───────────────────────────────────────────────────
     _renderSurveys(area) {
-        area.innerHTML = `
-        <div class="empty-state" style="padding:5rem 2rem">
-            <div style="font-size:3.5rem;margin-bottom:1.25rem;opacity:.2"><i class="fa-solid fa-square-poll-horizontal"></i></div>
-            <h3 style="color:var(--text-primary);margin-bottom:.5rem">Опитування — скоро</h3>
-            <p style="color:var(--text-muted);font-size:.875rem">Розділ знаходиться в розробці</p>
-        </div>`;
+        SurveysPage.renderInTab(area);
     }
 };

@@ -82,8 +82,8 @@ const DashboardPage = {
 
             .db-news-mini{display:flex;flex-direction:column}
             .db-news-hero{height:120px;position:relative;overflow:hidden;background:#0f0c29;cursor:pointer}
-            .db-news-hero-bg{position:absolute;inset:-8px;background-size:cover;background-position:center;filter:blur(12px) brightness(.4);transform:scale(1.05)}
-            .db-news-hero img{position:relative;width:100%;height:100%;object-fit:contain;display:block;z-index:1}
+            .db-news-hero-bg{position:absolute;inset:-8px;background-size:cover;filter:blur(12px) brightness(.4);transform:scale(1.05)}
+            .db-news-hero-main{position:absolute;inset:0;background-size:contain;background-repeat:no-repeat;z-index:1}
             .db-news-hero-overlay{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.7),transparent);z-index:2}
             .db-news-hero-title{position:absolute;bottom:.75rem;left:.85rem;right:.85rem;z-index:3;font-size:.85rem;font-weight:700;color:#fff;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
             .db-news-item{display:flex;gap:.75rem;padding:.6rem .85rem;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s}
@@ -173,7 +173,7 @@ const DashboardPage = {
             API.notifications.getUnreadCount().catch(() => 0).then(v => v || 0),
             API.documentDownloads.getTodayShiftLocation().catch(() => null),
             supabase.from('personal_cal_events')
-                .select('id,title,date,time,color,is_important,is_done,acked_date')
+                .select('id,title,date,time,end_time,color,is_important,is_done,acked_date')
                 .eq('user_id', AppState.user.id)
                 .gte('date', today)
                 .lte('date', in7)
@@ -289,7 +289,7 @@ const DashboardPage = {
         const in7   = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
         Promise.all([
             supabase.from('personal_cal_events')
-                .select('id,title,date,time,color,is_important,is_done,acked_date')
+                .select('id,title,date,time,end_time,color,is_important,is_done,acked_date')
                 .eq('user_id', AppState.user.id)
                 .gte('date', today).lte('date', in7)
                 .order('date').order('time', { nullsFirst: true })
@@ -489,8 +489,8 @@ const DashboardPage = {
         if (featured.thumbnail_url) {
             body += `
             <div class="db-news-hero" onclick="Router.go('news/${featured.slug || featured.id}')">
-                <div class="db-news-hero-bg" style="background-image:url('${featured.thumbnail_url}')"></div>
-                <img src="${featured.thumbnail_url}" alt="">
+                <div class="db-news-hero-bg" style="background-image:url('${featured.thumbnail_url}');background-position:${featured.thumbnail_position || 'center'} center"></div>
+                <div class="db-news-hero-main" style="background-image:url('${featured.thumbnail_url}');background-position:${featured.thumbnail_position || 'center'} center"></div>
                 <div class="db-news-hero-overlay"></div>
                 <div class="db-news-hero-title">${Fmt.esc(featured.title)}</div>
             </div>`;
@@ -599,7 +599,6 @@ const DashboardPage = {
                 </div>`;
             }
 
-            if (!upcoming.length && !past.length) body += '';
         } else {
             body += `
             <div style="text-align:center;padding:1rem 0;color:var(--text-muted);font-size:.82rem">

@@ -1400,5 +1400,129 @@ const API = {
             if (error) throw error;
             return data; // { bytes, pretty }
         }
+    },
+
+    // ── Surveys ───────────────────────────────────────────────────────
+    surveys: {
+        async getAll({ published } = {}) {
+            let q = supabase.from('surveys')
+                .select('*, creator:profiles!created_by(full_name), questions:survey_questions(id)', { count: 'exact' })
+                .order('created_at', { ascending: false });
+            if (published !== undefined) q = q.eq('is_published', published);
+            const { data, error } = await q;
+            if (error) throw error;
+            return data || [];
+        },
+        async getById(id) {
+            const { data, error } = await supabase.from('surveys')
+                .select('*, creator:profiles!created_by(full_name)')
+                .eq('id', id).single();
+            if (error) throw error;
+            return data;
+        },
+        async getQuestions(surveyId) {
+            const { data, error } = await supabase.from('survey_questions')
+                .select('*').eq('survey_id', surveyId)
+                .order('order_index');
+            if (error) throw error;
+            return data || [];
+        },
+        async create(fields) {
+            const { data, error } = await supabase.from('surveys')
+                .insert({ ...fields, created_by: (await supabase.auth.getUser()).data.user.id })
+                .select().single();
+            if (error) throw error;
+            return data;
+        },
+        async update(id, fields) {
+            const { data, error } = await supabase.from('surveys')
+                .update(fields).eq('id', id).select().single();
+            if (error) throw error;
+            return data;
+        },
+        async delete(id) {
+            const { error } = await supabase.from('surveys').delete().eq('id', id);
+            if (error) throw error;
+        },
+        async saveQuestions(surveyId, questions) {
+            await supabase.from('survey_questions').delete().eq('survey_id', surveyId);
+            if (!questions.length) return;
+            const rows = questions.map((q, i) => ({
+                survey_id: surveyId, text: q.text, type: q.type,
+                options: q.options || [], is_required: q.is_required !== false,
+                order_index: i, image_url: q.image_url || null
+            }));
+            const { error } = await supabase.from('survey_questions').insert(rows);
+            if (error) throw error;
+        },
+        async hasResponded(surveyId) {
+            const { data } = await supabase.from('survey_responses')
+                .select('id').eq('survey_id', surveyId)
+                .eq('user_id', (await supabase.auth.getUser()).data.user.id)
+                .maybeSingle();
+            return !!data;
+        },
+        async getMyResponse(surveyId) {
+            const uid = (await supabase.auth.getUser()).data.user.id;
+            const { data: resp } = await supabase.from('survey_responses')
+                .select('id').eq('survey_id', surveyId).eq('user_id', uid).maybeSingle();
+            if (!resp) return null;
+            const { data: answers } = await supabase.from('survey_answers')
+                .select('*').eq('response_id', resp.id);
+            return { response: resp, answers: answers || [] };
+        },
+        async submitResponse(surveyId, answers) {
+            const uid = (await supabase.auth.getUser()).data.user.id;
+            const { data: resp, error: re } = await supabase.from('survey_responses')
+                .insert({ survey_id: surveyId, user_id: uid }).select().single();
+            if (re) throw re;
+            const rows = answers.map(a => ({
+                response_id: resp.id, question_id: a.question_id,
+                value: a.value || null, selected_options: a.selected_options || []
+            }));
+            if (rows.length) {
+                const { error: ae } = await supabase.from('survey_answers').insert(rows);
+                if (ae) throw ae;
+            }
+            return resp;
+        },
+        async getResults(surveyId) {
+            const { data: responses, error: re } = await supabase.from('survey_responses')
+                .select('id, user_id, submitted_at, user:profiles!user_id(full_name, avatar_url)')
+                .eq('survey_id', surveyId).order('submitted_at', { ascending: false });
+            if (re) throw re;
+            if (!responses?.length) return { responses: [], answers: [] };
+            const { data: answers, error: ae } = await supabase.from('survey_answers')
+                .select('*').in('response_id', responses.map(r => r.id));
+            if (ae) throw ae;
+            return { responses: responses || [], answers: answers || [] };
+        },
+        async getRespondentCount(surveyId) {
+            const { count } = await supabase.from('survey_responses')
+                .select('id', { count: 'exact', head: true }).eq('survey_id', surveyId);
+            return count || 0;
+        },
+        async getAssignments(surveyId) {
+            const { data, error } = await supabase.from('survey_assignments')
+                .select('*, user:profiles!user_id(id,full_name,email,job_position)')
+                .eq('survey_id', surveyId);
+            if (error) throw error;
+            return data || [];
+        },
+        async assign(surveyId, userIds, deadlineAt) {
+            const rows = userIds.map(uid => ({
+                survey_id: surveyId, user_id: uid,
+                assigned_by: AppState.user.id,
+                deadline_at: deadlineAt || null
+            }));
+            const { error } = await supabase.from('survey_assignments')
+                .upsert(rows, { onConflict: 'survey_id,user_id', ignoreDuplicates: false });
+            if (error) throw error;
+        },
+        async unassign(surveyId, userId) {
+            const { error } = await supabase.from('survey_assignments')
+                .delete().eq('survey_id', surveyId).eq('user_id', userId);
+            if (error) throw error;
+        }
     }
 };

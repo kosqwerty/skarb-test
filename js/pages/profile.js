@@ -131,8 +131,10 @@ const ProfilePage = {
                         <span>Новий пароль</span>
                         <div style="position:relative">
                             <input id="pe-password" type="password" placeholder="Залиште порожнім щоб не змінювати" autocomplete="new-password" style="width:100%;box-sizing:border-box;padding-right:42px">
-                            <button type="button" onclick="const i=document.getElementById('pe-password');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'<i class="fa-solid fa-eye"></i>':'<i class="fa-solid fa-eye-slash"></i>'"
-                                
+                            <button type="button" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;display:flex;align-items:center"
+                                onclick="const i=document.getElementById('pe-password');i.type=i.type==='password'?'text':'password';this.innerHTML=i.type==='password'?'<i class=&quot;fa-solid fa-eye&quot;></i>':'<i class=&quot;fa-solid fa-eye-slash&quot;></i>'">
+                                <i class="fa-solid fa-eye"></i>
+                            </button>
                         </div>
                         <small class="field-hint">Мінімум 6 символів</small>
                     </label>
@@ -141,8 +143,10 @@ const ProfilePage = {
                         <span>Підтвердження пароля</span>
                         <div style="position:relative">
                             <input id="pe-password2" type="password" placeholder="Повторіть пароль" style="width:100%;box-sizing:border-box;padding-right:42px">
-                            <button type="button" onclick="const i=document.getElementById('pe-password2');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'<i class="fa-solid fa-eye"></i>':'<i class="fa-solid fa-eye-slash"></i>'"
-                                
+                            <button type="button" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;display:flex;align-items:center"
+                                onclick="const i=document.getElementById('pe-password2');i.type=i.type==='password'?'text':'password';this.innerHTML=i.type==='password'?'<i class=&quot;fa-solid fa-eye&quot;></i>':'<i class=&quot;fa-solid fa-eye-slash&quot;></i>'">
+                                <i class="fa-solid fa-eye"></i>
+                            </button>
                         </div>
                     </label>` : ''}
                     ${canRole ? `
@@ -160,9 +164,10 @@ const ProfilePage = {
                         const setByHint = user.label && user.label_set_by
                             ? `<small class="field-hint">Встановлено: ${roleNames[user.label_set_by] || user.label_set_by}${canLabel ? '' : ' · Недостатньо прав для зміни'}</small>`
                             : '';
-                        return canLabel
-                            ? `<label class="input-label"><span>Мітка</span><input id="pe-label" type="text" value="${user.label || ''}" placeholder="Наприклад: Стажер, Блок">${setByHint}</label>`
-                            : `<label class="input-label"><span>Мітка</span><input id="pe-label" type="text" value="${user.label || ''}" disabled style="opacity:.5;cursor:not-allowed">${setByHint}</label>`;
+                        const labelOpts = ['','intern','mentor'];
+                        const labelLabels = { '': '— Без мітки —', intern: '🌱 Стажер', mentor: '⭐ Наставник' };
+                        const labelSel = `<div class="custom-select-wrapper"><select id="pe-label"${canLabel ? '' : ' disabled style="opacity:.5;cursor:not-allowed"'}>${labelOpts.map(v=>`<option value="${v}"${user.label===v?' selected':''}>${labelLabels[v]}</option>`).join('')}</select></div>`;
+                        return `<label class="input-label"><span>Мітка</span>${labelSel}${setByHint}</label>`;
                     })() : ''}
                 </div>
             </div>

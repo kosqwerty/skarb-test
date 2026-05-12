@@ -87,11 +87,13 @@ const SomePage = {
 
 All Supabase calls live here, grouped by domain. Always throws on error so callers can try/catch.
 
-Full namespace list: `API.profiles`, `API.courses`, `API.enrollments`, `API.lessons`, `API.resources`, `API.scorm`, `API.tests`, `API.questions`, `API.testImages`, `API.notifications`, `API.attempts`, `API.progress`, `API.pages`, `API.pageAttachments`, `API.news`, `API.directories`, `API.dovirenosti`, `API.documentDownloads`, `API.birthdays`, `API.accessGroups`, `API.analytics`, `API.system`.
+Full namespace list: `API.profiles`, `API.courses`, `API.enrollments`, `API.lessons`, `API.resources`, `API.scorm`, `API.tests`, `API.questions`, `API.testImages`, `API.notifications`, `API.attempts`, `API.progress`, `API.pages`, `API.pageAttachments`, `API.news`, `API.directories`, `API.dovirenosti`, `API.documentDownloads`, `API.birthdays`, `API.accessGroups`, `API.analytics`, `API.system`, `API.surveys`.
 
 ### Database migrations
 
-`sql/migration_v*.sql` — incremental, numbered. The current schema is the result of applying all migrations in order. When adding a new column/table, create `migration_v{N+1}.sql` and run it in the Supabase SQL Editor. Latest is v41 (`tests.allow_skip`).
+`sql/migration_v*.sql` — incremental, numbered. The current schema is the result of applying all migrations in order. When adding a new column/table, create `migration_v{N+1}.sql` and run it in the Supabase SQL Editor. **Latest is v50** (surveys tables).
+
+When writing a migration, always include `IF NOT EXISTS` / `IF EXISTS` guards and end with RLS + policies.
 
 ## Key files
 
@@ -106,7 +108,8 @@ Full namespace list: `API.profiles`, `API.courses`, `API.enrollments`, `API.less
 | `js/pages/schedule-graph.js` | Visual schedule graph |
 | `js/pages/access-groups.js` | Access group management (city/position/department/label filters) |
 | `js/pages/label-access.js` | Label-based content access rules |
-| `js/pages/expert-path.js` | Expert learning paths |
+| `js/pages/expert-path.js` | Expert learning paths — tabs: шляхи / курси / тести / опитування |
+| `js/pages/surveys.js` | Surveys module — entry: `SurveysPage.renderInTab(area)`; embedded in expert-path tab |
 | `js/pages/analytics.js` | Usage analytics dashboard |
 | `css/main.css` | Single stylesheet, CSS variables for light/dark theming (`--primary`, `--bg-surface`, `--border`, etc.) |
 
@@ -133,7 +136,7 @@ All PKs are UUID. All tables have `created_at TIMESTAMPTZ DEFAULT NOW()`. Tables
 
 | Table | Key columns | Notes |
 |-------|-------------|-------|
-| `profiles` | `id` (= auth.uid), `email`, `full_name`, `role`, `avatar_url`, `is_active`, `is_blocked`, `job_position`, `city`, `subdivision` | Extends `auth.users`; auto-created by trigger on signup |
+| `profiles` | `id` (= auth.uid), `email`, `full_name`, `role`, `avatar_url`, `is_active`, `is_blocked`, `job_position`, `city`, `subdivision`, `gender`, `label` | Extends `auth.users`; auto-created by trigger on signup. `label`: `intern`\|`mentor` (v49). `gender`: `male`\|`female`\|`other` |
 | `courses` | `title`, `teacher_id`, `category`, `level`, `is_published`, `is_featured`, `tags TEXT[]` | |
 | `enrollments` | `user_id`, `course_id`, `progress_percentage`, `completed_at` | UNIQUE(user_id, course_id) |
 | `lessons` | `course_id`, `title`, `order_index`, `is_published`, `is_free_preview` | |
@@ -142,14 +145,18 @@ All PKs are UUID. All tables have `created_at TIMESTAMPTZ DEFAULT NOW()`. Tables
 | `questions` | `test_id`, `question_text`, `question_type` (single/multiple/true_false), `points`, `order_index` | |
 | `answers` | `question_id`, `answer_text`, `is_correct`, `order_index`, `image_url`, `image_align` | `answer_text` stores Quill HTML |
 | `test_attempts` | `user_id`, `test_id`, `attempt_number`, `score`, `percentage`, `passed`, `completed_at` | |
-| `news` | `title`, `content`, `excerpt`, `thumbnail_url`, `author_id`, `is_published`, `is_pinned` | |
+| `news` | `title`, `content`, `excerpt`, `thumbnail_url`, `thumbnail_position`, `author_id`, `is_published`, `is_pinned` | `thumbnail_position`: `left`\|`center`\|`right` — apply via `background-position` on div, not `object-position` on img |
 | `notifications` | `user_id`, `title`, `message`, `type`, `is_read`, `link` | |
 | `pages` | `title`, `slug`, `content` (HTML), `is_published`, `access_type` | CMS pages for collections |
 | `schedule_events` | `title`, `start_time`, `end_time`, `location_id`, `created_by` | |
 | `access_groups` | `name`, `cities`, `positions`, `departments`, `labels` | Filter groups for content access |
 | `dovirenosti` | document approval/acknowledgement records | |
+| `surveys` | `title`, `description`, `created_by`, `is_published`, `is_anonymous`, `deadline_at`, `access_group_id` | v50 |
+| `survey_questions` | `survey_id`, `text`, `type` (`single`\|`multiple`\|`text`\|`rating`\|`scale`), `options` (jsonb), `is_required`, `order_index` | |
+| `survey_responses` | `survey_id`, `user_id`, `session_id`, `submitted_at` | |
+| `survey_answers` | `response_id`, `question_id`, `value`, `selected_options` (jsonb) | |
 
-> `schema.sql` is the baseline. Migrations `v2–v41` add columns — check the latest migration for the most current column list on any table.
+> `schema.sql` is the baseline. Migrations `v2–v50` add columns — check the latest migration for the most current column list on any table.
 
 ## All routes
 
@@ -381,3 +388,40 @@ When a value is only used for display (toast message, confirm dialog text), stor
 |----------|---------|
 | `Fmt.esc(str)` | HTML-escape `< > " ' &` for safe innerHTML insertion |
 | `Fmt.safeUrl(url)` | Returns `#` if URL uses `javascript:`, `data:`, or `vbscript:` |
+
+## Known gotchas
+
+### Router.go() on the current route does nothing
+`Router.go('news')` when already on `#/news` does **not** re-render. To refresh the current page call `PageModule.init(container, {})` directly:
+```js
+const container = document.getElementById('page-content');
+if (container) await SomePage.init(container, {});
+else Router.go('some-route');
+```
+
+### setBreadcrumb onClick
+`UI.setBreadcrumb` supports an `onClick` callback for items that need in-page navigation instead of a route change:
+```js
+UI.setBreadcrumb([
+    { label: 'Новини', onClick: () => NewsPage._backToList() },
+    { label: 'Редагування' }
+]);
+```
+
+### FA icons in onclick handlers
+Setting icon via `this.textContent = '<i class="fa...">'` renders literal tags. Always use `this.innerHTML`. When building the icon HTML inside an onclick attribute, escape quotes: `&lt;i class=&quot;fa-solid fa-eye&quot;&gt;&lt;/i&gt;` — or better, toggle a CSS class instead.
+
+### Password / icon toggle buttons inside inputs
+Wrap the input in `position:relative` container. Button style: `position:absolute;right:10px;top:50%;transform:translateY(-50%)`. Set icon with `btn.innerHTML = '<i class="fa-solid fa-eye"></i>'`, not `textContent`.
+
+### Contacts page — gender colour themes
+`ContactsPage._genderTheme(gender)` returns gradient stops:
+- `female`: `#ec4899` → `#8b5cf6`
+- `male`: `#3b82f6` → `#6366f1`
+- `other` / null: `#10b981` → `#0ea5e9`
+
+### Profile label field (v49)
+`profiles.label` is `intern` | `mentor` | null (CHECK constraint). Render as:
+- `intern` → `badge-success` + "🌱 Стажер"
+- `mentor` → `badge-warning` + "⭐ Наставник"
+In forms, use `<select>` — never a free text input. Only `owner`/`admin` can set it.

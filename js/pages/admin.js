@@ -298,24 +298,20 @@ const AdminPage = {
                 <td style="font-size:.8rem;white-space:nowrap">${Fmt.esc(u.city) || '<span style="color:var(--text-muted)">—</span>'}</td>
                 <td style="font-size:.8rem">${Fmt.esc(u.subdivision) || '<span style="color:var(--text-muted)">—</span>'}</td>
                 <td>${Fmt.roleBadge(u.role)}</td>
-                <td>${u.label ? `<span class="badge badge-warning" style="font-size:.65rem">${u.label}</span>` : '<span style="color:var(--text-muted);font-size:.8rem">—</span>'}</td>
+                <td>${u.label === 'intern' ? `<span class="badge badge-success" style="font-size:.65rem">🌱 Стажер</span>` : u.label === 'mentor' ? `<span class="badge badge-warning" style="font-size:.65rem">⭐ Наставник</span>` : '<span style="color:var(--text-muted);font-size:.8rem">—</span>'}</td>
                 <td style="color:var(--text-muted);font-size:.78rem;white-space:nowrap">${Fmt.dateShort(u.created_at)}</td>
                 <td style="font-size:.78rem;white-space:nowrap">${u.last_sign_in_at
                     ? `<span style="color:var(--text-secondary)">${Fmt.dateShort(u.last_sign_in_at)}</span>`
                     : '<span style="color:var(--text-muted)">—</span>'}</td>
                
                 <td>
-                    <div style="display:flex;gap:.3rem">
-                        ${canEdit ? `<button class="btn btn-ghost btn-sm" onclick="AdminPage.openEditUser(${JSON.stringify(u).replace(/"/g,'&quot;')})"><i class="fa-solid fa-pen"></i></button>` : ''}
-                        ${!isSelf && !isOwnerRow ? `
-                            <button class="btn btn-ghost btn-sm" onclick="AdminPage.toggleBlock('${u.id}',${u.is_active !== false})" title="${u.is_active !== false ? 'Заблокувати' : 'Розблокувати'}">
-                                ${u.is_active !== false ? '🔒' : '🔓'}
-                            </button>` : ''}
+                    <div style="display:flex;flex-direction:column;gap:.25rem;align-items:flex-start">
+                        ${canEdit ? `<button class="btn btn-ghost btn-sm" style="width:100%;justify-content:flex-start;gap:.4rem" onclick="AdminPage.openEditUser(${JSON.stringify(u).replace(/"/g,'&quot;')})"><i class="fa-solid fa-pen"></i></button>` : ''}
                         ${canHide ? `
-                            <button class="btn btn-ghost btn-sm" onclick="AdminPage.toggleHidden('${u.id}',${!!u.is_hidden})" title="${u.is_hidden ? 'Показати в контактах' : 'Приховати з контактів'}">
+                            <button class="btn btn-ghost btn-sm" style="width:100%;justify-content:flex-start;gap:.4rem" onclick="AdminPage.toggleHidden('${u.id}',${!!u.is_hidden})" title="${u.is_hidden ? 'Показати в контактах' : 'Приховати з контактів'}">
                                 ${u.is_hidden ? '👁' : '🙈'}
                             </button>` : ''}
-                              </div>
+                    </div>
                 </td>
             </tr>`;
     },
@@ -359,7 +355,7 @@ const AdminPage = {
                         <div style="font-size:1.1rem;font-weight:700;margin-bottom:.3rem">${Fmt.esc(u.full_name) || '—'}</div>
                         <div style="display:flex;gap:.4rem;flex-wrap:wrap">
                             ${Fmt.roleBadge(u.role)}
-                            ${u.label ? `<span class="badge badge-warning" style="font-size:.65rem">${u.label}</span>` : ''}
+                            ${u.label === 'intern' ? `<span class="badge badge-success" style="font-size:.65rem">🌱 Стажер</span>` : u.label === 'mentor' ? `<span class="badge badge-warning" style="font-size:.65rem">⭐ Наставник</span>` : ''}
                             <span class="badge ${u.is_active !== false ? 'badge-success' : 'badge-muted'}">${u.is_active !== false ? 'Активний' : 'Заблокований'}</span>
                         </div>
                     </div>
@@ -383,6 +379,11 @@ const AdminPage = {
                 ${canSetBdReminder ? this._birthdayReminderBlock(u, bdReminder) : ''}`,
             footer: `
                 <button class="btn btn-secondary" onclick="Modal.close()">Закрити</button>
+                ${AppState.isAdmin() && u.id !== AppState.user?.id && u.role !== 'owner' ? `
+                    <button class="btn btn-ghost" style="color:${u.is_active !== false ? 'var(--danger)' : 'var(--success)'}"
+                        onclick="Modal.close();AdminPage.toggleBlock('${u.id}',${u.is_active !== false})">
+                        ${u.is_active !== false ? '🔒 Заблокувати' : '🔓 Розблокувати'}
+                    </button>` : ''}
                 ${AppState.isAdmin() && u.id !== AppState.user?.id ? `<button class="btn btn-ghost" onclick="Modal.close();AppState.impersonate(${JSON.stringify(u).replace(/"/g,'&quot;')})" title="Переглянути інтерфейс від імені цього користувача"><i class="fa-solid fa-eye"></i> Переглянути як</button>` : ''}
                 ${(u.role !== 'owner' || AppState.isOwner()) ? `<button class="btn btn-primary" onclick="Modal.close();AdminPage.openEditUser(${JSON.stringify(u).replace(/"/g,'&quot;')})"><i class="fa-solid fa-pen"></i> Редагувати</button>` : ''}
             `
@@ -687,8 +688,10 @@ const AdminPage = {
                         <span>Пароль <span class="required-star">*</span></span>
                         <div style="position:relative">
                             <input id="cu-password" type="password" placeholder="••••••••" autocomplete="new-password" style="width:100%;box-sizing:border-box;padding-right:42px">
-                            <button type="button" onclick="const i=document.getElementById('cu-password');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'<i class="fa-solid fa-eye"></i>':'<i class="fa-solid fa-eye-slash"></i>'"
-                                
+                            <button type="button" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;display:flex;align-items:center"
+                                onclick="const i=document.getElementById('cu-password');i.type=i.type==='password'?'text':'password';this.innerHTML=i.type==='password'?'<i class=&quot;fa-solid fa-eye&quot;></i>':'<i class=&quot;fa-solid fa-eye-slash&quot;></i>'">
+                                <i class="fa-solid fa-eye"></i>
+                            </button>
                         </div>
                         <small class="field-hint">Мінімум 6 символів</small>
                     </label>
@@ -742,7 +745,13 @@ const AdminPage = {
                     </div>
                     <label class="input-label">
                         <span>Мітка</span>
-                        <input id="cu-label" type="text" placeholder="Наприклад: Блок, Валюта">
+                        <div class="custom-select-wrapper">
+                            <select id="cu-label">
+                                <option value="">— Без мітки —</option>
+                                <option value="intern">🌱 Стажер</option>
+                                <option value="mentor">⭐ Наставник</option>
+                            </select>
+                        </div>
                     </label>
                 </div>
             </div>

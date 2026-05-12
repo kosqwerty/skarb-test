@@ -27,7 +27,7 @@ const ContactsPage = {
             const [{ data: users, error }, { data: reminders }] = await Promise.all([
                 supabase
                     .from('profiles')
-                    .select('id,full_name,phone,job_position,subdivision,city,role,avatar_url,birth_date,is_hidden,is_active,manager_id,hired_at,position_since')
+                    .select('id,full_name,phone,job_position,subdivision,city,role,avatar_url,birth_date,is_hidden,is_active,manager_id,hired_at,position_since,gender,label')
                     .eq('is_hidden', false)
                     .eq('is_active', true)
                     .order('full_name', { ascending: true }),
@@ -102,33 +102,47 @@ const ContactsPage = {
 .ct-search { width:100%;padding:11px 16px;background:var(--bg-raised);border:1.5px solid var(--border);border-radius:16px;font-size:.95rem;color:var(--text-primary);outline:none;transition:border-color .15s;box-sizing:border-box; }
 .ct-search:focus { border-color:var(--primary); }
 .ct-count { flex-shrink:0;font-size:.82rem;color:var(--text-muted);white-space:nowrap; }
-.ct-grid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:1rem; }
-.ct-card { background:var(--bg-surface);border:1px solid var(--border);border-radius:20px;padding:18px;box-shadow:var(--shadow-sm);transition:box-shadow .15s,border-color .15s;display:flex;flex-direction:column;gap:14px; }
-.ct-card:hover { box-shadow:var(--shadow-md);border-color:var(--border-light); }
-.ct-card-head { display:flex;align-items:center;gap:12px; }
-.ct-avatar { width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg,var(--primary),var(--secondary));display:flex;align-items:center;justify-content:center;font-size:1rem;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden; }
+.ct-grid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:1rem; }
+
+/* ── Card ── */
+.ct-card { background:var(--bg-surface);border:1.5px solid var(--border);border-radius:22px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.06);transition:box-shadow .2s,transform .2s,border-color .2s;display:flex;flex-direction:column; }
+.ct-card:hover { box-shadow:0 8px 32px rgba(0,0,0,.13);transform:translateY(-3px); }
+
+/* ── Banner (gradient top strip) ── */
+.ct-card-banner { position:relative;padding:14px 14px 12px;display:flex;flex-direction:column;justify-content:flex-end; }
+.ct-banner-main { display:flex;align-items:flex-end;gap:11px;margin-top:10px; }
+.ct-banner-info { flex:1;min-width:0; }
+.ct-avatar-wrap { position:relative;flex-shrink:0; }
+.ct-avatar { width:52px;height:52px;border-radius:14px;background:rgba(255,255,255,.25);border:2.5px solid rgba(255,255,255,.5);display:flex;align-items:center;justify-content:center;font-size:1rem;font-weight:800;color:#fff;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,.18); }
 .ct-avatar img { width:100%;height:100%;object-fit:cover; }
-.ct-name { font-weight:700;font-size:.95rem;color:var(--text-primary);margin-bottom:4px;line-height:1.2; }
-.ct-fields { display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--border);padding-top:12px; }
-.ct-field { display:flex;align-items:center;gap:8px;font-size:.82rem;color:var(--text-secondary);min-width:0; }
-.ct-field > span:first-child { flex-shrink:0;font-size:.9rem;width:18px;text-align:center; }
-.ct-field > span:last-child { white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
-.ct-field a { color:var(--primary);text-decoration:none; }
-.ct-field a:hover { text-decoration:underline; }
-.ct-bd-row { justify-content:space-between; }
-.ct-bd-row > span:last-child { flex:1;min-width:0; }
+.ct-av-corner { position:absolute;bottom:-5px;width:18px;height:18px;border-radius:50%;background:rgba(255,255,255,.95);display:flex;align-items:center;justify-content:center;font-size:.6rem;box-shadow:0 1px 4px rgba(0,0,0,.25); }
+.ct-av-corner-r { right:-5px; }
+.ct-av-corner-l { left:-5px; }
+.ct-name { font-weight:800;font-size:.95rem;color:#fff;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.ct-banner-pos { font-size:.75rem;color:rgba(255,255,255,.8);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.ct-gender-badge { position:absolute;top:10px;right:10px;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.85rem;font-weight:700;backdrop-filter:blur(4px); }
+.ct-bd-badge { position:absolute;top:10px;left:10px;padding:2px 8px;border-radius:20px;background:rgba(245,158,11,.9);color:#fff;font-size:.68rem;font-weight:700;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.2); }
+.ct-bd-btn-card { position:absolute;bottom:10px;right:10px;width:28px;height:28px;border-radius:50%;border:none;background:rgba(255,255,255,.22);color:#fff;font-size:.8rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s;backdrop-filter:blur(4px); }
+.ct-bd-btn-card:hover { background:rgba(255,255,255,.38); }
+.ct-bd-btn-card.active { background:rgba(255,255,255,.38);box-shadow:0 0 0 3px rgba(255,255,255,.3); }
+
+/* ── Card body ── */
+.ct-card-body { padding:10px 14px 13px;display:flex;flex-direction:column;gap:1px;flex:1; }
+.ct-info-row { display:flex;align-items:center;gap:8px;font-size:.8rem;color:var(--text-secondary);padding:3px 0;min-width:0; }
+.ct-info-row i { flex-shrink:0;width:14px;text-align:center;font-size:.75rem; }
+.ct-info-row span { white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+
+/* ── Misc ── */
 .ct-bd-soon { display:inline-block;padding:1px 7px;background:rgba(245,158,11,.12);color:#f59e0b;border-radius:40px;font-size:.7rem;font-weight:600;margin-left:5px; }
 .ct-bd-btn { flex-shrink:0;width:28px;height:28px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg-raised);cursor:pointer;font-size:.85rem;display:flex;align-items:center;justify-content:center;transition:all .15s;margin-left:4px; }
 .ct-bd-btn:hover { border-color:var(--primary);background:var(--primary-glow); }
 .ct-bd-btn.active { border-color:var(--primary);background:var(--primary-glow);box-shadow:0 0 0 3px var(--primary-glow); }
-.ct-copy-btn { flex-shrink:0;width:24px;height:24px;border-radius:6px;border:1.5px solid var(--border);background:var(--bg-raised);cursor:pointer;color:var(--text-muted);display:flex;align-items:center;justify-content:center;transition:all .15s;margin-left:4px;padding:0; }
-.ct-copy-btn:hover { border-color:var(--primary);color:var(--primary);background:var(--primary-glow); }
-.ct-copy-btn.copied { border-color:#10b981;color:#10b981;background:rgba(16,185,129,.1); }
 .ct-empty { text-align:center;padding:4rem 2rem;color:var(--text-muted);font-size:1rem; }
 .bd-chip { padding:5px 12px;border:1.5px solid var(--border);border-radius:40px;background:var(--bg-surface);color:var(--text-secondary);font-size:.8rem;font-weight:500;cursor:pointer;transition:all .15s; }
 .bd-chip:hover { border-color:var(--primary);color:var(--primary); }
 .bd-chip.bd-chip-active { background:var(--primary-glow);border-color:var(--primary);color:var(--primary);font-weight:600; }
-@media(max-width:600px){ .ct-search{width:100%} .ct-header{flex-direction:column} }
+@media(max-width:900px){ .ct-grid{grid-template-columns:repeat(2,minmax(0,1fr))} }
+@media(max-width:560px){ .ct-grid{grid-template-columns:1fr} .ct-search{width:100%} .ct-header{flex-direction:column} }
 </style>`;
     },
 
@@ -137,9 +151,66 @@ const ContactsPage = {
         return users.map(u => this._cardHtml(u)).join('');
     },
 
+    _roleCorner(role) {
+        const map = {
+            owner:   { icon: 'fa-crown',           color: '#f59e0b' },
+            admin:   { icon: 'fa-shield-halved',    color: '#6366f1' },
+            smm:     { icon: 'fa-bullhorn',         color: '#ec4899' },
+            teacher: { icon: 'fa-graduation-cap',   color: '#10b981' },
+            manager: { icon: 'fa-briefcase',        color: '#0ea5e9' },
+        };
+        return map[role] || null;
+    },
+
+    _labelCorner(label) {
+        if (label === 'intern')  return { icon: 'fa-seedling', color: '#84cc16', title: 'Стажер' };
+        if (label === 'mentor')  return { icon: 'fa-star',     color: '#f97316', title: 'Наставник' };
+        return null;
+    },
+
+    _roleBannerBadge(role) {
+        const map = {
+            owner:   '👑 Admin',
+            admin:   '👑 Адміністратор',
+            smm:     '📰 SMM-менеджер',
+            manager: '👔 Керівник',
+            teacher: '📚 Викладач',
+            user:    '👤 Користувач',
+        };
+        const label = map[role] || role;
+        return `<span style="display:inline-block;padding:2px 9px;border-radius:20px;background:rgba(255,255,255,.22);color:#fff;font-size:.7rem;font-weight:600;backdrop-filter:blur(4px)">${label}</span>`;
+    },
+
+    _avatarCorners(role, label) {
+        const r = this._roleCorner(role);
+        const l = this._labelCorner(label);
+        return `
+            ${r ? `<div class="ct-av-corner ct-av-corner-r" title="${r.icon.replace('fa-','')}" style="color:${r.color}"><i class="fa-solid ${r.icon}"></i></div>` : ''}
+            ${l ? `<div class="ct-av-corner ct-av-corner-l" title="${l.title}" style="color:${l.color}"><i class="fa-solid ${l.icon}"></i></div>` : ''}`;
+    },
+
+    _genderTheme(gender) {
+        if (gender === 'female') return {
+            from: '#ec4899', to: '#8b5cf6',
+            bg: 'rgba(236,72,153,.07)', border: 'rgba(236,72,153,.25)',
+            badge: 'rgba(236,72,153,.12)', badgeText: '#ec4899', icon: '♀'
+        };
+        if (gender === 'male') return {
+            from: '#3b82f6', to: '#6366f1',
+            bg: 'rgba(59,130,246,.07)', border: 'rgba(59,130,246,.25)',
+            badge: 'rgba(59,130,246,.12)', badgeText: '#3b82f6', icon: '♂'
+        };
+        return {
+            from: '#10b981', to: '#0ea5e9',
+            bg: 'rgba(16,185,129,.05)', border: 'var(--border)',
+            badge: 'rgba(16,185,129,.1)', badgeText: '#10b981', icon: ''
+        };
+    },
+
     _cardHtml(u) {
         const reminder  = this._reminders[u.id];
         const hasBd     = !!u.birth_date;
+        const theme     = this._genderTheme(u.gender);
         let bdStr = '', daysUntil = null;
 
         if (hasBd) {
@@ -151,50 +222,38 @@ const ContactsPage = {
             bdStr = upcoming.toLocaleDateString('uk-UA', { day: '2-digit', month: 'long' });
         }
 
-        const field = (icon, val) => val
-            ? `<div class="ct-field">
-                <span>${icon}</span>
-                <span>${val}</span>
-               </div>`
-            : '';
-
-        const phoneField = u.phone ? `
-        <div class="ct-field">
-            <span>📞</span>
-            <a href="tel:${u.phone}" style="color:var(--primary);text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${u.phone}</a>
-        </div>` : '';
-
         const loc = [u.city, u.subdivision].filter(Boolean).join(' · ');
         const managerName = u.manager_id ? (this._nameMap[u.manager_id] || null) : null;
 
         return `
-<div class="ct-card" data-uid="${u.id}" style="cursor:pointer" onclick="ContactsPage._openProfile('${u.id}')">
-    <div class="ct-card-head">
-        <div class="ct-avatar">
-            ${u.avatar_url ? `<img src="${u.avatar_url}" alt="">` : Fmt.initials(u.full_name)}
-        </div>
-        <div style="min-width:0">
-            <div class="ct-name">${u.full_name || '—'}</div>
-            <div>${Fmt.roleBadge(u.role)}</div>
+<div class="ct-card" data-uid="${u.id}" onclick="ContactsPage._openProfile('${u.id}')"
+     style="cursor:pointer;border-color:${theme.border};background:linear-gradient(160deg,${theme.bg} 0%,var(--bg-surface) 60%)">
+    <div class="ct-card-banner" style="background:linear-gradient(135deg,${theme.from},${theme.to})">
+        ${hasBd && daysUntil <= 7 ? `<div class="ct-bd-badge">🎂 ${daysUntil === 0 ? 'Сьогодні!' : `через ${daysUntil} дн.`}</div>` : ''}
+        ${hasBd ? `
+        <button class="ct-bd-btn-card${reminder ? ' active' : ''}"
+            title="${reminder ? `Нагадування за ${reminder.days_before} дн.` : 'Додати нагадування'}"
+            onclick="event.stopPropagation();ContactsPage._openBdModal('${u.id}',${JSON.stringify(u.full_name||'').replace(/"/g,'&quot;')},'${u.birth_date}')">
+            🔔
+        </button>` : ''}
+        <div class="ct-banner-main">
+            <div class="ct-avatar-wrap">
+                <div class="ct-avatar">
+                    ${u.avatar_url ? `<img src="${u.avatar_url}" alt="">` : Fmt.initials(u.full_name)}
+                </div>
+                ${this._avatarCorners(u.role, u.label)}
+            </div>
+            <div class="ct-banner-info">
+                <div class="ct-name">${Fmt.esc(u.full_name || '—')}</div>
+                ${u.job_position ? `<div class="ct-banner-pos">${Fmt.esc(u.job_position)}</div>` : ''}
+                <div style="margin-top:5px">${this._roleBannerBadge(u.role)}</div>
+            </div>
         </div>
     </div>
-    <div class="ct-fields">
-        ${phoneField}
-        ${field('💼', u.job_position)}
-        ${field('🏙️', loc)}
-        ${field('👤', managerName ? `Керівник: ${managerName}` : null)}
-        ${field('📅', u.hired_at ? `В компанії з ${Fmt.dateShort(u.hired_at)}` : null)}
-        ${field('🗓️', u.position_since ? `На посаді з ${Fmt.dateShort(u.position_since)}` : null)}
-        ${hasBd ? `
-        <div class="ct-field ct-bd-row">
-            <span>🎂</span>
-            <span>${bdStr}${daysUntil <= 7 ? `<span class="ct-bd-soon">через ${daysUntil} дн.</span>` : ''}</span>
-            <button class="ct-bd-btn${reminder ? ' active' : ''}"
-                title="${reminder ? `Нагадування за ${reminder.days_before} дн.` : 'Додати нагадування'}"
-                onclick="event.stopPropagation();ContactsPage._openBdModal('${u.id}',${JSON.stringify(u.full_name||'').replace(/"/g,'&quot;')},'${u.birth_date}')">
-                🔔
-            </button>
-        </div>` : ''}
+    <div class="ct-card-body">
+        ${loc ? `<div class="ct-info-row"><i class="fa-solid fa-location-dot" style="color:${theme.from}"></i><span>${Fmt.esc(loc)}</span></div>` : ''}
+        ${u.phone ? `<div class="ct-info-row"><i class="fa-solid fa-phone" style="color:${theme.from}"></i><span>${Fmt.esc(u.phone)}</span></div>` : ''}
+        ${managerName ? `<div class="ct-info-row"><i class="fa-solid fa-user-tie" style="color:${theme.from}"></i><span>${Fmt.esc(managerName)}</span></div>` : ''}
     </div>
 </div>`;
     },
@@ -253,16 +312,20 @@ const ContactsPage = {
             ? `<div class="ctp-row"><div class="ctp-row-ico">${icon}</div><div><div class="ctp-row-label">${label}</div><div class="ctp-row-val">${val}</div></div></div>`
             : '';
 
+        const theme = this._genderTheme(u.gender);
         const el = document.createElement('div');
         el.id = 'ct-profile-modal';
-        el.className = 'mc-overlay';
+        el.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(4px);animation:fadeIn .15s';
         el.innerHTML = `
 <div class="ctp-modal">
-    <button class="mc-mclose" onclick="document.getElementById('ct-profile-modal').remove()" style="position:absolute;top:1rem;right:1rem">✕</button>
+    <button onclick="document.getElementById('ct-profile-modal').remove()" style="position:absolute;top:.75rem;right:.75rem;width:32px;height:32px;border-radius:50%;border:none;background:rgba(255,255,255,.2);color:#fff;font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s;z-index:1" onmouseenter="this.style.background='rgba(255,255,255,.35)'" onmouseleave="this.style.background='rgba(255,255,255,.2)'">✕</button>
 
-    <div class="ctp-hero">
-        <div class="ctp-avatar">
-            ${u.avatar_url ? `<img src="${u.avatar_url}" alt="">` : `<span>${Fmt.initials(u.full_name)}</span>`}
+    <div class="ctp-hero" style="background:linear-gradient(135deg,${theme.from},${theme.to})">
+        <div class="ct-avatar-wrap" style="flex-shrink:0">
+            <div class="ctp-avatar">
+                ${u.avatar_url ? `<img src="${u.avatar_url}" alt="">` : `<span>${Fmt.initials(u.full_name)}</span>`}
+            </div>
+            ${this._avatarCorners(u.role, u.label)}
         </div>
         <div class="ctp-hero-info">
             <div class="ctp-name">${Fmt.esc(u.full_name || '—')}</div>
@@ -272,7 +335,7 @@ const ContactsPage = {
     </div>
 
     <div class="ctp-body">
-        ${u.phone    ? `${row('📞', 'Телефон', `<a href="tel:${u.phone}" onclick="event.stopPropagation()" style="color:var(--primary);text-decoration:none">${Fmt.esc(u.phone)}</a>`)}` : ''}
+        ${u.phone ? `${row('📞', 'Телефон', Fmt.esc(u.phone))}` : ''}
         ${row('🏙️', 'Локація', Fmt.esc(loc))}
         ${row('👤', 'Керівник', managerName ? Fmt.esc(managerName) : null)}
         ${row('📅', 'В компанії з', u.hired_at ? Fmt.date(u.hired_at) : null)}
@@ -291,7 +354,7 @@ const ContactsPage = {
 </div>
 
 <style>
-.ctp-modal{position:relative;background:var(--bg-surface);border-radius:var(--radius-xl);width:100%;max-width:420px;overflow:hidden;box-shadow:var(--shadow-lg);animation:fadeSlideUp .25s ease}
+.ctp-modal{position:relative;background:var(--bg-surface);border-radius:var(--radius-xl);width:100%;max-width:520px;overflow:hidden;box-shadow:var(--shadow-lg);animation:fadeSlideUp .25s ease}
 .ctp-hero{padding:2rem 1.5rem 1.25rem;background:linear-gradient(135deg,var(--primary),#8b5cf6);display:flex;align-items:center;gap:1.25rem}
 .ctp-avatar{width:72px;height:72px;border-radius:20px;background:rgba(255,255,255,.2);border:2px solid rgba(255,255,255,.35);display:flex;align-items:center;justify-content:center;font-size:1.6rem;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden}
 .ctp-avatar img{width:100%;height:100%;object-fit:cover}
@@ -375,7 +438,7 @@ const ContactsPage = {
             // Update bell icon on card without full re-render
             const card = document.querySelector(`.ct-card[data-uid="${userId}"]`);
             if (card) {
-                const btn = card.querySelector('.ct-bd-btn');
+                const btn = card.querySelector('.ct-bd-btn-card');
                 if (btn) { btn.classList.add('active'); btn.title = `Нагадування за ${days} дн.`; }
             }
         } catch(e) { Toast.error('Помилка', e.message); }
@@ -394,7 +457,7 @@ const ContactsPage = {
             Modal.close();
             const card = document.querySelector(`.ct-card[data-uid="${userId}"]`);
             if (card) {
-                const btn = card.querySelector('.ct-bd-btn');
+                const btn = card.querySelector('.ct-bd-btn-card');
                 if (btn) { btn.classList.remove('active'); btn.title = 'Додати нагадування'; }
             }
         } catch(e) { Toast.error('Помилка', e.message); }

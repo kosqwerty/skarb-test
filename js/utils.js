@@ -109,11 +109,12 @@ const UI = {
     },
     setBreadcrumb(items = []) {
         const el = document.getElementById('breadcrumb');
-        el.innerHTML = items.map((item, i) =>
-            i === items.length - 1
-                ? `<span class="current">${item.label}</span>`
-                : `<a href="#/${item.route}">${item.label}</a><span>›</span>`
-        ).join('');
+        if (!el) return;
+        el.innerHTML = items.map((item, i) => {
+            if (i === items.length - 1) return `<span class="current">${item.label}</span>`;
+            if (item.onClick) return `<a href="#" onclick="event.preventDefault();(${item.onClick.toString()})()">${item.label}</a><span>›</span>`;
+            return `<a href="#/${item.route}">${item.label}</a><span>›</span>`;
+        }).join('');
     },
     setPageContent(html) {
         const el = document.getElementById('page-content');

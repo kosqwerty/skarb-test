@@ -143,7 +143,7 @@ const MyCalendarPage = {
             onclick="event.stopPropagation();MyCalendarPage._openViewModal('${e.id}')">
             <div class="mc-chip-body">
                 <div class="mc-chip-top">
-                    ${e.time ? `<span class="mc-chip-time">${e.time.slice(0,5)}</span>` : ''}
+                    ${e.time ? `<span class="mc-chip-time">${e.time.slice(0,5)}${e.end_time ? '–'+e.end_time.slice(0,5) : ''}</span>` : ''}
                     <span class="mc-chip-title">${e.title}</span>
                     ${e.repeat_type && e.repeat_type !== 'none' ? `<span class="mc-chip-repeat">🔁</span>` : ''}
                 </div>
@@ -218,8 +218,13 @@ ${this._styles()}`;
         <label class="mc-label">Дата *</label>
         <input class="mc-input" id="mc-ev-date" type="date" value="${ev?.date || date || ''}">
 
-        <label class="mc-label">Час</label>
-        <input class="mc-input" id="mc-ev-time" type="time" value="${ev?.time?.slice(0,5) || ''}">
+        <label class="mc-label">Час початку</label>
+        <div style="display:flex;gap:.5rem;align-items:center">
+            <input class="mc-input" id="mc-ev-time" type="time" value="${ev?.time?.slice(0,5) || ''}" style="flex:1" oninput="MyCalendarPage._updateDuration()">
+            <span style="color:var(--text-muted);font-size:.85rem;flex-shrink:0">до</span>
+            <input class="mc-input" id="mc-ev-end-time" type="time" value="${ev?.end_time?.slice(0,5) || ''}" style="flex:1" oninput="MyCalendarPage._updateDuration()">
+        </div>
+        <div id="mc-ev-duration" style="font-size:.75rem;color:var(--primary);min-height:1.2em;margin-top:.1rem">${ev?.time && ev?.end_time ? MyCalendarPage._durationLabel(ev.time, ev.end_time) : ''}</div>
 
         <label class="mc-label">Нотатки</label>
         <textarea class="mc-input mc-textarea" id="mc-ev-notes" placeholder="Додаткова інформація...">${ev?.notes || ''}</textarea>
@@ -259,10 +264,28 @@ ${this._styles()}`;
         document.querySelectorAll('#mc-ev-colors .mc-color-dot').forEach(d => d.classList.toggle('active', d.dataset.color === color));
     },
 
+    _durationLabel(start, end) {
+        if (!start || !end) return '';
+        const [sh, sm] = start.slice(0,5).split(':').map(Number);
+        const [eh, em] = end.slice(0,5).split(':').map(Number);
+        const diff = (eh * 60 + em) - (sh * 60 + sm);
+        if (diff <= 0) return '';
+        const h = Math.floor(diff / 60), m = diff % 60;
+        return `<i class="fa-regular fa-clock"></i> Тривалість: ${h ? h + 'год ' : ''}${m ? m + 'хв' : ''}`;
+    },
+
+    _updateDuration() {
+        const t = document.getElementById('mc-ev-time')?.value;
+        const e = document.getElementById('mc-ev-end-time')?.value;
+        const lbl = document.getElementById('mc-ev-duration');
+        if (lbl) lbl.innerHTML = this._durationLabel(t, e);
+    },
+
     async _saveEvent(id) {
         const title       = document.getElementById('mc-ev-title')?.value.trim();
         const date        = document.getElementById('mc-ev-date')?.value;
         const time        = document.getElementById('mc-ev-time')?.value || null;
+        const end_time    = document.getElementById('mc-ev-end-time')?.value || null;
         const notes       = document.getElementById('mc-ev-notes')?.value.trim() || null;
         const color       = document.querySelector('#mc-ev-colors .mc-color-dot.active')?.dataset.color || '#6366f1';
         const repeat_type = document.getElementById('mc-ev-repeat')?.value || 'none';
@@ -270,14 +293,15 @@ ${this._styles()}`;
 
         if (!title) { Toast.error('Введіть назву події'); return; }
         if (!date)  { Toast.error('Оберіть дату'); return; }
+        if (time && end_time && end_time <= time) { Toast.error('Час завершення має бути пізніше початку'); return; }
 
         let error;
         if (id) {
             ({ error } = await supabase.from('personal_cal_events')
-                .update({ title, date, time, notes, color, repeat_type, is_important }).eq('id', id));
+                .update({ title, date, time, end_time, notes, color, repeat_type, is_important }).eq('id', id));
         } else {
             ({ error } = await supabase.from('personal_cal_events')
-                .insert({ user_id: AppState.user.id, title, date, time, notes, color, repeat_type, is_important }));
+                .insert({ user_id: AppState.user.id, title, date, time, end_time, notes, color, repeat_type, is_important }));
         }
         if (error) { Toast.error('Помилка збереження'); return; }
 
@@ -318,7 +342,7 @@ ${this._styles()}`;
     </div>
     <div style="display:flex;flex-direction:column;gap:8px;font-size:.85rem;margin-top:4px">
         <div>📅 ${new Date(ev.date+'T00:00:00').toLocaleDateString('uk-UA',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</div>
-        ${ev.time ? `<div>🕐 ${ev.time.slice(0,5)}</div>` : ''}
+        ${ev.time ? `<div>🕐 ${ev.time.slice(0,5)}${ev.end_time ? ' – ' + ev.end_time.slice(0,5) : ''}${ev.end_time ? `<span style="color:var(--text-muted);font-size:.8rem;margin-left:.5rem">${this._durationLabel(ev.time, ev.end_time).replace(/<[^>]+>/g,'')}</span>` : ''}</div>` : ''}
         ${ev.notes ? `<div style="color:var(--text-muted);line-height:1.5;margin-top:4px">${ev.notes}</div>` : ''}
     </div>
     ${readOnly ? '' : `
@@ -492,7 +516,7 @@ ${this._styles()}`;
         ${data.map(e => `
         <div class="mc-reminder-item" style="border-left:4px solid ${e.color}">
             <div class="mc-reminder-item-top">
-                ${e.time ? `<span class="mc-reminder-time">${e.time.slice(0,5)}</span>` : '<span class="mc-reminder-time" style="color:var(--text-muted)">Весь день</span>'}
+                ${e.time ? `<span class="mc-reminder-time">${e.time.slice(0,5)}${e.end_time ? '–'+e.end_time.slice(0,5) : ''}</span>` : '<span class="mc-reminder-time" style="color:var(--text-muted)">Весь день</span>'}
                 <span class="mc-reminder-item-title">${Fmt.esc(e.title)}</span>
             </div>
             ${e.notes ? `<div class="mc-reminder-notes">${Fmt.esc(e.notes)}</div>` : ''}

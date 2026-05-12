@@ -184,7 +184,7 @@ const NotificationsPage = {
 </div>
 
 <style>
-.ntf-page { max-width:800px; animation:fadeSlideUp .3s cubic-bezier(.16,1,.3,1); }
+.ntf-page { max-width:1150px; animation:fadeSlideUp .3s cubic-bezier(.16,1,.3,1); }
 @keyframes fadeSlideUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
 .ntf-header { display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1.25rem;flex-wrap:wrap; }
 .ntf-title { margin:0;font-size:1.8rem;font-weight:700;color:var(--text-primary);letter-spacing:-.02em; }

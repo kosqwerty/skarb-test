@@ -158,7 +158,6 @@ const BookmarksPage = {
     ${HelpTip.render('bookmarks', {
         icon: 'fa-star',
         gradient: '135deg,#f59e0b,#ef4444',
-        cols: 1,
         title: 'Як користуватись Закладками',
         items: [
             { icon: 'fa-star', color: '#f59e0b', text: 'Тут зберігаються матеріали, які ви позначили зірочкою в Базі знань або на сторінці уроку.' },

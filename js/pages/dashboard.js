@@ -173,7 +173,7 @@ const DashboardPage = {
             API.notifications.getUnreadCount().catch(() => 0).then(v => v || 0),
             API.documentDownloads.getTodayShiftLocation().catch(() => null),
             supabase.from('personal_cal_events')
-                .select('id,title,date,time,color,is_important')
+                .select('id,title,date,time,color,is_important,is_done,acked_date')
                 .eq('user_id', AppState.user.id)
                 .gte('date', today)
                 .lte('date', in7)
@@ -252,11 +252,8 @@ const DashboardPage = {
         const important = calEvents.filter(ev => ev.is_important && ev.date === today);
         if (!important.length) return;
 
-        // Filter out already acknowledged (stored in localStorage per event+date)
-        const pending = important.filter(ev => {
-            const key = `cal_ack_${ev.id}_${today}`;
-            return !localStorage.getItem(key);
-        });
+        // Filter out already acknowledged (acked_date stored in DB)
+        const pending = important.filter(ev => ev.acked_date !== today);
         if (!pending.length) return;
 
         el.innerHTML = pending.map(ev => `
@@ -275,26 +272,24 @@ const DashboardPage = {
     },
 
     _doneEvent(eventId, date) {
-        localStorage.setItem(`cal_done_${eventId}_${date}`, '1');
+        supabase.from('personal_cal_events').update({ is_done: true }).eq('id', eventId).eq('user_id', AppState.user.id);
         const el = document.getElementById(`db-ev-${eventId}`);
         if (!el) return;
         el.style.transition = 'opacity .25s,transform .25s';
         el.style.opacity = '0';
         el.style.transform = 'translateX(10px)';
         setTimeout(() => {
-            // Re-render events block without full page reload
             const eventsEl = document.getElementById('db-events');
             if (eventsEl) DashboardPage._refreshEvents();
         }, 260);
     },
 
     _refreshEvents() {
-        // Re-fetch and re-render only the events card
         const today = new Date().toISOString().slice(0, 10);
         const in7   = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
         Promise.all([
             supabase.from('personal_cal_events')
-                .select('id,title,date,time,color,is_important')
+                .select('id,title,date,time,color,is_important,is_done,acked_date')
                 .eq('user_id', AppState.user.id)
                 .gte('date', today).lte('date', in7)
                 .order('date').order('time', { nullsFirst: true })
@@ -306,8 +301,9 @@ const DashboardPage = {
     },
 
     _ackImportant(eventId, date) {
-        localStorage.setItem(`cal_ack_${eventId}_${date}`, '1');
-        localStorage.setItem(`cal_done_${eventId}_${date}`, '1');
+        supabase.from('personal_cal_events')
+            .update({ acked_date: date, is_done: true })
+            .eq('id', eventId).eq('user_id', AppState.user.id);
         const el = document.getElementById(`db-imp-${eventId}`);
         if (el) el.style.transition = 'opacity .3s', el.style.opacity = '0', setTimeout(() => el.remove(), 300);
         this._refreshEvents();
@@ -340,7 +336,7 @@ const DashboardPage = {
 
         if (unreadCount > 0) {
             html += `
-            <div class="db-alert db-alert-warn">
+            <div class="db-alert db-alert-warn" id="db-notif-alert">
                 <div class="db-alert-icon">🔔</div>
                 <div class="db-alert-body">
                     <div class="db-alert-title" style="color:#b45309">
@@ -350,12 +346,21 @@ const DashboardPage = {
                         <span class="db-alert-chip" onclick="Router.go('notifications')">
                             <i class="fa-solid fa-bell" style="color:#b45309"></i> Переглянути
                         </span>
+                        <span class="db-alert-chip" onclick="DashboardPage._dismissNotifAlert()" title="Позначити всі прочитаними">
+                            <i class="fa-solid fa-check-double" style="color:#b45309"></i> Позначити прочитаними
+                        </span>
                     </div>
                 </div>
             </div>`;
         }
 
         el.innerHTML = html;
+    },
+
+    async _dismissNotifAlert() {
+        await API.notifications.markAllRead().catch(() => {});
+        const el = document.getElementById('db-notif-alert');
+        if (el) { el.style.transition = 'opacity .25s'; el.style.opacity = '0'; setTimeout(() => el.remove(), 250); }
     },
 
     _renderBirthdays(people) {
@@ -543,9 +548,9 @@ const DashboardPage = {
         if (calEvents.length) {
             const nowTime = now.getHours() * 60 + now.getMinutes();
 
-            // Past by time OR manually marked done today
+            // Past by time OR manually marked done in DB
             const isDone = ev => {
-                if (localStorage.getItem(`cal_done_${ev.id}_${today}`)) return true;
+                if (ev.is_done) return true;
                 return ev.date === today && ev.time && (parseInt(ev.time) * 60 + parseInt(ev.time.slice(3))) < nowTime;
             };
 

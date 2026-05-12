@@ -1200,47 +1200,115 @@ const HelpTip = {
         });
     },
 
-    render(key, { icon = 'fa-circle-info', title, gradient = '135deg,#6366f1,#8b5cf6', cols, items = [] }) {
+    _prefs(key) {
+        return AppState.profile?.ui_prefs?.helptips?.[key] || {};
+    },
+
+    _savePrefs(key, patch) {
+        const cur = AppState.profile?.ui_prefs?.helptips || {};
+        API.profiles.updateUiPrefs({ helptips: { ...cur, [key]: { ...cur[key], ...patch } } });
+    },
+
+    render(key, { icon = 'fa-circle-info', title, gradient = '135deg,#6366f1,#8b5cf6', items = [] }) {
         const visible = items.filter(it => this._roleMatch(it.roles));
         if (!visible.length) return '';
-        const stored = localStorage.getItem(`helptip_${key}`);
-        const open   = stored === null ? true : stored === '1';
+
+        const prefs  = this._prefs(key);
+        const acked  = new Set(prefs.acked || []);
+        const open   = prefs.open !== false; // default open
+        const total  = visible.length;
+        const doneN  = visible.filter((_, i) => acked.has(i)).length;
+        const allDone = doneN === total;
+
         return `
-        <div class="ht-wrap${open ? ' ht-open' : ''}" id="ht-${key}">
-            <div class="ht-banner" style="background:linear-gradient(${gradient});cursor:pointer" onclick="HelpTip._toggle('${key}')">
+        <div class="ht-wrap${open && !allDone ? ' ht-open' : ''}" id="ht-${key}">
+            <div class="ht-banner" style="background:linear-gradient(270deg,${gradient.replace('135deg,','')});background-size:300% 300%;animation:ht-gradient 6s ease infinite;cursor:pointer" onclick="HelpTip._toggle('${key}')">
                 <div class="ht-banner-glow"></div>
                 <div class="ht-banner-left">
                     <div class="ht-banner-ico"><i class="fa-solid ${icon}"></i></div>
                     <div>
-                        <div class="ht-banner-label">Підказка</div>
+                        <div class="ht-banner-label">Підказка розділу</div>
                         <div class="ht-banner-title">${title}</div>
                     </div>
                 </div>
-                <button class="ht-toggle" onclick="event.stopPropagation();HelpTip._toggle('${key}')" title="${open ? 'Згорнути' : 'Розгорнути'}">
-                    <i class="fa-solid fa-chevron-up ht-chevron"></i>
-                </button>
+                <div class="ht-banner-right" onclick="event.stopPropagation()">
+                    ${allDone
+                        ? `<div class="ht-done-badge"><i class="fa-solid fa-circle-check"></i> Вивчено!</div>`
+                        : `<div class="ht-progress-wrap">
+                               <div class="ht-progress-bar"><div class="ht-progress-fill" style="width:${Math.round(doneN/total*100)}%"></div></div>
+                               <div class="ht-progress-label">${doneN} з ${total}</div>
+                           </div>`}
+                    <button class="ht-toggle" onclick="HelpTip._toggle('${key}')" title="${open ? 'Згорнути' : 'Розгорнути'}">
+                        <i class="fa-solid fa-chevron-up ht-chevron"></i>
+                    </button>
+                </div>
             </div>
             <div class="ht-body">
-                <div class="ht-items" style="${cols ? `grid-template-columns:repeat(${cols},1fr)` : ''}">
-                    ${visible.map((it, i) => `
-                    <div class="ht-item" style="animation-delay:${i * 0.06}s">
-                        <div class="ht-item-ico" style="background:${it.color || '#6366f1'}22;color:${it.color || '#6366f1'}">
-                            <i class="fa-solid ${it.icon}"></i>
-                        </div>
-                        <span class="ht-item-text">${it.text}</span>
-                    </div>`).join('')}
+                <div class="ht-scroll">
+                    ${visible.map((it, i) => {
+                        const done = acked.has(i);
+                        return `
+                        <div class="ht-card${done ? ' ht-card-done' : ''}" id="ht-card-${key}-${i}" style="animation-delay:${i * 0.07}s">
+                            <div class="ht-card-top">
+                                <div class="ht-card-ico" style="background:${it.color||'#6366f1'}20;color:${it.color||'#6366f1'}">
+                                    <i class="fa-solid ${it.icon}"></i>
+                                </div>
+                                ${done ? `<div class="ht-card-check"><i class="fa-solid fa-check"></i></div>` : ''}
+                            </div>
+                            <div class="ht-card-text">${it.text}</div>
+                            ${!done ? `
+                            <button class="ht-card-ack" onclick="HelpTip._ack('${key}',${i},${total})">
+                                <i class="fa-solid fa-check"></i> Зрозумів
+                            </button>` : ''}
+                        </div>`;
+                    }).join('')}
                 </div>
             </div>
         </div>`;
     },
+
     _toggle(key) {
         const el = document.getElementById(`ht-${key}`);
         if (!el) return;
         const isOpen = el.classList.toggle('ht-open');
-        el.querySelector('.ht-toggle').title = isOpen ? 'Згорнути' : 'Розгорнути';
-        localStorage.setItem(`helptip_${key}`, isOpen ? '1' : '0');
+        this._savePrefs(key, { open: isOpen });
     },
-    _save(key, open) {
-        localStorage.setItem(`helptip_${key}`, open ? '1' : '0');
+
+    _ack(key, idx, total) {
+        const prefs  = this._prefs(key);
+        const acked  = new Set(prefs.acked || []);
+        acked.add(idx);
+        this._savePrefs(key, { acked: [...acked] });
+
+        const card = document.getElementById(`ht-card-${key}-${idx}`);
+        if (card) {
+            card.classList.add('ht-card-acking');
+            setTimeout(() => {
+                card.classList.add('ht-card-done');
+                card.classList.remove('ht-card-acking');
+                card.querySelector('.ht-card-ack')?.remove();
+                card.querySelector('.ht-card-top').insertAdjacentHTML('beforeend',
+                    '<div class="ht-card-check"><i class="fa-solid fa-check"></i></div>');
+            }, 350);
+        }
+
+        // update progress bar
+        const wrap = document.getElementById(`ht-${key}`);
+        if (!wrap) return;
+        const doneN = acked.size;
+        const pct   = Math.round(doneN / total * 100);
+        const bar   = wrap.querySelector('.ht-progress-fill');
+        const lbl   = wrap.querySelector('.ht-progress-label');
+        if (bar) bar.style.width = pct + '%';
+        if (lbl) lbl.textContent = `${doneN} з ${total}`;
+
+        if (doneN === total) {
+            setTimeout(() => {
+                const pw = wrap.querySelector('.ht-progress-wrap');
+                if (pw) pw.outerHTML = '<div class="ht-done-badge"><i class="fa-solid fa-circle-check"></i> Вивчено!</div>';
+                wrap.classList.remove('ht-open');
+                this._savePrefs(key, { open: false });
+            }, 600);
+        }
     }
 };

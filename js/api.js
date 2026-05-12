@@ -36,6 +36,14 @@ const API = {
             return this.update(id, { role });
         },
 
+        async updateUiPrefs(prefs) {
+            const id = AppState.user?.id;
+            if (!id) return;
+            const merged = { ...(AppState.profile?.ui_prefs || {}), ...prefs };
+            const { error } = await supabase.from('profiles').update({ ui_prefs: merged }).eq('id', id);
+            if (!error && AppState.profile) AppState.profile.ui_prefs = merged;
+        },
+
         async getSubordinates(managerId) {
             const { data, error } = await supabase
                 .from('profiles')

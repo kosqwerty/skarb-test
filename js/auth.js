@@ -111,6 +111,7 @@ const Auth = {
         });
         if (!confirmed) return;
 
+        UI.closeUserPopup();
         try { await supabase.auth.signOut(); } catch(_) {}
         AppState.user    = null;
         AppState.profile = null;
@@ -130,6 +131,7 @@ const Auth = {
     },
 
     _showAuth() {
+        UI.closeUserPopup();
         document.getElementById('app-shell').classList.add('hidden');
         document.getElementById('auth-screen').classList.remove('hidden');
         this.showLogin();

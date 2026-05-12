@@ -439,6 +439,7 @@ ${this._styles()}`;
             .select('*')
             .eq('user_id', AppState.user.id)
             .eq('date', today)
+            .neq('is_done', true)
             .order('time', { nullsFirst: true });
 
         if (!data?.length) return;

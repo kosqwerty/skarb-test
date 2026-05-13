@@ -91,7 +91,7 @@ Full namespace list: `API.profiles`, `API.courses`, `API.enrollments`, `API.less
 
 ### Database migrations
 
-`sql/migration_v*.sql` — incremental, numbered. The current schema is the result of applying all migrations in order. When adding a new column/table, create `migration_v{N+1}.sql` and run it in the Supabase SQL Editor. **Latest is v50** (surveys tables).
+`sql/migration_v*.sql` — incremental, numbered. The current schema is the result of applying all migrations in order. When adding a new column/table, create `migration_v{N+1}.sql` and run it in the Supabase SQL Editor. **Latest is v52** (`image_url` on `survey_questions`).
 
 When writing a migration, always include `IF NOT EXISTS` / `IF EXISTS` guards and end with RLS + policies.
 
@@ -425,3 +425,92 @@ Wrap the input in `position:relative` container. Button style: `position:absolut
 - `intern` → `badge-success` + "🌱 Стажер"
 - `mentor` → `badge-warning` + "⭐ Наставник"
 In forms, use `<select>` — never a free text input. Only `owner`/`admin` can set it.
+
+## schedule-graph.js specifics (second largest module, ~6200 lines)
+
+Three objects in one file: `ScheduleGraphPage` (manager view), `ScheduleGraphEmployee` (employee view), `ScheduleViewPage` (read-only viewer).
+
+### Key state fields — ScheduleGraphPage
+| Field | Purpose |
+|-------|---------|
+| `_locations` | All locations the manager owns/views |
+| `_locId` | Currently selected location id (`'all'` = all-locs view) |
+| `_assignments` | Employees assigned to current location |
+| `_entries` | `{userId_date → entry}` for current month |
+| `_tab` | `'schedule'` \| `'subst'` \| `'log'` \| `'trash'` |
+| `_quickType` | Active quick-fill shift type key, or null |
+| `_locSortAlpha` | Sort sidebar A→Z (owner only), persisted in localStorage |
+| `_locCreators` | `{created_by → full_name}` for owner display in header bar |
+| `_pastMonthUnlocked` | Whether past month editing is unlocked |
+
+### Render flow
+`_render(container)` → sets full `container.innerHTML`. After innerHTML: applies saved sidebar width from `localStorage('sg_sidebar_w')`. Always call `_render(this._container)` to refresh UI — never patch DOM directly.
+
+### Tabs
+- Single location: `📅 Графік | 🔄 Підміни | 📋 Журнал змін` + trash button
+- `_locId === 'all'`: only `🔄 Підміни` tab + trash button
+
+### Assignments — is_primary
+`schedule_assignments.is_primary boolean DEFAULT true`. `false` = substitute (підміна). In `_nameCell`: filled `fa-solid fa-star` = primary, outline `fa-regular fa-star` = substitute. Badge `sg-temp-badge` shown inline for substitutes.
+
+### Shift cell coloring
+`sg-cell-sub` class added to cell when `!a.is_primary && dispShift` — substitutes get lighter styling. `dispType`: if `!a.is_primary` and `shift_type === 'work'` → display as `day_off` (substitute's "work" looks like day off for them).
+
+### CSS styles location
+All CSS is inside `_styles()` method at the bottom of `ScheduleGraphPage`. `ScheduleViewPage` has its own `_styles()`. Both are injected via template literal at end of `_render()` innerHTML.
+
+### Sidebar resize
+Drag handle between sidebar and content (`sg-sidebar-resizer`). Width saved to `localStorage('sg_sidebar_w')`, CSS var `--sg-sidebar-w`. Restored after every `_render`.
+
+### ScheduleViewPage — location picker
+Replaces tab bar with searchable dropdown (`sgv-loc-search` + `sgv-loc-dropdown`). On focus → `_openLocList()` shows all; on input → `_filterLocs(q)` filters; on select → `_pickLoc(locId, name)`. Works for 200+ locations.
+
+## surveys.js specifics
+
+Entry point: `SurveysPage.renderInTab(area)` — called from `ExpertPathPage._renderSurveys(area)`.
+
+### Visibility logic
+- `canManage` (admin/smm/owner): sees all surveys
+- `isStaff` (teacher): sees published surveys
+- regular user/manager: sees only assigned surveys via `survey_assignments` table
+
+### State fields (avoid passing through onclick attrs)
+| Field | Purpose |
+|-------|---------|
+| `_takeState` | `{surveyId, questions}` — set before `_submitResponse()` |
+| `_builderSurveyId` | Current survey id in builder |
+| `_builderQuestions` | Questions array in builder |
+
+### onclick patterns — survey-specific
+- Survey card open: `onclick="SurveysPage.openBuilder('${s.id}')"` — UUID with single quotes, safe
+- Delete with title: `data-title="${Fmt.esc(s.title)}" onclick="SurveysPage._deleteSurvey('${s.id}',this.dataset.title)"`
+- Never `JSON.stringify(uuid)` — generates `"uuid"` with double quotes that break HTML attribute parsing
+
+### Image upload
+Uses `test-images` bucket (private), path `surveys/{qid}/timestamp.ext`. `_uploadQImage(qid, input)` / `_removeQImage(qid)`.
+
+## Known onclick/HTML gotchas (hard-won lessons)
+
+### `<\i>` and `<\button>` cause "Unexpected end of input"
+Backslash in closing tags (`<\i>`, `<\button>`) inside template literals causes JS parse error at eval time. Always `</i>`, `</button>`.
+
+### JSON.stringify(uuid) breaks onclick
+`JSON.stringify(record.id)` produces `"uuid-string"` with double quotes — browser truncates `onclick="..."` attribute at the first `"`. Use `'${record.id}'` (single-quote interpolation) for UUIDs only.
+
+### Passing objects/arrays through onclick
+Never stringify complex data into onclick. Store in page-level state (`this._someState = data`) and call method with no args.
+
+### supabase .in() with null values
+If array passed to `.in('id', ids)` contains `null`, query may error or behave unexpectedly. Always `.filter(Boolean)` before `.in()`.
+
+### API.profiles.getAll() returns {data, count}
+Not a flat array — destructure: `const { data } = await ...` or use `data || []`.
+
+### hash-based TOC links trigger router
+`<a href="#section-id">` changes the URL hash → SPA router fires → navigates away. Use `<button onclick="document.getElementById('id').scrollIntoView({behavior:'smooth'})">` instead.
+
+### Modal scoped CSS
+When embedding rich HTML in `Modal.open({body})`, prefix all CSS classes to avoid collisions with global LMS styles. E.g. `.sg-man .mock-table thead { background: transparent }` to override LMS global `thead` background.
+
+### _render() resets DOM completely
+After `container.innerHTML = ...` all DOM state is lost. Restore persistent UI state (sidebar width, etc.) immediately after assignment, not in event handlers.

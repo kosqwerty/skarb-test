@@ -34,6 +34,7 @@ const NewsPage = {
             <div id="news-pagination" style="display:flex;justify-content:center;gap:.5rem;margin-top:2rem"></div>`;
 
         await this.load();
+        if (params.create) this.openCreate();
     },
     
     onSearch(e) {

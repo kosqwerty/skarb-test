@@ -165,9 +165,12 @@ const ScheduleGraphPage = {
     _filteredUserId:      null,
     _collapsedLocs:       new Set(),
     _pastMonthUnlocked:   false,
+    _locSortAlpha:        false,
+    _locCreators:         {},
 
     async init(container) {
         this._container = container;
+        this._locSortAlpha = !!localStorage.getItem('sg_loc_sort_alpha');
 
         if (!AppState.isManager() && !AppState.isAdmin() && !AppState.isOwner()) {
             await ScheduleGraphEmployee.init(container);
@@ -215,6 +218,14 @@ const ScheduleGraphPage = {
         const { data } = await query;
         this._locations = data || [];
         this._applyLocOrder();
+        if (AppState.isOwner() && this._locations.length) {
+            const ids = [...new Set(this._locations.map(l => l.created_by).filter(Boolean))];
+            if (ids.length) {
+                const { data: profs } = await supabase.from('profiles').select('id, full_name').in('id', ids);
+                this._locCreators = {};
+                (profs || []).forEach(p => { this._locCreators[p.id] = p.full_name; });
+            }
+        }
     },
 
     async _autoLockForNewMonth() {
@@ -507,6 +518,7 @@ const ScheduleGraphPage = {
     ${this._hero()}
     <div class="sg-body">
         ${this._locSidebar()}
+        <div class="sg-sidebar-resizer" onmousedown="ScheduleGraphPage._startSidebarResize(event)"></div>
         <div class="sg-content">
             ${this._locId || this._deletedLocations.length ? `
             <div class="sg-controls">
@@ -532,9 +544,15 @@ const ScheduleGraphPage = {
                 <div class="sg-tabs">
                     <button class="sg-tab ${this._tab==='schedule'?'active':''}"
                         onclick="ScheduleGraphPage._switchTab('schedule')">📅 Графік</button>
+                    <button class="sg-tab ${this._tab==='subst'?'active':''}"
+                        onclick="ScheduleGraphPage._goToSubst()">🔄 Підміни</button>
                     <button class="sg-tab ${this._tab==='log'?'active':''}"
                         onclick="ScheduleGraphPage._switchTab('log')">📋 Журнал змін</button>
-                </div>` : ''}
+                </div>` : `
+                <div class="sg-tabs">
+                    <button class="sg-tab ${this._tab==='subst'?'active':''}"
+                        onclick="ScheduleGraphPage._switchTab('subst')">🔄 Підміни</button>
+                </div>`}
                 ` : ''}
                 <button class="sg-tab sg-trash-tab ${this._tab==='trash'?'active':''}"
                     onclick="ScheduleGraphPage._switchTab(${this._tab==='trash'?`'schedule'`:`'trash'`})">
@@ -556,6 +574,9 @@ const ScheduleGraphPage = {
                 <button class="sg-add-btn" onclick="ScheduleGraphPage._addLocation()">
                     <span class="sg-add-ico">＋</span> Додати локацію
                 </button>
+                <button class="sg-manual-btn" onclick="ScheduleGraphPage._showManual()" style="margin-top:16px;display:inline-flex;align-items:center;gap:8px;">
+                    📖 Довідка — як користуватись графіком
+                </button>
             </div>
             `}
         </div>
@@ -563,6 +584,11 @@ const ScheduleGraphPage = {
 </div>
 ${this._styles()}`;
         this._initStickyScroll();
+        const savedW = localStorage.getItem('sg_sidebar_w');
+        if (savedW) {
+            const sidebar = container.querySelector('.sg-loc-sidebar');
+            if (sidebar) sidebar.style.width = savedW + 'px';
+        }
     },
 
     _hero() {
@@ -574,6 +600,7 @@ ${this._styles()}`;
             <h1 class="sg-hero-title">Графік роботи ломбарду</h1>
             <p class="sg-hero-sub">Керуйте розкладом співробітників по локаціях</p>
         </div>
+        <button class="sg-manual-btn" onclick="ScheduleGraphPage._showManual()" title="Інструкція">📖 Довідка</button>
         ${this._isAssignedAsEmployee ? `
         <button class="sg-my-sched-btn" onclick="ScheduleGraphPage._switchToEmployee()">
             👤 Мій графік
@@ -582,12 +609,333 @@ ${this._styles()}`;
 </div>`;
     },
 
+    _showManual() {
+        Modal.open({
+            title: '',
+            size: 'xl',
+            body: `
+<style>
+.sg-man { font-family: 'Golos Text', system-ui, sans-serif; line-height: 1.65; font-size: 15px; color: #0e1117; }
+.sg-man *,
+.sg-man *::before,
+.sg-man *::after { box-sizing: border-box; }
+.sg-man .cover {
+  background: linear-gradient(145deg,#0e1a2e 0%,#1e3a5f 55%,#163b6e 100%);
+  border-radius: 12px; padding: 40px 32px 36px; text-align: center; position: relative; overflow: hidden; margin-bottom: 24px;
+}
+.sg-man .cover::before {
+  content:''; position:absolute; inset:0;
+  background: radial-gradient(ellipse 70% 120% at 80% 30%,rgba(56,189,248,.18),transparent),
+              radial-gradient(ellipse 50% 60% at 20% 80%,rgba(99,102,241,.12),transparent);
+}
+.sg-man .cover-tag { position:relative; display:inline-block; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.22); color:rgba(255,255,255,.75); font-size:.72rem; font-weight:600; letter-spacing:.12em; text-transform:uppercase; padding:5px 14px; border-radius:20px; margin-bottom:16px; }
+.sg-man .cover-icon { position:relative; font-size:3rem; margin-bottom:12px; }
+.sg-man .cover h1 { position:relative; font-size:clamp(1.3rem,3vw,2rem); font-weight:800; color:#fff; line-height:1.15; letter-spacing:-.02em; margin-bottom:10px; }
+.sg-man .cover p { position:relative; color:rgba(255,255,255,.62); font-size:.9rem; }
+.sg-man .toc { background:var(--bg-surface,#fff); border:1.5px solid var(--border,#e2e8f0); border-radius:12px; padding:20px 24px; margin-bottom:28px; }
+.sg-man .toc-title { font-size:.75rem; font-weight:800; letter-spacing:.1em; text-transform:uppercase; color:#878b99; margin-bottom:14px; }
+.sg-man .toc-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:7px; }
+.sg-man .toc-item { display:flex; align-items:center; gap:9px; padding:8px 12px; border-radius:9px; text-decoration:none; color:var(--text,#2a2d36); font-size:.85rem; font-weight:500; border:1px solid transparent; transition:background .15s,color .15s; background:none; cursor:pointer; width:100%; text-align:left; font-family:inherit; }
+.sg-man .toc-item:hover { background:var(--bg-hover,#f4f2ee); border-color:var(--border,#e2e8f0); color:#2563eb; }
+.sg-man .toc-num { width:20px;height:20px;border-radius:5px;background:#1e3a5f;color:#fff;font-size:.6rem;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0; }
+.sg-man .section { margin-bottom:40px; scroll-margin-top:16px; }
+.sg-man .section-header { display:flex;align-items:center;gap:12px;margin-bottom:20px;padding-bottom:14px;border-bottom:2px solid var(--border,#e2e8f0); }
+.sg-man .section-num { width:40px;height:40px;border-radius:10px;background:#1e3a5f;color:#fff;font-size:.8rem;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0; }
+.sg-man .section-title { font-size:1rem;font-weight:800;color:var(--text,#0e1117);letter-spacing:-.01em; }
+.sg-man .card { background:var(--bg-surface,#fff);border:1.5px solid var(--border,#e2e8f0);border-radius:12px;padding:18px 22px;margin-bottom:14px;box-shadow:0 2px 8px rgba(0,0,0,.05); }
+.sg-man .card-title { font-weight:700;font-size:.92rem;color:var(--text,#0e1117);margin-bottom:8px;display:flex;align-items:center;gap:8px; }
+.sg-man .card p,.sg-man .card li { color:#4a4e5c;font-size:.88rem;line-height:1.7; }
+.sg-man .card ul,.sg-man .card ol { padding-left:18px;margin-top:6px; }
+.sg-man .card li+li { margin-top:4px; }
+.sg-man .steps { counter-reset:step;display:flex;flex-direction:column;gap:10px; }
+.sg-man .step { display:flex;gap:14px;background:var(--bg-surface,#fff);border:1.5px solid var(--border,#e2e8f0);border-radius:12px;padding:16px 18px;box-shadow:0 2px 8px rgba(0,0,0,.05);counter-increment:step;position:relative;overflow:hidden; }
+.sg-man .step::before { content:counter(step);position:absolute;right:14px;top:12px;font-size:2.5rem;font-weight:800;color:#e2e8f0;line-height:1;pointer-events:none; }
+.sg-man .step-icon { width:36px;height:36px;border-radius:9px;background:#f4f2ee;border:1.5px solid #e2e8f0;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0; }
+.sg-man .step-body { flex:1;min-width:0; }
+.sg-man .step-body strong { display:block;font-weight:700;font-size:.88rem;color:var(--text,#0e1117);margin-bottom:3px; }
+.sg-man .step-body p { color:#4a4e5c;font-size:.84rem;line-height:1.6;max-width:680px; }
+.sg-man .badge { display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:6px;font-size:.73rem;font-weight:700;letter-spacing:.02em; }
+.sg-man .badge-green  { background:rgba(5,150,105,.12);color:#047857; }
+.sg-man .badge-amber  { background:rgba(217,119,6,.12);color:#b45309; }
+.sg-man .badge-red    { background:rgba(220,38,38,.12);color:#b91c1c; }
+.sg-man .badge-purple { background:rgba(124,58,237,.12);color:#6d28d9; }
+.sg-man .badge-blue   { background:rgba(37,99,235,.12);color:#1d4ed8; }
+.sg-man .badge-ink    { background:rgba(14,17,23,.08);color:#2a2d36; }
+.sg-man .legend-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:9px;margin-top:10px; }
+.sg-man .legend-item { display:flex;align-items:center;gap:9px;background:var(--bg-surface,#fff);border:1.5px solid var(--border,#e2e8f0);border-radius:9px;padding:10px 13px; }
+.sg-man .legend-short { width:30px;height:30px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:800;flex-shrink:0; }
+.sg-man .legend-info strong { display:block;font-size:.84rem;font-weight:700;color:var(--text,#0e1117); }
+.sg-man .legend-info span { font-size:.73rem;color:#878b99; }
+.sg-man .callout { display:flex;gap:12px;border-radius:12px;padding:14px 18px;margin:14px 0;font-size:.86rem;line-height:1.65; }
+.sg-man .callout-icon { font-size:1.1rem;flex-shrink:0;margin-top:1px; }
+.sg-man .callout-body { color:#2a2d36; }
+.sg-man .callout-body strong { color:#0e1117; }
+.sg-man .callout.tip    { background:rgba(5,150,105,.07);border:1.5px solid rgba(5,150,105,.2); }
+.sg-man .callout.warn   { background:rgba(217,119,6,.07);border:1.5px solid rgba(217,119,6,.2); }
+.sg-man .callout.info   { background:rgba(37,99,235,.07);border:1.5px solid rgba(37,99,235,.2); }
+.sg-man .callout.danger { background:rgba(220,38,38,.07);border:1.5px solid rgba(220,38,38,.2); }
+.sg-man .tab-ribbon { display:flex;gap:7px;flex-wrap:wrap;margin:12px 0; }
+.sg-man .tab-chip { display:inline-flex;align-items:center;gap:5px;padding:6px 14px;border-radius:18px;font-size:.8rem;font-weight:600;background:var(--bg-surface,#fff);border:1.5px solid var(--border,#e2e8f0);color:#2a2d36; }
+.sg-man .tab-chip.active { background:#1e3a5f;border-color:#1e3a5f;color:#fff; }
+.sg-man .two-col { display:grid;grid-template-columns:1fr 1fr;gap:12px; }
+@media (max-width:600px) { .sg-man .two-col { grid-template-columns:1fr; } }
+.sg-man .screen-mock { background:#1a2744;border-radius:12px;padding:18px;margin:14px 0;font-size:.78rem;color:rgba(255,255,255,.8);overflow:hidden; }
+.sg-man .mock-bar { display:flex;align-items:center;gap:7px;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,.1);flex-wrap:wrap; }
+.sg-man .mock-loc-name { font-weight:700;color:#fff;font-size:.83rem; }
+.sg-man .mock-time { font-size:.7rem;color:rgba(255,255,255,.55);margin-left:auto; }
+.sg-man .mock-table { width:100%;border-collapse:collapse;font-size:.7rem; }
+.sg-man .mock-table thead,
+.sg-man .mock-table thead tr { background:transparent; }
+.sg-man .mock-table th { background:transparent;color:rgba(255,255,255,.5);font-weight:600;padding:4px 5px;text-align:center;border-bottom:1px solid rgba(255,255,255,.08); }
+.sg-man .mock-table th.we { color:rgba(248,113,113,.7); }
+.sg-man .mock-table td { padding:4px 5px;text-align:center;border-bottom:1px solid rgba(255,255,255,.05); }
+.sg-man .mock-table td.name { text-align:left;color:rgba(255,255,255,.85);font-weight:600;padding-left:9px;min-width:100px; }
+.sg-man .mock-badge { display:inline-block;padding:2px 6px;border-radius:4px;font-size:.66rem;font-weight:700; }
+.sg-man hr { border:none;border-top:1.5px solid var(--border,#e2e8f0);margin:28px 0; }
+.sg-man .cheatsheet-card { background:var(--bg-surface,#fff);border:2px solid #1e3a5f;border-radius:12px;padding:20px 24px;background:linear-gradient(135deg,rgba(30,58,95,.04),rgba(37,99,235,.04)); }
+.sg-man .cheatsheet-title { font-size:1rem;font-weight:800;margin-bottom:14px;color:var(--text,#0e1117); }
+.sg-man .cheat-list { list-style:none;padding:0;font-size:.86rem;color:#4a4e5c; }
+.sg-man .cheat-list li { padding:4px 0;border-bottom:1px solid var(--border,#e2e8f0); }
+.sg-man .cheat-list li:last-child { border-bottom:none; }
+</style>
+<div class="sg-man">
+  <div class="cover">
+    <div class="cover-tag">📋 Інструкція для керівника</div>
+    <div class="cover-icon">📅</div>
+    <h1>Графік роботи ломбарду</h1>
+    <p>Повний посібник: управління локаціями, співробітниками, змінами, підмінами та доступом</p>
+  </div>
+
+  <nav class="toc">
+    <div class="toc-title">Зміст</div>
+    <div class="toc-grid">
+      <button class="toc-item" onclick="document.getElementById('sgm-s1').scrollIntoView({behavior:'smooth',block:'start'})"><div class="toc-num">1</div>🏪 Локації та структура</button>
+      <button class="toc-item" onclick="document.getElementById('sgm-s2').scrollIntoView({behavior:'smooth',block:'start'})"><div class="toc-num">2</div>👥 Співробітники</button>
+      <button class="toc-item" onclick="document.getElementById('sgm-s3').scrollIntoView({behavior:'smooth',block:'start'})"><div class="toc-num">3</div>📆 Типи змін</button>
+      <button class="toc-item" onclick="document.getElementById('sgm-s4').scrollIntoView({behavior:'smooth',block:'start'})"><div class="toc-num">4</div>✏️ Заповнення графіку</button>
+      <button class="toc-item" onclick="document.getElementById('sgm-s5').scrollIntoView({behavior:'smooth',block:'start'})"><div class="toc-num">5</div>⚡ Швидке заповнення</button>
+      <button class="toc-item" onclick="document.getElementById('sgm-s6').scrollIntoView({behavior:'smooth',block:'start'})"><div class="toc-num">6</div>🆘 Пошук підміни</button>
+      <button class="toc-item" onclick="document.getElementById('sgm-s7').scrollIntoView({behavior:'smooth',block:'start'})"><div class="toc-num">7</div>🔒 Блокування</button>
+      <button class="toc-item" onclick="document.getElementById('sgm-s8').scrollIntoView({behavior:'smooth',block:'start'})"><div class="toc-num">8</div>📋 Журнал змін</button>
+      <button class="toc-item" onclick="document.getElementById('sgm-s9').scrollIntoView({behavior:'smooth',block:'start'})"><div class="toc-num">9</div>👁 Доступ для перегляду</button>
+      <button class="toc-item" onclick="document.getElementById('sgm-s10').scrollIntoView({behavior:'smooth',block:'start'})"><div class="toc-num">10</div>🤝 Блок (партнерство)</button>
+      <button class="toc-item" onclick="document.getElementById('sgm-s11').scrollIntoView({behavior:'smooth',block:'start'})"><div class="toc-num">11</div>🗑 Кошик</button>
+      <button class="toc-item" onclick="document.getElementById('sgm-s12').scrollIntoView({behavior:'smooth',block:'start'})"><div class="toc-num">12</div>⚙️ Типи змін — налаштування</button>
+    </div>
+  </nav>
+
+  <section class="section" id="sgm-s1">
+    <div class="section-header"><div class="section-num">1</div><div><div class="section-title">🏪 Локації та структура</div></div></div>
+    <div class="card"><div class="card-title">🗺️ Що таке локація?</div><p>Локація — це окремий підрозділ або точка роботи (магазин, відділення ломбарду). Для кожної локації ведеться окремий графік зі своїм переліком співробітників.</p></div>
+    <div class="steps">
+      <div class="step"><div class="step-icon">➕</div><div class="step-body"><strong>Додати нову локацію</strong><p>У лівій бічній панелі натисніть кнопку <strong>«+»</strong> поряд із заголовком «Локації». Введіть назву і натисніть <em>Зберегти</em>.</p></div></div>
+      <div class="step"><div class="step-icon">✏️</div><div class="step-body"><strong>Перейменувати локацію</strong><p>Поряд з назвою локації натисніть кнопку олівця ✏. Змініть назву та збережіть.</p></div></div>
+      <div class="step"><div class="step-icon">↕️</div><div class="step-body"><strong>Змінити порядок</strong><p>Перетягніть локацію за маркер <strong>⠿</strong> у сайдбарі. Порядок зберігається автоматично.</p></div></div>
+      <div class="step"><div class="step-icon">📊</div><div class="step-body"><strong>Всі локації</strong><p>Оберіть <strong>«Всі локації»</strong> у сайдбарі — зведений вигляд усіх точок і співробітників. Можна згортати/розгортати групи.</p></div></div>
+    </div>
+    <div class="callout info"><div class="callout-icon">ℹ️</div><div class="callout-body"><strong>Час роботи.</strong> Для кожної локації можна вказати робочі години — клікніть олівець поряд із 🕐, задайте початок і кінець, збережіть.</div></div>
+  </section>
+
+  <hr>
+
+  <section class="section" id="sgm-s2">
+    <div class="section-header"><div class="section-num">2</div><div><div class="section-title">👥 Управління співробітниками</div></div></div>
+    <div class="steps">
+      <div class="step"><div class="step-icon">＋</div><div class="step-body"><strong>Додати співробітника</strong><p>Натисніть <span class="badge badge-blue">＋ Співробітник</span> у правому верхньому куті таблиці. Оберіть людину зі списку. Одну людину можна призначити до кількох локацій.</p></div></div>
+      <div class="step"><div class="step-icon">↕️</div><div class="step-body"><strong>Змінити порядок рядків</strong><p>Перетягніть рядок за ручку <strong>⠿</strong> ліворуч від імені.</p></div></div>
+      <div class="step"><div class="step-icon">🗑️</div><div class="step-body"><strong>Видалити співробітника</strong><p>Натисніть <span class="badge badge-red">🗑 Видалити</span> у рядку праворуч.</p></div></div>
+    </div>
+    <div class="callout danger"><div class="callout-icon">⚠️</div><div class="callout-body"><strong>Обов'язково!</strong> Додати співробітника можна <strong>лише якщо він зареєстрований на порталі</strong>.</div></div>
+    <div class="callout tip"><div class="callout-icon">💡</div><div class="callout-body"><strong>Мій графік.</strong> Якщо ви самі призначені як співробітник — у заголовку з'явиться кнопка <strong>«👤 Мій графік»</strong> для переключення на вигляд звичайного співробітника.</div></div>
+  </section>
+
+  <hr>
+
+  <section class="section" id="sgm-s3">
+    <div class="section-header"><div class="section-num">3</div><div><div class="section-title">📆 Типи змін — позначення</div></div></div>
+    <p style="color:#4a4e5c;margin-bottom:14px;font-size:.88rem;">Кожна комірка може містити один з типів позначень:</p>
+    <div class="legend-grid">
+      <div class="legend-item"><div class="legend-short" style="background:rgba(16,185,129,.14);color:#10b981">З</div><div class="legend-info"><strong>Зміна (робота)</strong><span>Звичайний робочий день</span></div></div>
+      <div class="legend-item"><div class="legend-short" style="background:rgba(139,92,246,.14);color:#8b5cf6">П</div><div class="legend-info"><strong>Підміна</strong><span>Запланована підміна</span></div></div>
+      <div class="legend-item"><div class="legend-short" style="background:rgba(249,115,22,.14);color:#f97316">Р</div><div class="legend-info"><strong>Підміна підтверджена</strong><span>Погоджена керівником</span></div></div>
+      <div class="legend-item"><div class="legend-short" style="background:rgba(245,158,11,.14);color:#f59e0b">ВД</div><div class="legend-info"><strong>Відпустка</strong><span>Планова відпустка</span></div></div>
+      <div class="legend-item"><div class="legend-short" style="background:rgba(239,68,68,.14);color:#ef4444">Л</div><div class="legend-info"><strong>Лікарняний</strong><span>Тимчасова непрацездатність</span></div></div>
+      <div class="legend-item"><div class="legend-short" style="background:rgba(99,102,241,.14);color:#6366f1">🙋</div><div class="legend-info"><strong>Може підмінити</strong><span>Готовий вийти</span></div></div>
+      <div class="legend-item"><div class="legend-short" style="background:rgba(239,68,68,.14);color:#ef4444">🆘</div><div class="legend-info"><strong>Потрібна підміна</strong><span>Критичний запит заміни</span></div></div>
+    </div>
+    <div class="callout info" style="margin-top:14px"><div class="callout-icon">⚙️</div><div class="callout-body"><strong>Власні типи.</strong> Ви можете додати свої типи змін. Дивіться розділ <button onclick="document.getElementById('sgm-s12').scrollIntoView({behavior:'smooth',block:'start'})" style="background:none;border:none;color:#2563eb;cursor:pointer;font-size:inherit;padding:0;text-decoration:underline">12</button>.</div></div>
+  </section>
+
+  <hr>
+
+  <section class="section" id="sgm-s4">
+    <div class="section-header"><div class="section-num">4</div><div><div class="section-title">✏️ Заповнення графіку</div></div></div>
+    <div class="screen-mock">
+      <div class="mock-bar"><span class="mock-loc-name">🏪 А01 м. Київ, вул. Заболотного, 20А</span><span class="mock-time">🕐 08:00 — 20:00</span></div>
+      <table class="mock-table">
+        <thead><tr><th style="text-align:left;padding-left:9px;style="background:rgba(16,185,129,.18);color:#10b981"">Співробітник</th><th>1<br><span style="font-size:.6rem;opacity:.6">Пн</span></th><th>2<br><span style="font-size:.6rem;opacity:.6">Вт</span></th><th>3<br><span style="font-size:.6rem;opacity:.6">Ср</span></th><th class="we">4<br><span style="font-size:.6rem">Сб</span></th><th class="we">5<br><span style="font-size:.6rem">Нд</span></th><th>6<br><span style="font-size:.6rem;opacity:.6">Пн</span></th><th style="opacity:.7">Σ</th></tr></thead>
+        <tbody>
+          <tr><td class="name">Іваненко О.</td><td><span class="mock-badge" style="background:rgba(16,185,129,.18);color:#10b981">З</span></td><td><span class="mock-badge" style="background:rgba(16,185,129,.18);color:#10b981">З</span></td><td></td><td></td><td></td><td><span class="mock-badge" style="background:rgba(16,185,129,.18);color:#10b981">З</span></td><td style="opacity:.7;font-weight:700;color:rgba(255,255,255,.8)">3</td></tr>
+          <tr><td class="name">Петренко В.</td><td></td><td></td><td><span class="mock-badge" style="background:rgba(16,185,129,.18);color:#10b981">З</span></td><td></td><td></td><td></td><td style="opacity:.7;font-weight:700;color:rgba(255,255,255,.8)">1</td></tr>
+          <tr><td class="name">Сидоренко А.</td><td></td><td><span class="mock-badge" style="background:rgba(245,158,11,.14);color:#f59e0b">ВД</span></td><td><span class="mock-badge" style="background:rgba(245,158,11,.14);color:#f59e0b">ВД</span></td><td></td><td></td><td></td><td style="opacity:.7;font-weight:700;color:rgba(255,255,255,.8)">0</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="steps">
+      <div class="step"><div class="step-icon">🖱️</div><div class="step-body"><strong>Клікніть на комірку</strong><p>Знайдіть рядок співробітника і стовпець з потрібною датою. Клік на порожню комірку відкриє вікно редагування.</p></div></div>
+      <div class="step"><div class="step-icon">📝</div><div class="step-body"><strong>Оберіть тип зміни</strong><p>У вікні оберіть тип: <span class="badge badge-green">З Зміна</span>, <span class="badge badge-purple">П Підміна</span>, <span class="badge badge-amber">ВД Відпустка</span>, <span class="badge badge-red">Л Лікарняний</span> або власний тип. Можна вказати час і нотатку.</p></div></div>
+      <div class="step"><div class="step-icon">💾</div><div class="step-body"><strong>Збережіть</strong><p>Натисніть «Зберегти». Повторний клік на заповнену комірку дозволяє <strong>редагувати або видалити</strong> запис.</p></div></div>
+    </div>
+    <div class="callout tip"><div class="callout-icon">💡</div><div class="callout-body"><strong>Стовпець Σ.</strong> Автоматично підраховує кількість робочих змін (З) у місяці для кожного співробітника.</div></div>
+    <div class="callout info"><div class="callout-icon">📅</div><div class="callout-body"><strong>Навігація по місяцях.</strong> Стрілки <strong>‹ ›</strong> поряд з назвою місяця. Минулі місяці заблоковані — натисніть «Розблокувати» для редагування.</div></div>
+  </section>
+
+  <hr>
+
+  <section class="section" id="sgm-s5">
+    <div class="section-header"><div class="section-num">5</div><div><div class="section-title">⚡ Швидке заповнення (Quick Fill)</div></div></div>
+    <div class="card"><div class="card-title">⚡ Як це працює</div><p>Дозволяє масово проставляти один тип зміни, клікаючи по комірках без відкриття вікна кожного разу.</p></div>
+    <div class="steps">
+      <div class="step"><div class="step-icon">1️⃣</div><div class="step-body"><strong>Активуйте тип</strong><p>У панелі легенди натисніть на потрібний тип — <span class="badge badge-green">З Зміна</span>. Кнопка підсвітиться, з'явиться підказка «⚡ Швидке заповнення».</p></div></div>
+      <div class="step"><div class="step-icon">2️⃣</div><div class="step-body"><strong>Клікайте на комірки</strong><p>Кожен клік на порожню комірку — миттєво записує обраний тип. Клік на заповнену (той самий тип) — видаляє.</p></div></div>
+      <div class="step"><div class="step-icon">✕</div><div class="step-body"><strong>Вийдіть із режиму</strong><p>Натисніть <span class="badge badge-ink">✕ Скасувати</span> у підказці або знову клікніть на активний тип у легенді.</p></div></div>
+    </div>
+    <div class="callout tip"><div class="callout-icon">🚀</div><div class="callout-body">Ідеально для заповнення <strong>цілого тижня/місяця</strong> одним типом зміни.</div></div>
+  </section>
+
+  <hr>
+
+  <section class="section" id="sgm-s6">
+    <div class="section-header"><div class="section-num">6</div><div><div class="section-title">🔍 Пошук підміни</div></div></div>
+    <div class="tab-ribbon"><span class="tab-chip">📅 Графік</span><span class="tab-chip active">🔄 Підміни</span><span class="tab-chip">📋 Журнал</span></div>
+    <div class="card"><div class="card-title">🔄 Вкладка «Підміни»</div><p>Показує <strong>всіх співробітників з усіх локацій</strong> в одній зведеній таблиці. Зручно шукати кого можна залучити на заміну.</p></div>
+    <div class="steps">
+      <div class="step"><div class="step-icon">🔄</div><div class="step-body"><strong>Перейдіть на «Підміни»</strong><p>Клікніть вкладку «Підміни» вгорі. Над таблицею підказка: «🖱 Натисніть на заголовок дня щоб побачити хто може підмінити».</p></div></div>
+      <div class="step"><div class="step-icon">📅</div><div class="step-body"><strong>Клікніть на заголовок дня</strong><p>Натисніть на число у шапці таблиці. Стовпець підсвітиться фіолетовим, рядки розфарбуються: <span style="background:rgba(16,185,129,.15);color:#059669;padding:1px 6px;border-radius:5px;font-weight:700">зелений = вільний</span> <span style="background:rgba(239,68,68,.12);color:#b91c1c;padding:1px 6px;border-radius:5px;font-weight:700">червоний = зайнятий</span>.</p></div></div>
+      <div class="step"><div class="step-icon">🪟</div><div class="step-body"><strong>Вікно «🔍 Пошук підміни»</strong><p>Два табки: <span class="badge badge-green">🟢 Вільні</span> — без змін цього дня; <span class="badge badge-red">🔴 Зайняті</span> — вже мають зміну.</p></div></div>
+      <div class="step"><div class="step-icon">👆</div><div class="step-body"><strong>Призначте підміну</strong><p>Клікніть на картку вільного співробітника → підтвердіть. Автоматично записується підміна і надходить пуш-сповіщення.</p></div></div>
+    </div>
+    <div class="card" style="margin-top:8px"><div class="card-title">📋 Картка співробітника містить</div><ul><li><strong>Ім'я та посада</strong></li><li><strong>Довіреності</strong> — якими точками може управляти</li><li><strong>Лічильник підмін</strong> — <span style="color:#10b981;font-weight:700">зелений ≤1</span>, <span style="color:#f59e0b;font-weight:700">жовтий 2–3</span>, <span style="color:#ef4444;font-weight:700">червоний 4+</span></li><li><strong>🙋 Пропонує підміну</strong> — позначив готовність вийти</li></ul></div>
+    <div class="callout info" style="margin-top:10px"><div class="callout-icon">🆘</div><div class="callout-body"><strong>Потрібна підміна.</strong> Кнопка «🆘 Потрібна підміна» — масова розсилка пуш-повідомлень усім співробітникам. Оберіть дату і локацію.</div></div>
+  </section>
+
+  <hr>
+
+  <section class="section" id="sgm-s7">
+    <div class="section-header"><div class="section-num">7</div><div><div class="section-title">🔒 Блокування графіку</div></div></div>
+    <div class="two-col">
+      <div class="card"><div class="card-title">🔓 Розблокований</div><p>Співробітники <strong>можуть вносити зміни</strong> у своєму рядку.</p></div>
+      <div class="card"><div class="card-title">🔒 Заблокований</div><p>Лише керівник може редагувати. Для інших — <strong>тільки перегляд</strong>.</p></div>
+    </div>
+    <div class="callout info" style="margin-top:8px"><div class="callout-icon">🔒</div><div class="callout-body">Кнопка замка — у рядку над таблицею праворуч від часу роботи. <strong>Автоблокування:</strong> на початку місяця попередній місяць блокується автоматично.</div></div>
+    <div class="callout warn"><div class="callout-icon">⚠️</div><div class="callout-body"><strong>Минулі місяці.</strong> Для редагування натисніть «Розблокувати» під назвою місяця.</div></div>
+  </section>
+
+  <hr>
+
+  <section class="section" id="sgm-s8">
+    <div class="section-header"><div class="section-num">8</div><div><div class="section-title">📋 Журнал змін</div></div></div>
+    <div class="card"><div class="card-title">📋 Що таке журнал?</div><p>Фіксує всі зміни у графіку: хто, коли і що змінив. Кожен запис: ім'я того хто змінив → співробітник → дата → стара значення → нова → точний час.</p></div>
+    <div class="tab-ribbon"><span class="tab-chip">📅 Графік</span><span class="tab-chip">🔄 Підміни</span><span class="tab-chip active">📋 Журнал</span><span class="tab-chip">🗑 Кошик</span></div>
+    <div class="callout tip"><div class="callout-icon">🔍</div><div class="callout-body">Зберігає хронологію: якщо хтось видалив або помилково змінив запис — ви побачите <strong>хто і коли</strong>. Журнал ведеться для поточної локації і місяця.</div></div>
+  </section>
+
+  <hr>
+
+  <section class="section" id="sgm-s9">
+    <div class="section-header"><div class="section-num">9</div><div><div class="section-title">👁 Доступ для перегляду</div></div></div>
+    <div class="card"><div class="card-title">👁 Надати доступ без права редагування</div><p>Можна дати стороннім людям або іншим керівникам право <strong>переглядати</strong> ваш графік без можливості змін.</p></div>
+    <div class="steps">
+      <div class="step"><div class="step-icon">👁</div><div class="step-body"><strong>Натисніть «Доступ»</strong><p>Кнопка <span class="badge badge-blue">👁 Доступ</span> — у правому верхньому куті таблиці. Відкриється вікно управління доступом.</p></div></div>
+      <div class="step"><div class="step-icon">➕</div><div class="step-body"><strong>Додайте користувача</strong><p>Знайдіть у списку і натисніть «Додати». Кнопки редагування для них будуть приховані.</p></div></div>
+      <div class="step"><div class="step-icon">✕</div><div class="step-body"><strong>Скасувати доступ</strong><p>У тому ж вікні натисніть «✕» поряд з іменем — доступ відразу відкликається.</p></div></div>
+    </div>
+  </section>
+
+  <hr>
+
+  <section class="section" id="sgm-s10">
+    <div class="section-header"><div class="section-num">10</div><div><div class="section-title">🤝 Блок — спільний пошук підміни</div></div></div>
+    <div class="card"><div class="card-title">🤝 Що таке блок?</div><p>Об'єднання кількох керівників для <strong>спільного пошуку підміни</strong>. У блоці ви бачите графіки локацій партнера у своїй вкладці «Підміни» (тільки читання).</p></div>
+    <div class="steps">
+      <div class="step"><div class="step-icon">✉️</div><div class="step-body"><strong>Запросити партнера</strong><p>Кнопка <span class="badge badge-blue">🤝 Блок</span> у заголовку сторінки. Оберіть керівника і надішліть запит.</p></div></div>
+      <div class="step"><div class="step-icon">✅</div><div class="step-body"><strong>Прийняти запит</strong><p>У вікні блоку відображається секція «📬 Вхідні запити». Натисніть «✓ Прийняти».</p></div></div>
+    </div>
+    <div class="callout info"><div class="callout-icon">🤝</div><div class="callout-body">Графіки партнерів позначені іконкою 🤝. Редагувати їх <strong>не можна</strong> — тільки переглядати у «Підмінах».</div></div>
+  </section>
+
+  <hr>
+
+  <section class="section" id="sgm-s11">
+    <div class="section-header"><div class="section-num">11</div><div><div class="section-title">🗑 Кошик — видалені локації</div></div></div>
+    <div class="card"><div class="card-title">🗑️ Як працює кошик</div><p>Видалені локації <strong>зберігаються 2 дні</strong>. Можна відновити протягом цього часу.</p></div>
+    <div class="steps">
+      <div class="step"><div class="step-icon">↩️</div><div class="step-body"><strong>Відновити локацію</strong><p>Перейдіть на «🗑 Кошик», знайдіть локацію, натисніть <span class="badge badge-green">↩ Відновити</span>.</p></div></div>
+      <div class="step"><div class="step-icon">🗑️</div><div class="step-body"><strong>Остаточно видалити</strong><p>Іконка 🗑️ праворуч — локація видаляється негайно і безповоротно.</p></div></div>
+    </div>
+    <div class="callout danger"><div class="callout-icon">⚠️</div><div class="callout-body"><strong>Увага!</strong> Через 2 дні локація видаляється <strong>автоматично</strong> разом з усіма записами.</div></div>
+  </section>
+
+  <hr>
+
+  <section class="section" id="sgm-s12">
+    <div class="section-header"><div class="section-num">12</div><div><div class="section-title">⚙️ Налаштування типів змін</div></div></div>
+    <div class="card"><div class="card-title">⚙️ Власні типи змін</div><p>Крім стандартних, можна створити свої — «Навчання», «Відрядження» тощо. Кожному задається назва, скорочення та колір.</p></div>
+    <div class="steps">
+      <div class="step"><div class="step-icon">⚙️</div><div class="step-body"><strong>Відкрийте налаштування</strong><p>Кнопка <span class="badge badge-ink">⚙️</span> у правій частині панелі легенди.</p></div></div>
+      <div class="step"><div class="step-icon">➕</div><div class="step-body"><strong>Додайте тип</strong><p>Вкажіть <strong>назву</strong>, <strong>скорочення</strong> (2–3 символи) та <strong>колір</strong>. Натисніть «Додати».</p></div></div>
+      <div class="step"><div class="step-icon">🗑️</div><div class="step-body"><strong>Видалити</strong><p>Іконка кошика поряд із типом. Стандартні типи (З, П, ВД, Л) видалити <strong>не можна</strong>.</p></div></div>
+    </div>
+    <div class="callout info"><div class="callout-icon">💾</div><div class="callout-body">Власні типи зберігаються в базі даних і доступні у всіх локаціях.</div></div>
+  </section>
+
+  <hr>
+
+  <section class="section">
+    <div class="cheatsheet-card">
+      <div class="cheatsheet-title">📌 Шпаргалка</div>
+      <div class="two-col">
+        <div>
+          <p style="font-weight:700;margin-bottom:8px;font-size:.88rem;">Основні дії</p>
+          <ul class="cheat-list">
+            <li>🏪 + у сайдбарі → нова локація</li>
+            <li>✏️ поряд з назвою → перейменувати</li>
+            <li>🕐 + ✏️ → задати час роботи</li>
+            <li>＋ Співробітник → додати людину</li>
+            <li>Клік на комірку → редагувати зміну</li>
+            <li>⚡ Легенда → режим швидкого заповнення</li>
+          </ul>
+        </div>
+        <div>
+          <p style="font-weight:700;margin-bottom:8px;font-size:.88rem;">Вкладки</p>
+          <ul class="cheat-list">
+            <li>📅 Графік → редагування локації</li>
+            <li>🔄 Підміни → пошук по всіх локаціях</li>
+            <li>📋 Журнал → хто і коли що змінив</li>
+            <li>🗑 Кошик → відновлення видалених</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>`
+        });
+    },
+
     _locSidebar() {
         return `
 <aside class="sg-loc-sidebar">
     <div class="sg-loc-sidebar-head">
         <span class="sg-loc-sidebar-title">Розділ локацій</span>
-        <button class="sg-loc-add-ico" onclick="ScheduleGraphPage._addLocation()" title="Додати локацію">＋</button>
+        <div style="display:flex;gap:4px;align-items:center">
+            ${AppState.isOwner() ? `
+            <button class="sg-loc-add-ico${this._locSortAlpha ? ' active' : ''}"
+                onclick="ScheduleGraphPage._toggleLocSort()"
+                title="${this._locSortAlpha ? 'Вимкнути сортування А→Я' : 'Сортувати А→Я'}">
+                <i class="fa-solid fa-arrow-down-a-z"></i>
+            </button>` : ''}
+            <button class="sg-loc-add-ico" onclick="ScheduleGraphPage._addLocation()" title="Додати локацію">＋</button>
+        </div>
     </div>
     <div class="sg-loc-sidebar-list"
         ondragend="ScheduleGraphPage._draggingLocId=null;document.querySelectorAll('.sg-loc-item-row.sg-loc-dragging,.sg-loc-item-row.sg-loc-drag-over').forEach(r=>r.classList.remove('sg-loc-dragging','sg-loc-drag-over'))">
@@ -597,9 +945,7 @@ ${this._styles()}`;
             <span class="sg-loc-item-ico">🗂</span>
             <span class="sg-loc-item-name">Всі локації</span>
         </button>` : ''}
-        ${this._locations.map(l => {
-            const wh = this._getWorkHours(l.id);
-            const whText = (wh.start && wh.end) ? `${wh.start}–${wh.end}` : '';
+        ${(this._locSortAlpha ? [...this._locations].sort((a,b) => a.name.localeCompare(b.name, 'uk')) : this._locations).map(l => {
             const hasHelp = this._helpLocIds.has(l.id);
             const isActive = l.id === this._locId;
             const viewOnly = this._isViewOnlyLoc(l.id);
@@ -615,7 +961,6 @@ ${this._styles()}`;
                 <span class="sg-loc-item-ico">${viewOnly ? '<i class="fa-solid fa-eye"></i>' : '🏪'}</span>
                 <span class="sg-loc-item-name" title="${l.name}">${l.name.slice(0,3)}</span>
                 <span class="sg-loc-item-meta">
-                    ${whText ? `<span class="sg-loc-item-wh">${whText}</span>` : ''}
                     ${hasHelp ? `<span class="sg-loc-item-helpdot"></span>` : ''}
                     ${viewOnly ? `<span class="sg-loc-item-ro" title="Тільки перегляд"><i class="fa-solid fa-eye"></i></span>` : ''}
                 </span>
@@ -676,6 +1021,12 @@ ${this._styles()}`;
         <span class="sg-loc-name-text">${locName}</span>
         ${viewOnly ? `<span class="sg-view-only-badge"><i class="fa-solid fa-eye"></i> Тільки перегляд</span>` : `
         <button class="sg-loc-name-edit" onclick="ScheduleGraphPage._renameLocation('${this._locId}',${JSON.stringify(locName||'').replace(/"/g,'&quot;')})" title="Перейменувати"><i class="fa-solid fa-pen"></i></button>`}
+        ${(() => {
+            if (!AppState.isOwner()) return '';
+            const loc = this._locations.find(l => l.id === this._locId);
+            const creator = loc?.created_by ? (this._locCreators[loc.created_by] || null) : null;
+            return creator ? `<span class="sg-wh-sep">·</span><span class="sg-loc-creator"><i class="fa-solid fa-user-tie"></i> ${Fmt.esc(creator)}</span>` : '';
+        })()}
         <span class="sg-wh-sep">·</span>
         <span class="sg-wh-label">🕐 Час роботи:</span>
         <span class="sg-wh-time" id="sg-wh-display">${wStart} — ${wEnd}</span>
@@ -1046,6 +1397,44 @@ ${this._styles()}`;
         this._pastMonthUnlocked = false;
         const load = this._locId === 'all' ? this._loadAllData() : this._loadPageData();
         load.then(() => this._render(this._container));
+    },
+
+    _toggleLocSort() {
+        this._locSortAlpha = !this._locSortAlpha;
+        localStorage.setItem('sg_loc_sort_alpha', this._locSortAlpha ? '1' : '');
+        this._render(this._container);
+    },
+
+    _startSidebarResize(e) {
+        e.preventDefault();
+        const sidebar = document.querySelector('.sg-loc-sidebar');
+        if (!sidebar) return;
+        const body = document.querySelector('.sg-body');
+        const startX = e.clientX;
+        const startW = sidebar.getBoundingClientRect().width;
+        body.classList.add('sg-sidebar-resizing');
+        const onMove = mv => {
+            const w = Math.min(340, Math.max(80, startW + mv.clientX - startX));
+            sidebar.style.width = w + 'px';
+            document.documentElement.style.setProperty('--sg-sidebar-w', w + 'px');
+        };
+        const onUp = () => {
+            body.classList.remove('sg-sidebar-resizing');
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            const w = parseInt(sidebar.style.width);
+            if (w) localStorage.setItem('sg_sidebar_w', w);
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    },
+
+    _goToSubst() {
+        this._locId = 'all';
+        this._tab   = 'subst';
+        this._substDate    = null;
+        this._filteredUserId = null;
+        this._loadAllData().then(() => this._render(this._container));
     },
 
     _switchTab(tab) {
@@ -3423,9 +3812,9 @@ ${this._styles()}`;
 
         const primaryBtn = !fired && isOwner
             ? `<button class="sg-primary-btn${a.is_primary ? ' active' : ''}"
-                title="${a.is_primary ? 'Основний — клік щоб зробити тимчасовим' : 'Тимчасовий — клік щоб зробити основним'}"
+                title="${a.is_primary ? 'Основний співробітник — клік щоб зробити тимчасовим' : 'Тимчасовий (підміна) — клік щоб зробити основним'}"
                 onclick="ScheduleGraphPage._togglePrimary('${a.id}',${!a.is_primary},event)">
-                ${a.is_primary ? '<i class="fa-regular fa-star"></i>' : '<i class="fa-regular fa-star"></i>'}
+                ${a.is_primary ? '<i class="fa-solid fa-star"></i>' : '<i class="fa-regular fa-star"></i>'}
                </button>`
             : '';
 
@@ -3635,6 +4024,27 @@ ${this._styles()}`;
     backdrop-filter:blur(4px);
 }
 .sg-my-sched-btn:hover { background:rgba(255,255,255,.28);border-color:rgba(255,255,255,.6); }
+@keyframes sg-manual-glow {
+    0%,100% { box-shadow: 0 0 10px rgba(250,204,21,.5), 0 0 24px rgba(250,204,21,.25), inset 0 1px 0 rgba(255,255,255,.2); }
+    50%      { box-shadow: 0 0 18px rgba(250,204,21,.85), 0 0 40px rgba(250,204,21,.4), inset 0 1px 0 rgba(255,255,255,.25); }
+}
+.sg-manual-btn {
+    padding:9px 20px;border-radius:20px;
+    background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 50%, #f59e0b 100%);
+    background-size: 200% 200%;
+    border: none;
+    color: #1a1000;font-size:.84rem;font-weight:800;letter-spacing:.01em;
+    cursor:pointer;white-space:nowrap;flex-shrink:0;
+    animation: sg-manual-glow 2.2s ease-in-out infinite;
+    transition: transform .15s, filter .15s;
+    text-shadow: 0 1px 0 rgba(255,255,255,.35);
+}
+.sg-manual-btn:hover {
+    filter: brightness(1.12);
+    transform: scale(1.06);
+    animation-duration: .9s;
+}
+.sg-manual-btn:active { transform: scale(.97); }
 
 /* Body: sidebar + content */
 .sg-body { display:flex;gap:16px;align-items:flex-start; }
@@ -3642,11 +4052,24 @@ ${this._styles()}`;
 
 /* Location sidebar */
 .sg-loc-sidebar {
-    width:210px;flex-shrink:0;
+    width:var(--sg-sidebar-w,210px);flex-shrink:0;
     background:var(--bg-raised);border:1.5px solid var(--border);
     border-radius:16px;overflow:hidden;
     position:sticky;top:16px;
+    min-width:80px;max-width:340px;
 }
+.sg-sidebar-resizer {
+    flex-shrink:0;width:10px;cursor:col-resize;
+    display:flex;align-items:flex-start;justify-content:center;
+    padding-top:24px;position:sticky;top:16px;align-self:flex-start;
+}
+.sg-sidebar-resizer::after {
+    content:'';display:block;width:4px;height:44px;border-radius:4px;
+    background:var(--border);transition:background .15s,height .15s;
+}
+.sg-sidebar-resizer:hover::after { background:var(--primary);height:60px; }
+.sg-sidebar-resizing { cursor:col-resize;user-select:none; }
+.sg-sidebar-resizing .sg-sidebar-resizer::after { background:var(--primary);height:60px; }
 .sg-loc-sidebar-head {
     display:flex;align-items:center;justify-content:space-between;
     padding:10px 14px;border-bottom:1px solid var(--border);
@@ -3662,6 +4085,7 @@ ${this._styles()}`;
     transition:all .15s;line-height:1;
 }
 .sg-loc-add-ico:hover { background:var(--primary);color:#fff;border-color:var(--primary); }
+.sg-loc-add-ico.active { background:var(--primary);color:#fff;border-color:var(--primary); }
 .sg-loc-sidebar-list {
     padding:6px;display:flex;flex-direction:column;gap:2px;
     max-height:calc(100vh - 240px);overflow-y:auto;
@@ -3687,11 +4111,6 @@ ${this._styles()}`;
 .sg-loc-item-ico { font-size:.9rem;flex-shrink:0; }
 .sg-loc-item-name { flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
 .sg-loc-item-meta { display:flex;align-items:center;gap:4px;flex-shrink:0; }
-.sg-loc-item-wh {
-    font-size:.65rem;padding:1px 5px;border-radius:6px;
-    background:rgba(0,0,0,.1);color:inherit;white-space:nowrap;
-}
-.sg-loc-item.active .sg-loc-item-wh { background:rgba(255,255,255,.25);color:#fff; }
 .sg-loc-item-helpdot {
     width:6px;height:6px;border-radius:50%;background:#ef4444;flex-shrink:0;
     animation:dotBlink 1.4s ease-in-out infinite;
@@ -3912,6 +4331,7 @@ ${this._styles()}`;
     background:var(--bg-raised);font-size:.875rem;
 }
 .sg-wh-label { color:var(--text-muted);font-weight:600; }
+.sg-loc-creator { display:inline-flex;align-items:center;gap:5px;font-size:.8rem;font-weight:600;color:var(--text-muted); }
 .sg-wh-time { color:var(--text-primary);font-weight:700;letter-spacing:.03em; }
 .sg-wh-edit {
     border:none;background:none;cursor:pointer;font-size:.9rem;
@@ -5383,8 +5803,10 @@ const ScheduleViewPage = {
     _year:  new Date().getFullYear(),
 
     async init(container) {
-        this._container      = container;
+        this._container       = container;
         this._selectedManager = null;
+        this._month = new Date().getMonth();
+        this._year  = new Date().getFullYear();
         UI.setBreadcrumb([{ label: 'Огляд' }]);
         container.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
         await this._loadManagers();
@@ -5473,7 +5895,7 @@ const ScheduleViewPage = {
                 .eq('location_id', this._locId)
                 .gte('date', dateFrom).lte('date', dateTo),
             supabase.from('schedule_assignments')
-                .select('user_id')
+                .select('user_id, is_primary')
                 .eq('location_id', this._locId)
         ]);
         this._entries = {};
@@ -5481,12 +5903,12 @@ const ScheduleViewPage = {
 
         const rawAssignments = aRes.data || [];
         if (rawAssignments.length) {
-            const ids = [...new Set(rawAssignments.map(a => a.user_id))];
+            const ids = [...new Set(rawAssignments.map(a => a.user_id).filter(Boolean))];
             const { data: profs } = await supabase.from('profiles')
                 .select('id, full_name, avatar_url, role, label').in('id', ids);
             const profileMap = {};
             (profs || []).forEach(pr => { profileMap[pr.id] = pr; });
-            this._assignments = rawAssignments.map(a => ({ ...a, profile: profileMap[a.user_id] || null }));
+            this._assignments = rawAssignments.map(a => ({ ...a, profile: profileMap[a.user_id] || null, is_primary: a.is_primary !== false }));
         } else {
             this._assignments = [];
         }
@@ -5565,12 +5987,23 @@ ${ScheduleGraphPage._styles()}${this._styles()}`;
     `)}
 
     ${this._locations.length > 1 ? `
-    <div class="sgv-loc-tabs">
-        ${this._locations.map(l => `
-        <button class="sgv-loc-tab ${l.id === this._locId ? 'active' : ''}"
-            onclick="ScheduleViewPage._switchLoc('${l.id}')">
-            🏪 ${l.name}
-        </button>`).join('')}
+    <div class="sgv-loc-picker">
+        <div class="sgv-loc-picker-label">🏪 Локація</div>
+        <div class="sgv-loc-picker-wrap">
+            <input class="sgv-loc-search" id="sgv-loc-search" type="text" placeholder="Пошук локації…"
+                oninput="ScheduleViewPage._filterLocs(this.value)"
+                onfocus="this.select();ScheduleViewPage._openLocList()"
+                onblur="setTimeout(()=>{const d=document.getElementById('sgv-loc-dropdown'),i=document.getElementById('sgv-loc-search');if(d)d.classList.remove('open');if(i&&!i.value.trim()){const a=d&&d.querySelector('.sgv-loc-opt.active');if(a)i.value=a.textContent.trim().replace(/^🏪\s*/,'');}},180)"
+                value="${Fmt.esc(this._locations.find(l=>l.id===this._locId)?.name||'')}">
+            <div class="sgv-loc-dropdown" id="sgv-loc-dropdown">
+                ${this._locations.map(l => `
+                <button class="sgv-loc-opt ${l.id === this._locId ? 'active' : ''}"
+                    onclick="ScheduleViewPage._pickLoc('${l.id}',${JSON.stringify(Fmt.esc(l.name)).replace(/"/g,'&quot;')})">
+                    🏪 ${Fmt.esc(l.name)}
+                </button>`).join('')}
+            </div>
+        </div>
+        <span class="sgv-loc-count">${this._locations.length} локацій</span>
     </div>` : ''}
 
     <div class="sg-section">
@@ -5607,6 +6040,7 @@ ${ScheduleGraphPage._styles()}${this._styles()}`;
                     const p     = a.profile || {};
                     const init  = (p.full_name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
                     const color = ScheduleGraphPage._avatarColor(a.user_id);
+                    const isPrimary = a.is_primary !== false;
                     const sub   = [p.role ? Fmt.role(p.role) : '', p.label || ''].filter(Boolean).join(' · ');
                     let workDays = 0;
                     const cells = nums.map(d => {
@@ -5627,7 +6061,10 @@ ${ScheduleGraphPage._styles()}${this._styles()}`;
                                     ${p.avatar_url ? `<img src="${p.avatar_url}">` : init}
                                 </div>
                                 <div class="sg-name-info">
-                                    <div class="sg-name-full">${p.full_name||'Без імені'}</div>
+                                    <div class="sg-name-full">
+                                        ${p.full_name||'Без імені'}
+                                        ${!isPrimary ? `<span class="sg-temp-badge">підміна</span>` : ''}
+                                    </div>
                                     ${sub ? `<div class="sg-name-sub">${sub}</div>` : ''}
                                 </div>
                             </div>
@@ -5703,16 +6140,33 @@ ${ScheduleGraphPage._styles()}${this._styles()}`;
     padding:6px 12px;color:#fff;font-size:.85rem;font-weight:500;
 }
 
-/* Loc tabs */
-.sgv-loc-tabs { display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px; }
-.sgv-loc-tab {
-    padding:7px 16px;border-radius:20px;border:1.5px solid var(--border);
-    background:var(--bg-surface);cursor:pointer;font-size:.85rem;
-    color:var(--text-secondary);transition:all .15s;
+/* Loc picker */
+.sgv-loc-picker {
+    display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;
 }
-.sgv-loc-tab.active,.sgv-loc-tab:hover {
-    border-color:var(--primary);background:rgba(99,102,241,.1);color:var(--primary);font-weight:600;
+.sgv-loc-picker-label { font-size:.82rem;font-weight:600;color:var(--text-muted);white-space:nowrap; }
+.sgv-loc-picker-wrap { position:relative;flex:1;min-width:200px;max-width:420px; }
+.sgv-loc-search {
+    width:100%;padding:8px 14px;border-radius:10px;
+    border:1.5px solid var(--border);background:var(--bg-surface);
+    color:var(--text-primary);font-size:.88rem;outline:none;
+    transition:border-color .15s;cursor:pointer;
 }
+.sgv-loc-search:focus { border-color:var(--primary); }
+.sgv-loc-dropdown {
+    display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:120;
+    background:var(--bg-surface);border:1.5px solid var(--border);border-radius:12px;
+    box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:260px;overflow-y:auto;padding:4px;
+}
+.sgv-loc-dropdown.open { display:block; }
+.sgv-loc-opt {
+    display:block;width:100%;text-align:left;padding:8px 12px;border-radius:8px;
+    border:none;background:none;cursor:pointer;font-size:.85rem;color:var(--text-primary);
+    transition:background .12s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.sgv-loc-opt:hover { background:var(--bg-hover); }
+.sgv-loc-opt.active { background:rgba(99,102,241,.1);color:var(--primary);font-weight:700; }
+.sgv-loc-count { font-size:.78rem;color:var(--text-muted);white-space:nowrap; }
 .sgv-header-bar {
     display:flex;align-items:center;gap:12px;
     padding:12px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap;
@@ -5727,13 +6181,41 @@ ${ScheduleGraphPage._styles()}${this._styles()}`;
         this._loadEntries().then(() => this._render());
     },
 
+    _pickLoc(locId, name) {
+        const inp = document.getElementById('sgv-loc-search');
+        const dd  = document.getElementById('sgv-loc-dropdown');
+        if (inp) inp.value = name;
+        if (dd)  dd.classList.remove('open');
+        if (locId !== this._locId) this._switchLoc(locId);
+    },
+
+    _openLocList() {
+        const dd = document.getElementById('sgv-loc-dropdown');
+        if (!dd) return;
+        dd.classList.add('open');
+        dd.querySelectorAll('.sgv-loc-opt').forEach(btn => btn.style.display = '');
+    },
+
+    _filterLocs(q) {
+        const dd = document.getElementById('sgv-loc-dropdown');
+        if (!dd) return;
+        dd.classList.add('open');
+        dd.querySelectorAll('.sgv-loc-opt').forEach(btn => {
+            btn.style.display = btn.textContent.toLowerCase().includes(q.toLowerCase()) ? '' : 'none';
+        });
+    },
+
     _prevMonth() {
         if (this._month === 0) { this._month = 11; this._year--; } else this._month--;
-        this._loadEntries().then(() => this._render());
+        if (this._locId) this._loadEntries().then(() => this._render());
+        else this._render();
     },
 
     _nextMonth() {
         if (this._month === 11) { this._month = 0; this._year++; } else this._month++;
-        this._loadEntries().then(() => this._render());
+        if (this._locId) this._loadEntries().then(() => this._render());
+        else this._render();
     },
+
 };
+

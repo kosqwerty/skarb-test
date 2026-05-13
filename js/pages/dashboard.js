@@ -81,7 +81,7 @@ const DashboardPage = {
             .db-pbar-fill{height:100%;background:linear-gradient(to right,${colors.from},${colors.to});border-radius:3px;transition:width .6s ease}
 
             .db-news-mini{display:flex;flex-direction:column}
-            .db-news-hero{height:120px;position:relative;overflow:hidden;background:#0f0c29;cursor:pointer}
+            .db-news-hero{height:165px;position:relative;overflow:hidden;background:#0f0c29;cursor:pointer}
             .db-news-hero-bg{position:absolute;inset:-8px;background-size:cover;filter:blur(12px) brightness(.4);transform:scale(1.05)}
             .db-news-hero-main{position:absolute;inset:0;background-size:contain;background-repeat:no-repeat;z-index:1}
             .db-news-hero-overlay{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.7),transparent);z-index:2}
@@ -220,7 +220,7 @@ const DashboardPage = {
             { label: 'Новини', icon: 'fa-newspaper', route: 'news', roles: ['owner','admin','smm','teacher','manager','user'] },
             { label: 'База знань', icon: 'fa-book-open', route: 'knowledge-base', roles: ['owner','admin','smm','teacher','manager','user'] },
             { label: 'Мої курси', icon: 'fa-graduation-cap', route: 'courses', roles: ['owner','admin','smm','teacher','manager','user'] },
-            { label: 'Додати новину', icon: 'fa-plus', route: 'news', roles: ['owner','admin','smm'], action: 'NewsPage.openCreate()' },
+            { label: 'Додати новину', icon: 'fa-plus', route: 'news', roles: ['owner','admin','smm'], action: "Router.go('news?create=1')" },
             { label: 'Адмін', icon: 'fa-screwdriver-wrench', route: 'admin', roles: ['owner','admin'] },
             { label: `Сповіщення${unreadCount ? ` (${unreadCount})` : ''}`, icon: 'fa-bell', route: 'notifications', roles: ['owner','admin','smm','teacher','manager','user'] },
         ].filter(a => a.roles.includes(role)).slice(0, 5);

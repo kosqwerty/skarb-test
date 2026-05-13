@@ -2419,13 +2419,8 @@ const MyTestsPage = {
             const qCount    = test.questions?.length || 0;
             let deadlineTxt = '';
             if (a.deadline_at) {
-                const dl = new Date(a.deadline_at);
-                const daysLeft = Math.ceil((dl - Date.now()) / 86400000);
-                deadlineTxt = isOverdue
-                    ? `<span class="mt-badge mt-badge-overdue"><i class="fa-solid fa-circle-exclamation"></i> Прострочено</span>`
-                    : daysLeft <= 3
-                        ? `<span class="mt-badge mt-badge-overdue"><i class="fa-solid fa-clock"></i> ${daysLeft} дн.</span>`
-                        : `<span class="mt-badge mt-badge-info"><i class="fa-solid fa-calendar-days"></i> до ${Fmt.dateShort(dl)}</span>`;
+                const cd = Fmt.countdown(a.deadline_at);
+                deadlineTxt = `<span class="mt-badge ${cd.expired || cd.urgent ? 'mt-badge-overdue' : 'mt-badge-info'}">${cd.html}</span>`;
             }
             return `
 <div class="mt-card">

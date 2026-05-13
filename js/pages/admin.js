@@ -38,6 +38,7 @@ const AdminPage = {
             <div id="admin-content"></div>`;
 
         this._tab = params.tab || (canManageUsers ? 'users' : 'courses');
+        this._editCourseId = params.edit || null;
         const activeBtn = container.querySelector(`.tab[data-tab="${this._tab}"]`);
         if (activeBtn) activeBtn.classList.add('active');
         await this._loadTab();
@@ -1857,6 +1858,12 @@ const AdminPage = {
                     </tbody>
                 </table>
             </div>`;
+
+        if (this._editCourseId) {
+            const id = this._editCourseId;
+            this._editCourseId = null;
+            await this._loadCourseForm(id);
+        }
     },
 
     async _loadCourseForm(id) {
@@ -1923,6 +1930,27 @@ const AdminPage = {
                             <span>Рекомендований курс</span>
                         </label>
                     </div>
+                    ${isEdit ? `
+                    <div class="form-group">
+                        <label style="display:flex;align-items:center;justify-content:space-between">
+                            <span>👥 Викладачі курсу</span>
+                            <button type="button" class="btn btn-ghost btn-sm" onclick="AdminPage._courseTeacherAdd('${course.id}')">
+                                <i class="fa-solid fa-plus"></i> Додати викладача
+                            </button>
+                        </label>
+                        <div id="c-course-teachers" style="display:flex;flex-direction:column;gap:.4rem;margin-top:.35rem">
+                            <div style="color:var(--text-muted);font-size:.82rem">Завантаження...</div>
+                        </div>
+                    </div>` : ''}
+                    <div class="form-group">
+                        <label style="display:flex;align-items:center;justify-content:space-between">
+                            <span>📅 Розклад занять</span>
+                            <button type="button" class="btn btn-ghost btn-sm" onclick="AdminPage._scheduleAddDay()">
+                                <i class="fa-solid fa-plus"></i> Додати день
+                            </button>
+                        </label>
+                        <div id="c-schedule-builder" style="display:flex;flex-direction:column;gap:.75rem;margin-top:.35rem"></div>
+                    </div>
                     <div style="display:flex;gap:.75rem;justify-content:flex-end;padding-top:.5rem;border-top:1px solid var(--border)">
                         <button class="btn btn-secondary" onclick="AdminPage._renderCourses(AdminPage._coursesEl)">Скасувати</button>
                         <button class="btn btn-primary" onclick="AdminPage._saveCourse('${course?.id || ''}')">
@@ -1937,11 +1965,276 @@ const AdminPage = {
             const input = FileUpload.createDropZone(zone, { accept: 'image/*', label: 'Завантажити обкладинку', hint: 'PNG, JPG до 5 МБ' });
             input.addEventListener('change', () => { this._courseThumbFile = input.files[0]; });
         }
+
+        this._scheduleInit(course?.schedule || []);
+        if (isEdit) this._courseTeachersLoad(course.id);
+    },
+
+    // ── Course teachers (admin) ───────────────────────────────────────
+    _courseTeachersData: [],
+
+    async _courseTeachersLoad(courseId) {
+        try {
+            const [teachers, profRes] = await Promise.all([
+                API.courseTeachers.getByCourse(courseId),
+                API.profiles.getAll({ pageSize: 500 })
+            ]);
+            this._courseTeachersData = teachers;
+            this._courseTeachersProfiles = (profRes.data || []).sort((a,b) => (a.full_name||'').localeCompare(b.full_name||'','uk'));
+            this._courseTeachersRender(courseId);
+        } catch(e) {
+            const el = document.getElementById('c-course-teachers');
+            if (el) el.innerHTML = `<div style="color:var(--danger);font-size:.82rem">${e.message}</div>`;
+        }
+    },
+
+    _courseTeachersProfiles: [],
+
+    _courseTeachersRender(courseId) {
+        const el = document.getElementById('c-course-teachers');
+        if (!el) return;
+        if (!this._courseTeachersData.length) {
+            el.innerHTML = `<div style="color:var(--text-muted);font-size:.82rem">Викладачів не призначено</div>`;
+            return;
+        }
+        el.innerHTML = this._courseTeachersData.map(t => `
+            <div style="display:flex;align-items:center;gap:.5rem;padding:.45rem .7rem;background:var(--bg-raised);border-radius:var(--radius-sm);border:1px solid var(--border)">
+                <i class="fa-solid fa-chalkboard-user" style="color:var(--primary);font-size:.85rem"></i>
+                <span style="flex:1;font-size:.85rem;font-weight:500">${Fmt.esc(t.profile?.full_name || t.user_id)}</span>
+                ${t.label ? `<span style="font-size:.75rem;background:var(--primary-glow);color:var(--primary);padding:.1rem .5rem;border-radius:999px">${Fmt.esc(t.label)}</span>` : ''}
+                <button type="button" class="btn btn-ghost btn-sm" title="Редагувати мітку"
+                    onclick="AdminPage._courseTeacherEditLabel('${t.id}','${courseId}')">
+                    <i class="fa-solid fa-pen" style="font-size:.72rem"></i>
+                </button>
+                <button type="button" class="btn btn-danger btn-sm"
+                    data-name="${Fmt.esc(t.profile?.full_name || '')}"
+                    onclick="AdminPage._courseTeacherRemove('${t.id}','${courseId}',this.dataset.name)">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>`).join('');
+    },
+
+    async _courseTeacherAdd(courseId) {
+        Modal.open({
+            title: 'Додати викладача',
+            body: `
+                <div class="form-group">
+                    <label>Викладач *</label>
+                    <select id="ct-user-sel" style="width:100%">
+                        <option value="">— Оберіть людину —</option>
+                        ${this._courseTeachersProfiles.map(p => `
+                            <option value="${p.id}">${Fmt.esc(p.full_name || p.email)}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="form-group" style="margin-top:.75rem">
+                    <label>Мітка групи (необов'язково)</label>
+                    <input id="ct-label-inp" type="text" placeholder='Наприклад: "Група A", "Тиждень 2"' style="width:100%">
+                </div>`,
+            footer: `
+                <button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
+                <button class="btn btn-primary" onclick="AdminPage._courseTeacherSaveNew('${courseId}')">Додати</button>`
+        });
+    },
+
+    async _courseTeacherSaveNew(courseId) {
+        const userId = document.getElementById('ct-user-sel')?.value;
+        const label  = document.getElementById('ct-label-inp')?.value.trim() || null;
+        if (!userId) { Toast.error('Помилка', 'Оберіть людину'); return; }
+        Loader.show();
+        try {
+            await supabase.from('course_teachers').insert({ course_id: courseId, user_id: userId, label, is_active: true });
+            Modal.close();
+            await this._courseTeachersLoad(courseId);
+        } catch(e) { Toast.error('Помилка', e.message); }
+        finally { Loader.hide(); }
+    },
+
+    async _courseTeacherEditLabel(entryId, courseId) {
+        const current = this._courseTeachersData.find(t => t.id === entryId)?.label || '';
+        Modal.open({
+            title: 'Мітка групи',
+            body: `<div class="form-group">
+                <label>Група або тиждень</label>
+                <input id="ct-edit-label" type="text" value="${Fmt.esc(current)}" placeholder='Наприклад: "Група A"' style="width:100%">
+            </div>`,
+            footer: `
+                <button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
+                <button class="btn btn-primary" onclick="AdminPage._courseTeacherSaveLabel('${entryId}','${courseId}')">Зберегти</button>`
+        });
+    },
+
+    async _courseTeacherSaveLabel(entryId, courseId) {
+        const label = document.getElementById('ct-edit-label')?.value.trim() || null;
+        Loader.show();
+        try {
+            await API.courseTeachers.updateLabel(entryId, label);
+            Modal.close();
+            await this._courseTeachersLoad(courseId);
+        } catch(e) { Toast.error('Помилка', e.message); }
+        finally { Loader.hide(); }
+    },
+
+    async _courseTeacherRemove(entryId, courseId, name) {
+        const ok = await Modal.confirm({ message: `Видалити викладача "${name}" з курсу?`, danger: true });
+        if (!ok) return;
+        Loader.show();
+        try {
+            await API.courseTeachers.remove(entryId);
+            await this._courseTeachersLoad(courseId);
+        } catch(e) { Toast.error('Помилка', e.message); }
+        finally { Loader.hide(); }
+    },
+
+    // ── Schedule builder ──────────────────────────────────────────────
+    _scheduleDays: [],
+    _scheduleProfiles: [],
+    _scheduleTests: [],
+
+    async _scheduleInit(existing) {
+        this._scheduleDays = existing.length
+            ? existing.map(d => ({
+                ...d,
+                items: [...(d.items || [])],
+                // migrate old single test_id → tests array
+                tests: d.tests ? [...d.tests] : (d.test_id ? [{ id: d.test_id, title: d.test_title || '' }] : [])
+              }))
+            : [];
+        try {
+            const [profRes, tests] = await Promise.all([
+                API.profiles.getAll({ pageSize: 500 }),
+                API.tests.getAll()
+            ]);
+            this._scheduleProfiles = (profRes.data || []).sort((a, b) => (a.full_name || '').localeCompare(b.full_name || '', 'uk'));
+            this._scheduleTests    = tests || [];
+        } catch(e) { this._scheduleProfiles = []; this._scheduleTests = []; }
+        this._scheduleRender();
+    },
+
+    _scheduleRender() {
+        const el = document.getElementById('c-schedule-builder');
+        if (!el) return;
+        if (!this._scheduleDays.length) {
+            el.innerHTML = `<div style="color:var(--text-muted);font-size:.82rem;padding:.5rem 0">Розклад не заповнено</div>`;
+            return;
+        }
+        el.innerHTML = this._scheduleDays.map((day, di) => `
+            <div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:.85rem;background:var(--bg-raised)">
+                <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.75rem">
+                    <span style="font-weight:700;min-width:60px;color:var(--primary)">День ${di + 1}</span>
+                    <input type="text" placeholder="Назва дня (необов'язково)"
+                        value="${Fmt.esc(day.title || '')}"
+                        onchange="AdminPage._scheduleDays[${di}].title=this.value"
+                        style="flex:1;font-size:.85rem">
+                    <button type="button" class="btn btn-danger btn-sm" onclick="AdminPage._scheduleRemoveDay(${di})">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
+                <div style="margin-bottom:.65rem">
+                    <label style="font-size:.75rem;color:var(--text-muted);margin-bottom:.25rem;display:block">Викладач</label>
+                    <select onchange="AdminPage._scheduleDays[${di}].teacher_id=this.value;AdminPage._scheduleDays[${di}].teacher_name=this.options[this.selectedIndex].dataset.name||''"
+                        style="width:100%;font-size:.82rem">
+                        <option value="" data-name="">— Не вказано —</option>
+                        ${this._scheduleProfiles.map(p => `
+                            <option value="${p.id}" data-name="${Fmt.esc(p.full_name || p.email)}" ${day.teacher_id === p.id ? 'selected' : ''}>${Fmt.esc(p.full_name || p.email)}</option>
+                        `).join('')}
+                    </select>
+                </div>
+                <div style="margin-bottom:.65rem">
+                    <label style="font-size:.75rem;color:var(--text-muted);margin-bottom:.25rem;display:flex;align-items:center;justify-content:space-between">
+                        <span>Тести дня</span>
+                        <button type="button" class="btn btn-ghost btn-sm" style="font-size:.75rem" onclick="AdminPage._scheduleAddTest(${di})">
+                            <i class="fa-solid fa-plus"></i> Додати тест
+                        </button>
+                    </label>
+                    <div style="display:flex;flex-direction:column;gap:.35rem">
+                        ${(day.tests || []).map((t, ti) => `
+                            <div style="display:flex;gap:.35rem">
+                                <select onchange="AdminPage._scheduleDays[${di}].tests[${ti}]={id:this.value,title:this.options[this.selectedIndex].dataset.title||''}"
+                                    style="flex:1;font-size:.82rem">
+                                    <option value="">— Оберіть тест —</option>
+                                    ${this._scheduleTests.map(st => `
+                                        <option value="${st.id}" data-title="${Fmt.esc(st.title)}" ${t.id === st.id ? 'selected' : ''}>${Fmt.esc(st.title)}</option>
+                                    `).join('')}
+                                </select>
+                                <button type="button" class="btn btn-ghost btn-sm" onclick="AdminPage._scheduleRemoveTest(${di},${ti})">
+                                    <i class="fa-solid fa-xmark"></i>
+                                </button>
+                            </div>`).join('')}
+                        ${!(day.tests?.length) ? `<div style="font-size:.78rem;color:var(--text-muted)">Тести не призначено</div>` : ''}
+                    </div>
+                </div>
+                <div style="margin-bottom:.65rem">
+                    <label style="font-size:.75rem;color:var(--text-muted);margin-bottom:.25rem;display:block">Інструкції для дня</label>
+                    <textarea placeholder="Що потрібно підготувати, як пройти день, особливі умови..."
+                        rows="2"
+                        onchange="AdminPage._scheduleDays[${di}].instructions=this.value"
+                        style="width:100%;font-size:.82rem;resize:vertical">${Fmt.esc(day.instructions || '')}</textarea>
+                </div>
+                <div>
+                    <label style="font-size:.75rem;color:var(--text-muted);margin-bottom:.25rem;display:block">Теми / заняття</label>
+                    <div style="display:flex;flex-direction:column;gap:.35rem">
+                        ${(day.items || []).map((item, ii) => `
+                            <div style="display:flex;gap:.35rem">
+                                <input type="text" value="${Fmt.esc(item)}" placeholder="Тема..."
+                                    onchange="AdminPage._scheduleDays[${di}].items[${ii}]=this.value"
+                                    style="flex:1;font-size:.82rem">
+                                <button type="button" class="btn btn-ghost btn-sm" onclick="AdminPage._scheduleRemoveItem(${di},${ii})">
+                                    <i class="fa-solid fa-xmark"></i>
+                                </button>
+                            </div>`).join('')}
+                    </div>
+                    <button type="button" class="btn btn-ghost btn-sm" style="margin-top:.35rem;font-size:.78rem"
+                        onclick="AdminPage._scheduleAddItem(${di})">
+                        <i class="fa-solid fa-plus"></i> Додати тему
+                    </button>
+                </div>
+            </div>`).join('');
+    },
+
+    _scheduleAddDay() {
+        this._scheduleDays.push({ title: '', teacher_id: '', teacher_name: '', tests: [], instructions: '', items: [] });
+        this._scheduleRender();
+    },
+
+    _scheduleAddTest(di) {
+        if (!this._scheduleDays[di].tests) this._scheduleDays[di].tests = [];
+        this._scheduleDays[di].tests.push({ id: '', title: '' });
+        this._scheduleRender();
+    },
+
+    _scheduleRemoveTest(di, ti) {
+        this._scheduleDays[di].tests.splice(ti, 1);
+        this._scheduleRender();
+    },
+
+    _scheduleRemoveDay(di) {
+        this._scheduleDays.splice(di, 1);
+        this._scheduleRender();
+    },
+
+    _scheduleAddItem(di) {
+        this._scheduleDays[di].items.push('');
+        this._scheduleRender();
+    },
+
+    _scheduleRemoveItem(di, ii) {
+        this._scheduleDays[di].items.splice(ii, 1);
+        this._scheduleRender();
     },
 
     async _saveCourse(id) {
         const title = Dom.val('c-title').trim();
         if (!title) { Toast.error('Помилка', 'Вкажіть назву курсу'); return; }
+        const schedule = (this._scheduleDays || [])
+            .map(d => ({
+                title:        d.title || '',
+                teacher_id:   d.teacher_id || null,
+                teacher_name: d.teacher_name || '',
+                tests:        (d.tests || []).filter(t => t.id),
+                instructions: d.instructions || '',
+                items:        (d.items || []).filter(s => s.trim())
+            }))
+            .filter(d => d.items.length || d.title || d.teacher_id || d.tests.length || d.instructions);
         const fields = {
             title,
             description:    Dom.val('c-desc').trim() || null,
@@ -1949,7 +2242,8 @@ const AdminPage = {
             category:       Dom.val('c-category').trim() || 'general',
             duration_hours: parseInt(Dom.val('c-duration')) || 0,
             is_published:   document.getElementById('c-published').checked,
-            is_featured:    document.getElementById('c-featured').checked
+            is_featured:    document.getElementById('c-featured').checked,
+            schedule
         };
         Loader.show();
         try {

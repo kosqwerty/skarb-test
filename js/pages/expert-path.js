@@ -336,11 +336,17 @@ const ExpertPathPage = {
         ];
 
         const active = this._courseSubTab;
+        const canCreate = AppState.isStaff();
         area.innerHTML = `
-            <div class="ep-sub-tabs">
-                ${this._courseTabs.map(t => `
-                    <button class="ep-sub-tab${t.id===active?' active':''}"
-                        onclick="ExpertPathPage._switchCourseTab('${t.id}',this)">${t.label}</button>`).join('')}
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.25rem">
+                <div class="ep-sub-tabs" style="margin-bottom:0">
+                    ${this._courseTabs.map(t => `
+                        <button class="ep-sub-tab${t.id===active?' active':''}"
+                            onclick="ExpertPathPage._switchCourseTab('${t.id}',this)">${t.label}</button>`).join('')}
+                </div>
+                ${canCreate ? `<button class="btn btn-primary btn-sm" onclick="Router.go('admin?tab=courses')">
+                    <i class="fa-solid fa-plus"></i> Створити курс
+                </button>` : ''}
             </div>
             <div id="ep-course-list">${cardsFn(this._courseTabs.find(t=>t.id===active)?.courses||[])}</div>`;
     },

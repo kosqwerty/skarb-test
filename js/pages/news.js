@@ -368,10 +368,8 @@ const NewsPage = {
     },
 
     // ── Create / Edit ──────────────────────────────────────────────
-    async _backToList() {
-        const container = document.getElementById('page-content');
-        if (container) await this.init(container, {});
-        else Router.go('news');
+    _backToList() {
+        location.hash = '#/news';
     },
 
     openCreate() {
@@ -609,8 +607,9 @@ const NewsPage = {
         // If content has complex HTML that Quill can't represent in its Delta model,
         // open directly in HTML mode to avoid Quill stripping it on normalization
         const rawContent = news?.content || '';
-        const isComplexHtml = /position\s*:|overflow\s*:|radial-gradient|linear-gradient.*\(|display\s*:\s*grid|display\s*:\s*flex.*position/i.test(rawContent)
-            && /<div/i.test(rawContent);
+        const isComplexHtml = /<table[\s>]/i.test(rawContent) ||
+            (/position\s*:|overflow\s*:|radial-gradient|linear-gradient.*\(|display\s*:\s*grid|display\s*:\s*flex.*position/i.test(rawContent)
+            && /<div/i.test(rawContent));
         this._initQuill(isComplexHtml ? '' : rawContent);
         if (isComplexHtml) {
             this._htmlMode = true;
@@ -972,6 +971,15 @@ const NewsPage = {
     },
 
     _toggleHtmlMode() {
+        // If currently in HTML mode and content has a table — stay in HTML mode,
+        // Quill 1.x strips <table> on normalization
+        if (this._htmlMode) {
+            const ta = document.getElementById('n-html-src');
+            if (ta && /<table[\s>]/i.test(ta.value)) {
+                Toast.warning('HTML-режим', 'Таблиці підтримуються тільки в HTML-режимі — залишаємось тут');
+                return;
+            }
+        }
         this._htmlMode = !this._htmlMode;
         const ta  = document.getElementById('n-html-src');
         const qw  = document.querySelector('.nf-quill-wrap');
@@ -1079,9 +1087,7 @@ const NewsPage = {
 
             AuditLog.write(id ? 'news_update' : 'news_create', 'news', title);
             Toast.success('Успішно!', `Новина "${title}" ${id ? 'оновлена' : 'додана'}`);
-            const container = document.getElementById('page-content');
-            if (container) await this.init(container, {});
-            else Router.go('news');
+            location.hash = '#/news';
         } catch(e) {
             Toast.error('Помилка', e.message);
         } finally { Loader.hide(); }

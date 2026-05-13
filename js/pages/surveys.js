@@ -196,13 +196,8 @@ const SurveysPage = {
 
         let deadlineLabel = '';
         if (dl) {
-            const d = new Date(dl);
-            const diff = Math.ceil((d - now) / 86400000);
-            deadlineLabel = expired
-                ? `<span class="sv-meta-item" style="color:var(--danger)"><i class="fa-solid fa-hourglass-end"></i> Завершено</span>`
-                : diff <= 3
-                    ? `<span class="sv-meta-item" style="color:#f59e0b"><i class="fa-solid fa-clock"></i> ${diff} дн.</span>`
-                    : `<span class="sv-meta-item"><i class="fa-regular fa-calendar"></i> до ${Fmt.dateShort(s.deadline_at)}</span>`;
+            const cd = Fmt.countdown(dl);
+            deadlineLabel = `<span class="sv-meta-item">${cd.html}</span>`;
         }
 
         return `

@@ -440,7 +440,7 @@ const DashboardPage = {
             el.innerHTML += `<div class="db-card-body" style="text-align:center;padding:2rem;color:var(--text-muted)">
                 <div style="font-size:2rem;margin-bottom:.5rem">🎉</div>
                 <div style="font-weight:600">Всі курси завершено!</div>
-                <button class="btn btn-primary btn-sm" style="margin-top:1rem" onclick="Router.go('courses')">Знайти нові</button>
+                <button class="btn btn-primary btn-sm" style="margin-top:1rem" onclick="Router.go('expert-path')">Знайти нові</button>
             </div>`;
             return;
         }

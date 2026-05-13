@@ -364,6 +364,21 @@ const Fmt = {
         const h = Math.floor(minutes / 60), m = minutes % 60;
         return h ? `${h}год ${m}хв` : `${m}хв`;
     },
+    countdown(deadlineIso) {
+        if (!deadlineIso) return null;
+        const diff = new Date(deadlineIso) - Date.now();
+        if (diff <= 0) return { expired: true, html: `<span style="display:inline-flex;align-items:center;gap:.3rem;color:var(--danger);font-weight:600;font-size:.78rem"><i class="fa-solid fa-hourglass-end"></i> Прострочено</span>` };
+        const d = Math.floor(diff / 86400000);
+        const h = Math.floor((diff % 86400000) / 3600000);
+        const m = Math.floor((diff % 3600000) / 60000);
+        const urgent = diff < 86400000;       // < 1 day
+        const warning = diff < 3 * 86400000; // < 3 days
+        const color = urgent ? 'var(--danger)' : warning ? '#f59e0b' : 'var(--text-muted)';
+        const icon  = urgent ? 'fa-solid fa-fire' : warning ? 'fa-solid fa-clock' : 'fa-regular fa-calendar-clock';
+        const parts = d > 0 ? `${d}д ${h}г` : h > 0 ? `${h}г ${m}хв` : `${m}хв`;
+        return { expired: false, urgent, warning, html: `<span style="display:inline-flex;align-items:center;gap:.3rem;color:${color};font-weight:600;font-size:.78rem"><i class="${icon}"></i> ${parts}</span>` };
+    },
+
     fileSize(bytes) {
         if (!bytes) return '—';
         const units = ['Б', 'КБ', 'МБ', 'ГБ'];

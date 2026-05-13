@@ -17,12 +17,14 @@ const CourseViewPage = {
         container.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
 
         try {
-            const [course, enrolled] = await Promise.all([
+            const [course, enrolled, courseTeachers] = await Promise.all([
                 API.courses.getById(courseId),
-                API.enrollments.isEnrolled(courseId)
+                API.enrollments.isEnrolled(courseId),
+                API.courseTeachers.getByCourse(courseId).catch(() => [])
             ]);
-            this._course   = course;
-            this._enrolled = enrolled;
+            this._course        = course;
+            this._enrolled      = enrolled;
+            this._courseTeachers = courseTeachers;
             UI.setBreadcrumb([{ label: backLabel, route: backRoute }, { label: course.title }]);
             course.lessons?.sort((a,b) => a.order_index - b.order_index);
 
@@ -72,21 +74,10 @@ const CourseViewPage = {
                             </div>` : ''}
                     </div>
 
-                    <div class="card" style="margin-bottom:1.5rem">
-                        <div class="card-body" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:1rem">
-                            ${[
-                                { icon:'👤', label:'Викладач',   value: course.teacher?.full_name || '—' },
-                                { icon:'📋', label:'Уроків',     value: totalPublished },
-                                { icon:'⏱', label:'Тривалість',  value: course.duration_hours ? course.duration_hours + ' год' : '—' },
-                                ...(enrolled ? [{ icon:'📊', label:'Прогрес', value: pct + '%' }] : [])
-                            ].map(s => `
-                                <div style="text-align:center">
-                                    <div style="font-size:1.5rem;margin-bottom:.25rem">${s.icon}</div>
-                                    <div style="font-size:.75rem;color:var(--text-muted)">${s.label}</div>
-                                    <div style="font-weight:600;font-size:.875rem">${s.value}</div>
-                                </div>`).join('')}
                         </div>
                     </div>
+
+                    <div id="cv-teachers-block">${this._renderTeachersBlock(this._courseTeachers, course.id)}</div>
 
                     ${enrolled ? `
                         <div class="card" style="margin-bottom:1.5rem">
@@ -103,6 +94,8 @@ const CourseViewPage = {
                                 </div>
                             </div>
                         </div>` : ''}
+
+                    ${course.schedule?.length ? this._renderSchedule(course.schedule) : ''}
 
                     <h3 style="margin-bottom:1rem">📋 Уроки курсу</h3>
                     <div id="lessons-list" class="lesson-list">
@@ -125,6 +118,196 @@ const CourseViewPage = {
         this._loadTests(course.id, enrolled);
     },
 
+    _renderTeachersBlock(teachers, courseId) {
+        const isStaff   = AppState.isStaff();
+        const myEntry   = teachers.find(t => t.user_id === AppState.user?.id);
+        const others    = teachers.filter(t => t.user_id !== AppState.user?.id);
+        const allSorted = myEntry ? [myEntry, ...others] : others;
+
+        const colors = ['#6366f1','#10b981','#f59e0b','#ef4444','#ec4899','#3b82f6','#8b5cf6','#14b8a6'];
+        const colorFor = (uid) => colors[Math.abs([...uid].reduce((a,c)=>a+c.charCodeAt(0),0)) % colors.length];
+
+        const cards = allSorted.map(t => {
+            const c    = colorFor(t.user_id);
+            const name = Fmt.esc(t.profile?.full_name || '—');
+            const pos  = Fmt.esc(t.profile?.job_position || '');
+            const lbl  = t.label ? `<span style="font-size:.7rem;background:${c}22;color:${c};padding:.15rem .45rem;border-radius:999px;margin-top:.2rem;display:inline-block">${Fmt.esc(t.label)}</span>` : '';
+            const isMine = t.user_id === AppState.user?.id;
+            return `
+                <div style="display:flex;align-items:center;gap:.65rem;padding:.6rem .85rem;background:var(--bg-raised);border-radius:var(--radius-sm);border:1px solid ${isMine ? c+'55' : 'var(--border)'}">
+                    <div style="width:36px;height:36px;border-radius:50%;background:${c}22;display:flex;align-items:center;justify-content:center;font-size:.9rem;font-weight:700;color:${c};flex-shrink:0">
+                        ${t.profile?.avatar_url
+                            ? `<img src="${t.profile.avatar_url}" style="width:36px;height:36px;border-radius:50%;object-fit:cover">`
+                            : Fmt.initials(t.profile?.full_name || '?')}
+                    </div>
+                    <div style="flex:1;min-width:0">
+                        <div style="font-weight:600;font-size:.875rem">${name}${isMine ? ' <span style="font-size:.7rem;color:var(--text-muted)">(ви)</span>' : ''}</div>
+                        ${pos ? `<div style="font-size:.75rem;color:var(--text-muted)">${pos}</div>` : ''}
+                        ${lbl}
+                    </div>
+                    ${isMine && isStaff ? `
+                        <button class="btn btn-ghost btn-sm" title="Редагувати мітку"
+                            onclick="CourseViewPage._editMyLabel('${t.id}','${courseId}')">
+                            <i class="fa-solid fa-pen" style="font-size:.75rem"></i>
+                        </button>
+                        <button class="btn btn-danger btn-sm" title="Зняти себе"
+                            onclick="CourseViewPage._removeMe('${t.id}','${courseId}')">
+                            <i class="fa-solid fa-xmark" style="font-size:.75rem"></i>
+                        </button>` : ''}
+                </div>`;
+        }).join('');
+
+        const joinBtn = isStaff && !myEntry ? `
+            <button class="btn btn-secondary btn-sm" onclick="CourseViewPage._joinAsteacher('${courseId}')">
+                <i class="fa-solid fa-chalkboard-user"></i> Я веду цей курс
+            </button>` : '';
+
+        if (!allSorted.length && !isStaff) return '';
+
+        return `
+            <div class="card" style="margin-bottom:1.5rem">
+                <div class="card-body" style="padding:1rem 1.25rem">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
+                        <span style="font-weight:600;font-size:.9rem">
+                            <i class="fa-solid fa-chalkboard-user" style="color:var(--primary);margin-right:.4rem"></i>
+                            Викладачі курсу
+                        </span>
+                        ${joinBtn}
+                    </div>
+                    ${allSorted.length
+                        ? `<div style="display:flex;flex-direction:column;gap:.45rem">${cards}</div>`
+                        : `<div style="font-size:.82rem;color:var(--text-muted)">Ніхто ще не відмітився як викладач цього курсу</div>`}
+                </div>
+            </div>`;
+    },
+
+    async _joinAsteacher(courseId) {
+        const label = await this._promptLabel();
+        Loader.show();
+        try {
+            await API.courseTeachers.setMe(courseId, label, true);
+            const teachers = await API.courseTeachers.getByCourse(courseId);
+            this._courseTeachers = teachers;
+            const el = document.getElementById('cv-teachers-block');
+            if (el) el.innerHTML = this._renderTeachersBlock(teachers, courseId);
+            Toast.success('Готово', 'Вас додано як викладача цього курсу');
+        } catch(e) { Toast.error('Помилка', e.message); }
+        finally { Loader.hide(); }
+    },
+
+    async _removeMe(entryId, courseId) {
+        const ok = await Modal.confirm({ message: 'Зняти себе як викладача цього курсу?', danger: true });
+        if (!ok) return;
+        Loader.show();
+        try {
+            await API.courseTeachers.remove(entryId);
+            const teachers = await API.courseTeachers.getByCourse(courseId);
+            this._courseTeachers = teachers;
+            const el = document.getElementById('cv-teachers-block');
+            if (el) el.innerHTML = this._renderTeachersBlock(teachers, courseId);
+        } catch(e) { Toast.error('Помилка', e.message); }
+        finally { Loader.hide(); }
+    },
+
+    async _editMyLabel(entryId, courseId) {
+        const current = this._courseTeachers.find(t => t.id === entryId)?.label || '';
+        Modal.open({
+            title: 'Мітка групи / тижня',
+            body: `<div class="form-group">
+                <label>Наприклад: "Група A", "Тиждень 2"</label>
+                <input id="cv-label-input" type="text" value="${Fmt.esc(current)}" placeholder="Необов'язково" style="width:100%">
+            </div>`,
+            footer: `
+                <button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
+                <button class="btn btn-primary" onclick="CourseViewPage._saveLabel('${entryId}','${courseId}')">Зберегти</button>`
+        });
+    },
+
+    async _saveLabel(entryId, courseId) {
+        const label = document.getElementById('cv-label-input')?.value.trim() || null;
+        Loader.show();
+        try {
+            await API.courseTeachers.updateLabel(entryId, label);
+            Modal.close();
+            const teachers = await API.courseTeachers.getByCourse(courseId);
+            this._courseTeachers = teachers;
+            const el = document.getElementById('cv-teachers-block');
+            if (el) el.innerHTML = this._renderTeachersBlock(teachers, courseId);
+        } catch(e) { Toast.error('Помилка', e.message); }
+        finally { Loader.hide(); }
+    },
+
+    async _promptLabel() {
+        return new Promise(resolve => {
+            Modal.open({
+                title: "Мітка (необов'язково)",
+                body: `<div class="form-group">
+                    <label>Група або тиждень, наприклад "Група A" або "Тиждень 1"</label>
+                    <input id="cv-join-label" type="text" placeholder="Залиште порожнім якщо не потрібно" style="width:100%">
+                </div>`,
+                footer: `
+                    <button class="btn btn-secondary" onclick="Modal.close();CourseViewPage._promptResolve('')">Пропустити</button>
+                    <button class="btn btn-primary" onclick="CourseViewPage._promptResolve(document.getElementById('cv-join-label').value.trim())">Додати</button>`
+            });
+            this._promptResolve = (v) => { Modal.close(); resolve(v); };
+        });
+    },
+
+    _renderSchedule(schedule) {
+        const activeDay = 0;
+        const tabs = schedule.map((d, i) => `
+            <button class="cv-sched-tab${i === activeDay ? ' active' : ''}"
+                data-day="${i}"
+                onclick="CourseViewPage._switchScheduleDay(${i})">
+                День ${i + 1}${d.title ? ` — ${Fmt.esc(d.title)}` : ''}
+            </button>`).join('');
+
+        const panels = schedule.map((d, i) => `
+            <div class="cv-sched-panel${i === activeDay ? ' active' : ''}" data-day="${i}">
+                <div style="display:flex;flex-wrap:wrap;gap:.65rem;margin-bottom:${d.instructions || d.items?.length ? '1rem' : '0'}">
+                    ${d.teacher_name ? `
+                        <div style="display:flex;align-items:center;gap:.4rem;font-size:.84rem;color:var(--text-secondary);background:var(--bg-raised);padding:.3rem .7rem;border-radius:var(--radius-sm)">
+                            <i class="fa-solid fa-chalkboard-user" style="color:var(--primary)"></i>
+                            <span>${Fmt.esc(d.teacher_name)}</span>
+                        </div>` : ''}
+                    ${(d.tests?.length ? d.tests : (d.test_id ? [{ id: d.test_id, title: d.test_title || 'Тест дня' }] : [])).map(t => `
+                        <button class="btn btn-primary btn-sm" onclick="Router.go('tests/${t.id}')">
+                            <i class="fa-solid fa-pen-to-square"></i> ${Fmt.esc(t.title || 'Тест дня')}
+                        </button>`).join('')}
+                </div>
+                ${d.instructions ? `
+                    <div style="background:rgba(99,102,241,.07);border-left:3px solid var(--primary);border-radius:0 var(--radius-sm) var(--radius-sm) 0;padding:.65rem .9rem;margin-bottom:.85rem;font-size:.84rem;color:var(--text-secondary);white-space:pre-wrap">${Fmt.esc(d.instructions)}</div>` : ''}
+                ${d.items?.length ? `
+                    <ul style="margin:0;padding-left:1.25rem;display:flex;flex-direction:column;gap:.4rem">
+                        ${d.items.map(item => `<li style="font-size:.875rem;color:var(--text-secondary)">${Fmt.esc(item)}</li>`).join('')}
+                    </ul>` : ''}
+            </div>`).join('');
+
+        return `
+            <div style="margin-bottom:1.75rem">
+                <h3 style="margin-bottom:.85rem">📅 Розклад занять</h3>
+                <div class="card">
+                    <div class="card-body" style="padding:0">
+                        <div class="cv-sched-tabs">${tabs}</div>
+                        <div class="cv-sched-body">${panels}</div>
+                    </div>
+                </div>
+            </div>
+            <style>
+                .cv-sched-tabs{display:flex;flex-wrap:wrap;gap:.35rem;padding:.75rem .75rem 0;border-bottom:1px solid var(--border)}
+                .cv-sched-tab{padding:.35rem .85rem;border-radius:var(--radius-sm) var(--radius-sm) 0 0;border:1px solid transparent;border-bottom:none;font-size:.8rem;cursor:pointer;background:none;color:var(--text-muted);transition:color .15s,background .15s;margin-bottom:-1px}
+                .cv-sched-tab:hover{color:var(--text-primary);background:var(--bg-raised)}
+                .cv-sched-tab.active{background:var(--bg-surface);color:var(--primary);border-color:var(--border);font-weight:600}
+                .cv-sched-panel{display:none;padding:1rem 1.25rem}
+                .cv-sched-panel.active{display:block}
+            </style>`;
+    },
+
+    _switchScheduleDay(i) {
+        document.querySelectorAll('.cv-sched-tab').forEach(b => b.classList.toggle('active', +b.dataset.day === i));
+        document.querySelectorAll('.cv-sched-panel').forEach(p => p.classList.toggle('active', +p.dataset.day === i));
+    },
+
     _renderLessons(lessons, progressMap, enrolled) {
         if (!lessons.length) return `<div class="empty-state" style="padding:2rem"><div class="empty-icon">📋</div><h3>Уроків поки немає</h3></div>`;
 
@@ -142,7 +325,7 @@ const CourseViewPage = {
                         ${lesson.description ? `<div class="lesson-meta-row">${lesson.description.slice(0,80)}</div>` : ''}
                         <div class="lesson-meta-row">
                             ${lesson.resources?.length ? `📎 ${lesson.resources.length} матеріал(ів)` : ''}
-                            ${lesson.is_free_preview ? `<span class="badge badge-info" style="margin-left:.5rem;font-size:.65rem">Безкоштовний перегляд</span>` : ''}
+                            ${lesson.is_free_preview ? `<span class="badge badge-info" style="margin-left:.5rem;font-size:.65rem">Перегляд</span>` : ''}
                         </div>
                     </div>
                     <div style="display:flex;align-items:center;gap:.5rem;flex-shrink:0">
@@ -164,7 +347,7 @@ const CourseViewPage = {
                 Отримайте доступ до всіх уроків та матеріалів курсу
             </p>
             <button class="btn btn-primary btn-full" onclick="CourseViewPage.enroll('${course.id}')">
-                🎓 Записатися безкоштовно
+                🎓 Записатися
             </button>`;
     },
 
@@ -189,7 +372,7 @@ const CourseViewPage = {
                     <button class="btn btn-secondary" onclick="CourseViewPage.openAddTest()"><i class="fa-solid fa-plus"></i> Додати тест</button>
                     <button class="btn btn-secondary" onclick="Router.go('analytics?course=${course.id}')">📊 Аналітика курсу</button>
                     <button class="btn btn-secondary" onclick="CourseViewPage.manageEnrollments('${course.id}')">👥 Стажери</button>
-                    <button class="btn btn-ghost" onclick="CoursesPage.openEdit('${course.id}')">⚙️ Налаштування</button>
+                    <button class="btn btn-ghost" onclick="Router.go('admin?tab=courses&edit=${course.id}')">⚙️ Налаштування</button>
                 </div>
             </div>`;
     },
@@ -275,7 +458,7 @@ const CourseViewPage = {
                     </label>
                     <label class="checkbox-item" style="cursor:pointer;margin-top:.5rem">
                         <input type="checkbox" id="l-free" ${lesson?.is_free_preview ? 'checked' : ''}>
-                        <span>Безкоштовний перегляд</span>
+                        <span>Перегляд</span>
                     </label>
                 </div>`,
             footer: `

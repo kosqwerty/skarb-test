@@ -136,6 +136,36 @@ const API = {
         }
     },
 
+    // ── Course teachers ─────────────────────────────────────────────
+    courseTeachers: {
+        async getByCourse(courseId) {
+            const { data, error } = await supabase.from('course_teachers')
+                .select('*, profile:profiles(id, full_name, avatar_url, job_position)')
+                .eq('course_id', courseId)
+                .eq('is_active', true)
+                .order('created_at');
+            if (error) throw error;
+            return data || [];
+        },
+
+        async setMe(courseId, label) {
+            const { error } = await supabase.from('course_teachers')
+                .insert({ course_id: courseId, user_id: AppState.user.id, label: label || null, is_active: true });
+            if (error) throw error;
+        },
+
+        async updateLabel(id, label) {
+            const { error } = await supabase.from('course_teachers')
+                .update({ label }).eq('id', id);
+            if (error) throw error;
+        },
+
+        async remove(id) {
+            const { error } = await supabase.from('course_teachers').delete().eq('id', id);
+            if (error) throw error;
+        }
+    },
+
     // ── Enrollments ─────────────────────────────────────────────────
     enrollments: {
         async getMyEnrollments() {

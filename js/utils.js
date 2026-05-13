@@ -375,7 +375,7 @@ const Fmt = {
         const warning = diff < 3 * 86400000; // < 3 days
         const color = urgent ? 'var(--danger)' : warning ? '#f59e0b' : 'var(--text-muted)';
         const icon  = urgent ? 'fa-solid fa-fire' : warning ? 'fa-solid fa-clock' : 'fa-regular fa-calendar-clock';
-        const parts = d > 0 ? `${d}д ${h}г` : h > 0 ? `${h}г ${m}хв` : `${m}хв`;
+        const parts = [d > 0 ? `${d}д` : '', h > 0 ? `${h}г` : '', m > 0 ? `${m}хв` : ''].filter(Boolean).join(' ') || '< 1хв';
         return { expired: false, urgent, warning, html: `<span style="display:inline-flex;align-items:center;gap:.3rem;color:${color};font-weight:600;font-size:.78rem"><i class="${icon}"></i> ${parts}</span>` };
     },
 

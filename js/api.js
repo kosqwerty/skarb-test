@@ -191,9 +191,14 @@ const API = {
             return data;
         },
 
+        async resetCourse(courseId) {
+            const { error } = await supabase.from('enrollments').delete().eq('course_id', courseId);
+            if (error) throw error;
+        },
+
         async getCourseEnrollments(courseId) {
             const { data, error } = await supabase.from('enrollments')
-                .select(`*, user:profiles!user_id(id, full_name, email, avatar_url)`)
+                .select(`*, user:profiles!user_id(id, full_name, email, avatar_url, role)`)
                 .eq('course_id', courseId)
                 .order('enrolled_at', { ascending: false });
             if (error) throw error;

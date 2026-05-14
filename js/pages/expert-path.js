@@ -155,7 +155,7 @@ const ExpertPathPage = {
 .ep-sub-tab.active{background:#6366f1;color:#fff;border-color:#6366f1}
 
 /* ── Course grid ─────────────────────────────────────────────── */
-.ep-course-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px}
+.ep-course-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
 .ep-course-card{
     background:var(--bg-surface);border:1px solid var(--border);
     border-radius:18px;overflow:hidden;cursor:pointer;
@@ -167,9 +167,10 @@ const ExpertPathPage = {
     box-shadow:0 16px 48px rgba(0,0,0,.15);
     border-color:transparent
 }
-.ep-course-thumb{height:148px;flex-shrink:0;overflow:hidden;position:relative}
-.ep-course-thumb img{width:100%;height:100%;object-fit:cover;transition:transform .35s}
-.ep-course-card:hover .ep-course-thumb img{transform:scale(1.06)}
+.ep-course-thumb{height:148px;flex-shrink:0;overflow:hidden;position:relative;background:#0f0c29;border-radius:18px 18px 0 0}
+.ep-course-thumb-bg{position:absolute;inset:-8px;background-size:cover;background-position:center;filter:blur(12px) brightness(.4);transform:scale(1.05);transition:transform .35s}
+.ep-course-thumb-main{position:absolute;inset:0;background-size:contain;background-repeat:no-repeat;background-position:center;z-index:1;transition:transform .35s}
+.ep-course-card:hover .ep-course-thumb-bg,.ep-course-card:hover .ep-course-thumb-main{transform:scale(1.06)}
 .ep-course-body{padding:16px;flex:1;display:flex;flex-direction:column;gap:4px}
 .ep-course-title{
     font-weight:700;font-size:.9rem;color:var(--text-primary);
@@ -298,19 +299,15 @@ const ExpertPathPage = {
                 const enr  = enrolledMap.get(c.id);
                 const pct  = enr?.progress_percentage || 0;
                 const done = !!enr?.completed_at;
-                const thumb = c.cover_image
-                    ? `<img src="${c.cover_image}" style="width:100%;height:100%;object-fit:cover">`
-                    : `<div style="height:100%;background:${grads[i%grads.length]};display:flex;align-items:center;justify-content:center">
+                const thumb = c.thumbnail_url
+                    ? `<div class="ep-course-thumb-bg" style="background-image:url('${c.thumbnail_url}')"></div>
+                       <div class="ep-course-thumb-main" style="background-image:url('${c.thumbnail_url}')"></div>`
+                    : `<div style="position:absolute;inset:0;background:${grads[i%grads.length]};display:flex;align-items:center;justify-content:center">
                            <i class="fa-solid fa-graduation-cap" style="font-size:2.5rem;color:rgba(255,255,255,.25)"></i>
                        </div>`;
                 const footer = enr
-                    ? `<div class="ep-course-prog-wrap" style="margin-top:auto">
-                           <div class="ep-prog-bar">
-                               <div class="ep-prog-fill${done?' done':''}" style="width:${pct}%"></div>
-                           </div>
-                           <div class="ep-prog-label${done?' done':''}">
-                               ${done ? '<i class="fa-solid fa-circle-check"></i> Завершено' : pct+'% пройдено'}
-                           </div>
+                    ? `<div style="font-size:.7rem;color:${done?'#10b981':'var(--text-muted)'};margin-top:auto;font-weight:${done?'600':'400'}">
+                           ${done ? '<i class="fa-solid fa-circle-check"></i> Завершено' : '<i class="fa-regular fa-circle-dot"></i> Записаний'}
                        </div>`
                     : `<div style="font-size:.7rem;color:var(--text-muted);margin-top:auto">
                            <i class="fa-regular fa-circle"></i> Не записаний
@@ -397,12 +394,8 @@ const ExpertPathPage = {
                             onmouseenter="this.style.background='var(--bg-hover)'" onmouseleave="this.style.background=''">
                             <div style="flex:1;min-width:0">
                                 <div style="font-weight:500;font-size:.875rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Fmt.esc(e.course?.title||'—')}</div>
-                                <div class="ep-prog-bar" style="margin-top:.4rem">
-                                    <div class="ep-prog-fill${e.completed_at?' done':''}" style="width:${e.progress_percentage||0}%"></div>
-                                </div>
                             </div>
-                            <span style="font-size:.8rem;color:var(--text-muted);flex-shrink:0">${e.progress_percentage||0}%</span>
-                            ${e.completed_at ? '<span class="badge badge-success"><i class="fa-solid fa-check"></i></span>' : ''}
+                            ${e.completed_at ? '<span class="badge badge-success"><i class="fa-solid fa-check"></i> Завершено</span>' : ''}
                         </div>`).join('')
                     : '<div style="padding:2rem;text-align:center;color:var(--text-muted)">Ви не записані на жодний курс</div>'}
                 </div>

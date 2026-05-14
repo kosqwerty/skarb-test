@@ -72,9 +72,9 @@ const DashboardPage = {
             .db-stat-label{font-size:.75rem;color:var(--text-muted);font-weight:500}
 
             .db-continue{display:flex;flex-direction:column;gap:0}
-            .db-continue-thumb{height:110px;position:relative;overflow:hidden;background:#0f0c29;flex-shrink:0}
+            .db-continue-thumb{height:165px;position:relative;overflow:hidden;background:#0f0c29;flex-shrink:0}
             .db-continue-thumb-bg{position:absolute;inset:-8px;background-size:cover;background-position:center;filter:blur(12px) brightness(.4);transform:scale(1.05)}
-            .db-continue-thumb img{position:relative;width:100%;height:100%;object-fit:contain;display:block;z-index:1}
+            .db-continue-thumb-main{position:absolute;inset:0;background-size:contain;background-repeat:no-repeat;background-position:center;z-index:1}
             .db-continue-body{padding:1rem;flex:1;display:flex;flex-direction:column;gap:.6rem}
             .db-continue-title{font-weight:700;font-size:.92rem;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
             .db-pbar{height:6px;background:var(--bg-raised);border-radius:3px;overflow:hidden}
@@ -449,20 +449,16 @@ const DashboardPage = {
 
         el.innerHTML += `
             <div class="db-continue">
-                <div class="db-continue-thumb" onclick="Router.go('courses/${course.id}')" style="cursor:pointer">
+                <div class="db-continue-thumb" onclick="Router.go('courses/${course.id}?from=expert-path')" style="cursor:pointer">
                     ${thumb
                         ? `<div class="db-continue-thumb-bg" style="background-image:url('${thumb}')"></div>
-                           <img src="${thumb}" alt="">`
+                           <div class="db-continue-thumb-main" style="background-image:url('${thumb}')"></div>`
                         : `<div style="height:100%;display:flex;align-items:center;justify-content:center;font-size:2.5rem;position:relative;z-index:1">📖</div>`}
                 </div>
                 <div class="db-continue-body">
                     <div class="db-continue-title">${Fmt.esc(course.title)}</div>
-                    <div style="display:flex;justify-content:space-between;font-size:.72rem;color:var(--text-muted);margin-bottom:.3rem">
-                        <span>Прогрес</span><span style="font-weight:700;color:var(--text-primary)">${pct}%</span>
-                    </div>
-                    <div class="db-pbar"><div class="db-pbar-fill" style="width:${pct}%"></div></div>
-                    <button class="btn btn-primary btn-sm" style="margin-top:.75rem;width:100%" onclick="Router.go('courses/${course.id}')">
-                        <i class="fa-solid fa-play"></i> ${pct > 0 ? 'Продовжити' : 'Розпочати'}
+                    <button class="btn btn-primary btn-sm" style="margin-top:.75rem;width:100%" onclick="Router.go('courses/${course.id}?from=expert-path')">
+                        <i class="fa-solid fa-play"></i> Перейти до курсу
                     </button>
                 </div>
             </div>`;

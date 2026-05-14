@@ -1873,10 +1873,14 @@ const AdminPage = {
         finally { Loader.hide(); }
     },
 
+    _kbSelected: [],
+
     _openCourseForm(course = null) {
         const el = this._coursesEl;
         if (!el) return;
         this._courseThumbFile = null;
+        this._kbSelected = (course?.course_info?.kb_resources || []);
+        this._courseInfoBase = course?.course_info || {};
         const isEdit = !!course;
         el.innerHTML = `
             <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem">
@@ -1951,6 +1955,18 @@ const AdminPage = {
                         </label>
                         <div id="c-schedule-builder" style="display:flex;flex-direction:column;gap:.75rem;margin-top:.35rem"></div>
                     </div>
+                    <div class="form-group">
+                        <label style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem">
+                            <span>📂 Файли з бази знань</span>
+                            <span style="font-size:.75rem;color:var(--text-muted)" id="c-kb-count"></span>
+                        </label>
+                        <input id="c-kb-search" type="text" placeholder="Пошук файлів..." style="margin-bottom:.5rem"
+                            oninput="AdminPage._kbFilterList(this.value)">
+                        <div id="c-kb-selected" style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.5rem;min-height:0"></div>
+                        <div id="c-kb-list" style="border:1px solid var(--border);border-radius:var(--radius-sm);max-height:220px;overflow-y:auto;background:var(--bg-raised)">
+                            <div style="padding:.75rem;color:var(--text-muted);font-size:.82rem">Завантаження...</div>
+                        </div>
+                    </div>
                     <div style="display:flex;gap:.75rem;justify-content:flex-end;padding-top:.5rem;border-top:1px solid var(--border)">
                         <button class="btn btn-secondary" onclick="AdminPage._renderCourses(AdminPage._coursesEl)">Скасувати</button>
                         <button class="btn btn-primary" onclick="AdminPage._saveCourse('${course?.id || ''}')">
@@ -1968,6 +1984,7 @@ const AdminPage = {
 
         this._scheduleInit(course?.schedule || []);
         if (isEdit) this._courseTeachersLoad(course.id);
+        this._kbLoad();
     },
 
     // ── Course teachers (admin) ───────────────────────────────────────
@@ -2173,15 +2190,22 @@ const AdminPage = {
                 <div>
                     <label style="font-size:.75rem;color:var(--text-muted);margin-bottom:.25rem;display:block">Теми / заняття</label>
                     <div style="display:flex;flex-direction:column;gap:.35rem">
-                        ${(day.items || []).map((item, ii) => `
-                            <div style="display:flex;gap:.35rem">
-                                <input type="text" value="${Fmt.esc(item)}" placeholder="Тема..."
-                                    onchange="AdminPage._scheduleDays[${di}].items[${ii}]=this.value"
-                                    style="flex:1;font-size:.82rem">
+                        ${(day.items || []).map((item, ii) => {
+                            const t = typeof item === 'object' ? item : { title: item, desc: '' };
+                            return `
+                            <div style="display:flex;gap:.35rem;align-items:flex-start">
+                                <div style="flex:1;display:flex;flex-direction:column;gap:.2rem">
+                                    <input type="text" value="${Fmt.esc(t.title || '')}" placeholder="Назва теми..."
+                                        onchange="AdminPage._schedItemSet(${di},${ii},'title',this.value)"
+                                        style="font-size:.82rem">
+                                    <input type="text" value="${Fmt.esc(t.desc || '')}" placeholder="Короткий опис (необов'язково)..."
+                                        onchange="AdminPage._schedItemSet(${di},${ii},'desc',this.value)"
+                                        style="font-size:.78rem">
+                                </div>
                                 <button type="button" class="btn btn-ghost btn-sm" onclick="AdminPage._scheduleRemoveItem(${di},${ii})">
                                     <i class="fa-solid fa-xmark"></i>
                                 </button>
-                            </div>`).join('')}
+                            </div>`;}).join('')}
                     </div>
                     <button type="button" class="btn btn-ghost btn-sm" style="margin-top:.35rem;font-size:.78rem"
                         onclick="AdminPage._scheduleAddItem(${di})">
@@ -2213,13 +2237,83 @@ const AdminPage = {
     },
 
     _scheduleAddItem(di) {
-        this._scheduleDays[di].items.push('');
+        this._scheduleDays[di].items.push({ title: '', desc: '' });
         this._scheduleRender();
     },
 
     _scheduleRemoveItem(di, ii) {
         this._scheduleDays[di].items.splice(ii, 1);
         this._scheduleRender();
+    },
+
+    _schedItemSet(di, ii, key, val) {
+        const item = this._scheduleDays[di].items[ii];
+        if (typeof item === 'object') item[key] = val;
+        else this._scheduleDays[di].items[ii] = { title: item, desc: '', [key]: val };
+    },
+
+    _kbAllResources: [],
+
+    async _kbLoad() {
+        try {
+            const { data } = await API.resources.getAll({ pageSize: 500, studentOnly: true });
+            this._kbAllResources = data || [];
+            this._kbFilterList('');
+            this._kbRenderSelected();
+        } catch(e) {
+            const el = document.getElementById('c-kb-list');
+            if (el) el.innerHTML = `<div style="padding:.75rem;color:var(--text-muted);font-size:.82rem">Не вдалося завантажити</div>`;
+        }
+    },
+
+    _kbRenderSelected() {
+        const el = document.getElementById('c-kb-selected');
+        const cnt = document.getElementById('c-kb-count');
+        if (!el) return;
+        if (cnt) cnt.textContent = this._kbSelected.length ? this._kbSelected.length + ' обрано' : '';
+        el.innerHTML = this._kbSelected.map(r => `
+            <span style="display:inline-flex;align-items:center;gap:.35rem;background:var(--bg-raised);border:1px solid var(--border);border-radius:6px;padding:.2rem .55rem;font-size:.78rem;max-width:220px">
+                <i class="fa-solid ${AdminPage._kbIcon(r.type)}" style="color:var(--primary);flex-shrink:0;font-size:.7rem"></i>
+                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Fmt.esc(r.title)}</span>
+                <button onclick="AdminPage._kbToggle(${JSON.stringify(r.id).replace(/"/g,'&quot;')})" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:0;line-height:1;flex-shrink:0"><i class="fa-solid fa-xmark" style="font-size:.65rem"></i></button>
+            </span>`).join('');
+    },
+
+    _kbFilterList(q) {
+        const el = document.getElementById('c-kb-list');
+        if (!el) return;
+        const term = (q || '').toLowerCase();
+        const filtered = this._kbAllResources.filter(r => !term || r.title.toLowerCase().includes(term));
+        if (!filtered.length) {
+            el.innerHTML = `<div style="padding:.75rem;color:var(--text-muted);font-size:.82rem">Нічого не знайдено</div>`;
+            return;
+        }
+        el.innerHTML = filtered.map(r => {
+            const sel = this._kbSelected.some(s => s.id === r.id);
+            return `
+            <div onclick="AdminPage._kbToggle('${r.id}')" style="display:flex;align-items:center;gap:.6rem;padding:.5rem .85rem;cursor:pointer;transition:background .12s;border-bottom:1px solid var(--border);${sel ? 'background:color-mix(in srgb,var(--primary) 8%,transparent)' : ''}" onmouseenter="this.style.background='var(--bg-surface)'" onmouseleave="this.style.background='${sel ? 'color-mix(in srgb,var(--primary) 8%,transparent)' : 'transparent'}'">
+                <i class="fa-solid ${AdminPage._kbIcon(r.type)}" style="color:${sel ? 'var(--primary)' : 'var(--text-muted)'};width:14px;font-size:.8rem;flex-shrink:0"></i>
+                <span style="flex:1;font-size:.82rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Fmt.esc(r.title)}</span>
+                <i class="fa-solid ${sel ? 'fa-circle-check' : 'fa-circle'}" style="color:${sel ? 'var(--primary)' : 'var(--border)'};font-size:.85rem;flex-shrink:0"></i>
+            </div>`;
+        }).join('');
+    },
+
+    _kbToggle(id) {
+        const idx = this._kbSelected.findIndex(r => r.id === id);
+        if (idx >= 0) {
+            this._kbSelected.splice(idx, 1);
+        } else {
+            const res = this._kbAllResources.find(r => r.id === id);
+            if (res) this._kbSelected.push({ id: res.id, title: res.title, type: res.type });
+        }
+        this._kbRenderSelected();
+        this._kbFilterList(document.getElementById('c-kb-search')?.value || '');
+    },
+
+    _kbIcon(type) {
+        const map = { pdf:'fa-file-pdf', video:'fa-circle-play', link:'fa-link', scorm:'fa-cube', image:'fa-image', document:'fa-file-lines', file:'fa-file' };
+        return map[type] || 'fa-file';
     },
 
     async _saveCourse(id) {
@@ -2232,7 +2326,7 @@ const AdminPage = {
                 teacher_name: d.teacher_name || '',
                 tests:        (d.tests || []).filter(t => t.id),
                 instructions: d.instructions || '',
-                items:        (d.items || []).filter(s => s.trim())
+                items:        (d.items || []).map(it => typeof it === 'object' ? it : { title: it, desc: '' }).filter(it => (it.title || '').trim())
             }))
             .filter(d => d.items.length || d.title || d.teacher_id || d.tests.length || d.instructions);
         const fields = {
@@ -2248,6 +2342,10 @@ const AdminPage = {
         Loader.show();
         try {
             let course = id ? await API.courses.update(id, fields) : await API.courses.create(fields);
+            // merge kb_resources into course_info without touching other fields (outcomes, goals, etc.)
+            const { data: fresh } = await supabase.from('courses').select('course_info').eq('id', course.id).single();
+            const mergedInfo = { ...(fresh?.course_info || {}), kb_resources: this._kbSelected };
+            await supabase.from('courses').update({ course_info: mergedInfo }).eq('id', course.id);
             if (this._courseThumbFile) await API.courses.uploadThumbnail(course.id, this._courseThumbFile);
             AuditLog.write(id ? 'course_update' : 'course_create', 'course', title);
             Toast.success('Збережено!', `Курс "${title}" ${id ? 'оновлено' : 'створено'}`);

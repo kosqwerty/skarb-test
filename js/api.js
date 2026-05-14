@@ -128,9 +128,9 @@ const API = {
             const path = `${courseId}/thumbnail.${ext}`;
             const { error } = await supabase.storage
                 .from(APP_CONFIG.buckets.thumbnails)
-                .upload(path, file, { upsert: true });
+                .upload(path, file, { upsert: true, contentType: file.type });
             if (error) throw error;
-            const url = `${APP_CONFIG.storagePublicUrl}/${APP_CONFIG.buckets.thumbnails}/${path}`;
+            const url = `${APP_CONFIG.storagePublicUrl}/${APP_CONFIG.buckets.thumbnails}/${path}?v=${Date.now()}`;
             await this.update(courseId, { thumbnail_url: url });
             return url;
         }
@@ -179,16 +179,20 @@ const API = {
 
         async isEnrolled(courseId) {
             const { data } = await supabase.from('enrollments')
-                .select('id').eq('user_id', AppState.user.id).eq('course_id', courseId).single();
+                .select('id').eq('user_id', AppState.user.id).eq('course_id', courseId).maybeSingle();
             return !!data;
         },
 
         async enroll(courseId) {
-            const { data, error } = await supabase.from('enrollments')
-                .insert({ user_id: AppState.user.id, course_id: courseId })
-                .select().single();
+            const { error } = await supabase.from('enrollments')
+                .insert({ user_id: AppState.user.id, course_id: courseId });
+            if (error && error.code !== '23505') throw error;
+        },
+
+        async unenroll(courseId) {
+            const { error } = await supabase.from('enrollments')
+                .delete().eq('course_id', courseId).eq('user_id', (await supabase.auth.getUser()).data.user.id);
             if (error) throw error;
-            return data;
         },
 
         async resetCourse(courseId) {

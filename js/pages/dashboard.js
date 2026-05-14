@@ -159,8 +159,7 @@ const DashboardPage = {
             <div id="db-continue" class="db-card"></div>
         </div>
 
-        <!-- ── My courses ── -->
-        <div id="db-courses"></div>`;
+        `;
 
         // Load all data in parallel
         const today = new Date().toISOString().slice(0, 10);
@@ -194,7 +193,6 @@ const DashboardPage = {
         this._renderContinue(enrollments);
         this._renderNewsWidget(newsRes.data || []);
         this._renderEvents(shiftLocation, calEvents);
-        this._renderCourses(enrollments);
     },
 
     async _getUnackedDocs() {
@@ -628,7 +626,7 @@ const DashboardPage = {
         el.innerHTML = `
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.35rem">
                 <h3 style="font-size:1rem;font-weight:700">Мої курси</h3>
-                <button class="btn btn-ghost btn-sm" onclick="Router.go('courses')">Всі курси <i class="fa-solid fa-arrow-right" style="position:relative;top:1.5px"></i></button>
+                <button class="btn btn-ghost btn-sm" onclick="Router.go('expert-path')">Всі курси <i class="fa-solid fa-arrow-right" style="position:relative;top:1.5px"></i></button>
             </div>
             <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.85rem">Курси, на які ви записані — клікніть, щоб продовжити проходження</div>
             <div class="db-courses-scroll">

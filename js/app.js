@@ -62,10 +62,6 @@ const App = {
                 await DashboardPage.init(container);
             },
 
-            'courses': async ({ container, params }) => {
-                await CoursesPage.init(container, params);
-            },
-
             'courses/:id': async ({ container, params }) => {
                 await CourseViewPage.init(container, params);
             },

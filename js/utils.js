@@ -104,7 +104,7 @@ const UI = {
     globalSearch(e) {
         if (e.key === 'Enter') {
             const q = e.target.value.trim();
-            if (q) Router.go(`courses?search=${encodeURIComponent(q)}`);
+            if (q) Router.go(`expert-path?search=${encodeURIComponent(q)}`);
         }
     },
     setBreadcrumb(items = []) {

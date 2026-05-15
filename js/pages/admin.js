@@ -1849,7 +1849,7 @@ const AdminPage = {
                                 <td style="color:var(--text-muted);font-size:.8rem">${Fmt.dateShort(c.created_at)}</td>
                                 <td>
                                     <div style="display:flex;gap:.4rem">
-                                        <button class="btn btn-ghost btn-sm" onclick="Router.go('courses/${c.id}')"><i class="fa-solid fa-eye"></i></button>
+                                        <button class="btn btn-ghost btn-sm" onclick="Router.go('courses/${c.id}?from=expert-path')" title="Переглянути в Skill Up"><i class="fa-solid fa-eye"></i></button>
                                         <button class="btn btn-ghost btn-sm" onclick="AdminPage._loadCourseForm('${c.id}')"><i class="fa-solid fa-pen"></i></button>
                                         <button class="btn btn-danger btn-sm" onclick="AdminPage._deleteCourse('${c.id}',${JSON.stringify(c.title||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-trash"></i></button>
                                     </div>
@@ -1875,28 +1875,84 @@ const AdminPage = {
 
     _kbSelected: [],
 
+    _cfTab: 'main',
+    _cfSwitchTab(tab) {
+        this._cfTab = tab;
+        document.querySelectorAll('.cf-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+        document.querySelectorAll('.cf-tab-pane').forEach(p => p.style.display = p.dataset.tab === tab ? '' : 'none');
+    },
+
     _openCourseForm(course = null) {
         const el = this._coursesEl;
         if (!el) return;
         this._courseThumbFile = null;
+        this._courseBadgeFile = null;
+        this._cfTab = 'main';
         this._kbSelected = (course?.course_info?.kb_resources || []);
         this._courseInfoBase = course?.course_info || {};
         const isEdit = !!course;
+        const id = course?.id || '';
+
+        const tabs = [
+            { id: 'main',      icon: 'fa-circle-info',       label: 'Основне',    color: '#6366f1' },
+            { id: 'media',     icon: 'fa-photo-film',         label: 'Медіа',      color: '#ec4899' },
+            ...(isEdit ? [
+                { id: 'runs',      icon: 'fa-users-rectangle', label: 'Групи',     color: '#f59e0b' },
+                { id: 'teachers',  icon: 'fa-chalkboard-user', label: 'Викладачі', color: '#10b981' },
+            ] : []),
+            { id: 'schedule',  icon: 'fa-calendar-days',      label: 'Розклад',   color: '#0ea5e9' },
+        ];
+
         el.innerHTML = `
-            <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem">
+        <style>
+        .cf-wrap{max-width:720px}
+        .cf-header{display:flex;align-items:center;gap:.75rem;margin-bottom:1.5rem;flex-wrap:wrap}
+        .cf-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:1.75rem}
+        .cf-tab-btn{display:flex;align-items:center;gap:.55rem;padding:.45rem 1rem .45rem .55rem;border-radius:50px;border:2px solid transparent;background:var(--bg-raised);cursor:pointer;font-size:.82rem;font-weight:600;color:var(--text-muted);transition:all .18s;white-space:nowrap}
+        .cf-tab-btn .cf-tab-icon{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.75rem;flex-shrink:0;transition:all .18s;background:var(--bg-surface);color:var(--text-muted)}
+        .cf-tab-btn:hover{color:var(--text-primary);background:var(--bg-surface);border-color:var(--border)}
+        .cf-tab-btn:hover .cf-tab-icon{background:var(--bg-raised)}
+        .cf-tab-btn.active{background:var(--bg-surface);font-weight:700;border-color:var(--cfti-color,var(--primary));color:var(--cfti-color,var(--primary));box-shadow:0 2px 8px rgba(0,0,0,.1)}
+        .cf-tab-btn.active .cf-tab-icon{background:var(--cfti-color,var(--primary));color:#fff;box-shadow:0 2px 6px color-mix(in srgb,var(--cfti-color,var(--primary)) 40%,transparent)}
+        .cf-pane{display:flex;flex-direction:column;gap:1rem}
+        .cf-section{background:var(--bg-surface);border:1px solid var(--border);border-radius:14px;padding:1.25rem 1.5rem;display:flex;flex-direction:column;gap:1rem}
+        .cf-section-title{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:-.25rem}
+        .cf-footer{display:flex;gap:.75rem;justify-content:flex-end;padding-top:1rem;border-top:1px solid var(--border);margin-top:.5rem}
+        </style>
+
+        <div class="cf-wrap">
+            <div class="cf-header">
                 <button class="btn btn-ghost btn-sm" onclick="AdminPage._renderCourses(AdminPage._coursesEl)">
                     <i class="fa-solid fa-arrow-left"></i> Назад
                 </button>
-                <h3 style="margin:0">${isEdit ? '<i class="fa-solid fa-pen"></i> Редагувати курс' : '+ Створити курс'}</h3>
+                <h3 style="margin:0;font-size:1.1rem">${isEdit ? `<i class="fa-solid fa-pen" style="color:var(--primary)"></i> ${Fmt.esc(course.title)}` : '<i class="fa-solid fa-plus"></i> Новий курс'}</h3>
+                ${isEdit ? `<span class="badge ${course.is_published ? 'badge-success' : 'badge-muted'}" style="margin-left:auto">${course.is_published ? 'Опублікований' : 'Чернетка'}</span>` : ''}
             </div>
-            <div style="max-width:680px">
-                <div style="display:flex;flex-direction:column;gap:1rem">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Назва курсу *</label>
-                            <input id="c-title" type="text" placeholder="Введіть назву" value="${course?.title || ''}">
+
+            <div class="cf-tabs">
+                ${tabs.map(t => `<button class="cf-tab-btn${t.id === 'main' ? ' active' : ''}" data-tab="${t.id}" onclick="AdminPage._cfSwitchTab('${t.id}')" style="--cfti-color:${t.color}">
+                    <span class="cf-tab-icon"><i class="fa-solid ${t.icon}"></i></span>${t.label}
+                </button>`).join('')}
+            </div>
+
+            <!-- ОСНОВНЕ -->
+            <div class="cf-tab-pane cf-pane" data-tab="main">
+                <div class="cf-section">
+                    <div class="cf-section-title">Загальна інформація</div>
+                    <div class="form-group" style="margin:0">
+                        <label>Назва курсу *</label>
+                        <input id="c-title" type="text" placeholder="Введіть назву" value="${Fmt.esc(course?.title || '')}">
+                    </div>
+                    <div class="form-group" style="margin:0">
+                        <label>Опис</label>
+                        <textarea id="c-desc" placeholder="Короткий опис курсу" rows="3">${Fmt.esc(course?.description || '')}</textarea>
+                    </div>
+                    <div class="form-row" style="margin:0">
+                        <div class="form-group" style="margin:0">
+                            <label>Категорія</label>
+                            <input id="c-category" type="text" placeholder="Наприклад: Оцінка" value="${Fmt.esc(course?.category || '')}">
                         </div>
-                        <div class="form-group">
+                        <div class="form-group" style="margin:0">
                             <label>Рівень</label>
                             <select id="c-level">
                                 <option value="beginner"     ${course?.level === 'beginner'     ? 'selected' : ''}>Початковий</option>
@@ -1905,92 +1961,139 @@ const AdminPage = {
                             </select>
                         </div>
                     </div>
-                    <div class="form-group">
-                        <label>Опис</label>
-                        <textarea id="c-desc" placeholder="Опис курсу" rows="3">${course?.description || ''}</textarea>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Категорія</label>
-                            <input id="c-category" type="text" placeholder="Наприклад: Програмування" value="${course?.category || ''}">
-                        </div>
-                        <div class="form-group">
-                            <label>Тривалість (годин)</label>
-                            <input id="c-duration" type="number" min="0" placeholder="0" value="${course?.duration_hours || ''}">
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label>Обкладинка курсу</label>
-                        <div id="thumb-upload-zone"></div>
-                        ${course?.thumbnail_url ? `<div style="margin-top:.5rem;height:120px;border-radius:var(--radius-sm);overflow:hidden"><img src="${course.thumbnail_url}" style="width:100%;height:100%;object-fit:cover;display:block"></div>` : ''}
-                    </div>
-                    <div class="form-group">
-                        <label class="checkbox-item" style="cursor:pointer;user-select:none">
-                            <input type="checkbox" id="c-published" ${course?.is_published ? 'checked' : ''}>
-                            <span>Опублікувати курс</span>
-                        </label>
-                        <label class="checkbox-item" style="cursor:pointer;user-select:none;margin-top:.5rem">
-                            <input type="checkbox" id="c-featured" ${course?.is_featured ? 'checked' : ''}>
-                            <span>Рекомендований курс</span>
-                        </label>
-                    </div>
-                    ${isEdit ? `
-                    <div class="form-group">
-                        <label style="display:flex;align-items:center;justify-content:space-between">
-                            <span>🔄 Групи курсу</span>
-                            <button type="button" class="btn btn-ghost btn-sm" onclick="AdminPage._runsAdd('${course.id}')">
-                                <i class="fa-solid fa-plus"></i> Нова група
-                            </button>
-                        </label>
-                        <div id="c-runs-list" style="display:flex;flex-direction:column;gap:.4rem;margin-top:.35rem">
-                            <div style="color:var(--text-muted);font-size:.82rem">Завантаження...</div>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label style="display:flex;align-items:center;justify-content:space-between">
-                            <span>👥 Викладачі курсу</span>
-                            <button type="button" class="btn btn-ghost btn-sm" onclick="AdminPage._courseTeacherAdd('${course.id}')">
-                                <i class="fa-solid fa-plus"></i> Додати викладача
-                            </button>
-                        </label>
-                        <div id="c-course-teachers" style="display:flex;flex-direction:column;gap:.4rem;margin-top:.35rem">
-                            <div style="color:var(--text-muted);font-size:.82rem">Завантаження...</div>
-                        </div>
-                    </div>` : ''}
-                    <div class="form-group">
-                        <label style="display:flex;align-items:center;justify-content:space-between">
-                            <span>📅 Розклад занять</span>
-                            <button type="button" class="btn btn-ghost btn-sm" onclick="AdminPage._scheduleAddDay()">
-                                <i class="fa-solid fa-plus"></i> Додати день
-                            </button>
-                        </label>
-                        <div id="c-schedule-builder" style="display:flex;flex-direction:column;gap:.75rem;margin-top:.35rem"></div>
-                    </div>
-                    <div class="form-group">
-                        <label style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem">
-                            <span>📂 Файли з бази знань</span>
-                            <span style="font-size:.75rem;color:var(--text-muted)" id="c-kb-count"></span>
-                        </label>
-                        <input id="c-kb-search" type="text" placeholder="Пошук файлів..." style="margin-bottom:.5rem"
-                            oninput="AdminPage._kbFilterList(this.value)">
-                        <div id="c-kb-selected" style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.5rem;min-height:0"></div>
-                        <div id="c-kb-list" style="border:1px solid var(--border);border-radius:var(--radius-sm);max-height:220px;overflow-y:auto;background:var(--bg-raised)">
-                            <div style="padding:.75rem;color:var(--text-muted);font-size:.82rem">Завантаження...</div>
-                        </div>
-                    </div>
-                    <div style="display:flex;gap:.75rem;justify-content:flex-end;padding-top:.5rem;border-top:1px solid var(--border)">
-                        <button class="btn btn-secondary" onclick="AdminPage._renderCourses(AdminPage._coursesEl)">Скасувати</button>
-                        <button class="btn btn-primary" onclick="AdminPage._saveCourse('${course?.id || ''}')">
-                            ${isEdit ? '<i class="fa-regular fa-floppy-disk"></i> Зберегти' : '<i class="fa-solid fa-plus"></i> Створити'}
-                        </button>
+                    <div class="form-group" style="margin:0">
+                        <label>Тривалість (годин)</label>
+                        <input id="c-duration" type="number" min="0" placeholder="0" value="${course?.duration_hours || ''}" style="max-width:160px">
                     </div>
                 </div>
-            </div>`;
+                <div class="cf-section">
+                    <div class="cf-section-title">Публікація</div>
+                    <label class="checkbox-item" style="cursor:pointer;user-select:none;margin:0">
+                        <input type="checkbox" id="c-published" ${course?.is_published ? 'checked' : ''}>
+                        <span>Опублікувати курс</span>
+                    </label>
+                    <label class="checkbox-item" style="cursor:pointer;user-select:none;margin:0">
+                        <input type="checkbox" id="c-featured" ${course?.is_featured ? 'checked' : ''}>
+                        <span>Рекомендований курс</span>
+                    </label>
+                </div>
+                <div class="cf-footer">
+                    <button class="btn btn-secondary" onclick="AdminPage._renderCourses(AdminPage._coursesEl)">Скасувати</button>
+                    <button class="btn btn-primary" onclick="AdminPage._saveCourse('${id}')">
+                        ${isEdit ? '<i class="fa-regular fa-floppy-disk"></i> Зберегти' : '<i class="fa-solid fa-plus"></i> Створити'}
+                    </button>
+                </div>
+            </div>
+
+            <!-- МЕДІА -->
+            <div class="cf-tab-pane cf-pane" data-tab="media" style="display:none">
+                <div class="cf-section">
+                    <div class="cf-section-title">Обкладинка</div>
+                    <div id="thumb-upload-zone"></div>
+                    <div id="thumb-preview" style="${course?.thumbnail_url ? '' : 'display:none'}">
+                        <div style="width:100%;border-radius:12px;overflow:hidden;background:var(--bg-raised);border:1px solid var(--border);text-align:center;line-height:0">
+                            <img id="thumb-preview-img" src="${course?.thumbnail_url || ''}" style="max-width:100%;max-height:340px;width:100%;object-fit:cover;display:block">
+                        </div>
+                        <div style="font-size:.74rem;color:var(--text-muted);margin-top:.35rem;text-align:center">Поточна обкладинка</div>
+                    </div>
+                </div>
+                <div class="cf-section">
+                    <div class="cf-section-title">Бейдж досягнення</div>
+                    <div style="font-size:.82rem;color:var(--text-muted)">Відображається на картці курсу в <strong>Skill Up</strong> після завершення.</div>
+                    <div id="badge-upload-zone"></div>
+                    ${course?.badge_url ? `
+                    <div style="display:flex;align-items:center;gap:.75rem;padding:.75rem;background:var(--bg-raised);border-radius:10px;border:1px solid var(--border)">
+                        <img src="${course.badge_url}" style="width:56px;height:56px;object-fit:contain">
+                        <div style="flex:1">
+                            <div style="font-size:.85rem;font-weight:600;margin-bottom:.35rem">Поточний бейдж</div>
+                            <button class="btn btn-ghost btn-sm" style="color:var(--danger);border-color:rgba(239,68,68,.3)" onclick="AdminPage._removeBadge('${id}')">
+                                <i class="fa-solid fa-trash"></i> Видалити
+                            </button>
+                        </div>
+                        <div style="width:120px;border-radius:10px;overflow:hidden;border:1px solid var(--border);flex-shrink:0">
+                            <div style="height:70px;background:linear-gradient(135deg,#6366f1,#8b5cf6);position:relative">
+                                <div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.6) 0%,transparent 60%);display:flex;align-items:flex-end;padding:5px 7px"><span style="font-size:.6rem;font-weight:700;color:#fff">Назва курсу</span></div>
+                                <div style="position:absolute;bottom:-1px;right:6px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 2px 4px rgba(0,0,0,.4))"><img src="${course.badge_url}" style="width:30px;height:30px;object-fit:contain"></div>
+                            </div>
+                            <div style="padding:4px 7px;font-size:.6rem;color:var(--text-muted)">Skill Up · приклад</div>
+                        </div>
+                    </div>` : `
+                    <div style="display:flex;align-items:center;gap:.75rem;padding:.75rem;background:var(--bg-raised);border-radius:10px;border:1px dashed var(--border)">
+                        <div style="width:44px;height:44px;border-radius:50%;background:rgba(99,102,241,.1);display:flex;align-items:center;justify-content:center;font-size:1.3rem;flex-shrink:0">🏆</div>
+                        <div style="font-size:.8rem;color:var(--text-muted)">Бейдж не завантажено. Буде використано стандартну медаль.</div>
+                    </div>`}
+                </div>
+                <div class="cf-footer">
+                    <button class="btn btn-secondary" onclick="AdminPage._renderCourses(AdminPage._coursesEl)">Скасувати</button>
+                    <button class="btn btn-primary" onclick="AdminPage._saveCourse('${id}')"><i class="fa-regular fa-floppy-disk"></i> Зберегти</button>
+                </div>
+            </div>
+
+            <!-- ГРУПИ -->
+            ${isEdit ? `
+            <div class="cf-tab-pane cf-pane" data-tab="runs" style="display:none">
+                <div class="cf-section">
+                    <div style="display:flex;align-items:center;justify-content:space-between">
+                        <div class="cf-section-title" style="margin:0">Навчальні групи</div>
+                        <button class="btn btn-ghost btn-sm" onclick="AdminPage._runsAdd('${id}')"><i class="fa-solid fa-plus"></i> Нова група</button>
+                    </div>
+                    <div id="c-runs-list" style="display:flex;flex-direction:column;gap:.4rem">
+                        <div style="color:var(--text-muted);font-size:.82rem">Завантаження...</div>
+                    </div>
+                </div>
+            </div>` : ''}
+
+            <!-- ВИКЛАДАЧІ -->
+            ${isEdit ? `
+            <div class="cf-tab-pane cf-pane" data-tab="teachers" style="display:none">
+                <div class="cf-section">
+                    <div style="display:flex;align-items:center;justify-content:space-between">
+                        <div class="cf-section-title" style="margin:0">Викладачі</div>
+                        <button class="btn btn-ghost btn-sm" onclick="AdminPage._courseTeacherAdd('${id}')"><i class="fa-solid fa-plus"></i> Додати</button>
+                    </div>
+                    <div id="c-course-teachers" style="display:flex;flex-direction:column;gap:.4rem">
+                        <div style="color:var(--text-muted);font-size:.82rem">Завантаження...</div>
+                    </div>
+                </div>
+            </div>` : ''}
+
+            <!-- РОЗКЛАД -->
+            <div class="cf-tab-pane cf-pane" data-tab="schedule" style="display:none">
+                <div class="cf-section">
+                    <div style="display:flex;align-items:center;justify-content:space-between">
+                        <div class="cf-section-title" style="margin:0">Розклад занять</div>
+                        <button class="btn btn-ghost btn-sm" onclick="AdminPage._scheduleAddDay()"><i class="fa-solid fa-plus"></i> Додати день</button>
+                    </div>
+                    <div id="c-schedule-builder" style="display:flex;flex-direction:column;gap:.75rem"></div>
+                </div>
+                <div class="cf-footer">
+                    <button class="btn btn-secondary" onclick="AdminPage._renderCourses(AdminPage._coursesEl)">Скасувати</button>
+                    <button class="btn btn-primary" onclick="AdminPage._saveCourse('${id}')"><i class="fa-regular fa-floppy-disk"></i> Зберегти</button>
+                </div>
+            </div>
+
+        </div>`;
 
         const zone = document.getElementById('thumb-upload-zone');
         if (zone) {
             const input = FileUpload.createDropZone(zone, { accept: 'image/*', label: 'Завантажити обкладинку', hint: 'PNG, JPG до 5 МБ' });
-            input.addEventListener('change', () => { this._courseThumbFile = input.files[0]; });
+            input.addEventListener('change', () => {
+                this._courseThumbFile = input.files[0];
+                if (this._courseThumbFile) {
+                    const reader = new FileReader();
+                    reader.onload = e => {
+                        const prev = document.getElementById('thumb-preview');
+                        const img = document.getElementById('thumb-preview-img');
+                        if (prev && img) { img.src = e.target.result; prev.style.display = ''; }
+                    };
+                    reader.readAsDataURL(this._courseThumbFile);
+                }
+            });
+        }
+        const badgeZone = document.getElementById('badge-upload-zone');
+        if (badgeZone) {
+            const input = FileUpload.createDropZone(badgeZone, { accept: 'image/*', label: 'Завантажити бейдж', hint: 'PNG з прозорістю, до 2 МБ' });
+            input.addEventListener('change', () => { this._courseBadgeFile = input.files[0]; });
         }
 
         this._scheduleInit(course?.schedule || []);
@@ -1998,10 +2101,22 @@ const AdminPage = {
             this._runsLoad(course.id);
             this._courseTeachersLoad(course.id);
         }
-        this._kbLoad();
     },
 
     // ── Course Runs (admin) ───────────────────────────────────────────
+    async _removeBadge(courseId) {
+        if (!await Modal.confirm({ message: 'Видалити бейдж досягнення?', danger: true })) return;
+        Loader.show();
+        try {
+            await API.courses.removeBadge(courseId);
+            Toast.success('Бейдж видалено');
+            const { data: course } = await supabase.from('courses').select('*').eq('id', courseId).single();
+            this._openCourseForm(course);
+        } catch(e) { Toast.error('Помилка', e.message); }
+        finally { Loader.hide(); }
+    },
+
+    _courseBadgeFile: null,
     _runsData: [],
 
     async _runsLoad(courseId) {
@@ -2074,6 +2189,16 @@ const AdminPage = {
                         <input id="run-end" class="form-control" type="date" value="${run?.end_date || ''}">
                     </div>
                 </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem">
+                    <div>
+                        <label style="font-size:.82rem;font-weight:600;display:block;margin-bottom:.3rem">Час початку</label>
+                        <input id="run-stime" class="form-control" type="time" value="${run?.start_time?.slice(0,5) || ''}">
+                    </div>
+                    <div>
+                        <label style="font-size:.82rem;font-weight:600;display:block;margin-bottom:.3rem">Час завершення</label>
+                        <input id="run-etime" class="form-control" type="time" value="${run?.end_time?.slice(0,5) || ''}">
+                    </div>
+                </div>
             </div>`,
             footer: `
                 <button class="btn btn-primary" onclick="AdminPage._runsSave('${courseId}','${run?.id || ''}')">
@@ -2087,13 +2212,16 @@ const AdminPage = {
         const title      = document.getElementById('run-title')?.value.trim();
         const start_date = document.getElementById('run-start')?.value || null;
         const end_date   = document.getElementById('run-end')?.value || null;
+        const start_time = document.getElementById('run-stime')?.value || null;
+        const end_time   = document.getElementById('run-etime')?.value || null;
         if (!title) { Toast.warning('Введіть назву групи'); return; }
         Loader.show();
         try {
             if (runId) {
-                await API.courseRuns.update(runId, { title, start_date, end_date });
+                await API.courseRuns.update(runId, { title, start_date, end_date, start_time, end_time });
+                CourseViewPage._syncRunCalendars(runId, { course_id: courseId, title, start_date, end_date, start_time, end_time }).catch(() => {});
             } else {
-                await API.courseRuns.create(courseId, { title, start_date, end_date });
+                await API.courseRuns.create(courseId, { title, start_date, end_date, start_time, end_time });
             }
             Modal.close();
             await this._runsLoad(courseId);
@@ -2234,29 +2362,32 @@ const AdminPage = {
     _scheduleDays: [],
     _scheduleProfiles: [],
     _scheduleTests: [],
+    _scheduleKbAll: [],
 
     async _scheduleInit(existing) {
         this._scheduleDays = existing.length
             ? existing.map(d => ({
                 ...d,
-                items: [...(d.items || [])],
-                // migrate old single test_id → tests array
-                tests: d.tests ? [...d.tests] : (d.test_id ? [{ id: d.test_id, title: d.test_title || '' }] : [])
+                items:        [...(d.items || [])],
+                tests:        d.tests ? [...d.tests] : (d.test_id ? [{ id: d.test_id, title: d.test_title || '' }] : []),
+                kb_resources: [...(d.kb_resources || [])],
               }))
             : [];
         try {
-            const [profRes, tests] = await Promise.all([
+            const [profRes, tests, kbRes] = await Promise.all([
                 API.profiles.getAll({ pageSize: 500 }),
-                API.tests.getAll()
+                API.tests.getAll(),
+                API.resources.getAll({ pageSize: 500 }),
             ]);
             this._scheduleProfiles = (profRes.data || []).sort((a, b) => (a.full_name || '').localeCompare(b.full_name || '', 'uk'));
             this._scheduleTests    = tests || [];
-        } catch(e) { this._scheduleProfiles = []; this._scheduleTests = []; }
+            this._scheduleKbAll    = kbRes.data || [];
+        } catch(e) { this._scheduleProfiles = []; this._scheduleTests = []; this._scheduleKbAll = []; }
         this._scheduleRender();
     },
 
-    _scheduleRender() {
-        const el = document.getElementById('c-schedule-builder');
+    _scheduleRender(containerId = 'c-schedule-builder') {
+        const el = document.getElementById(containerId);
         if (!el) return;
         if (!this._scheduleDays.length) {
             el.innerHTML = `<div style="color:var(--text-muted);font-size:.82rem;padding:.5rem 0">Розклад не заповнено</div>`;
@@ -2340,12 +2471,94 @@ const AdminPage = {
                         <i class="fa-solid fa-plus"></i> Додати тему
                     </button>
                 </div>
+                <div style="border-top:1px solid var(--border);padding-top:.65rem;margin-top:.65rem">
+                    <label style="font-size:.75rem;color:var(--text-muted);margin-bottom:.4rem;display:flex;align-items:center;gap:.4rem">
+                        <i class="fa-solid fa-folder-open" style="color:var(--primary)"></i> Файли з бази знань
+                        ${(day.kb_resources||[]).length ? `<span style="background:var(--primary);color:#fff;border-radius:10px;padding:0 6px;font-size:.65rem;font-weight:700">${(day.kb_resources||[]).length}</span>` : ''}
+                    </label>
+                    <div id="skb-chips-${di}" style="display:flex;flex-wrap:wrap;gap:.3rem;${(day.kb_resources||[]).length ? 'margin-bottom:.4rem' : ''}">
+                        ${this._schedKbChipsHtml(di)}
+                    </div>
+                    <button class="btn btn-ghost btn-sm" onclick="AdminPage._schedKbOpenModal(${di})" style="font-size:.78rem">
+                        <i class="fa-solid fa-plus"></i> Додати файл з бази знань
+                    </button>
+                </div>
             </div>`).join('');
     },
 
     _scheduleAddDay() {
-        this._scheduleDays.push({ title: '', teacher_id: '', teacher_name: '', tests: [], instructions: '', items: [] });
+        this._scheduleDays.push({ title: '', teacher_id: '', teacher_name: '', tests: [], instructions: '', items: [], kb_resources: [] });
         this._scheduleRender();
+    },
+
+    _schedKbAdd(di, id) {
+        const res = this._scheduleKbAll.find(r => r.id === id);
+        if (!res) return;
+        if (!this._scheduleDays[di].kb_resources) this._scheduleDays[di].kb_resources = [];
+        if (this._scheduleDays[di].kb_resources.some(r => r.id === id)) return;
+        this._scheduleDays[di].kb_resources.push({ id: res.id, title: res.title, type: res.type });
+    },
+
+    _schedKbRemove(di, ri) {
+        this._scheduleDays[di].kb_resources.splice(ri, 1);
+        const chips = document.getElementById(`skb-chips-${di}`);
+        if (chips) chips.innerHTML = this._schedKbChipsHtml(di);
+        if (this._schedKbModalRender) this._schedKbModalRender(document.getElementById('skb-modal-search')?.value || '');
+    },
+
+    _schedKbOpenModal(di) {
+        const render = (term = '') => {
+            const selected = this._scheduleDays[di].kb_resources || [];
+            const filtered = this._scheduleKbAll
+                .filter(r => !selected.some(s => s.id === r.id))
+                .filter(r => !term || r.title.toLowerCase().includes(term.toLowerCase()))
+                .slice(0, 50);
+            const list = document.getElementById('skb-modal-list');
+            if (!list) return;
+            list.innerHTML = filtered.length
+                ? filtered.map(r => `
+                <div onclick="AdminPage._schedKbAdd(${di},'${r.id}');AdminPage._schedKbModalRefresh(${di})"
+                    style="display:flex;align-items:center;gap:.6rem;padding:.5rem .75rem;cursor:pointer;border-bottom:1px solid var(--border);border-radius:6px"
+                    onmouseenter="this.style.background='var(--bg-raised)'" onmouseleave="this.style.background=''">
+                    <i class="fa-solid ${this._kbIcon(r.type)}" style="color:var(--primary);font-size:.8rem;width:14px;flex-shrink:0"></i>
+                    <span style="font-size:.83rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Fmt.esc(r.title)}</span>
+                </div>`).join('')
+                : `<div style="padding:1.5rem;text-align:center;color:var(--text-muted);font-size:.85rem">Файли не знайдено</div>`;
+        };
+        this._schedKbModalDi = di;
+        this._schedKbModalRender = render;
+        Modal.open({
+            title: '<i class="fa-solid fa-folder-open" style="color:var(--primary)"></i> База знань — вибір файлу',
+            size: 'lg',
+            body: `
+                <input id="skb-modal-search" type="text" class="form-control" placeholder="🔍 Пошук файлу..."
+                    oninput="AdminPage._schedKbModalRender(this.value)"
+                    style="margin-bottom:.75rem">
+                <div id="skb-modal-list" style="max-height:360px;overflow-y:auto;border:1px solid var(--border);border-radius:10px"></div>`,
+            footer: `<button class="btn btn-secondary" onclick="Modal.close()">Закрити</button>`
+        });
+        setTimeout(() => {
+            render('');
+            document.getElementById('skb-modal-search')?.focus();
+        }, 50);
+    },
+
+    _schedKbModalRefresh(di) {
+        const term = document.getElementById('skb-modal-search')?.value || '';
+        if (this._schedKbModalRender) this._schedKbModalRender(term);
+        // Update chips without full re-render
+        const chips = document.getElementById(`skb-chips-${di}`);
+        if (chips) chips.innerHTML = this._schedKbChipsHtml(di);
+    },
+
+    _schedKbChipsHtml(di) {
+        const day = this._scheduleDays[di];
+        return (day.kb_resources || []).map((r, ri) => `
+            <span style="display:inline-flex;align-items:center;gap:.3rem;background:color-mix(in srgb,var(--primary) 8%,transparent);border:1px solid color-mix(in srgb,var(--primary) 25%,transparent);border-radius:6px;padding:.18rem .5rem;font-size:.73rem">
+                <i class="fa-solid ${this._kbIcon(r.type)}" style="color:var(--primary);font-size:.65rem"></i>
+                <span style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Fmt.esc(r.title)}</span>
+                <button onclick="AdminPage._schedKbRemove(${di},${ri})" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:0;line-height:1"><i class="fa-solid fa-xmark" style="font-size:.6rem"></i></button>
+            </span>`).join('');
     },
 
     _scheduleAddTest(di) {
@@ -2454,9 +2667,10 @@ const AdminPage = {
                 teacher_name: d.teacher_name || '',
                 tests:        (d.tests || []).filter(t => t.id),
                 instructions: d.instructions || '',
-                items:        (d.items || []).map(it => typeof it === 'object' ? it : { title: it, desc: '' }).filter(it => (it.title || '').trim())
+                items:        (d.items || []).map(it => typeof it === 'object' ? it : { title: it, desc: '' }).filter(it => (it.title || '').trim()),
+                kb_resources: (d.kb_resources || [])
             }))
-            .filter(d => d.items.length || d.title || d.teacher_id || d.tests.length || d.instructions);
+            .filter(d => d.items.length || d.title || d.teacher_id || d.tests.length || d.instructions || d.kb_resources.length);
         const fields = {
             title,
             description:    Dom.val('c-desc').trim() || null,
@@ -2475,6 +2689,7 @@ const AdminPage = {
             const mergedInfo = { ...(fresh?.course_info || {}), kb_resources: this._kbSelected };
             await supabase.from('courses').update({ course_info: mergedInfo }).eq('id', course.id);
             if (this._courseThumbFile) await API.courses.uploadThumbnail(course.id, this._courseThumbFile);
+            if (this._courseBadgeFile) await API.courses.uploadBadge(course.id, this._courseBadgeFile);
             AuditLog.write(id ? 'course_update' : 'course_create', 'course', title);
             Toast.success('Збережено!', `Курс "${title}" ${id ? 'оновлено' : 'створено'}`);
             await this._renderCourses(this._coursesEl);

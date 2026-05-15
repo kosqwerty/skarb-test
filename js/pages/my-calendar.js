@@ -681,7 +681,7 @@ ${this._styles()}`;
 .mc-chip-time { font-size:.65rem;font-weight:700;color:var(--text-muted);flex-shrink:0; }
 .mc-chip-repeat { font-size:.6rem;flex-shrink:0;opacity:.7; }
 .mc-chip-title { font-size:.72rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1; }
-.mc-chip-notes { font-size:.65rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.3; }
+.mc-chip-notes { font-size:.65rem;color:var(--text-muted);overflow:hidden;line-height:1.3; }
 
 .mc-fab { position:fixed;bottom:32px;right:32px;width:52px;height:52px;border-radius:50%;background:var(--primary);color:#fff;font-size:1.5rem;border:none;cursor:pointer;box-shadow:0 4px 20px rgba(99,102,241,.45);display:flex;align-items:center;justify-content:center;transition:transform .15s; }
 .mc-fab:hover { transform:scale(1.1); }
@@ -740,6 +740,7 @@ ${this._styles()}`;
 .mc-reminder-day-label { font-size:.75rem;font-weight:600;color:var(--text-secondary);padding:4px 2px 2px;margin-top:4px; }
 .mc-reminder-empty { text-align:center;padding:16px 0;color:var(--text-muted);font-size:.88rem; }
 .mc-reminder-footer { display:flex;justify-content:flex-end;gap:8px;margin-top:16px;padding-top:12px;border-top:1px solid var(--border); }
+.cvs-acc-name{font-size:.78rem;font-weight:700;color:var(--text-primary)}
 </style>`;
     },
 };

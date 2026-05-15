@@ -133,6 +133,22 @@ const API = {
             const url = `${APP_CONFIG.storagePublicUrl}/${APP_CONFIG.buckets.thumbnails}/${path}?v=${Date.now()}`;
             await this.update(courseId, { thumbnail_url: url });
             return url;
+        },
+
+        async uploadBadge(courseId, file) {
+            const ext  = file.name.split('.').pop();
+            const path = `${courseId}/badge.${ext}`;
+            const { error } = await supabase.storage
+                .from(APP_CONFIG.buckets.thumbnails)
+                .upload(path, file, { upsert: true, contentType: file.type });
+            if (error) throw error;
+            const url = `${APP_CONFIG.storagePublicUrl}/${APP_CONFIG.buckets.thumbnails}/${path}?v=${Date.now()}`;
+            await this.update(courseId, { badge_url: url });
+            return url;
+        },
+
+        async removeBadge(courseId) {
+            await this.update(courseId, { badge_url: null });
         }
     },
 
@@ -160,17 +176,17 @@ const API = {
             return data;
         },
 
-        async create(courseId, { title, start_date, end_date }) {
+        async create(courseId, { title, start_date, end_date, start_time, end_time }) {
             const { data, error } = await supabase.from('course_runs')
-                .insert({ course_id: courseId, title, start_date: start_date || null, end_date: end_date || null })
+                .insert({ course_id: courseId, title, start_date: start_date || null, end_date: end_date || null, start_time: start_time || null, end_time: end_time || null })
                 .select().single();
             if (error) throw error;
             return data;
         },
 
-        async update(id, { title, start_date, end_date }) {
+        async update(id, { title, start_date, end_date, start_time, end_time }) {
             const { error } = await supabase.from('course_runs')
-                .update({ title, start_date: start_date || null, end_date: end_date || null })
+                .update({ title, start_date: start_date || null, end_date: end_date || null, start_time: start_time || null, end_time: end_time || null })
                 .eq('id', id);
             if (error) throw error;
         },

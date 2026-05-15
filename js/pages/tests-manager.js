@@ -208,6 +208,15 @@ const TestsManagerPage = {
     _opts:      [],
     _qType:     'single',
     _dirty:          false,
+    _dirtyEnabled:   false,
+    _markDirty() { if (this._dirtyEnabled) this._dirty = true; },
+    async _checkDirty() {
+        if (!this._dirty) return true;
+        const ok = await Modal.confirm({ title: 'Незбережені зміни', message: 'Питання має незбережені зміни. Зберегти перед переходом?', confirmText: 'Зберегти', cancelText: 'Не зберігати' });
+        if (ok) await this.saveCurrentQuestion();
+        this._dirty = false;
+        return true;
+    },
     _quillSetupDone: false,
     _pendingCoverFile: null,
     _coverImageUrl:    null,
@@ -383,7 +392,9 @@ const TestsManagerPage = {
         this._renderSettings(c, t);
     },
 
-    _goBack(container) {
+    async _goBack(container) {
+        await this._checkDirty();
+        this._dirty = false;
         if (this._prevView === 'editor' && this._curTest) this._renderEditor(container);
         else this._renderList(container);
     },
@@ -859,9 +870,9 @@ const TestsManagerPage = {
 
 <div class="te-wrap">
     <div class="te-topbar">
-        <button class="te-back" onclick="TestsManagerPage._renderList(TestsManagerPage._container)"><i class="fa-solid fa-arrow-left"></i> Тести</button>
+        <button class="te-back" onclick="TestsManagerPage._checkDirty().then(()=>{TestsManagerPage._dirty=false;TestsManagerPage._renderList(TestsManagerPage._container)})"><i class="fa-solid fa-arrow-left"></i> Тести</button>
         <span class="te-test-title">${this._curTest.title}</span>
-        <button class="btn btn-ghost btn-sm" onclick="TestsManagerPage._renderSettings(TestsManagerPage._container,TestsManagerPage._curTest)"><i class="fa-solid fa-gear"></i> Налаштування</button>
+        <button class="btn btn-ghost btn-sm" onclick="TestsManagerPage._checkDirty().then(()=>{TestsManagerPage._dirty=false;TestsManagerPage._renderSettings(TestsManagerPage._container,TestsManagerPage._curTest)})"><i class="fa-solid fa-gear"></i> Налаштування</button>
         <button class="btn btn-ghost btn-sm" onclick="TestsManagerPage.openPreview('${this._curTest.id}')"><i class="fa-solid fa-eye"></i> Перегляд</button>
         <button class="btn btn-sm" style="background:#C9A227;color:#fff;border:none;border-radius:10px;padding:7px 16px;font-weight:600;cursor:pointer" onclick="TestsManagerPage.openAssignModal('${this._curTest.id}')"><i class="fa-solid fa-users"></i> Призначити</button>
         <button style="display:inline-flex;align-items:center;gap:6px;padding:7px 16px;border-radius:10px;border:none;cursor:pointer;font-size:.82rem;font-weight:700;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;box-shadow:0 4px 14px rgba(22,163,74,.35);transition:all .2s" onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform=''" onclick="TestsManagerPage.openResultsModal('${this._curTest.id}')"><i class="fa-solid fa-chart-bar"></i> Результати</button>
@@ -938,8 +949,9 @@ const TestsManagerPage = {
 </div>
 <div class="te-pts-wrap">
     <span class="te-pts-lbl">Балів:</span>
-    <input class="te-pts-inp" type="number" id="te-pts" min="1" max="100" value="${pts}">
-</div>`;
+    <input class="te-pts-inp" type="number" id="te-pts" min="1" max="100" value="${pts}" oninput="TestsManagerPage._markDirty()">
+</div>
+<button class="te-save-btn" style="width:auto;padding:6px 16px;margin-top:0;font-size:.82rem" onclick="TestsManagerPage.saveCurrentQuestion()"><i class="fa-solid fa-floppy-disk"></i> Зберегти питання</button>`;
     },
 
     _renderQList() {
@@ -967,7 +979,9 @@ const TestsManagerPage = {
         }).join('');
     },
 
-    _selectQuestion(idx) {
+    async _selectQuestion(idx) {
+        await this._checkDirty();
+        this._dirty = false;
         this._activeIdx = idx;
         const q = this._questions[idx];
         if (!q) return;
@@ -1008,6 +1022,8 @@ const TestsManagerPage = {
         const content = document.getElementById('te-left-content');
         if (!content) return;
 
+        this._dirty = false;
+        this._dirtyEnabled = false;
         content.innerHTML = `
 <div class="te-lbl">Текст питання</div>
 <div class="te-quill-wrap"><div id="te-quill"></div></div>
@@ -1016,9 +1032,9 @@ const TestsManagerPage = {
 <div id="te-options-area">${this._optionsHtml()}</div>
 <div class="te-explanation-wrap">
     <div class="te-lbl"><i class="fa-solid fa-lightbulb"></i> Пояснення (показується після відповіді)</div>
-    <textarea class="te-explanation" id="te-explanation" placeholder="Необов'язково — поясніть правильну відповідь...">${q.explanation||''}</textarea>
+    <textarea class="te-explanation" id="te-explanation" placeholder="Необов'язково — поясніть правильну відповідь..." oninput="TestsManagerPage._markDirty()">${q.explanation||''}</textarea>
 </div>
-<button class="te-save-btn" onclick="TestsManagerPage.saveCurrentQuestion()"><i class="fa-solid fa-floppy-disk"></i> Зберегти питання</button>`;
+`;
 
         // Init Quill
         if (this._quill) { try { this._quill = null; } catch{} }
@@ -1034,6 +1050,7 @@ const TestsManagerPage = {
             // the resize/alignment tools. dangerouslyPasteHTML converts through Delta
             // and strips all img style attributes.
             if (text) this._quill.root.innerHTML = text;
+            this._quill.on('text-change', () => { TestsManagerPage._markDirty(); });
 
             // Clipboard image paste → compress → upload → insert
             this._quill.root.addEventListener('paste', async e => {
@@ -1082,6 +1099,8 @@ const TestsManagerPage = {
                 TestsManagerPage._quill.setSelection(sel.index + 1);
                 TestsManagerPage._draggedImageUrl = null;
             });
+            // Enable dirty tracking after all MutationObserver callbacks have fired
+            setTimeout(() => { TestsManagerPage._dirty = false; TestsManagerPage._dirtyEnabled = true; }, 100);
         }, 50);
     },
 
@@ -1097,9 +1116,9 @@ const TestsManagerPage = {
 ${this._opts.map((p,i) => `
 <div style="margin-bottom:10px">
 <div class="te-match-row">
-    <input class="te-match-inp" placeholder="Ліва частина..." value="${(p.left||'').replace(/"/g,'&quot;')}" oninput="TestsManagerPage._opts[${i}].left=this.value">
+    <input class="te-match-inp" placeholder="Ліва частина..." value="${(p.left||'').replace(/"/g,'&quot;')}" oninput="TestsManagerPage._opts[${i}].left=this.value;TestsManagerPage._markDirty()">
     <span class="te-match-arrow"><i class="fa-solid fa-arrows-left-right"></i></span>
-    <input class="te-match-inp" placeholder="Права частина..." value="${(p.right||'').replace(/"/g,'&quot;')}" oninput="TestsManagerPage._opts[${i}].right=this.value">
+    <input class="te-match-inp" placeholder="Права частина..." value="${(p.right||'').replace(/"/g,'&quot;')}" oninput="TestsManagerPage._opts[${i}].right=this.value;TestsManagerPage._markDirty()">
     ${p.image_url
         ? `<div class="te-opt-img-wrap"><img src="${p.image_url}" class="te-opt-img" alt="" onclick="TestsManagerPage._openLightbox(this.src)"><button class="te-opt-img-del" onclick="TestsManagerPage._removeAnswerImage(${i})"><i class="fa-solid fa-xmark"></i></button></div>`
         : `<button class="te-opt-img-btn" data-aidx="${i}" title="Додати зображення" onclick="TestsManagerPage._showImgPicker(${i})"><i class="fa-solid fa-image"></i></button>`}
@@ -1120,7 +1139,7 @@ ${this._opts.map((it,i) => `
     ${it.image_url
         ? `<div class="te-opt-img-wrap"><img src="${it.image_url}" class="te-opt-img" alt="" onclick="TestsManagerPage._openLightbox(this.src)"><button class="te-opt-img-del" onclick="TestsManagerPage._removeAnswerImage(${i})"><i class="fa-solid fa-xmark"></i></button></div>`
         : `<button class="te-opt-img-btn" data-aidx="${i}" title="Додати зображення" onclick="TestsManagerPage._showImgPicker(${i})"><i class="fa-solid fa-image"></i></button>`}
-    <input class="te-opt-inp" placeholder="Елемент ${i+1}..." value="${(it.text||'').replace(/"/g,'&quot;')}" oninput="TestsManagerPage._opts[${i}].text=this.value">
+    <input class="te-opt-inp" placeholder="Елемент ${i+1}..." value="${(it.text||'').replace(/"/g,'&quot;')}" oninput="TestsManagerPage._opts[${i}].text=this.value;TestsManagerPage._markDirty()">
     <button class="te-opt-del" onclick="TestsManagerPage.removeOption(${i})"><i class="fa-solid fa-xmark"></i></button>
 </div>`).join('')}
 </div>
@@ -1153,6 +1172,7 @@ ${this._opts.map((o,i) => `
         this._cleanupAnswerQuills();
         this._qType = val;
         this._opts  = [];
+        this._markDirty();
         document.querySelectorAll('.te-type-chip').forEach(el => el.classList.toggle('active', el.dataset.type === val));
         document.getElementById('te-options-area').innerHTML = this._optionsHtml();
     },
@@ -1219,6 +1239,7 @@ ${this._opts.map((o,i) => `
             q.explanation   = explanation;
             q.answers       = savedAnswers;
             document.getElementById('te-qlist').innerHTML = this._renderQList();
+            this._dirty = false;
             Toast.success('Збережено');
         } catch(e) { Toast.error('Помилка', e.message); }
         finally { Loader.hide(); }
@@ -1447,6 +1468,7 @@ ${this._opts.map((o,i) => `
                 modules: this._buildQuillModules()
             });
             if (opt.html) q.root.innerHTML = opt.html;
+            q.on('text-change', () => { TestsManagerPage._markDirty(); });
 
             // Paste image → upload → insert
             q.root.addEventListener('paste', async e => {

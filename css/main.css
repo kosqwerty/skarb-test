@@ -127,9 +127,9 @@
     --border:        #E2E8F0;
     --border-light:  #CBD5E1;
 
-    --primary:       #fcb316;      /* золотий – головний акцент */
-    --primary-dark:  #e0a010;
-    --primary-glow:  rgba(252,179,22,0.2);
+    --primary:       #6366f1;      /* indigo – головний акцент */
+    --primary-dark:  #4F46E5;
+    --primary-glow:  rgba(99,102,241,0.2);
     --secondary:     #263473;      /* темно-синій – другорядний */
     --accent:        #06B6D4;
     --success:       #10B981;
@@ -322,6 +322,9 @@ h4 { font-size: 1.125rem; font-weight: 500; }
 .btn-ghost:hover { background: var(--bg-hover); color: var(--text-primary); }
 
 .btn-sm { padding: 0.35rem 0.8rem; font-size: 0.8rem; }
+.btn-tab { background: none; border: none; border-bottom: 2px solid transparent; border-radius: 0; padding: 0.55rem 1rem; font-size: 0.875rem; font-weight: 500; color: var(--text-muted); cursor: pointer; white-space: nowrap; transition: all var(--transition); }
+.btn-tab:hover { color: var(--text-primary); background: none; transform: none; box-shadow: none; }
+.btn-tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
 .btn-lg { padding: 0.75rem 1.75rem; font-size: 1rem; }
 .btn-full { width: 100%; justify-content: center; }
 .btn-icon { padding: 0.5rem; border-radius: var(--radius-md); }
@@ -2538,21 +2541,23 @@ select {
 }
 
 /* ── File Upload ────────────────────────────────────────────────── */
-.file-upload-frame { padding: 2px; border-radius: 16px; background: var(--border-light, #CBD5E1); }
+.file-upload-frame { width: 180px;padding: 2px; border-radius: 16px; background: var(--border-light, #CBD5E1); }
 .file-upload-area {
     border: none;
     border-radius: 14px;
-    padding: 28px 20px;
+    padding: 13px 4px;
     cursor: pointer;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 14px;
+    gap: 1px;
     background: linear-gradient(145deg, rgba(99,102,241,.05), rgba(139,92,246,.05));
     transition: background .2s;
     position: relative;
     overflow: hidden;
-    min-height: 120px;
+    
+    width: 180px;
+    height: 150px;
 }
 .file-upload-area::before {
     content: '';

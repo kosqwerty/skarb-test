@@ -252,10 +252,9 @@ const CourseViewPage = {
                             <span class="cv-tab-label">Викладачі</span>
                         </button>
                         ${course.schedule?.length || AppState.isStaff() ? `
-                        <button class="cv-info-tab-btn" onclick="CourseViewPage._switchInfoTab('schedule')" style="position:relative">
+                        <button class="cv-info-tab-btn" onclick="CourseViewPage._switchInfoTab('schedule')">
                             <span class="cv-tab-icon">📅</span>
                             <span class="cv-tab-label">Розклад</span>
-                            ${AppState.isStaff() ? `<span onclick="event.stopPropagation();CourseViewPage._editSchedule('${course.id}')" style="position:absolute;top:6px;right:6px;display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;color:var(--text-muted);border:1px solid var(--border);background:var(--bg-raised);transition:all .15s" onmouseenter="this.style.borderColor='var(--primary)';this.style.color='var(--primary)'" onmouseleave="this.style.borderColor='var(--border)';this.style.color='var(--text-muted)'"><i class="fa-solid fa-pen-to-square" style="font-size:.65rem"></i></span>` : ''}
                         </button>` : ''}
                         ${(course.course_info?.meet_url || AppState.isStaff()) ? `
                         <button class="cv-info-tab-btn" onclick="CourseViewPage._switchInfoTab('meet')" style="position:relative">
@@ -682,6 +681,16 @@ const CourseViewPage = {
                         <input id="cvrun-end" class="form-control" type="date">
                     </div>
                 </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem">
+                    <div>
+                        <label style="font-size:.82rem;font-weight:600;display:block;margin-bottom:.3rem">Час початку</label>
+                        <input id="cvrun-stime" class="form-control" type="time">
+                    </div>
+                    <div>
+                        <label style="font-size:.82rem;font-weight:600;display:block;margin-bottom:.3rem">Час завершення</label>
+                        <input id="cvrun-etime" class="form-control" type="time">
+                    </div>
+                </div>
             </div>`,
             footer: `
                 <button class="btn btn-primary" onclick="CourseViewPage._saveRunModal('${courseId}')">
@@ -713,6 +722,16 @@ const CourseViewPage = {
                         <input id="cvrun-end" class="form-control" type="date" value="${run.end_date || ''}">
                     </div>
                 </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem">
+                    <div>
+                        <label style="font-size:.82rem;font-weight:600;display:block;margin-bottom:.3rem">Час початку</label>
+                        <input id="cvrun-stime" class="form-control" type="time" value="${run.start_time?.slice(0,5) || ''}">
+                    </div>
+                    <div>
+                        <label style="font-size:.82rem;font-weight:600;display:block;margin-bottom:.3rem">Час завершення</label>
+                        <input id="cvrun-etime" class="form-control" type="time" value="${run.end_time?.slice(0,5) || ''}">
+                    </div>
+                </div>
             </div>`,
             footer: `
                 <button class="btn btn-primary" onclick="CourseViewPage._saveRunModal('${courseId}','${runId}')">
@@ -742,13 +761,16 @@ const CourseViewPage = {
         const title      = document.getElementById('cvrun-title')?.value.trim();
         const start_date = document.getElementById('cvrun-start')?.value || null;
         const end_date   = document.getElementById('cvrun-end')?.value || null;
+        const start_time = document.getElementById('cvrun-stime')?.value || null;
+        const end_time   = document.getElementById('cvrun-etime')?.value || null;
         if (!title) { Toast.warning('Введіть назву групи'); return; }
         Loader.show();
         try {
             if (runId) {
-                await API.courseRuns.update(runId, { title, start_date, end_date });
+                await API.courseRuns.update(runId, { title, start_date, end_date, start_time, end_time });
+                this._syncRunCalendars(runId, { course_id: courseId, title, start_date, end_date, start_time, end_time }).catch(() => {});
             } else {
-                await API.courseRuns.create(courseId, { title, start_date, end_date });
+                await API.courseRuns.create(courseId, { title, start_date, end_date, start_time, end_time });
             }
             Modal.close();
             this._allRuns = await API.courseRuns.getByCourse(courseId);
@@ -760,263 +782,43 @@ const CourseViewPage = {
         finally { Loader.hide(); }
     },
 
-    _schedDays: [],
-    _schedProfiles: [],
-    _schedTests: [],
-    _schedKbResources: [],
-
     async _editSchedule(courseId) {
-        this._schedDays = (this._course?.schedule || []).map(d => ({
+        const el = document.getElementById('cv-info-tab-schedule');
+        if (!el) return;
+        el.innerHTML = `<div style="padding:1rem 0;text-align:center;color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin"></i></div>`;
+        AdminPage._scheduleDays = (this._course?.schedule || []).map(d => ({
             ...d,
             items: [...(d.items || [])],
             tests: d.tests ? [...d.tests] : (d.test_id ? [{ id: d.test_id, title: d.test_title || '' }] : []),
             kb_resources: [...(d.kb_resources || [])]
         }));
-        Loader.show();
         try {
             const [profRes, tests, kbRes] = await Promise.all([
                 API.profiles.getAll({ pageSize: 500 }),
                 API.tests.getAll(),
-                API.resources.getAll({ pageSize: 500, studentOnly: true })
+                API.resources.getAll({ pageSize: 500 })
             ]);
-            this._schedProfiles = (profRes.data || []).sort((a, b) => (a.full_name || '').localeCompare(b.full_name || '', 'uk'));
-            this._schedTests = tests || [];
-            this._schedKbResources = kbRes.data || [];
-        } catch(e) { this._schedProfiles = []; this._schedTests = []; this._schedKbResources = []; }
-        finally { Loader.hide(); }
-
-        Modal.open({
-            title: 'Розклад занять',
-            size: 'xl',
-            body: `
-            <style>
-                .cvse-wrap{display:flex;flex-direction:column;gap:.5rem}
-                .cvse-day{display:flex;gap:0;border-radius:12px;border:1px solid var(--border);overflow:hidden;background:var(--bg-surface);transition:box-shadow .2s}
-                .cvse-day:hover{box-shadow:0 2px 16px rgba(0,0,0,.1)}
-                .cvse-accent{width:4px;background:var(--cvse-color);flex-shrink:0}
-                .cvse-inner{flex:1;min-width:0;padding:1rem 1.25rem}
-                .cvse-top{display:flex;align-items:center;gap:.75rem;margin-bottom:.9rem}
-                .cvse-badge{display:inline-flex;align-items:center;justify-content:center;min-width:32px;height:24px;padding:0 .6rem;border-radius:6px;background:color-mix(in srgb,var(--cvse-color) 15%,transparent);color:var(--cvse-color);font-size:.7rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;flex-shrink:0}
-                .cvse-title-input{flex:1;border:none;background:transparent;font-size:.95rem;font-weight:600;color:var(--text-primary);outline:none;padding:.15rem 0;border-bottom:1.5px solid transparent;transition:border-color .2s}
-                .cvse-title-input:focus{border-bottom-color:var(--cvse-color)}
-                .cvse-title-input::placeholder{color:var(--text-muted);font-weight:400}
-                .cvse-del{width:28px;height:28px;border-radius:7px;border:none;background:none;color:var(--text-muted);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:.8rem;flex-shrink:0;transition:all .15s;margin-left:.25rem}
-                .cvse-del:hover{color:#ef4444;background:rgba(239,68,68,.1)}
-                .cvse-icon-btn{width:36px;height:36px;border-radius:9px;border:1.5px solid var(--border);background:color-mix(in srgb,var(--cvse-color) 12%,transparent);color:var(--cvse-color);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:1rem;flex-shrink:0;transition:all .15s;position:relative}
-                .cvse-icon-btn:hover{border-color:var(--cvse-color);transform:scale(1.08)}
-                .cvse-icon-picker{position:absolute;top:calc(100% + 6px);left:0;z-index:100;background:var(--bg-surface);border:1px solid var(--border);border-radius:12px;padding:.6rem;box-shadow:0 8px 32px rgba(0,0,0,.18);display:grid;grid-template-columns:repeat(8,32px);gap:.3rem;width:max-content}
-                .cvse-icon-opt{width:32px;height:32px;border-radius:7px;border:1px solid transparent;background:none;color:var(--text-muted);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:.85rem;transition:all .15s}
-                .cvse-icon-opt:hover{background:var(--bg-raised);color:var(--primary);border-color:var(--border)}
-                .cvse-icon-opt.selected{background:rgba(99,102,241,.15);color:var(--primary);border-color:rgba(99,102,241,.4)}
-                .cvse-grid{display:grid;grid-template-columns:1fr 1fr;gap:.75rem 1.25rem}
-                .cvse-field-full{grid-column:1/-1}
-                .cvse-lbl{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:.3rem;display:flex;align-items:center;justify-content:space-between}
-                .cvse-lbl-btn{text-transform:none;letter-spacing:0;font-weight:600;color:var(--primary);cursor:pointer;display:inline-flex;align-items:center;gap:.25rem;font-size:.72rem;padding:.1rem .4rem;border-radius:4px;transition:background .15s}
-                .cvse-lbl-btn:hover{background:rgba(99,102,241,.1)}
-                .cvse-input,.cvse-select,.cvse-textarea{width:100%;padding:.5rem .7rem;border-radius:8px;border:1.5px solid var(--border);background:var(--bg-raised);color:var(--text-primary);font-size:.85rem;outline:none;transition:border-color .2s;box-sizing:border-box}
-                .cvse-input:focus,.cvse-select:focus,.cvse-textarea:focus{border-color:var(--cvse-color,var(--primary))}
-                .cvse-textarea{resize:vertical;line-height:1.55;min-height:60px}
-                .cvse-topics{display:flex;flex-direction:column;gap:.3rem}
-                .cvse-topic-row{display:flex;align-items:center;gap:.4rem}
-                .cvse-topic-n{width:20px;height:20px;border-radius:50%;background:color-mix(in srgb,var(--cvse-color) 15%,transparent);color:var(--cvse-color);font-size:.65rem;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-                .cvse-topic-rm{width:24px;height:24px;border-radius:6px;border:none;background:none;color:var(--text-muted);font-size:.72rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s}
-                .cvse-topic-rm:hover{color:#ef4444;background:rgba(239,68,68,.1)}
-                .cvse-add-topic{display:inline-flex;align-items:center;gap:.35rem;margin-top:.3rem;font-size:.8rem;font-weight:500;color:var(--text-muted);cursor:pointer;border:none;background:none;padding:.2rem 0;transition:color .15s}
-                .cvse-add-topic:hover{color:var(--primary)}
-                .cvse-tests{display:flex;flex-direction:column;gap:.3rem}
-                .cvse-test-row{display:flex;align-items:center;gap:.4rem}
-                .cvse-empty{font-size:.78rem;color:var(--text-muted);font-style:italic}
-                .cvse-divider{height:1px;background:var(--border);margin:.75rem 0}
-                .cvse-add-day{display:flex;align-items:center;justify-content:center;gap:.5rem;width:100%;padding:.65rem;border-radius:10px;border:1.5px dashed var(--border);background:none;color:var(--text-muted);font-size:.85rem;font-weight:600;cursor:pointer;transition:all .2s;margin-top:.25rem}
-                .cvse-add-day:hover{border-color:var(--primary);color:var(--primary);background:rgba(99,102,241,.04)}
-                .cvse-kb-chips{display:flex;flex-wrap:wrap;gap:.35rem;min-height:0;margin-bottom:.35rem}
-                .cvse-kb-chip{display:inline-flex;align-items:center;gap:.3rem;background:var(--bg-raised);border:1px solid var(--border);border-radius:6px;padding:.18rem .5rem;font-size:.75rem;max-width:220px}
-                .cvse-kb-chip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-                .cvse-kb-chip button{background:none;border:none;cursor:pointer;color:var(--text-muted);padding:0;line-height:1;flex-shrink:0;font-size:.65rem}
-                .cvse-kb-chip button:hover{color:#ef4444}
-                .cvse-kb-list{border:1px solid var(--border);border-radius:8px;max-height:160px;overflow-y:auto;background:var(--bg-raised)}
-                .cvse-kb-item{display:flex;align-items:center;gap:.5rem;padding:.4rem .75rem;cursor:pointer;font-size:.8rem;border-bottom:1px solid var(--border);transition:background .12s}
-                .cvse-kb-item:last-child{border-bottom:none}
-                .cvse-kb-item:hover{background:var(--bg-surface)}
-                .cvse-kb-item.sel{background:color-mix(in srgb,var(--primary) 8%,transparent)}
-                .cvse-kb-item i.check{color:var(--primary)}
-                .cvse-kb-item i.uncheck{color:var(--border)}
-            </style>
-            <div id="cvse-builder" style="max-height:68vh;overflow-y:auto;padding-right:2px"></div>
-            <button class="cvse-add-day" onclick="CourseViewPage._schedAddDay()">
-                <i class="fa-solid fa-plus"></i> Додати день
-            </button>`,
-            footer: `<button class="btn btn-primary" onclick="CourseViewPage._saveSchedule('${courseId}')">Зберегти</button>
-                     <button class="btn btn-ghost" onclick="Modal.close()">Скасувати</button>`
-        });
-        this._schedRender();
-    },
-
-    _schedRender() {
-        const el = document.getElementById('cvse-builder');
-        if (!el) return;
-        if (!this._schedDays.length) {
-            el.innerHTML = `<div style="color:var(--text-muted);font-size:.85rem;padding:1rem 0;text-align:center">Розклад порожній — додайте перший день</div>`;
-            return;
-        }
-        const colors = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#0ea5e9','#ef4444'];
-        el.innerHTML = `<div class="cvse-wrap">${this._schedDays.map((day, di) => {
-            const color = colors[di % colors.length];
-            return `
-            <div class="cvse-day" style="--cvse-color:${color}">
-                <div class="cvse-accent"></div>
-                <div class="cvse-inner">
-                    <div class="cvse-top">
-                        <span class="cvse-badge">День ${di + 1}</span>
-                        <input class="cvse-title-input" type="text" placeholder="Назва дня (необов'язково)"
-                            value="${Fmt.esc(day.title || '')}"
-                            oninput="CourseViewPage._schedDays[${di}].title=this.value">
-                        <button class="cvse-del" title="Видалити день" onclick="CourseViewPage._schedRemoveDay(${di})">
-                            <i class="fa-solid fa-trash"></i>
-                        </button>
-                    </div>
-                    <div class="cvse-grid">
-                        <div>
-                            <div class="cvse-lbl">Викладач</div>
-                            <select class="cvse-select"
-                                onchange="CourseViewPage._schedDays[${di}].teacher_id=this.value;CourseViewPage._schedDays[${di}].teacher_name=this.options[this.selectedIndex].dataset.name||''">
-                                <option value="" data-name="">Не вказано</option>
-                                ${this._schedProfiles.map(p => `<option value="${p.id}" data-name="${Fmt.esc(p.full_name || p.email)}" ${day.teacher_id === p.id ? 'selected' : ''}>${Fmt.esc(p.full_name || p.email)}</option>`).join('')}
-                            </select>
-                        </div>
-                        <div>
-                            <div class="cvse-lbl">
-                                <span>Тести дня</span>
-                                <span class="cvse-lbl-btn" onclick="CourseViewPage._schedAddTest(${di})"><i class="fa-solid fa-plus"></i> Додати</span>
-                            </div>
-                            <div class="cvse-tests">
-                                ${(day.tests || []).map((t, ti) => `
-                                <div class="cvse-test-row">
-                                    <select class="cvse-select" style="flex:1"
-                                        onchange="CourseViewPage._schedDays[${di}].tests[${ti}]={id:this.value,title:this.options[this.selectedIndex].dataset.title||''}">
-                                        <option value="">Оберіть тест...</option>
-                                        ${this._schedTests.map(st => `<option value="${st.id}" data-title="${Fmt.esc(st.title)}" ${t.id === st.id ? 'selected' : ''}>${Fmt.esc(st.title)}</option>`).join('')}
-                                    </select>
-                                    <button class="cvse-topic-rm" onclick="CourseViewPage._schedRemoveTest(${di},${ti})"><i class="fa-solid fa-xmark"></i></button>
-                                </div>`).join('') || `<div class="cvse-empty">Не призначено</div>`}
-                            </div>
-                        </div>
-                        <div>
-                            <div class="cvse-lbl">Час проведення</div>
-                            <input class="cvse-input" type="text" placeholder="напр. 10:00 – 17:00"
-                                value="${Fmt.esc(day.time_range || '')}"
-                                oninput="CourseViewPage._schedDays[${di}].time_range=this.value">
-                        </div>
-                        <div class="cvse-field-full">
-                            <div class="cvse-lbl">Нотатки</div>
-                            <textarea class="cvse-textarea" rows="2"
-                                oninput="CourseViewPage._schedDays[${di}].instructions=this.value"
-                                placeholder="Особливі умови, матеріали...">${Fmt.esc(day.instructions || '')}</textarea>
-                        </div>
-                        <div class="cvse-field-full">
-                            <div class="cvse-lbl">Теми занять</div>
-                            <div class="cvse-topics">
-                                ${(day.items || []).map((item, ii) => {
-                                    const t = typeof item === 'object' ? item : { title: item, desc: '' };
-                                    return `
-                                <div class="cvse-topic-row" style="align-items:flex-start">
-                                    <span class="cvse-topic-n" style="margin-top:.6rem">${ii + 1}</span>
-                                    <div style="flex:1;display:flex;flex-direction:column;gap:.3rem">
-                                        <input class="cvse-input" type="text" value="${Fmt.esc(t.title || '')}"
-                                            placeholder="Назва теми..."
-                                            oninput="CourseViewPage._schedItemSet(${di},${ii},'title',this.value)">
-                                        <input class="cvse-input" type="text" value="${Fmt.esc(t.desc || '')}"
-                                            placeholder="Короткий опис (необов'язково)..."
-                                            oninput="CourseViewPage._schedItemSet(${di},${ii},'desc',this.value)">
-                                    </div>
-                                    <button class="cvse-topic-rm" style="margin-top:.5rem" onclick="CourseViewPage._schedRemoveItem(${di},${ii})"><i class="fa-solid fa-xmark"></i></button>
-                                </div>`; }).join('')}
-                            </div>
-                            <button class="cvse-add-topic" onclick="CourseViewPage._schedAddItem(${di})">
-                                <i class="fa-solid fa-plus"></i> Додати тему
-                            </button>
-                        </div>
-                        <div class="cvse-field-full">
-                            <div class="cvse-lbl">
-                                <span>📂 Файли з бази знань</span>
-                                <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted);font-size:.7rem">${(day.kb_resources||[]).length ? (day.kb_resources.length + ' обрано') : ''}</span>
-                            </div>
-                            <div class="cvse-kb-chips" id="cvse-kb-chips-${di}">
-                                ${(day.kb_resources || []).map(r => `
-                                <span class="cvse-kb-chip">
-                                    <i class="fa-solid ${CourseViewPage._kbIcon(r.type)}" style="color:var(--primary);font-size:.65rem;flex-shrink:0"></i>
-                                    <span>${Fmt.esc(r.title)}</span>
-                                    <button onclick="CourseViewPage._schedKbToggle(${di},'${r.id}')"><i class="fa-solid fa-xmark"></i></button>
-                                </span>`).join('')}
-                            </div>
-                            <input class="cvse-input" type="text" placeholder="Пошук файлів..."
-                                style="margin-bottom:.35rem"
-                                oninput="CourseViewPage._schedKbFilter(${di},this.value)">
-                            <div class="cvse-kb-list" id="cvse-kb-list-${di}">
-                                ${this._schedKbResources.length ? this._schedKbResources.map(r => {
-                                    const sel = (day.kb_resources||[]).some(s => s.id === r.id);
-                                    return `<div class="cvse-kb-item${sel?' sel':''}" onclick="CourseViewPage._schedKbToggle(${di},'${r.id}')">
-                                        <i class="fa-solid ${CourseViewPage._kbIcon(r.type)}" style="color:var(--text-muted);font-size:.75rem;flex-shrink:0"></i>
-                                        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Fmt.esc(r.title)}</span>
-                                        <i class="fa-solid ${sel?'fa-circle-check':'fa-circle'} ${sel?'check':'uncheck'}" style="font-size:.8rem;flex-shrink:0"></i>
-                                    </div>`;
-                                }).join('') : '<div style="padding:.6rem .75rem;color:var(--text-muted);font-size:.8rem">Файли відсутні</div>'}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>`;
-        }).join('')}</div>`;
-    },
-
-    _schedAddDay() { this._schedDays.push({ title:'', icon:'', time_range:'', teacher_id:'', teacher_name:'', tests:[], instructions:'', items:[], kb_resources:[] }); this._schedRender(); },
-    _schedRemoveDay(di) { this._schedDays.splice(di, 1); this._schedRender(); },
-    _schedAddTest(di) { if (!this._schedDays[di].tests) this._schedDays[di].tests = []; this._schedDays[di].tests.push({ id:'', title:'' }); this._schedRender(); },
-    _schedRemoveTest(di, ti) { this._schedDays[di].tests.splice(ti, 1); this._schedRender(); },
-    _schedAddItem(di) { this._schedDays[di].items.push({ title:'', desc:'' }); this._schedRender(); },
-    _schedRemoveItem(di, ii) { this._schedDays[di].items.splice(ii, 1); this._schedRender(); },
-    _kbIcon(type) {
-        const map = { pdf:'fa-file-pdf', video:'fa-circle-play', link:'fa-link', scorm:'fa-cube', image:'fa-image', document:'fa-file-lines', file:'fa-file' };
-        return map[type] || 'fa-file';
-    },
-
-    _schedKbToggle(di, id) {
-        const day = this._schedDays[di];
-        if (!day.kb_resources) day.kb_resources = [];
-        const idx = day.kb_resources.findIndex(r => r.id === id);
-        if (idx >= 0) {
-            day.kb_resources.splice(idx, 1);
-        } else {
-            const res = this._schedKbResources.find(r => r.id === id);
-            if (res) day.kb_resources.push({ id: res.id, title: res.title, type: res.type });
-        }
-        this._schedRender();
-    },
-
-    _schedKbFilter(di, q) {
-        const list = document.getElementById('cvse-kb-list-' + di);
-        if (!list) return;
-        const term = q.toLowerCase();
-        const day = this._schedDays[di];
-        const filtered = this._schedKbResources.filter(r => !term || r.title.toLowerCase().includes(term));
-        list.innerHTML = filtered.length ? filtered.map(r => {
-            const sel = (day.kb_resources||[]).some(s => s.id === r.id);
-            return `<div class="cvse-kb-item${sel?' sel':''}" onclick="CourseViewPage._schedKbToggle(${di},'${r.id}')">
-                <i class="fa-solid ${CourseViewPage._kbIcon(r.type)}" style="color:var(--text-muted);font-size:.75rem;flex-shrink:0"></i>
-                <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Fmt.esc(r.title)}</span>
-                <i class="fa-solid ${sel?'fa-circle-check':'fa-circle'} ${sel?'check':'uncheck'}" style="font-size:.8rem;flex-shrink:0"></i>
-            </div>`;
-        }).join('') : '<div style="padding:.6rem .75rem;color:var(--text-muted);font-size:.8rem">Нічого не знайдено</div>';
-    },
-
-    _schedItemSet(di, ii, key, val) {
-        const item = this._schedDays[di].items[ii];
-        if (typeof item === 'object') item[key] = val;
-        else this._schedDays[di].items[ii] = { title: item, desc: '', [key]: val };
+            AdminPage._scheduleProfiles = (profRes.data || []).sort((a, b) => (a.full_name || '').localeCompare(b.full_name || '', 'uk'));
+            AdminPage._scheduleTests    = tests || [];
+            AdminPage._scheduleKbAll    = kbRes.data || [];
+        } catch(e) { AdminPage._scheduleProfiles = []; AdminPage._scheduleTests = []; AdminPage._scheduleKbAll = []; }
+        el.innerHTML = `
+        <div id="c-schedule-builder" style="display:flex;flex-direction:column;gap:.65rem"></div>
+        <button type="button" class="btn btn-ghost btn-sm" style="margin-top:.35rem;width:100%;justify-content:center;border:1.5px dashed var(--border)"
+            onclick="AdminPage._scheduleAddDay()">
+            <i class="fa-solid fa-plus"></i> Додати день
+        </button>
+        <div style="display:flex;gap:.5rem;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)">
+            <button class="btn btn-primary" onclick="CourseViewPage._saveSchedule('${courseId}')">
+                <i class="fa-solid fa-floppy-disk"></i> Зберегти
+            </button>
+            <button class="btn btn-ghost" onclick="CourseViewPage._loadScheduleTab(CourseViewPage._course?.schedule||[])">Скасувати</button>
+        </div>`;
+        AdminPage._scheduleRender();
     },
 
     async _saveSchedule(courseId) {
-        const schedule = this._schedDays.map(d => ({
+        const schedule = AdminPage._scheduleDays.map(d => ({
             title:        d.title || '',
             icon:         d.icon || '',
             time_range:   d.time_range || '',
@@ -1031,11 +833,15 @@ const CourseViewPage = {
         try {
             await API.courses.update(courseId, { schedule });
             if (this._course) this._course.schedule = schedule;
-            Modal.close();
             await this._loadScheduleTab(schedule);
             Toast.success('Збережено');
         } catch(e) { Toast.error('Помилка', e.message); }
         finally { Loader.hide(); }
+    },
+
+    _kbIcon(type) {
+        const map = { pdf:'fa-file-pdf', video:'fa-circle-play', link:'fa-link', scorm:'fa-cube', image:'fa-image', document:'fa-file-lines', file:'fa-file' };
+        return map[type] || 'fa-file';
     },
 
     _renderEnrollPrompt(courseId) {
@@ -1071,7 +877,13 @@ const CourseViewPage = {
                 } catch {}
             }));
         }
-        el.innerHTML = this._renderScheduleCards(schedule, attemptsMap);
+        const courseId = this._course?.id || '';
+        el.innerHTML = (AppState.isStaff() ? `
+            <div style="display:flex;justify-content:flex-end;margin-bottom:.75rem">
+                <button class="btn btn-ghost btn-sm" onclick="CourseViewPage._editSchedule('${courseId}')">
+                    <i class="fa-solid fa-pen-to-square"></i> Редагувати
+                </button>
+            </div>` : '') + this._renderScheduleCards(schedule, attemptsMap);
     },
 
     _renderScheduleCards(schedule, attemptsMap = {}) {
@@ -1397,9 +1209,17 @@ const CourseViewPage = {
                 </div>
                 <div style="font-weight:700;font-size:.9rem">${Fmt.esc(run.title)}</div>
                 ${run.start_date || run.end_date ? `<div style="font-size:.75rem;color:var(--text-muted);margin-top:.2rem">
-                    ${fmtDate(run.start_date)}${run.start_date && run.end_date ? ' — ' : ''}${fmtDate(run.end_date)}
+                    <i class="fa-regular fa-calendar"></i> ${fmtDate(run.start_date)}${run.start_date && run.end_date ? ' — ' : ''}${fmtDate(run.end_date)}
                     ${ended ? '<span style="color:#ef4444;margin-left:.4rem">• Завершено</span>' : ''}
                 </div>` : ''}
+                ${run.start_time ? `<div style="font-size:.75rem;color:var(--text-muted);margin-top:.1rem">
+                    <i class="fa-regular fa-clock"></i> ${run.start_time.slice(0,5)}${run.end_time ? ' — ' + run.end_time.slice(0,5) : ''}
+                </div>` : ''}
+                <button onclick="CourseViewPage.unenroll('${course.id}')"
+                    style="margin-top:.6rem;width:100%;padding:.35rem;border:1px solid rgba(239,68,68,.3);border-radius:8px;background:rgba(239,68,68,.06);color:#ef4444;font-size:.75rem;cursor:pointer;transition:background .15s"
+                    onmouseenter="this.style.background='rgba(239,68,68,.14)'" onmouseleave="this.style.background='rgba(239,68,68,.06)'">
+                    <i class="fa-solid fa-arrow-right-from-bracket"></i> Відписатися
+                </button>
             </div>`;
         }
 
@@ -1624,7 +1444,180 @@ const CourseViewPage = {
         Loader.show();
         try {
             await API.enrollments.enroll(courseId, runId || null);
-            Toast.success('Записано!', 'Ви успішно записалися на курс');
+            // Add calendar events for the course run
+            const run = runId
+                ? (this._allRuns || []).find(r => r.id === runId)
+                : this._activeRun;
+            if (run?.start_date) {
+                const cur = new Date(run.start_date + 'T00:00:00');
+                const end = run.end_date ? new Date(run.end_date + 'T00:00:00') : new Date(run.start_date + 'T00:00:00');
+                let days = 0;
+                while (cur <= end) { days++; cur.setDate(cur.getDate() + 1); }
+                this._addCourseCalEvent(run).catch(() => {});
+                const daysLabel = days === 1 ? 'день' : days < 5 ? 'дні' : 'днів';
+                Modal.open({
+                    size: 'sm',
+                    body: `
+                    <div style="text-align:center;padding:1rem .5rem 0">
+                        <div style="width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,var(--primary),#8b5cf6);display:flex;align-items:center;justify-content:center;margin:0 auto 1.25rem;font-size:1.8rem;box-shadow:0 8px 24px rgba(99,102,241,.35)">✅</div>
+                        <div style="font-size:1.15rem;font-weight:700;margin-bottom:.4rem">Ви записані на курс!</div>
+                        <div style="font-size:.88rem;color:var(--text-muted);margin-bottom:1.5rem">${Fmt.esc(this._course?.title || '')}</div>
+                        <div style="display:flex;gap:.75rem;margin-bottom:1.5rem">
+                            <div style="flex:1;background:var(--bg-raised);border:1px solid var(--border);border-radius:12px;padding:.9rem .75rem">
+                                <div style="font-size:1.5rem;font-weight:800;color:var(--primary);line-height:1">${days}</div>
+                                <div style="font-size:.75rem;color:var(--text-muted);margin-top:.25rem">${daysLabel} навчання</div>
+                            </div>
+                            <div style="flex:2;background:var(--bg-raised);border:1px solid var(--border);border-radius:12px;padding:.9rem .75rem;display:flex;align-items:center;gap:.6rem;text-align:left">
+                                <i class="fa-regular fa-calendar-check" style="font-size:1.3rem;color:var(--primary);flex-shrink:0"></i>
+                                <div style="font-size:.8rem;color:var(--text-muted);line-height:1.4">Додано до вашого <strong style="color:var(--text-primary)">Календаря</strong></div>
+                            </div>
+                        </div>
+                        <div style="display:flex;gap:.6rem">
+                            <button class="btn btn-primary" style="flex:1;padding:.75rem" onclick="Modal.close()">OK</button>
+                            <button class="btn btn-ghost" style="flex:1;padding:.75rem" onclick="Modal.close();Router.go('my-calendar')"><i class="fa-regular fa-calendar-days"></i> Мій календар</button>
+                        </div>
+                    </div>`,
+                });
+            } else {
+                Modal.open({
+                    size: 'sm',
+                    body: `
+                    <div style="text-align:center;padding:1rem .5rem 0">
+                        <div style="width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,var(--primary),#8b5cf6);display:flex;align-items:center;justify-content:center;margin:0 auto 1.25rem;font-size:1.8rem;box-shadow:0 8px 24px rgba(99,102,241,.35)">✅</div>
+                        <div style="font-size:1.15rem;font-weight:700;margin-bottom:.4rem">Ви записані на курс!</div>
+                        <div style="font-size:.88rem;color:var(--text-muted);margin-bottom:1.5rem">${Fmt.esc(this._course?.title || '')}</div>
+                        <button class="btn btn-primary" style="width:100%;padding:.75rem" onclick="Modal.close()">OK</button>
+                    </div>`,
+                });
+            }
+            const container = document.getElementById('page-content');
+            if (container) await CourseViewPage.init(container, { id: courseId, from: this._from });
+            else Router.go('courses/' + courseId);
+        } catch(e) { Toast.error('Помилка', e.message); }
+        finally { Loader.hide(); }
+    },
+
+    async _addCourseCalEvent(run) {
+        if (!run?.start_date) return;
+        const title = `📚 ${this._course?.title || 'Курс'}`;
+
+        // Build list of all dates in the run range
+        const dates = [];
+        const pad = n => String(n).padStart(2, '0');
+        const fmtLocal = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+        const cur = new Date(run.start_date + 'T00:00:00');
+        const end = run.end_date ? new Date(run.end_date + 'T00:00:00') : new Date(run.start_date + 'T00:00:00');
+        while (cur <= end) {
+            dates.push(fmtLocal(cur));
+            cur.setDate(cur.getDate() + 1);
+        }
+
+        // Fetch already existing events for this title in the range to dedup
+        const { data: existing } = await supabase.from('personal_cal_events')
+            .select('date')
+            .eq('user_id', AppState.user.id)
+            .eq('title', title)
+            .gte('date', dates[0])
+            .lte('date', dates[dates.length - 1]);
+        const existingSet = new Set((existing || []).map(e => e.date));
+
+        const toInsert = dates
+            .map((d, idx) => ({ d, dayNum: idx + 1 }))
+            .filter(({ d }) => !existingSet.has(d))
+            .map(({ d, dayNum }) => ({
+                user_id:      AppState.user.id,
+                title,
+                date:         d,
+                time:         run.start_time || null,
+                end_time:     run.end_time   || null,
+                notes:        (() => { const topic = (this._course?.schedule || [])[dayNum - 1]?.title; return `День ${dayNum}${topic ? ` <span class="cvs-acc-name">${Fmt.esc(topic)}</span>` : ''}`; })(),
+                color:        '#6366f1',
+                repeat_type:  'none',
+                is_important: true,
+            }));
+
+        if (toInsert.length) {
+            await supabase.from('personal_cal_events').insert(toInsert);
+        }
+    },
+
+    // Called after run date/time update — rebuilds calendar events for all participants
+    async _syncRunCalendars(runId, newRun) {
+        if (!newRun.start_date) return;
+
+        // Fetch course for title + schedule
+        const { data: course } = await supabase.from('courses')
+            .select('id, title, schedule').eq('id', newRun.course_id).maybeSingle();
+        if (!course) return;
+
+        const courseTitle = `📚 ${course.title}`;
+        const schedule = course.schedule || [];
+
+        // Build new date list
+        const pad = n => String(n).padStart(2, '0');
+        const fmtLocal = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+        const dates = [];
+        const cur = new Date(newRun.start_date + 'T00:00:00');
+        const end = newRun.end_date ? new Date(newRun.end_date + 'T00:00:00') : new Date(newRun.start_date + 'T00:00:00');
+        while (cur <= end) { dates.push(fmtLocal(cur)); cur.setDate(cur.getDate() + 1); }
+
+        // Get active (non-completed) participants of this run
+        const { data: enrollments } = await supabase.from('enrollments')
+            .select('user_id').eq('run_id', runId).is('completed_at', null);
+        if (!enrollments?.length) return;
+
+        const userIds = enrollments.map(e => e.user_id);
+
+        // Rebuild calendar events and send notifications for each participant
+        const notifs = [];
+        for (const userId of userIds) {
+            await supabase.from('personal_cal_events')
+                .delete().eq('user_id', userId).eq('title', courseTitle);
+
+            const events = dates.map((d, idx) => {
+                const topic = schedule[idx]?.title;
+                return {
+                    user_id:      userId,
+                    title:        courseTitle,
+                    date:         d,
+                    time:         newRun.start_time || null,
+                    end_time:     newRun.end_time   || null,
+                    notes:        `День ${idx + 1}${topic ? ` <span class="cvs-acc-name">${Fmt.esc(topic)}</span>` : ''}`,
+                    color:        '#6366f1',
+                    repeat_type:  'none',
+                    is_important: true,
+                };
+            });
+            if (events.length) await supabase.from('personal_cal_events').insert(events);
+
+            notifs.push({
+                user_id:    userId,
+                title:      '📅 Розклад курсу змінено',
+                message:    `Дати групи курсу «${course.title}» були оновлені адміністратором. Ваш календар оновлено автоматично.`,
+                type:       'general',
+                created_by: AppState.user.id,
+            });
+        }
+
+        if (notifs.length) {
+            await supabase.from('notifications').insert(notifs).catch(() => {});
+            UI.loadNotificationCount?.();
+        }
+    },
+
+    async unenroll(courseId) {
+        const ok = await Modal.confirm({ title: 'Відписатися від курсу?', message: 'Ваш прогрес збережеться, але події курсу буде видалено з календаря.', confirmText: 'Відписатися', danger: true });
+        if (!ok) return;
+        Loader.show();
+        try {
+            await API.enrollments.unenroll(courseId);
+            // Remove course calendar events
+            const title = `📚 ${this._course?.title || ''}`;
+            await supabase.from('personal_cal_events')
+                .delete()
+                .eq('user_id', AppState.user.id)
+                .eq('title', title);
+            Toast.success('Відписано', 'Ви відписалися від курсу');
             const container = document.getElementById('page-content');
             if (container) await CourseViewPage.init(container, { id: courseId, from: this._from });
             else Router.go('courses/' + courseId);

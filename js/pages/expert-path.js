@@ -176,35 +176,73 @@ const ExpertPathPage = {
 .ep-sub-tab.active{background:#6366f1;color:#fff;border-color:#6366f1}
 
 /* ── Course grid ─────────────────────────────────────────────── */
-.ep-course-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.ep-course-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:24px}
 .ep-course-card{
-    background:var(--bg-surface);border:1px solid var(--border);
-    border-radius:18px;overflow:hidden;cursor:pointer;
-    transition:all .25s cubic-bezier(.4,0,.2,1);
-    display:flex;flex-direction:column
+    background:var(--bg-surface);
+    border:1px solid var(--border);
+    border-radius:20px;overflow:hidden;cursor:pointer;
+    transition:all .3s cubic-bezier(.4,0,.2,1);
+    display:flex;flex-direction:column;
+    position:relative;
 }
 .ep-course-card:hover{
-    transform:translateY(-5px);
-    box-shadow:0 16px 48px rgba(0,0,0,.15);
-    border-color:transparent
+    transform:translateY(-6px);
+    box-shadow:0 20px 56px rgba(0,0,0,.18);
+    border-color:var(--primary);
 }
-.ep-course-thumb{height:148px;flex-shrink:0;overflow:hidden;position:relative;background:#0f0c29;border-radius:18px 18px 0 0}
-.ep-course-thumb-bg{position:absolute;inset:-8px;background-size:cover;background-position:center;filter:blur(12px) brightness(.4);transform:scale(1.05);transition:transform .35s}
-.ep-course-thumb-main{position:absolute;inset:0;background-size:contain;background-repeat:no-repeat;background-position:center;z-index:1;transition:transform .35s}
-.ep-course-card:hover .ep-course-thumb-bg,.ep-course-card:hover .ep-course-thumb-main{transform:scale(1.06)}
-.ep-course-body{padding:16px;flex:1;display:flex;flex-direction:column;gap:4px}
-.ep-course-title{
-    font-weight:700;font-size:.9rem;color:var(--text-primary);
-    line-height:1.4;margin-bottom:2px;
-    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden
+/* Thumbnail */
+.ep-course-thumb{height:200px;flex-shrink:0;overflow:hidden;position:relative;background:#0f0c29;border-radius:20px 20px 0 0}
+.ep-course-thumb-bg{position:absolute;inset:-8px;background-size:cover;background-position:center;filter:blur(14px) brightness(.35);transform:scale(1.05);transition:transform .4s}
+.ep-course-thumb-main{position:absolute;inset:0;background-size:contain;background-repeat:no-repeat;background-position:center;z-index:1;transition:transform .4s}
+.ep-course-card:hover .ep-course-thumb-bg,.ep-course-card:hover .ep-course-thumb-main{transform:scale(1.08)}
+/* Bottom gradient overlay for title */
+.ep-course-thumb-overlay{
+    position:absolute;inset:0;z-index:2;
+    background:linear-gradient(to top,rgba(0,0,0,.72) 0%,rgba(0,0,0,.1) 55%,transparent 100%);
+    display:flex;flex-direction:column;justify-content:flex-end;padding:12px 14px;
 }
-.ep-course-teacher{font-size:.73rem;color:var(--text-muted);margin-bottom:8px}
-.ep-prog-bar{height:4px;border-radius:4px;background:var(--border);overflow:hidden;margin-bottom:5px}
-.ep-prog-fill{
-    height:100%;border-radius:4px;
-    background:linear-gradient(90deg,#6366f1,#8b5cf6);
-    transition:width .6s ease
+.ep-course-thumb-title{
+    font-size:.92rem;font-weight:700;color:#fff;line-height:1.35;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+    text-shadow:0 1px 4px rgba(0,0,0,.5);
 }
+/* Status badge top-right */
+.ep-course-badge{
+    position:absolute;top:10px;right:10px;z-index:3;
+    padding:.22rem .65rem;border-radius:20px;font-size:.68rem;font-weight:700;
+    backdrop-filter:blur(6px);letter-spacing:.02em;
+}
+.ep-course-badge--enrolled{background:rgba(99,102,241,.85);color:#fff}
+.ep-course-badge--done{background:rgba(16,185,129,.85);color:#fff}
+.ep-course-badge--none{background:rgba(0,0,0,.45);color:rgba(255,255,255,.8)}
+/* Achievement badge (completed) */
+.ep-course-achievement{
+    position:absolute;bottom:-1px;right:14px;z-index:5;
+    width:52px;height:52px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    filter:drop-shadow(0 4px 10px rgba(0,0,0,.45));
+}
+.ep-course-achievement svg{width:52px;height:52px}
+.ep-course-achievement-icon{
+    position:absolute;font-size:1.15rem;top:50%;left:50%;
+    transform:translate(-50%,-58%);
+}
+/* Card body */
+.ep-course-body{padding:14px 16px 16px;flex:1;display:flex;flex-direction:column;gap:6px}
+.ep-course-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.ep-course-meta-tag{
+    font-size:.67rem;font-weight:600;padding:.15rem .55rem;border-radius:20px;
+    background:var(--bg-raised);color:var(--text-muted);border:1px solid var(--border);
+}
+.ep-course-dates{
+    margin-top:auto;padding-top:8px;border-top:1px solid var(--border);
+    font-size:.72rem;color:var(--text-muted);display:flex;align-items:center;gap:.4rem;
+}
+/* Old refs kept for compat */
+.ep-course-title{font-weight:700;font-size:.9rem;color:var(--text-primary);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.ep-course-teacher{font-size:.73rem;color:var(--text-muted)}
+.ep-prog-bar{height:4px;border-radius:4px;background:var(--border);overflow:hidden}
+.ep-prog-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,#6366f1,#8b5cf6);transition:width .6s ease}
 .ep-prog-fill.done{background:linear-gradient(90deg,#10b981,#14b8a6)}
 .ep-prog-label{font-size:.7rem;color:var(--text-muted)}
 .ep-prog-label.done{color:#10b981;font-weight:600}
@@ -327,31 +365,70 @@ const ExpertPathPage = {
                 const enr  = enrolledMap.get(c.id);
                 const pct  = enr?.progress_percentage || 0;
                 const done = !!enr?.completed_at;
-                const thumb = c.thumbnail_url
+                const run  = enr?.run;
+                const fmtD = d => d ? Fmt.dateShort(new Date(d + 'T00:00:00')) : '';
+                const dates = run ? [fmtD(run.start_date), fmtD(run.end_date)].filter(Boolean).join(' — ') : '';
+
+                const thumbInner = c.thumbnail_url
                     ? `<div class="ep-course-thumb-bg" style="background-image:url('${c.thumbnail_url}')"></div>
                        <div class="ep-course-thumb-main" style="background-image:url('${c.thumbnail_url}')"></div>`
                     : `<div style="position:absolute;inset:0;background:${grads[i%grads.length]};display:flex;align-items:center;justify-content:center">
-                           <i class="fa-solid fa-graduation-cap" style="font-size:2.5rem;color:rgba(255,255,255,.25)"></i>
+                           <i class="fa-solid fa-graduation-cap" style="font-size:2.8rem;color:rgba(255,255,255,.22)"></i>
                        </div>`;
-                const run = enr?.run;
-                const fmtD = d => d ? Fmt.dateShort(new Date(d + 'T00:00:00')) : '';
-                const dates = run ? [fmtD(run.start_date), fmtD(run.end_date)].filter(Boolean).join(' — ') : '';
-                const footer = enr
-                    ? `<div style="margin-top:auto">
-                           ${dates ? `<div style="font-size:.7rem;color:var(--text-muted);margin-bottom:.2rem"><i class="fa-regular fa-calendar"></i> ${dates}</div>` : ''}
-                           <div style="font-size:.7rem;color:${done?'#10b981':'var(--primary)'};font-weight:600">
-                               ${done ? '<i class="fa-solid fa-circle-check"></i> Завершено' : '<i class="fa-regular fa-circle-dot"></i> Записаний'}
-                           </div>
-                       </div>`
-                    : `<div style="font-size:.7rem;color:var(--text-muted);margin-top:auto">
-                           <i class="fa-regular fa-circle"></i> Не записаний
-                       </div>`;
+
+                const badge = done
+                    ? `<span class="ep-course-badge ep-course-badge--done"><i class="fa-solid fa-circle-check"></i> Завершено</span>`
+                    : enr
+                        ? `<span class="ep-course-badge ep-course-badge--enrolled"><i class="fa-solid fa-circle-dot"></i> Записаний</span>`
+                        : `<span class="ep-course-badge ep-course-badge--none"><i class="fa-regular fa-circle"></i> Не записаний</span>`;
+
+                // Achievement badge for completed courses
+                const achievementBadge = done ? (() => {
+                    if (c.badge_url) {
+                        return `<div class="ep-course-achievement">
+                            <img src="${c.badge_url}" style="width:52px;height:52px;object-fit:contain" alt="Бейдж">
+                        </div>`;
+                    }
+                    const medals = [
+                        { icon:'🏆', fill:'#f59e0b', fill2:'#d97706', ring:'#fbbf24' },
+                        { icon:'🥇', fill:'#eab308', fill2:'#ca8a04', ring:'#fde047' },
+                        { icon:'⭐', fill:'#6366f1', fill2:'#4f46e5', ring:'#818cf8' },
+                        { icon:'🎖️', fill:'#10b981', fill2:'#059669', ring:'#34d399' },
+                    ];
+                    const m = medals[(c.id.charCodeAt(0) + c.id.charCodeAt(1)) % medals.length];
+                    return `<div class="ep-course-achievement">
+                        <svg viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M26 4 L31 18 L46 18 L34 27 L39 42 L26 33 L13 42 L18 27 L6 18 L21 18 Z" fill="${m.fill}" stroke="${m.ring}" stroke-width="1.5"/>
+                            <path d="M26 8 L30 19.5 L43 19.5 L33 27 L37 39 L26 32 L15 39 L19 27 L9 19.5 L22 19.5 Z" fill="${m.fill2}" opacity=".5"/>
+                        </svg>
+                        <div class="ep-course-achievement-icon">${m.icon}</div>
+                    </div>`;
+                })() : '';
+
+                const metaTags = [
+                    c.category ? `<span class="ep-course-meta-tag">${Fmt.esc(c.category)}</span>` : '',
+                    c.level    ? `<span class="ep-course-meta-tag">${Fmt.level(c.level)}</span>`   : '',
+                ].filter(Boolean).join('');
+
+                const datesRow = dates ? `
+                    <div class="ep-course-dates">
+                        <i class="fa-regular fa-calendar"></i> ${dates}
+                        ${run?.title ? `<span style="color:var(--primary);font-weight:600">· ${Fmt.esc(run.title)}</span>` : ''}
+                    </div>` : '';
+
                 return `
                 <div class="ep-course-card" onclick="Router.go('courses/${c.id}?from=expert-path')">
-                    <div class="ep-course-thumb">${thumb}</div>
+                    <div class="ep-course-thumb">
+                        ${thumbInner}
+                        ${badge}
+                        <div class="ep-course-thumb-overlay">
+                            <div class="ep-course-thumb-title">${Fmt.esc(c.title)}</div>
+                        </div>
+                        ${achievementBadge}
+                    </div>
                     <div class="ep-course-body">
-                        <div class="ep-course-title">${Fmt.esc(c.title)}</div>
-                        ${footer}
+                        ${metaTags ? `<div class="ep-course-meta">${metaTags}</div>` : ''}
+                        ${datesRow}
                     </div>
                 </div>`;
             }).join('')}</div>`;

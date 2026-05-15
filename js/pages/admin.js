@@ -1937,6 +1937,17 @@ const AdminPage = {
                     ${isEdit ? `
                     <div class="form-group">
                         <label style="display:flex;align-items:center;justify-content:space-between">
+                            <span>🔄 Потоки курсу</span>
+                            <button type="button" class="btn btn-ghost btn-sm" onclick="AdminPage._runsAdd('${course.id}')">
+                                <i class="fa-solid fa-plus"></i> Новий потік
+                            </button>
+                        </label>
+                        <div id="c-runs-list" style="display:flex;flex-direction:column;gap:.4rem;margin-top:.35rem">
+                            <div style="color:var(--text-muted);font-size:.82rem">Завантаження...</div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label style="display:flex;align-items:center;justify-content:space-between">
                             <span>👥 Викладачі курсу</span>
                             <button type="button" class="btn btn-ghost btn-sm" onclick="AdminPage._courseTeacherAdd('${course.id}')">
                                 <i class="fa-solid fa-plus"></i> Додати викладача
@@ -1983,8 +1994,125 @@ const AdminPage = {
         }
 
         this._scheduleInit(course?.schedule || []);
-        if (isEdit) this._courseTeachersLoad(course.id);
+        if (isEdit) {
+            this._runsLoad(course.id);
+            this._courseTeachersLoad(course.id);
+        }
         this._kbLoad();
+    },
+
+    // ── Course Runs (admin) ───────────────────────────────────────────
+    _runsData: [],
+
+    async _runsLoad(courseId) {
+        const el = document.getElementById('c-runs-list');
+        if (!el) return;
+        try {
+            this._runsData = await API.courseRuns.getByCourse(courseId);
+            this._runsRender(courseId);
+        } catch(e) { el.innerHTML = `<div style="color:var(--danger);font-size:.82rem">${Fmt.esc(e.message)}</div>`; }
+    },
+
+    _runsRender(courseId) {
+        const el = document.getElementById('c-runs-list');
+        if (!el) return;
+        if (!this._runsData.length) {
+            el.innerHTML = `<div style="color:var(--text-muted);font-size:.82rem;padding:.5rem 0">Потоків ще немає. Натисніть «Новий потік» щоб додати.</div>`;
+            return;
+        }
+        const today = new Date().toISOString().slice(0, 10);
+        el.innerHTML = this._runsData.map(r => {
+            const started = r.start_date && r.start_date <= today;
+            const ended   = r.end_date && r.end_date < today;
+            const active  = started && !ended;
+            const upcoming = r.start_date && r.start_date > today;
+            const badge = ended    ? `<span style="font-size:.68rem;padding:.15rem .5rem;border-radius:20px;background:var(--bg-raised);color:var(--text-muted);border:1px solid var(--border)">Завершено</span>`
+                        : active   ? `<span style="font-size:.68rem;padding:.15rem .5rem;border-radius:20px;background:rgba(16,185,129,.12);color:#10b981;border:1px solid rgba(16,185,129,.3)">Активний</span>`
+                        : upcoming ? `<span style="font-size:.68rem;padding:.15rem .5rem;border-radius:20px;background:rgba(99,102,241,.1);color:#6366f1;border:1px solid rgba(99,102,241,.25)">Заплановано</span>`
+                        : `<span style="font-size:.68rem;padding:.15rem .5rem;border-radius:20px;background:var(--bg-raised);color:var(--text-muted);border:1px solid var(--border)">Без дат</span>`;
+            const dates = [r.start_date && Fmt.dateShort(new Date(r.start_date + 'T00:00:00')), r.end_date && Fmt.dateShort(new Date(r.end_date + 'T00:00:00'))].filter(Boolean).join(' — ');
+            return `
+            <div style="display:flex;align-items:center;gap:.6rem;padding:.5rem .75rem;border:1px solid var(--border);border-radius:8px;background:var(--bg-raised)">
+                <i class="fa-solid fa-rotate" style="color:var(--text-muted);font-size:.8rem;flex-shrink:0"></i>
+                <div style="flex:1;min-width:0">
+                    <div style="font-size:.85rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Fmt.esc(r.title)}</div>
+                    ${dates ? `<div style="font-size:.72rem;color:var(--text-muted)">${dates}</div>` : ''}
+                </div>
+                ${badge}
+                <button class="btn btn-ghost btn-sm" style="padding:.25rem .5rem" onclick="AdminPage._runsEdit('${r.id}','${courseId}')" title="Редагувати"><i class="fa-solid fa-pen-to-square"></i></button>
+                <button class="btn btn-ghost btn-sm" style="padding:.25rem .5rem;color:var(--danger)" onclick="AdminPage._runsDelete('${r.id}','${courseId}')" title="Видалити"><i class="fa-solid fa-trash"></i></button>
+            </div>`;
+        }).join('');
+    },
+
+    _runsAdd(courseId) {
+        this._runsOpenModal(courseId, null);
+    },
+
+    _runsEdit(runId, courseId) {
+        const run = this._runsData.find(r => r.id === runId);
+        if (run) this._runsOpenModal(courseId, run);
+    },
+
+    _runsOpenModal(courseId, run) {
+        Modal.open({
+            title: run ? '✏️ Редагувати потік' : '🔄 Новий потік',
+            size: 'sm',
+            body: `
+            <div style="display:flex;flex-direction:column;gap:.75rem">
+                <div>
+                    <label style="font-size:.82rem;font-weight:600;display:block;margin-bottom:.3rem">Назва потоку *</label>
+                    <input id="run-title" class="form-control" placeholder="Наприклад: Група Червень 2025" value="${Fmt.esc(run?.title || '')}">
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem">
+                    <div>
+                        <label style="font-size:.82rem;font-weight:600;display:block;margin-bottom:.3rem">Дата початку</label>
+                        <input id="run-start" class="form-control" type="date" value="${run?.start_date || ''}">
+                    </div>
+                    <div>
+                        <label style="font-size:.82rem;font-weight:600;display:block;margin-bottom:.3rem">Дата завершення</label>
+                        <input id="run-end" class="form-control" type="date" value="${run?.end_date || ''}">
+                    </div>
+                </div>
+            </div>`,
+            footer: `
+                <button class="btn btn-primary" onclick="AdminPage._runsSave('${courseId}','${run?.id || ''}')">
+                    <i class="fa-regular fa-floppy-disk"></i> Зберегти
+                </button>
+                <button class="btn btn-ghost" onclick="Modal.close()">Скасувати</button>`
+        });
+    },
+
+    async _runsSave(courseId, runId) {
+        const title      = document.getElementById('run-title')?.value.trim();
+        const start_date = document.getElementById('run-start')?.value || null;
+        const end_date   = document.getElementById('run-end')?.value || null;
+        if (!title) { Toast.warning('Введіть назву потоку'); return; }
+        Loader.show();
+        try {
+            if (runId) {
+                await API.courseRuns.update(runId, { title, start_date, end_date });
+            } else {
+                await API.courseRuns.create(courseId, { title, start_date, end_date });
+            }
+            Modal.close();
+            await this._runsLoad(courseId);
+            Toast.success('Збережено');
+        } catch(e) { Toast.error('Помилка', e.message); }
+        finally { Loader.hide(); }
+    },
+
+    async _runsDelete(runId, courseId) {
+        const run = this._runsData.find(r => r.id === runId);
+        const ok = await Modal.confirm({ message: `Видалити потік «${run?.title || ''}»? Записи учасників залишаться, але потік буде відв'язаний.`, danger: true });
+        if (!ok) return;
+        Loader.show();
+        try {
+            await API.courseRuns.remove(runId);
+            await this._runsLoad(courseId);
+            Toast.success('Видалено');
+        } catch(e) { Toast.error('Помилка', e.message); }
+        finally { Loader.hide(); }
     },
 
     // ── Course teachers (admin) ───────────────────────────────────────

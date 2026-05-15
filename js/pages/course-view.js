@@ -17,23 +17,28 @@ const CourseViewPage = {
         container.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
 
         try {
-            const [course, enrolled, courseTeachers] = await Promise.all([
+            const [course, enrollmentRow, courseTeachers, activeRun, allRuns] = await Promise.all([
                 API.courses.getById(courseId),
                 API.enrollments.isEnrolled(courseId),
-                API.courseTeachers.getByCourse(courseId).catch(() => [])
+                API.courseTeachers.getByCourse(courseId).catch(() => []),
+                API.courseRuns.getActive(courseId).catch(() => null),
+                API.courseRuns.getByCourse(courseId).catch(() => [])
             ]);
-            this._course        = course;
-            this._enrolled      = enrolled;
+            this._course         = course;
+            this._enrolled       = !!enrollmentRow;
+            this._enrollmentRow  = enrollmentRow;
+            this._activeRun      = activeRun;
+            this._allRuns        = allRuns;
             this._courseTeachers = courseTeachers;
             UI.setBreadcrumb([{ label: backLabel, route: backRoute }, { label: course.title }]);
             course.lessons?.sort((a,b) => a.order_index - b.order_index);
 
             let progressMap = {};
-            if (enrolled) {
+            if (this._enrolled) {
                 const progress = await API.progress.getForCourse(courseId).catch(() => []);
                 progressMap    = Object.fromEntries(progress.map(p => [p.lesson_id, p]));
             }
-            this._render(container, course, enrolled, progressMap);
+            this._render(container, course, this._enrolled, progressMap);
         } catch(e) {
             container.innerHTML = `
                 <div class="empty-state">
@@ -212,12 +217,6 @@ const CourseViewPage = {
                             </div>
                             <div class="cv-hero-title">${Fmt.esc(course.title)}</div>
                             ${course.description ? `<div class="cv-hero-desc">${Fmt.esc(course.description)}</div>` : ''}
-                            ${!enrolled ? `
-                            <div class="cv-hero-actions">
-                                <button class="cv-enroll-btn" style="width:auto;padding:.75rem 2rem" onclick="CourseViewPage.enroll('${course.id}')">
-                                    <i class="fa-solid fa-graduation-cap"></i> Записатися на курс
-                                </button>
-                            </div>` : ''}
                             <div class="cv-hero-stats" style="margin-top:auto;padding-top:1.5rem;border-top:1px solid rgba(255,255,255,.12)">
                                 ${totalPublished ? `<div class="cv-hero-stat"><i class="fa-solid fa-book-open"></i> ${totalPublished} уроків</div>` : ''}
                                 ${course.duration_hours ? `<div class="cv-hero-stat"><i class="fa-regular fa-clock"></i> ${course.duration_hours} год</div>` : ''}
@@ -282,6 +281,7 @@ const CourseViewPage = {
                         ` : `<div class="cv-sidebar-thumb-def">📖</div>`}
                     </div>
                     <div class="cv-sidebar-body">
+                        ${this._renderRunBlock(course, enrolled)}
                         ${enrolled ? this._renderEnrolledActions(course, pct) : ''}
                         <div id="cv-enrollees" style="margin-top:.5rem"><div style="display:flex;justify-content:center;padding:1rem"><div class="spinner"></div></div></div>
                     </div>
@@ -945,7 +945,7 @@ const CourseViewPage = {
             <div style="font-size:2.5rem">🔒</div>
             <div style="font-weight:700;font-size:1rem">Запишіться на курс</div>
             <div style="font-size:.85rem;color:var(--text-muted);max-width:280px">Цей розділ доступний лише для учасників курсу. Запишіться, щоб отримати доступ.</div>
-            <button class="cv-enroll-btn" style="width:auto;padding:.75rem 2rem;background:rgba(0,0,0,.07);border-color:var(--border);color:var(--text-primary)" onmouseenter="this.style.background='rgba(0,0,0,.13)'" onmouseleave="this.style.background='rgba(0,0,0,.07)'" onclick="CourseViewPage.enroll('${courseId}')">
+            <button class="cv-enroll-btn" style="width:auto;padding:.75rem 2rem;background:rgba(0,0,0,.07);border-color:var(--border);color:var(--text-primary)" onmouseenter="this.style.background='rgba(0,0,0,.13)'" onmouseleave="this.style.background='rgba(0,0,0,.07)'" onclick="CourseViewPage.enroll('${courseId}',${this._activeRun ? `'${this._activeRun.id}'` : 'null'})">
                 <i class="fa-solid fa-circle-plus"></i> Записатися
             </button>
         </div>`;
@@ -1260,6 +1260,71 @@ const CourseViewPage = {
 
     _renderEnrollAction(course) { return ''; },
 
+    _renderRunBlock(course, enrolled) {
+        const run    = this._activeRun;
+        const allRuns = this._allRuns || [];
+        const today  = new Date().toISOString().slice(0, 10);
+
+        // No runs configured at all
+        if (!allRuns.length) {
+            if (!enrolled) return `
+                <button class="cv-enroll-btn" style="width:100%;margin-bottom:.75rem;background:rgba(0,0,0,.07);border-color:var(--border);color:var(--text-primary)"
+                        onmouseenter="this.style.background='rgba(0,0,0,.13)'" onmouseleave="this.style.background='rgba(0,0,0,.07)'"
+                        onclick="CourseViewPage.enroll('${course.id}')">
+                    <i class="fa-solid fa-circle-plus"></i> Записатися
+                </button>`;
+            return '';
+        }
+
+        // Has runs — find which one user is enrolled in
+        const enrollment = this._enrollmentRow;
+        const enrolledRunId = enrollment?.run_id || null;
+
+        // Already enrolled in active run
+        if (enrolled && run && enrolledRunId === run.id) {
+            const ended = run.end_date && run.end_date < today;
+            return `
+            <div style="padding:.65rem .9rem;border-radius:10px;background:color-mix(in srgb,var(--primary) 8%,transparent);border:1px solid color-mix(in srgb,var(--primary) 20%,transparent);margin-bottom:.75rem">
+                <div style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:.2rem">
+                    <i class="fa-solid fa-rotate"></i> Поточний потік
+                </div>
+                <div style="font-weight:700;font-size:.9rem">${Fmt.esc(run.title)}</div>
+                ${run.start_date || run.end_date ? `<div style="font-size:.75rem;color:var(--text-muted);margin-top:.2rem">
+                    ${run.start_date ? Fmt.dateShort(new Date(run.start_date + 'T00:00:00')) : ''}${run.start_date && run.end_date ? ' — ' : ''}${run.end_date ? Fmt.dateShort(new Date(run.end_date + 'T00:00:00')) : ''}
+                    ${ended ? '<span style="color:#ef4444;margin-left:.4rem">• Завершено</span>' : ''}
+                </div>` : ''}
+            </div>`;
+        }
+
+        // Active run exists but user not enrolled (or enrolled in different run)
+        if (run) {
+            const isReEnroll = enrolled; // enrolled in a past run, active run is different
+            return `
+            <div style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:.75rem">
+                <div style="padding:.65rem .9rem;border-radius:10px;background:color-mix(in srgb,#10b981 8%,transparent);border:1px solid color-mix(in srgb,#10b981 25%,transparent)">
+                    <div style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:.2rem">
+                        <i class="fa-solid fa-rotate" style="color:#10b981"></i> ${isReEnroll ? 'Новий потік' : 'Активний потік'}
+                    </div>
+                    <div style="font-weight:700;font-size:.9rem">${Fmt.esc(run.title)}</div>
+                    ${run.start_date || run.end_date ? `<div style="font-size:.75rem;color:var(--text-muted);margin-top:.2rem">
+                        ${run.start_date ? Fmt.dateShort(new Date(run.start_date + 'T00:00:00')) : ''}${run.start_date && run.end_date ? ' — ' : ''}${run.end_date ? Fmt.dateShort(new Date(run.end_date + 'T00:00:00')) : ''}
+                    </div>` : ''}
+                </div>
+                <button class="cv-enroll-btn" style="width:100%;background:rgba(0,0,0,.07);border-color:var(--border);color:var(--text-primary)"
+                        onmouseenter="this.style.background='rgba(0,0,0,.13)'" onmouseleave="this.style.background='rgba(0,0,0,.07)'"
+                        onclick="CourseViewPage.enroll('${course.id}','${run.id}')">
+                    <i class="fa-solid fa-${isReEnroll ? 'rotate' : 'circle-plus'}"></i> ${isReEnroll ? 'Записатися на новий потік' : 'Записатися'}
+                </button>
+            </div>`;
+        }
+
+        // Only past/upcoming runs, no active — show nothing or past-run info
+        if (enrolled) return '';
+        return `<div style="padding:.65rem;border-radius:10px;background:var(--bg-raised);border:1px solid var(--border);margin-bottom:.75rem;font-size:.82rem;color:var(--text-muted);text-align:center">
+            <i class="fa-solid fa-calendar-xmark"></i> Активних потоків немає
+        </div>`;
+    },
+
     _renderEnrolledActions(course, pct) {
         return `
             <div style="display:flex;align-items:center;justify-content:space-between;gap:.6rem;margin-bottom:1rem;padding-bottom:1rem;border-bottom:1px solid var(--border)">
@@ -1385,10 +1450,10 @@ const CourseViewPage = {
         } catch(e) { el.innerHTML = ''; }
     },
 
-    async enroll(courseId) {
+    async enroll(courseId, runId = null) {
         Loader.show();
         try {
-            await API.enrollments.enroll(courseId);
+            await API.enrollments.enroll(courseId, runId || null);
             Toast.success('Записано!', 'Ви успішно записалися на курс');
             const container = document.getElementById('page-content');
             if (container) await CourseViewPage.init(container, { id: courseId, from: this._from });

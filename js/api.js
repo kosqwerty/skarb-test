@@ -137,6 +137,51 @@ const API = {
     },
 
     // ── Course teachers ─────────────────────────────────────────────
+    // ── Course Runs (потоки) ──────────────────────────────────────────
+    courseRuns: {
+        async getByCourse(courseId) {
+            const { data, error } = await supabase.from('course_runs')
+                .select('*')
+                .eq('course_id', courseId)
+                .order('start_date', { ascending: false });
+            if (error) throw error;
+            return data || [];
+        },
+
+        async getActive(courseId) {
+            const today = new Date().toISOString().slice(0, 10);
+            const { data } = await supabase.from('course_runs')
+                .select('*')
+                .eq('course_id', courseId)
+                .or(`start_date.is.null,start_date.lte.${today}`)
+                .or(`end_date.is.null,end_date.gte.${today}`)
+                .order('start_date', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+            return data;
+        },
+
+        async create(courseId, { title, start_date, end_date }) {
+            const { data, error } = await supabase.from('course_runs')
+                .insert({ course_id: courseId, title, start_date: start_date || null, end_date: end_date || null })
+                .select().single();
+            if (error) throw error;
+            return data;
+        },
+
+        async update(id, { title, start_date, end_date }) {
+            const { error } = await supabase.from('course_runs')
+                .update({ title, start_date: start_date || null, end_date: end_date || null })
+                .eq('id', id);
+            if (error) throw error;
+        },
+
+        async remove(id) {
+            const { error } = await supabase.from('course_runs').delete().eq('id', id);
+            if (error) throw error;
+        },
+    },
+
     courseTeachers: {
         async getByCourse(courseId) {
             const { data, error } = await supabase.from('course_teachers')
@@ -177,15 +222,29 @@ const API = {
             return data;
         },
 
-        async isEnrolled(courseId) {
-            const { data } = await supabase.from('enrollments')
-                .select('id').eq('user_id', AppState.user.id).eq('course_id', courseId).maybeSingle();
-            return !!data;
+        async isEnrolled(courseId, runId = null) {
+            let q = supabase.from('enrollments')
+                .select('id, run_id, completed_at')
+                .eq('user_id', AppState.user.id)
+                .eq('course_id', courseId);
+            if (runId) q = q.eq('run_id', runId);
+            const { data } = await q.order('created_at', { ascending: false }).limit(1).maybeSingle();
+            return data || null;
         },
 
-        async enroll(courseId) {
-            const { error } = await supabase.from('enrollments')
-                .insert({ user_id: AppState.user.id, course_id: courseId });
+        async getEnrollments(courseId) {
+            const { data } = await supabase.from('enrollments')
+                .select('id, run_id, completed_at, progress_percentage, created_at')
+                .eq('user_id', AppState.user.id)
+                .eq('course_id', courseId)
+                .order('created_at', { ascending: false });
+            return data || [];
+        },
+
+        async enroll(courseId, runId = null) {
+            const row = { user_id: AppState.user.id, course_id: courseId };
+            if (runId) row.run_id = runId;
+            const { error } = await supabase.from('enrollments').insert(row);
             if (error && error.code !== '23505') throw error;
         },
 
@@ -648,12 +707,13 @@ const API = {
 
     // ── Attempts ─────────────────────────────────────────────────────
     attempts: {
-        async getByTest(testId) {
-            const { data, error } = await supabase.from('test_attempts')
+        async getByTest(testId, runId = null) {
+            let q = supabase.from('test_attempts')
                 .select('*')
                 .eq('user_id', AppState.user.id)
-                .eq('test_id', testId)
-                .order('started_at', { ascending: false });
+                .eq('test_id', testId);
+            if (runId) q = q.eq('run_id', runId);
+            const { data, error } = await q.order('started_at', { ascending: false });
             if (error) throw error;
             return data;
         },
@@ -667,14 +727,16 @@ const API = {
             return data;
         },
 
-        async create(testId) {
-            const prev = await this.getByTest(testId);
+        async create(testId, runId = null) {
+            const prev = await this.getByTest(testId, runId);
+            const row = {
+                user_id: AppState.user.id,
+                test_id: testId,
+                attempt_number: prev.length + 1,
+            };
+            if (runId) row.run_id = runId;
             const { data, error } = await supabase.from('test_attempts')
-                .insert({
-                    user_id: AppState.user.id,
-                    test_id: testId,
-                    attempt_number: prev.length + 1
-                }).select().single();
+                .insert(row).select().single();
             if (error) throw error;
             return data;
         },

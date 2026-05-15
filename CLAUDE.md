@@ -2,6 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Session start
+
+At the start of every new conversation, before taking any task:
+1. Run `git log --oneline -5` and `git status`
+2. Read relevant memory files from `C:\Users\Boss\.claude\projects\d--lms\memory\`
+3. Output a brief summary: last commits, dirty files, current migration version, key reminders from memory
+
 ## Project Overview
 
 LMS "Скарбниця" — a learning management system for a Ukrainian pawnshop chain. Vanilla JS SPA deployed on Vercel, backed by Supabase (PostgreSQL + Auth + Storage).

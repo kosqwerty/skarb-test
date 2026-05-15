@@ -69,10 +69,11 @@ const CoursesPage = {
         try {
             let courses = [], total = 0;
             const level = Dom.val('level-filter');
+            let myEnrollments = null;
 
             if (this._currentTab === 'enrolled' || !AppState.isStaff()) {
-                const enrollments = await API.enrollments.getMyEnrollments();
-                let items = enrollments.map(e => e.course).filter(Boolean);
+                myEnrollments = await API.enrollments.getMyEnrollments();
+                let items = myEnrollments.map(e => e.course).filter(Boolean);
                 if (this._search) items = items.filter(c => c.title.toLowerCase().includes(this._search.toLowerCase()));
                 if (level) items = items.filter(c => c.level === level);
                 courses = items; total = items.length;
@@ -87,8 +88,8 @@ const CoursesPage = {
 
             if (level && courses.length) courses = courses.filter(c => c.level === level);
 
-            const myEnrollments = await API.enrollments.getMyEnrollments().catch(() => []);
-            const enrollMap     = Object.fromEntries(myEnrollments.map(e => [e.course_id, e]));
+            if (!myEnrollments) myEnrollments = await API.enrollments.getMyEnrollments().catch(() => []);
+            const enrollMap = Object.fromEntries(myEnrollments.map(e => [e.course_id, e]));
 
             if (!courses.length) {
                 grid.innerHTML = `
@@ -110,7 +111,7 @@ const CoursesPage = {
 
     _renderCard(course, enrollment) {
         const thumb = course.thumbnail_url
-            ? `<img src="${course.thumbnail_url}" alt="${course.title}" loading="lazy">`
+            ? `<img src="${course.thumbnail_url}" alt="${Fmt.esc(course.title)}" loading="lazy">`
             : `<div class="thumb-placeholder">📖</div>`;
         const pct = enrollment?.progress_percentage || 0;
         const levelColor = { beginner:'badge-success', intermediate:'badge-warning', advanced:'badge-danger' }[course.level] || 'badge-muted';
@@ -121,14 +122,16 @@ const CoursesPage = {
                     ${thumb}
                     <div class="course-level-badge">
                         <span class="badge ${levelColor}">${Fmt.level(course.level)}</span>
+                        ${course.is_featured ? `<span class="badge badge-warning" style="margin-left:.25rem">⭐ Рекомендовано</span>` : ''}
                     </div>
                     ${!course.is_published ? `<div style="position:absolute;top:.75rem;right:.75rem"><span class="badge badge-muted">Чернетка</span></div>` : ''}
                 </div>
                 <div class="course-body">
-                    <h4 class="course-title">${course.title}</h4>
-                    ${course.description ? `<p style="font-size:.8rem;color:var(--text-muted);margin-bottom:.75rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${course.description}</p>` : ''}
+                    <h4 class="course-title">${Fmt.esc(course.title)}</h4>
+                    ${course.description ? `<p style="font-size:.8rem;color:var(--text-muted);margin-bottom:.75rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${Fmt.esc(course.description)}</p>` : ''}
+                    ${course.tags?.length ? `<div style="display:flex;flex-wrap:wrap;gap:.25rem;margin-bottom:.5rem">${course.tags.map(t => `<span style="font-size:.68rem;padding:.15rem .5rem;border-radius:999px;background:rgba(99,102,241,.1);color:var(--primary);border:1px solid rgba(99,102,241,.2)">${Fmt.esc(t)}</span>`).join('')}</div>` : ''}
                     <div class="course-meta">
-                        <span>👤 ${course.teacher?.full_name || 'Викладач'}</span>
+                        <span>👤 ${Fmt.esc(course.teacher?.full_name || 'Викладач')}</span>
                         ${course.duration_hours ? `<span>⏱ ${course.duration_hours}год</span>` : ''}
                     </div>
                     ${enrollment ? `

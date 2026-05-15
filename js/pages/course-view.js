@@ -4,6 +4,7 @@
 
 const CourseViewPage = {
     _course: null,
+    _scheduleData: null,
     _enrolled: false,
     _from: null,
 
@@ -31,14 +32,7 @@ const CourseViewPage = {
             this._allRuns        = allRuns;
             this._courseTeachers = courseTeachers;
             UI.setBreadcrumb([{ label: backLabel, route: backRoute }, { label: course.title }]);
-            course.lessons?.sort((a,b) => a.order_index - b.order_index);
-
-            let progressMap = {};
-            if (this._enrolled) {
-                const progress = await API.progress.getForCourse(courseId).catch(() => []);
-                progressMap    = Object.fromEntries(progress.map(p => [p.lesson_id, p]));
-            }
-            this._render(container, course, this._enrolled, progressMap);
+            this._render(container, course, this._enrolled);
         } catch(e) {
             container.innerHTML = `
                 <div class="empty-state">
@@ -49,11 +43,7 @@ const CourseViewPage = {
         }
     },
 
-    _render(container, course, enrolled, progressMap) {
-        const publishedLessons = course.lessons?.filter(l => l.is_published || AppState.isStaff()) || [];
-        const completedCount   = Object.values(progressMap).filter(p => p.completed).length;
-        const totalPublished   = publishedLessons.length;
-        const pct = totalPublished ? Math.round(completedCount / totalPublished * 100) : 0;
+    _render(container, course, enrolled) {
         const levelColors = { beginner:'#10b981', intermediate:'#f59e0b', advanced:'#ef4444' };
         const levelColor  = levelColors[course.level] || '#6366f1';
 
@@ -95,12 +85,6 @@ const CourseViewPage = {
             .cv-staff-bar .btn{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.15);color:rgba(255,255,255,.85)}
             .cv-staff-bar .btn:hover{background:rgba(255,255,255,.18);border-color:rgba(255,255,255,.3);color:#fff}
 
-            .cv-progress-wrap{background:var(--bg-surface);border-radius:var(--radius-lg);padding:1.25rem 1.5rem;margin-bottom:1.5rem;border:1px solid var(--border)}
-            .cv-progress-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem}
-            .cv-progress-pct{font-size:1.75rem;font-weight:800;background:linear-gradient(135deg,var(--primary),#8b5cf6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;line-height:1}
-            .cv-progress-bar{height:10px;border-radius:999px;background:var(--bg-raised);overflow:hidden;margin-bottom:.5rem}
-            .cv-progress-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,var(--primary),#8b5cf6);transition:width .6s ease}
-            .cv-progress-fill.done{background:linear-gradient(90deg,#10b981,#0ea5e9)}
             .cv-section-head{display:flex;align-items:center;gap:.6rem;margin-bottom:1.1rem;margin-top:2rem}
             .cv-section-icon{width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,var(--primary),#8b5cf6);display:flex;align-items:center;justify-content:center;color:#fff;font-size:.85rem;flex-shrink:0}
             .cv-section-title{font-size:1rem;font-weight:700}
@@ -148,51 +132,65 @@ const CourseViewPage = {
             .cvi-text{font-size:.83rem;line-height:1.6;color:var(--text-secondary);margin:0}
             .cvi-empty{text-align:center;padding:1.5rem;color:var(--text-muted);font-size:.85rem}
 
-            .cvs-wrap{display:flex;flex-direction:column;gap:1.25rem}
-            .cvs-title{font-size:1.5rem;font-weight:800;color:var(--text-primary);margin-bottom:.25rem;text-align:center}
-            .cvs-title-accent{color:var(--primary)}
-            .cvs-days-tabs{display:flex;flex-wrap:wrap;gap:.4rem;border-bottom:1px solid var(--border);padding-bottom:.75rem;justify-content:center}
-            .cvs-tab-btn{background:transparent;border:none;padding:.5rem 1.5rem;font-size:.9rem;font-weight:600;border-radius:40px;cursor:pointer;color:#5b6e8c;transition:all .18s;font-family:inherit}
-            .cvs-tab-btn:hover{background:#eef2ff;color:#1e3a8a}
-            .cvs-tab-btn.active{background:#1e3a8a;color:#fff;box-shadow:0 6px 14px rgba(30,58,138,.2)}
-            .cvs-tab-btn.pass{background:#10b981;color:#fff;box-shadow:0 4px 12px rgba(16,185,129,.25)}
-            .cvs-tab-btn.fail{background:#ef4444;color:#fff;box-shadow:0 4px 12px rgba(239,68,68,.25)}
-            .cvs-accordion{background:var(--bg-surface);border-radius:24px;box-shadow:0 8px 30px rgba(0,0,0,.06);overflow:hidden;border:1px solid var(--border)}
-            .cvs-acc-item{border-bottom:1px solid var(--border)}
-            .cvs-acc-item:last-child{border-bottom:none}
-            .cvs-acc-head{width:100%;background:transparent;padding:1.2rem 1.75rem;display:flex;justify-content:space-between;align-items:center;cursor:pointer;border:none;text-align:left;gap:1rem;transition:background .15s;font-family:inherit}
-            .cvs-acc-head:hover{background:var(--bg-raised)}
-            .cvs-acc-left{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;flex:1;min-width:0}
-            .cvs-acc-num{padding:.22rem .8rem;border-radius:40px;font-size:.78rem;font-weight:700;border:1.5px solid;white-space:nowrap}
-            .cvs-acc-num.default{background:#eef2ff;color:#1e3a8a;border-color:#c7d7f8}
-            .cvs-acc-num.pass{background:rgba(16,185,129,.12);color:#10b981;border-color:rgba(16,185,129,.35)}
-            .cvs-acc-num.fail{background:rgba(239,68,68,.1);color:#ef4444;border-color:rgba(239,68,68,.3)}
-            .cvs-acc-name{font-size:.95rem;font-weight:700;color:var(--text-primary)}
-            .cvs-acc-teacher{font-size:.78rem;color:var(--text-muted);display:flex;align-items:center;gap:.3rem}
-            .cvs-acc-time{font-size:.78rem;color:var(--text-muted);background:var(--bg-raised);border:1px solid var(--border);padding:.15rem .6rem;border-radius:20px;display:inline-flex;align-items:center;gap:.3rem}
-            .cvs-acc-chevron{color:var(--text-muted);font-size:.8rem;transition:transform .3s;flex-shrink:0}
-            .cvs-acc-item.open .cvs-acc-chevron{transform:rotate(180deg)}
-            .cvs-acc-body{max-height:0;overflow:hidden;transition:max-height .4s cubic-bezier(.2,.9,.4,1)}
-            .cvs-acc-item.open .cvs-acc-body{max-height:2000px}
-            .cvs-acc-inner{padding:0 1.75rem 1.5rem}
-            .cvs-topic-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem;margin-bottom:.75rem; margin-top:.5rem}
-            .cvs-topic-card{background:var(--bg-raised);padding:.8rem 1rem;border-radius:14px;border-left:3px solid}
-            .cvs-topic-title{display:block;font-size:.88rem;font-weight:700;color:var(--text-primary);margin-bottom:.15rem}
-            .cvs-topic-sub{font-size:.78rem;color:var(--text-secondary);line-height:1.4}
-            .cvs-day-note{font-size:.82rem;color:var(--primary);background:var(--bg-raised);border:1px solid var(--border);display:inline-flex;align-items:center;gap:.4rem;padding:.3rem 1rem;border-radius:30px;margin-top:.25rem}
-            .cvs-test-btn{display:flex;align-items:center;gap:.6rem;padding:.55rem .85rem;border-radius:10px;border:1.5px solid rgba(245,158,11,.3);background:rgba(245,158,11,.06);color:var(--text-primary);font-size:.82rem;font-weight:600;cursor:pointer;transition:all .2s;font-family:inherit;margin-top:.3rem}
-            .cvs-test-btn:hover{border-color:rgba(245,158,11,.55);background:rgba(245,158,11,.11)}
-            .cvs-test-icon{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#f59e0b,#ef4444);display:flex;align-items:center;justify-content:center;color:#fff;font-size:.7rem;flex-shrink:0}
-            .cvs-test-meta{display:flex;flex-direction:column;gap:.05rem;flex:1;min-width:0}
-            .cvs-test-hint{font-size:.7rem;color:var(--text-muted)}
-            .cvs-test-arrow{color:var(--text-muted);font-size:.7rem;flex-shrink:0}
-            .cvs-test-passed{border-color:rgba(16,185,129,.35)!important;background:rgba(16,185,129,.07)!important}
-            .cvs-test-passed .cvs-test-icon{background:linear-gradient(135deg,#10b981,#0ea5e9)!important}
-            .cvs-test-failed{border-color:rgba(239,68,68,.3)!important;background:rgba(239,68,68,.06)!important}
-            .cvs-test-failed .cvs-test-icon{background:linear-gradient(135deg,#ef4444,#f59e0b)!important}
-            .cvs-test-result-badge{font-size:.75rem;font-weight:800;flex-shrink:0}
-            .cvs-test-result-badge.pass{color:#10b981}
-            .cvs-test-result-badge.fail{color:#ef4444}
+            .cvt-wrap{display:flex;gap:1.5rem;min-height:380px}
+            .cvt-timeline{width:210px;flex-shrink:0;padding:.5rem 0;border-right:1px solid var(--border);padding-right:1rem}
+            .cvt-tl-header{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);padding-bottom:.6rem;border-bottom:1px solid var(--border);margin-bottom:.55rem;display:flex;align-items:center;gap:.4rem}
+            .cvt-tl-list{display:flex;flex-direction:column;gap:.05rem}
+            .cvt-tl-item{display:flex;align-items:stretch;gap:.55rem;padding:.4rem .45rem;border-radius:10px;cursor:pointer;transition:background .15s,box-shadow .15s}
+            .cvt-tl-item:hover{background:var(--bg-raised)}
+            .cvt-tl-item.active{background:rgba(99,102,241,.08);box-shadow:inset 0 0 0 1.5px rgba(99,102,241,.3)}
+            .cvt-tl-node{display:flex;flex-direction:column;align-items:center;flex-shrink:0;width:30px}
+            .cvt-tl-dot{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:800;color:#fff;flex-shrink:0;position:relative;transition:transform .2s,box-shadow .18s}
+            .cvt-tl-item.active .cvt-tl-dot{transform:scale(1.12)}
+            .cvt-status-icon{position:absolute;bottom:-3px;right:-3px;width:13px;height:13px;border-radius:50%;border:2px solid var(--bg-surface);display:flex;align-items:center;justify-content:center;font-size:.42rem;color:#fff}
+            .cvt-tl-line{flex:1;width:2px;background:var(--border);border-radius:1px;margin:.25rem 0;min-height:8px}
+            .cvt-tl-info{flex:1;min-width:0;padding-top:.15rem}
+            .cvt-tl-day{font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)}
+            .cvt-tl-title{font-size:.8rem;font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.3;margin-top:.05rem}
+            .cvt-tl-badge{font-size:.6rem;font-weight:700;padding:.08rem .4rem;border-radius:999px;margin-top:.25rem;display:inline-block;letter-spacing:.02em}
+            .cvt-panel{flex:1;min-width:0}
+            @keyframes cvt-in{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:translateX(0)}}
+            .cvt-panel-inner{animation:cvt-in .22s ease}
+            .cvt-hero{border-radius:14px;padding:1.2rem 1.35rem;margin-bottom:1.1rem;display:flex;align-items:flex-start;gap:1rem;position:relative;overflow:hidden}
+            .cvt-hero::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(0,0,0,.2) 0%,rgba(0,0,0,.04) 100%);pointer-events:none}
+            .cvt-hero>*{position:relative;z-index:1}
+            .cvt-hero-numwrap{width:56px;height:56px;border-radius:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:1.55rem;font-weight:900;color:rgba(255,255,255,.95);background:rgba(255,255,255,.18);backdrop-filter:blur(8px)}
+            .cvt-hero-info{flex:1;min-width:0}
+            .cvt-hero-num-label{font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:rgba(255,255,255,.6);margin-bottom:.12rem}
+            .cvt-hero-title{font-size:1.05rem;font-weight:800;color:#fff;line-height:1.25;margin-bottom:.5rem;text-shadow:0 1px 8px rgba(0,0,0,.25)}
+            .cvt-hero-chips{display:flex;flex-wrap:wrap;gap:.35rem}
+            .cvt-hero-chip{display:inline-flex;align-items:center;gap:.3rem;font-size:.72rem;font-weight:600;padding:.18rem .6rem;border-radius:20px;background:rgba(255,255,255,.18);color:rgba(255,255,255,.95);backdrop-filter:blur(6px)}
+            .cvt-hero-status{position:absolute;top:.85rem;right:.85rem;font-size:.68rem;font-weight:700;padding:.2rem .6rem;border-radius:999px;backdrop-filter:blur(8px);z-index:2;letter-spacing:.03em;display:inline-flex;align-items:center;gap:.3rem}
+            .cvt-hero-status.pass{background:rgba(16,185,129,.3);color:#6ee7b7;border:1px solid rgba(16,185,129,.5)}
+            .cvt-hero-status.fail{background:rgba(239,68,68,.25);color:#fca5a5;border:1px solid rgba(239,68,68,.4)}
+            .cvt-section{margin-bottom:.9rem}
+            .cvt-section-label{display:flex;align-items:center;gap:.5rem;font-size:.67rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:.55rem}
+            .cvt-section-line{flex:1;height:1px;background:var(--border)}
+            .cvt-topic-list{display:flex;flex-direction:column;gap:.4rem}
+            .cvt-topic-item{display:flex;align-items:flex-start;gap:.7rem;padding:.6rem .8rem;background:var(--bg-raised);border-radius:10px;border:1px solid var(--border);transition:border-color .15s}
+            .cvt-topic-item:hover{border-color:var(--primary)}
+            .cvt-topic-num{width:24px;height:24px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:800;color:#fff;flex-shrink:0;margin-top:.05rem}
+            .cvt-topic-name{font-size:.875rem;font-weight:600;color:var(--text-primary)}
+            .cvt-topic-desc{font-size:.775rem;color:var(--text-secondary);margin-top:.15rem;line-height:1.45}
+            .cvt-callout{display:flex;align-items:flex-start;gap:.7rem;padding:.8rem 1rem;border-radius:10px;background:rgba(99,102,241,.07);border:1px solid rgba(99,102,241,.2);margin-bottom:.85rem}
+            .cvt-callout-icon{width:28px;height:28px;border-radius:8px;background:rgba(99,102,241,.15);display:flex;align-items:center;justify-content:center;color:var(--primary);flex-shrink:0;font-size:.8rem;margin-top:.08rem}
+            .cvt-callout-text{font-size:.82rem;color:var(--text-secondary);line-height:1.55}
+            .cvt-test-card{display:flex;align-items:center;gap:.8rem;padding:.85rem 1rem;border-radius:12px;border:1.5px solid;cursor:pointer;transition:all .18s;font-family:inherit;width:100%;text-align:left;margin-bottom:.4rem;background:var(--bg-raised)}
+            .cvt-test-card:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,.1)}
+            .cvt-test-card.neutral{border-color:rgba(245,158,11,.3);background:rgba(245,158,11,.05)}
+            .cvt-test-card.pass{border-color:rgba(16,185,129,.4);background:rgba(16,185,129,.06)}
+            .cvt-test-card.fail{border-color:rgba(239,68,68,.35);background:rgba(239,68,68,.06)}
+            .cvt-test-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:.85rem;flex-shrink:0}
+            .cvt-test-info{flex:1;min-width:0}
+            .cvt-test-title{font-size:.875rem;font-weight:700;color:var(--text-primary)}
+            .cvt-test-hint{font-size:.72rem;color:var(--text-muted);margin-top:.1rem}
+            .cvt-test-pct{font-size:.9rem;font-weight:800;flex-shrink:0}
+            .cvt-test-pct.pass{color:#10b981}
+            .cvt-test-pct.fail{color:#ef4444}
+            .cvt-kb-list{display:flex;flex-wrap:wrap;gap:.4rem}
+            .cvt-kb-chip{display:inline-flex;align-items:center;gap:.4rem;padding:.3rem .75rem;border-radius:20px;border:1px solid var(--border);background:var(--bg-raised);color:var(--text-primary);text-decoration:none;font-size:.78rem;transition:all .15s;max-width:240px}
+            .cvt-kb-chip:hover{border-color:var(--primary);background:rgba(99,102,241,.06);color:var(--primary)}
+            .cvt-kb-chip-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
         </style>
 
         <div style="display:grid;grid-template-columns:1fr 300px;gap:2rem;align-items:start">
@@ -219,7 +217,6 @@ const CourseViewPage = {
                             <div class="cv-hero-title">${Fmt.esc(course.title)}</div>
                             ${course.description ? `<div class="cv-hero-desc">${Fmt.esc(course.description)}</div>` : ''}
                             <div class="cv-hero-stats" style="margin-top:auto;padding-top:1.5rem;border-top:1px solid rgba(255,255,255,.12)">
-                                ${totalPublished ? `<div class="cv-hero-stat"><i class="fa-solid fa-book-open"></i> ${totalPublished} уроків</div>` : ''}
                                 ${course.duration_hours ? `<div class="cv-hero-stat"><i class="fa-regular fa-clock"></i> ${course.duration_hours} год</div>` : ''}
                                 ${course.category ? `<div class="cv-hero-stat"><i class="fa-solid fa-tag"></i> ${Fmt.esc(course.category)}</div>` : ''}
                             </div>
@@ -282,7 +279,7 @@ const CourseViewPage = {
                     </div>
                     <div class="cv-sidebar-body">
                         ${this._renderRunBlock(course, enrolled)}
-                        ${enrolled ? this._renderEnrolledActions(course, pct) : ''}
+                        ${enrolled ? this._renderEnrolledActions(course) : ''}
                         <div id="cv-enrollees" style="margin-top:.5rem"><div style="display:flex;justify-content:center;padding:1rem"><div class="spinner"></div></div></div>
                     </div>
                 </div>
@@ -423,7 +420,7 @@ const CourseViewPage = {
         if (!allSorted.length && !isStaff) return '';
 
         return `
-            <div class="card" style="margin-bottom:1.5rem">
+            <div id="cv-teachers-block" class="card" style="margin-bottom:1.5rem">
                 <div class="card-body" style="padding:1rem 1.25rem">
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
                         <span style="font-weight:600;font-size:.9rem">
@@ -888,141 +885,161 @@ const CourseViewPage = {
 
     _renderScheduleCards(schedule, attemptsMap = {}) {
         const dayColors = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#0ea5e9'];
-        const defaultIcons = ['fa-mobile-screen','fa-laptop','fa-screwdriver-wrench','fa-star','fa-rocket','fa-crown','fa-gem'];
+        this._scheduleData = { schedule, attemptsMap, dayColors };
         const n = schedule.length;
         const label = n === 1 ? '1 день' : n < 5 ? n + ' дні' : n + ' днів';
 
-        const tabsHtml = schedule.map((d, i) => {
-            const tests = d.tests?.length ? d.tests : (d.test_id ? [{ id: d.test_id, title: d.test_title || 'Тест дня' }] : []);
-            const attempted = tests.filter(t => attemptsMap[t.id]);
-            const allPassed = tests.length > 0 && attempted.length === tests.length && attempted.every(t => attemptsMap[t.id].passed);
-            const anyFailed = attempted.some(t => !attemptsMap[t.id].passed);
-            const cls = allPassed ? ' pass' : anyFailed ? ' fail' : (i === 0 ? ' active' : '');
-            return `<button class="cvs-tab-btn${cls}" onclick="CourseViewPage._cvsDayOpen(${i})">ДЕНЬ ${i + 1}</button>`;
-        }).join('');
-
-        const itemsHtml = schedule.map((d, i) => {
+        const timelineItems = schedule.map((d, i) => {
             const color = dayColors[i % dayColors.length];
-            const icon  = d.icon || defaultIcons[i % defaultIcons.length];
             const tests = d.tests?.length ? d.tests : (d.test_id ? [{ id: d.test_id, title: d.test_title || 'Тест дня' }] : []);
             const attempted = tests.filter(t => attemptsMap[t.id]);
             const allPassed = tests.length > 0 && attempted.length === tests.length && attempted.every(t => attemptsMap[t.id].passed);
             const anyFailed = attempted.some(t => !attemptsMap[t.id].passed);
-            const numCls = allPassed ? 'pass' : anyFailed ? 'fail' : 'default';
 
-            const topicsHtml = d.items?.length ? `
-            <div class="cvs-topic-grid">
-                ${d.items.map(item => {
-                    const t = typeof item === 'object' ? item : { title: item, desc: '' };
-                    return `
-                <div class="cvs-topic-card" style="border-left-color:${color}">
-                    <span class="cvs-topic-title">${Fmt.esc(t.title || '')}</span>
-                    ${t.desc ? `<span class="cvs-topic-sub">${Fmt.esc(t.desc)}</span>` : ''}
-                </div>`;}).join('')}
-            </div>` : '';
-
-            const noteHtml = d.instructions ? `
-            <div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.25rem">
-                <span class="cvs-day-note" style="font-style:italic"><i class="fa-solid fa-circle-info"></i> ${Fmt.esc(d.instructions)}</span>
-            </div>` : '';
-
-            const teacherHtml = d.teacher_name ? `
-            <span class="cvs-acc-teacher"><i class="fa-solid fa-chalkboard-user"></i> ${Fmt.esc(d.teacher_name)}</span>` : '';
-
-            const testsHtml = tests.length ? `
-                <div style="margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--border)">
-                    <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:.4rem">
-                        <i class="fa-solid fa-pen-to-square"></i> Тест до заняття
-                    </div>
-                    ${tests.map(t => {
-                        const att = attemptsMap[t.id];
-                        const done = !!att;
-                        const passed = att?.passed;
-                        const pct = att?.percentage ?? 0;
-                        return `
-                    <button class="cvs-test-btn${done ? (passed ? ' cvs-test-passed' : ' cvs-test-failed') : ''}" onclick="Router.go('tests/${t.id}')">
-                        <div class="cvs-test-icon">${done
-                            ? '<i class="fa-solid ' + (passed ? 'fa-circle-check' : 'fa-circle-xmark') + '"></i>'
-                            : '<i class="fa-solid fa-pen-to-square"></i>'}</div>
-                        <div class="cvs-test-meta">
-                            <span>${Fmt.esc(t.title || 'Тест дня')}</span>
-                            <span class="cvs-test-hint">${done
-                                ? (passed ? 'Пройдено — ' + Math.round(pct) + '%' : 'Не пройдено — ' + Math.round(pct) + '%')
-                                : 'Пройдіть після лекції'}</span>
-                        </div>
-                        ${done
-                            ? '<span class="cvs-test-result-badge' + (passed ? ' pass' : ' fail') + '">' + (passed ? '✓' : '✗') + '</span>'
-                            : '<i class="fa-solid fa-chevron-right cvs-test-arrow"></i>'}
-                    </button>`;
-                    }).join('')}
-                </div>` : '';
+            const statusIcon = allPassed
+                ? `<span class="cvt-status-icon" style="background:#10b981"><i class="fa-solid fa-check"></i></span>`
+                : anyFailed
+                ? `<span class="cvt-status-icon" style="background:#ef4444"><i class="fa-solid fa-xmark"></i></span>`
+                : '';
+            const badge = allPassed
+                ? `<span class="cvt-tl-badge" style="background:rgba(16,185,129,.12);color:#10b981"><i class="fa-solid fa-trophy" style="font-size:.55rem"></i> Пройдено</span>`
+                : anyFailed
+                ? `<span class="cvt-tl-badge" style="background:rgba(239,68,68,.1);color:#ef4444"><i class="fa-solid fa-rotate-right" style="font-size:.55rem"></i> Повторити</span>`
+                : '';
+            const isLast = i === schedule.length - 1;
 
             return `
-            <div class="cvs-acc-item${i === 0 ? ' open' : ''}" id="cvs-day-${i}">
-                <button class="cvs-acc-head" onclick="CourseViewPage._cvsDayToggle(${i})">
-                    <div class="cvs-acc-left">
-                        <span class="cvs-acc-num ${numCls}">ДЕНЬ ${i + 1}</span>
-                        ${d.title ? `<span class="cvs-acc-name">${Fmt.esc(d.title)}</span>` : ''}
-                        ${teacherHtml}
-                        ${d.time_range ? `<span class="cvs-acc-time"><i class="fa-regular fa-clock"></i> ${Fmt.esc(d.time_range)}</span>` : ''}
-                    </div>
-                    <i class="fa-solid fa-chevron-down cvs-acc-chevron"></i>
-                </button>
-                <div class="cvs-acc-body">
-                    <div class="cvs-acc-inner">
-                        ${topicsHtml}
-                        ${noteHtml}
-                        ${testsHtml}
-                        ${d.kb_resources?.length ? `
-                        <div style="margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--border)">
-                            <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:.4rem">
-                                <i class="fa-solid fa-paperclip"></i> Матеріали до заняття
-                            </div>
-                            <div style="display:flex;flex-wrap:wrap;gap:.4rem">
-                                ${d.kb_resources.map(r => `
-                                <a href="#" onclick="event.preventDefault();Router.go('resource/${r.id}')"
-                                   style="display:inline-flex;align-items:center;gap:.4rem;padding:.3rem .7rem;border-radius:20px;border:1px solid var(--border);background:var(--bg-raised);color:var(--text-primary);text-decoration:none;font-size:.78rem;transition:all .15s;max-width:240px;overflow:hidden"
-                                   onmouseenter="this.style.background='var(--bg-surface)';this.style.borderColor='var(--primary)'" onmouseleave="this.style.background='var(--bg-raised)';this.style.borderColor='var(--border)'">
-                                    <i class="fa-solid ${this._kbIcon(r.type)}" style="color:var(--primary);font-size:.72rem;flex-shrink:0"></i>
-                                    <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Fmt.esc(r.title)}</span>
-                                </a>`).join('')}
-                            </div>
-                        </div>` : ''}
-                    </div>
+            <div class="cvt-tl-item${i === 0 ? ' active' : ''}" onclick="CourseViewPage._cvsDayOpen(${i})">
+                <div class="cvt-tl-node">
+                    <div class="cvt-tl-dot" style="background:${color}">${i + 1}${statusIcon}</div>
+                    ${!isLast ? '<div class="cvt-tl-line"></div>' : ''}
+                </div>
+                <div class="cvt-tl-info">
+                    <div class="cvt-tl-day">День ${i + 1}</div>
+                    ${d.title ? `<div class="cvt-tl-title">${Fmt.esc(d.title)}</div>` : ''}
+                    ${badge}
                 </div>
             </div>`;
         }).join('');
 
         return `
-        <div class="cvs-wrap">
-            <div class="cvs-title">Графік курсу <span class="cvs-title-accent">• ${label}</span></div>
-            <div class="cvs-days-tabs">${tabsHtml}</div>
-            <div class="cvs-accordion">${itemsHtml}</div>
+        <div class="cvt-wrap">
+            <div class="cvt-timeline">
+                <div class="cvt-tl-header"><i class="fa-solid fa-route"></i> Програма • ${label}</div>
+                <div class="cvt-tl-list">${timelineItems}</div>
+            </div>
+            <div class="cvt-panel" id="cvt-panel">${this._dayCardHtml(0)}</div>
+        </div>`;
+    },
+
+    _dayCardHtml(idx) {
+        const { schedule, attemptsMap, dayColors } = this._scheduleData || {};
+        const d = schedule?.[idx];
+        if (!d) return '';
+        const color = dayColors[idx % dayColors.length];
+        const tests = d.tests?.length ? d.tests : (d.test_id ? [{ id: d.test_id, title: d.test_title || 'Тест дня' }] : []);
+        const attempted = tests.filter(t => attemptsMap[t.id]);
+        const allPassed = tests.length > 0 && attempted.length === tests.length && attempted.every(t => attemptsMap[t.id].passed);
+        const anyFailed = attempted.some(t => !attemptsMap[t.id].passed);
+
+        const statusHtml = allPassed
+            ? `<span class="cvt-hero-status pass"><i class="fa-solid fa-trophy"></i> Завершено</span>`
+            : anyFailed
+            ? `<span class="cvt-hero-status fail"><i class="fa-solid fa-rotate-right"></i> Повторити тест</span>`
+            : '';
+
+        const topicsHtml = d.items?.length ? `
+            <div class="cvt-section">
+                <div class="cvt-section-label">
+                    <i class="fa-solid fa-list-check" style="color:${color}"></i> Теми заняття
+                    <div class="cvt-section-line"></div>
+                </div>
+                <div class="cvt-topic-list">
+                    ${d.items.map((item, ti) => {
+                        const t = typeof item === 'object' ? item : { title: item, desc: '' };
+                        return `<div class="cvt-topic-item">
+                            <div class="cvt-topic-num" style="background:${color}">${ti + 1}</div>
+                            <div>
+                                <div class="cvt-topic-name">${Fmt.esc(t.title || '')}</div>
+                                ${t.desc ? `<div class="cvt-topic-desc">${Fmt.esc(t.desc)}</div>` : ''}
+                            </div>
+                        </div>`;
+                    }).join('')}
+                </div>
+            </div>` : '';
+
+        const noteHtml = d.instructions ? `
+            <div class="cvt-callout">
+                <div class="cvt-callout-icon"><i class="fa-solid fa-circle-info"></i></div>
+                <div class="cvt-callout-text">${Fmt.esc(d.instructions)}</div>
+            </div>` : '';
+
+        const testsHtml = tests.length ? `
+            <div class="cvt-section">
+                <div class="cvt-section-label">
+                    <i class="fa-solid fa-pen-to-square" style="color:#f59e0b"></i> Тест до заняття
+                    <div class="cvt-section-line"></div>
+                </div>
+                ${tests.map(t => {
+                    const att = attemptsMap[t.id];
+                    const done = !!att;
+                    const passed = att?.passed;
+                    const pct = att?.percentage ?? 0;
+                    const cardCls = done ? (passed ? 'pass' : 'fail') : 'neutral';
+                    const iconBg = done
+                        ? `background:linear-gradient(135deg,${passed ? '#10b981,#0ea5e9' : '#ef4444,#f59e0b'})`
+                        : 'background:linear-gradient(135deg,#f59e0b,#ef4444)';
+                    const iconName = done ? (passed ? 'fa-circle-check' : 'fa-circle-xmark') : 'fa-pen-to-square';
+                    const resultHtml = done
+                        ? `<span class="cvt-test-pct ${passed ? 'pass' : 'fail'}">${Math.round(pct)}%</span>`
+                        : `<i class="fa-solid fa-chevron-right" style="color:var(--text-muted);font-size:.75rem;flex-shrink:0"></i>`;
+                    return `<button class="cvt-test-card ${cardCls}" onclick="Router.go('tests/${t.id}')">
+                        <div class="cvt-test-icon" style="${iconBg}"><i class="fa-solid ${iconName}"></i></div>
+                        <div class="cvt-test-info">
+                            <div class="cvt-test-title">${Fmt.esc(t.title || 'Тест дня')}</div>
+                            <div class="cvt-test-hint">${done ? (passed ? 'Пройдено · ' + Math.round(pct) + '%' : 'Не пройдено · ' + Math.round(pct) + '%') : 'Пройдіть після лекції'}</div>
+                        </div>
+                        ${resultHtml}
+                    </button>`;
+                }).join('')}
+            </div>` : '';
+
+        const kbHtml = d.kb_resources?.length ? `
+            <div class="cvt-section">
+                <div class="cvt-section-label">
+                    <i class="fa-solid fa-paperclip" style="color:#6366f1"></i> Матеріали
+                    <div class="cvt-section-line"></div>
+                </div>
+                <div class="cvt-kb-list">
+                    ${d.kb_resources.map(r => `
+                    <a href="#" onclick="event.preventDefault();Router.go('resource/${r.id}')" class="cvt-kb-chip">
+                        <i class="fa-solid ${this._kbIcon(r.type)}" style="color:var(--primary);font-size:.72rem;flex-shrink:0"></i>
+                        <span class="cvt-kb-chip-name">${Fmt.esc(r.title)}</span>
+                    </a>`).join('')}
+                </div>
+            </div>` : '';
+
+        return `<div class="cvt-panel-inner">
+            <div class="cvt-hero" style="background:${color}">
+                ${statusHtml}
+                <div class="cvt-hero-numwrap">${idx + 1}</div>
+                <div class="cvt-hero-info">
+                    <div class="cvt-hero-num-label">День ${idx + 1}</div>
+                    <div class="cvt-hero-title">${d.title ? Fmt.esc(d.title) : 'Заняття'}</div>
+                    <div class="cvt-hero-chips">
+                        ${d.teacher_name ? `<span class="cvt-hero-chip"><i class="fa-solid fa-chalkboard-user"></i> ${Fmt.esc(d.teacher_name)}</span>` : ''}
+                        ${d.time_range ? `<span class="cvt-hero-chip"><i class="fa-regular fa-clock"></i> ${Fmt.esc(d.time_range)}</span>` : ''}
+                    </div>
+                </div>
+            </div>
+            ${topicsHtml}${noteHtml}${testsHtml}${kbHtml}
         </div>`;
     },
 
     _cvsDayOpen(idx) {
-        document.querySelectorAll('.cvs-acc-item').forEach((el, i) => el.classList.toggle('open', i === idx));
-        document.querySelectorAll('.cvs-tab-btn').forEach((el, i) => {
-            if (!el.classList.contains('pass') && !el.classList.contains('fail')) {
-                el.classList.toggle('active', i === idx);
-            }
-        });
-    },
-
-    _cvsDayToggle(idx) {
-        const items = document.querySelectorAll('.cvs-acc-item');
-        const item = items[idx];
-        if (!item) return;
-        const opening = !item.classList.contains('open');
-        items.forEach((el, i) => el.classList.toggle('open', i === idx && opening));
-        if (opening) {
-            document.querySelectorAll('.cvs-tab-btn').forEach((el, i) => {
-                if (!el.classList.contains('pass') && !el.classList.contains('fail')) {
-                    el.classList.toggle('active', i === idx);
-                }
-            });
-        }
+        document.querySelectorAll('.cvt-tl-item').forEach((el, i) => el.classList.toggle('active', i === idx));
+        const panel = document.getElementById('cvt-panel');
+        if (panel) panel.innerHTML = this._dayCardHtml(idx);
     },
 
     _editCourseInfo(courseId) {
@@ -1081,95 +1098,6 @@ const CourseViewPage = {
         } catch(e) { Toast.error('Помилка', e.message); }
         finally { Loader.hide(); }
     },
-
-    _renderSchedule(schedule) {
-        const activeDay = 0;
-        const tabs = schedule.map((d, i) => `
-            <button class="cv-sched-tab${i === activeDay ? ' active' : ''}"
-                data-day="${i}"
-                onclick="CourseViewPage._switchScheduleDay(${i})">
-                День ${i + 1}${d.title ? ` — ${Fmt.esc(d.title)}` : ''}
-            </button>`).join('');
-
-        const panels = schedule.map((d, i) => `
-            <div class="cv-sched-panel${i === activeDay ? ' active' : ''}" data-day="${i}">
-                <div style="display:flex;flex-wrap:wrap;gap:.65rem;margin-bottom:${d.instructions || d.items?.length ? '1rem' : '0'}">
-                    ${d.teacher_name ? `
-                        <div style="display:flex;align-items:center;gap:.4rem;font-size:.84rem;color:var(--text-secondary);background:var(--bg-raised);padding:.3rem .7rem;border-radius:var(--radius-sm)">
-                            <i class="fa-solid fa-chalkboard-user" style="color:var(--primary)"></i>
-                            <span>${Fmt.esc(d.teacher_name)}</span>
-                        </div>` : ''}
-                    ${(d.tests?.length ? d.tests : (d.test_id ? [{ id: d.test_id, title: d.test_title || 'Тест дня' }] : [])).map(t => `
-                        <button class="btn btn-primary btn-sm" onclick="Router.go('tests/${t.id}')">
-                            <i class="fa-solid fa-pen-to-square"></i> ${Fmt.esc(t.title || 'Тест дня')}
-                        </button>`).join('')}
-                </div>
-                ${d.instructions ? `
-                    <div style="background:rgba(99,102,241,.07);border-left:3px solid var(--primary);border-radius:0 var(--radius-sm) var(--radius-sm) 0;padding:.65rem .9rem;margin-bottom:.85rem;font-size:.84rem;color:var(--text-secondary);white-space:pre-wrap">${Fmt.esc(d.instructions)}</div>` : ''}
-                ${d.items?.length ? `
-                    <ul style="margin:0;padding-left:1.25rem;display:flex;flex-direction:column;gap:.4rem">
-                        ${d.items.map(item => `<li style="font-size:.875rem;color:var(--text-secondary)">${Fmt.esc(item)}</li>`).join('')}
-                    </ul>` : ''}
-            </div>`).join('');
-
-        return `
-            <div style="margin-bottom:1.75rem">
-                <h3 style="margin-bottom:.85rem">📅 Розклад занять</h3>
-                <div class="card">
-                    <div class="card-body" style="padding:0">
-                        <div class="cv-sched-tabs">${tabs}</div>
-                        <div class="cv-sched-body">${panels}</div>
-                    </div>
-                </div>
-            </div>
-            <style>
-                .cv-sched-tabs{display:flex;flex-wrap:wrap;gap:.35rem;padding:.75rem .75rem 0;border-bottom:1px solid var(--border)}
-                .cv-sched-tab{padding:.35rem .85rem;border-radius:var(--radius-sm) var(--radius-sm) 0 0;border:1px solid transparent;border-bottom:none;font-size:.8rem;cursor:pointer;background:none;color:var(--text-muted);transition:color .15s,background .15s;margin-bottom:-1px}
-                .cv-sched-tab:hover{color:var(--text-primary);background:var(--bg-raised)}
-                .cv-sched-tab.active{background:var(--bg-surface);color:var(--primary);border-color:var(--border);font-weight:600}
-                .cv-sched-panel{display:none;padding:1rem 1.25rem}
-                .cv-sched-panel.active{display:block}
-            </style>`;
-    },
-
-    _switchScheduleDay(i) {
-        document.querySelectorAll('.cv-sched-tab').forEach(b => b.classList.toggle('active', +b.dataset.day === i));
-        document.querySelectorAll('.cv-sched-panel').forEach(p => p.classList.toggle('active', +p.dataset.day === i));
-    },
-
-    _renderLessons(lessons, progressMap, enrolled) {
-        if (!lessons.length) return `<div class="empty-state" style="padding:2rem"><div class="empty-icon">📋</div><h3>Уроків поки немає</h3></div>`;
-
-        return lessons.map((lesson, i) => {
-            const prog      = progressMap[lesson.id];
-            const completed = prog?.completed;
-            const canOpen   = enrolled || lesson.is_free_preview || AppState.isStaff();
-            const lessonUrl = `lessons/${lesson.id}${this._from === 'expert-path' ? '?from=expert-path' : ''}`;
-            return `
-                <div class="cv-lesson${completed?' done':''}${!canOpen?' locked':''}"
-                     ${canOpen ? `onclick="Router.go('${lessonUrl}')"` : ''}>
-                    <div class="cv-lesson-num">${completed ? '<i class="fa-solid fa-check"></i>' : i + 1}</div>
-                    <div style="flex:1;min-width:0">
-                        <div class="cv-lesson-title">${Fmt.esc(lesson.title)}</div>
-                        <div class="cv-lesson-meta">
-                            ${lesson.resources?.length ? `<span><i class="fa-solid fa-paperclip"></i> ${lesson.resources.length} матеріал(ів)</span>` : ''}
-                            ${lesson.duration_minutes ? `<span><i class="fa-regular fa-clock"></i> ${Fmt.duration(lesson.duration_minutes)}</span>` : ''}
-                            ${lesson.is_free_preview ? `<span style="color:var(--primary)"><i class="fa-solid fa-eye"></i> Вільний перегляд</span>` : ''}
-                        </div>
-                    </div>
-                    <div style="display:flex;align-items:center;gap:.4rem;flex-shrink:0">
-                        ${!canOpen ? '<i class="fa-solid fa-lock" style="color:var(--text-muted);font-size:.8rem"></i>' : ''}
-                        ${canOpen && !completed ? '<i class="fa-solid fa-chevron-right" style="color:var(--text-muted);font-size:.8rem"></i>' : ''}
-                        ${AppState.isStaff() ? `
-                            <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();CourseViewPage.openEditLesson('${lesson.id}')"><i class="fa-solid fa-pen"></i></button>
-                            <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();CourseViewPage.deleteLesson('${lesson.id}',${JSON.stringify(lesson.title||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-trash"></i></button>
-                        ` : ''}
-                    </div>
-                </div>`;
-        }).join('');
-    },
-
-    _renderEnrollAction(course) { return ''; },
 
     _renderRunBlock(course, enrolled) {
         const run         = this._activeRun;
@@ -1266,7 +1194,7 @@ const CourseViewPage = {
         if (enrolled) return adminBlock;
     },
 
-    _renderEnrolledActions(course, pct) {
+    _renderEnrolledActions(course) {
         return `
             <div style="display:flex;align-items:center;justify-content:space-between;gap:.6rem;margin-bottom:1rem;padding-bottom:1rem;border-bottom:1px solid var(--border)">
                 <div style="display:flex;align-items:center;gap:.6rem">
@@ -1280,22 +1208,6 @@ const CourseViewPage = {
                 </button>
             </div>`;
     },
-
-    async unenroll(courseId) {
-        const ok = await Modal.confirm({ message: 'Відписатися від курсу?', danger: true });
-        if (!ok) return;
-        Loader.show();
-        try {
-            await API.enrollments.unenroll(courseId);
-            Toast.success('Ви відписались від курсу');
-            this._enrolled = false;
-            const container = document.getElementById('page-content');
-            if (container) await this.init(container, { id: courseId, from: this._from });
-        } catch(e) { Toast.error('Помилка', e.message); }
-        finally { Loader.hide(); }
-    },
-
-    _renderManageCard(course) { return ''; },
 
     async _loadEnrollees(courseId) {
         const el = document.getElementById('cv-enrollees');
@@ -1530,7 +1442,7 @@ const CourseViewPage = {
                 date:         d,
                 time:         run.start_time || null,
                 end_time:     run.end_time   || null,
-                notes:        (() => { const topic = (this._course?.schedule || [])[dayNum - 1]?.title; return `День ${dayNum}${topic ? ` <span class="cvs-acc-name">${Fmt.esc(topic)}</span>` : ''}`; })(),
+                notes:        (() => { const topic = (this._course?.schedule || [])[dayNum - 1]?.title; return `День ${dayNum}${topic ? ': ' + topic : ''}`; })(),
                 color:        '#6366f1',
                 repeat_type:  'none',
                 is_important: true,
@@ -1582,7 +1494,7 @@ const CourseViewPage = {
                     date:         d,
                     time:         newRun.start_time || null,
                     end_time:     newRun.end_time   || null,
-                    notes:        `День ${idx + 1}${topic ? ` <span class="cvs-acc-name">${Fmt.esc(topic)}</span>` : ''}`,
+                    notes:        `День ${idx + 1}${topic ? ': ' + topic : ''}`,
                     color:        '#6366f1',
                     repeat_type:  'none',
                     is_important: true,
@@ -1625,87 +1537,6 @@ const CourseViewPage = {
         finally { Loader.hide(); }
     },
 
-    openAddLesson()  { this._openLessonForm(null); },
-
-    async openEditLesson(id) {
-        Loader.show();
-        try { const lesson = await API.lessons.getById(id); this._openLessonForm(lesson); }
-        finally { Loader.hide(); }
-    },
-
-    _openLessonForm(lesson) {
-        Modal.open({
-            title: lesson ? '<i class="fa-solid fa-pen"></i> Редагувати урок' : '<i class="fa-solid fa-plus"></i> Додати урок',
-            size: 'lg',
-            body: `
-                <div class="form-group">
-                    <label>Назва уроку *</label>
-                    <input id="l-title" type="text" value="${lesson?.title || ''}" placeholder="Введіть назву уроку">
-                </div>
-                <div class="form-group">
-                    <label>Опис</label>
-                    <textarea id="l-desc" placeholder="Короткий опис уроку">${lesson?.description || ''}</textarea>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Порядок (індекс)</label>
-                        <input id="l-order" type="number" min="0" value="${lesson?.order_index ?? 0}">
-                    </div>
-                    <div class="form-group">
-                        <label>Тривалість (хв)</label>
-                        <input id="l-duration" type="number" min="0" value="${lesson?.duration_minutes || ''}">
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label class="checkbox-item" style="cursor:pointer">
-                        <input type="checkbox" id="l-published" ${lesson?.is_published ? 'checked' : ''}>
-                        <span>Опублікувати урок</span>
-                    </label>
-                    <label class="checkbox-item" style="cursor:pointer;margin-top:.5rem">
-                        <input type="checkbox" id="l-free" ${lesson?.is_free_preview ? 'checked' : ''}>
-                        <span>Перегляд</span>
-                    </label>
-                </div>`,
-            footer: `
-                <button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
-                <button class="btn btn-primary" onclick="CourseViewPage.saveLesson('${lesson?.id || ''}','${this._course.id}')"><i class="fa-regular fa-floppy-disk"></i> Зберегти</button>`
-        });
-    },
-
-    async saveLesson(lessonId, courseId) {
-        const title = Dom.val('l-title').trim();
-        if (!title) { Toast.error('Помилка', 'Вкажіть назву уроку'); return; }
-        const fields = {
-            course_id: courseId, title,
-            description:      Dom.val('l-desc').trim() || null,
-            order_index:      parseInt(Dom.val('l-order')) || 0,
-            duration_minutes: parseInt(Dom.val('l-duration')) || 0,
-            is_published:     document.getElementById('l-published').checked,
-            is_free_preview:  document.getElementById('l-free').checked
-        };
-        Loader.show();
-        try {
-            if (lessonId) await API.lessons.update(lessonId, fields);
-            else          await API.lessons.create(fields);
-            Toast.success('Збережено!');
-            Modal.close();
-            Router.go('courses/' + courseId);
-        } catch(e) { Toast.error('Помилка', e.message); }
-        finally { Loader.hide(); }
-    },
-
-    async deleteLesson(id, title) {
-        const ok = await Modal.confirm({ title: 'Видалити урок', message: `Видалити урок "${title}"?`, confirmText: 'Видалити', danger: true });
-        if (!ok) return;
-        Loader.show();
-        try {
-            await API.lessons.delete(id);
-            Toast.success('Урок видалено');
-            Router.go('courses/' + this._course.id);
-        } catch(e) { Toast.error('Помилка', e.message); }
-        finally { Loader.hide(); }
-    },
-
     openAddTest() { TestsPage._openTestForm(null, this._course.id); },
 
     async manageEnrollments(courseId) {
@@ -1722,8 +1553,8 @@ const CourseViewPage = {
                             <tbody>
                                 ${enrollments.length ? enrollments.map(e => `
                                     <tr>
-                                        <td><strong>${e.user?.full_name || '—'}</strong></td>
-                                        <td style="color:var(--text-muted)">${e.user?.email || '—'}</td>
+                                        <td><strong>${Fmt.esc(e.user?.full_name || '—')}</strong></td>
+                                        <td style="color:var(--text-muted)">${Fmt.esc(e.user?.email || '—')}</td>
                                         <td>
                                             <div style="display:flex;align-items:center;gap:.5rem;min-width:100px">
                                                 <div class="progress-bar" style="flex:1"><div class="progress-fill" style="width:${e.progress_percentage||0}%"></div></div>

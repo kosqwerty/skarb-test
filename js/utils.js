@@ -110,8 +110,8 @@ const UI = {
     setBreadcrumb(items = []) {
         const el = document.getElementById('breadcrumb');
         if (!el) return;
-        el.innerHTML = items.map((item, i) => {
-            if (i === items.length - 1) return `<span class="current">${item.label}</span>`;
+        const nav = items.slice(0, -1);
+        el.innerHTML = nav.map(item => {
             if (item.onClick) return `<a href="#" onclick="event.preventDefault();(${item.onClick.toString()})()">${item.label}</a><span>›</span>`;
             return `<a href="#/${item.route}">${item.label}</a><span>›</span>`;
         }).join('');
@@ -159,6 +159,22 @@ const UI = {
         if (n > 0 && !NotificationsPage._reminderTimer) {
             NotificationsPage.startReminder();
         }
+        this._subscribeNotifications();
+    },
+
+    _subscribeNotifications() {
+        if (this._notifChannel) return;
+        this._notifChannel = supabase
+            .channel('ntf-' + AppState.user.id)
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'notifications',
+                filter: `user_id=eq.${AppState.user.id}`
+            }, () => {
+                this.updateNotificationBadge(1);
+            })
+            .subscribe();
     },
 
     updateNotificationBadge(delta, reset = false) {
@@ -185,7 +201,7 @@ const UI = {
         if (bellBtn) bellBtn.classList.toggle('has-unread', count > 0);
     },
     _getNavItems(role) {
-        const expertItem   = { icon: '<img src="icons/road_up.png" style="width:33px;height:33px;object-fit:contain;vertical-align:middle;border-radius:3px;padding:1px">', label: 'Skill Up', route: 'expert-path' };
+        const expertItem   = { icon: '<i class="fa-solid fa-ranking-star"></i>', label: 'Skill Up', route: 'expert-path' };
         const common = [
             { icon: '<i class="fa-solid fa-house" style="color:#C9A227"></i>',        label: 'Головна',  route: 'dashboard' },
             expertItem,
@@ -209,7 +225,7 @@ const UI = {
                     { icon: '<i class="fa-solid fa-calendar-days" style="color:#60a5fa"></i>', label: 'Розділ планування', route: 'scheduler' },
                     { icon: '<i class="fa-solid fa-gear" style="color:#f87171"></i>',          label: 'Адміністрування',   route: 'admin' }
                 ]},
-                { title: 'Особисте', items: [ contactsItem, bmItem, ntfItem ] }
+                { title: 'Особисте', items: [ contactsItem, bmItem ] }
             ];
         }
         if (role === 'manager') {
@@ -218,7 +234,7 @@ const UI = {
                 { title: 'Управління', items: [
                     { icon: '<i class="fa-solid fa-calendar-days" style="color:#60a5fa"></i>', label: 'Розділ планування', route: 'scheduler' }
                 ]},
-                { title: 'Особисте', items: [ contactsItem, bmItem, ntfItem ] }
+                { title: 'Особисте', items: [ contactsItem, bmItem ] }
             ];
         }
         if (role === 'smm') {
@@ -229,7 +245,7 @@ const UI = {
                     { icon: '<i class="fa-solid fa-gear"></i>',          label: 'Контент',          route: 'admin' },
                     { icon: '<i class="fa-solid fa-calendar-days" style="color:#60a5fa"></i>', label: 'Розділ планування', route: 'scheduler', noStar: true }
                 ]},
-                { title: 'Особисте', items: [ contactsItem, bmItem, ntfItem ] }
+                { title: 'Особисте', items: [ contactsItem, bmItem ] }
             ];
         }
         if (role === 'teacher') {
@@ -239,7 +255,7 @@ const UI = {
                     { icon: '<i class="fa-solid fa-chart-bar"></i>',     label: 'Аналітика',        route: 'analytics' },
                     { icon: '<i class="fa-solid fa-calendar-days" style="color:#60a5fa"></i>', label: 'Розділ планування', route: 'scheduler', noStar: true }
                 ]},
-                { title: 'Особисте', items: [ contactsItem, bmItem, ntfItem ] }
+                { title: 'Особисте', items: [ contactsItem, bmItem ] }
             ];
         }
         return [
@@ -247,7 +263,7 @@ const UI = {
             { title: 'Особисте', items: [
                 contactsItem,
                 { icon: '<i class="fa-solid fa-calendar-days" style="color:#60a5fa"></i>', label: 'Розділ планування', route: 'scheduler', noStar: true },
-                bmItem, ntfItem
+                bmItem
             ]}
         ];
     },
@@ -292,7 +308,15 @@ const UI = {
         popup.classList.remove('hidden');
         requestAnimationFrame(() => popup.classList.add('open'));
         document.getElementById('su-chevron-icon')?.classList.add('su-rotated');
-        setTimeout(() => document.addEventListener('click', this._popupOutsideHandler, { once: true }), 0);
+        if (!this._boundPopupHandler) {
+            this._boundPopupHandler = e => {
+                if (!document.getElementById('su-popup')?.contains(e.target) &&
+                    !document.getElementById('header-user')?.contains(e.target)) {
+                    this.closeUserPopup();
+                }
+            };
+        }
+        setTimeout(() => document.addEventListener('click', this._boundPopupHandler), 0);
     },
 
     closeUserPopup() {
@@ -301,13 +325,7 @@ const UI = {
         popup.classList.remove('open');
         document.getElementById('su-chevron-icon')?.classList.remove('su-rotated');
         setTimeout(() => popup.classList.add('hidden'), 180);
-    },
-
-    _popupOutsideHandler(e) {
-        if (!document.getElementById('su-popup')?.contains(e.target) &&
-            !document.getElementById('header-user')?.contains(e.target)) {
-            UI.closeUserPopup();
-        }
+        document.removeEventListener('click', this._boundPopupHandler);
     },
 
     _updateThemeLabel() {
@@ -562,20 +580,20 @@ const SearchSelect = {
 const Theme = {
     init() {
         // Apply from localStorage immediately (avoids flash before profile loads)
-        const saved = localStorage.getItem('lms_theme') || 'dark';
+        const saved = localStorage.getItem('lms_theme') || 'light';
         this._apply(saved, false, false);
     },
 
     // Called after profile is loaded — syncs theme from DB to browser
     applyFromProfile(profile) {
         if (!profile) return;
-        const theme = profile.ui_theme || 'dark';
+        const theme = profile.ui_theme || 'light';
         localStorage.setItem('lms_theme', theme);
         this._apply(theme, false, false);
     },
 
     toggle() {
-        const current = localStorage.getItem('lms_theme') || 'dark';
+        const current = localStorage.getItem('lms_theme') || 'light';
         this._apply(current === 'dark' ? 'light' : 'dark', true, true);
     },
 

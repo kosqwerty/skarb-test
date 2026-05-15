@@ -39,10 +39,6 @@ const App = {
         // Apply user's saved theme from DB
         Theme.applyFromProfile(profile);
 
-        // Load unread notification count
-        UI.loadNotificationCount();
-        UI.loadDocBadge();
-
         // Start scheduler background ticker (owner/admin/manager only)
         if (AppState.canSchedule()) SchedulerPage.startTimer();
 
@@ -52,6 +48,10 @@ const App = {
         // Render navigation based on role
         UI.renderNavigation(profile.role);
         UI.renderSidebarUser(profile);
+
+        // Load unread counts after sidebar is in DOM
+        UI.loadNotificationCount();
+        UI.loadDocBadge();
 
         // Load bookmarks async (updates nav stars when done)
         Bookmarks.load();

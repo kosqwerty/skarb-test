@@ -2137,16 +2137,17 @@ ${this._opts.map((o,i) => `
             // Send notifications to newly assigned users
             if (toAssignNew.length) {
                 const testTitle = (this._tests.find(x => x.id === testId) || this._curTest)?.title || 'Тест';
-                try {
-                    await Promise.all(toAssignNew.map(uid =>
-                        supabase.from('notifications').insert({
-                            user_id: uid, type: 'test_assigned',
-                            title: 'Новий тест',
-                            body:  `Вам призначено тест: ${testTitle}`,
-                            data:  { test_id: testId }
-                        })
-                    ));
-                } catch(e) { Toast.warning('Сповіщення', 'Призначено, але не вдалося надіслати сповіщення деяким користувачам'); }
+                const results = await Promise.all(toAssignNew.map(uid =>
+                    supabase.from('notifications').insert({
+                        user_id: uid, type: 'test_assigned',
+                        title:   `Вам призначено тест: ${testTitle}`,
+                        message: testTitle,
+                        link:    `tests/${testId}`
+                    })
+                ));
+                if (results.some(r => r.error)) {
+                    Toast.warning('Сповіщення', 'Призначено, але не вдалося надіслати сповіщення деяким користувачам');
+                }
             }
             Toast.success('Збережено');
             this._goBack(TestsManagerPage._container);

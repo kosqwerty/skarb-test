@@ -1937,9 +1937,9 @@ const AdminPage = {
                     ${isEdit ? `
                     <div class="form-group">
                         <label style="display:flex;align-items:center;justify-content:space-between">
-                            <span>🔄 Потоки курсу</span>
+                            <span>🔄 Групи курсу</span>
                             <button type="button" class="btn btn-ghost btn-sm" onclick="AdminPage._runsAdd('${course.id}')">
-                                <i class="fa-solid fa-plus"></i> Новий потік
+                                <i class="fa-solid fa-plus"></i> Нова група
                             </button>
                         </label>
                         <div id="c-runs-list" style="display:flex;flex-direction:column;gap:.4rem;margin-top:.35rem">
@@ -2017,7 +2017,7 @@ const AdminPage = {
         const el = document.getElementById('c-runs-list');
         if (!el) return;
         if (!this._runsData.length) {
-            el.innerHTML = `<div style="color:var(--text-muted);font-size:.82rem;padding:.5rem 0">Потоків ще немає. Натисніть «Новий потік» щоб додати.</div>`;
+            el.innerHTML = `<div style="color:var(--text-muted);font-size:.82rem;padding:.5rem 0">Груп ще немає. Натисніть «Нова група» щоб додати.</div>`;
             return;
         }
         const today = new Date().toISOString().slice(0, 10);
@@ -2056,12 +2056,12 @@ const AdminPage = {
 
     _runsOpenModal(courseId, run) {
         Modal.open({
-            title: run ? '✏️ Редагувати потік' : '🔄 Новий потік',
+            title: run ? '✏️ Редагувати групу' : '🔄 Нова група',
             size: 'sm',
             body: `
             <div style="display:flex;flex-direction:column;gap:.75rem">
                 <div>
-                    <label style="font-size:.82rem;font-weight:600;display:block;margin-bottom:.3rem">Назва потоку *</label>
+                    <label style="font-size:.82rem;font-weight:600;display:block;margin-bottom:.3rem">Назва групи *</label>
                     <input id="run-title" class="form-control" placeholder="Наприклад: Група Червень 2025" value="${Fmt.esc(run?.title || '')}">
                 </div>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem">
@@ -2087,7 +2087,7 @@ const AdminPage = {
         const title      = document.getElementById('run-title')?.value.trim();
         const start_date = document.getElementById('run-start')?.value || null;
         const end_date   = document.getElementById('run-end')?.value || null;
-        if (!title) { Toast.warning('Введіть назву потоку'); return; }
+        if (!title) { Toast.warning('Введіть назву групи'); return; }
         Loader.show();
         try {
             if (runId) {
@@ -2104,7 +2104,7 @@ const AdminPage = {
 
     async _runsDelete(runId, courseId) {
         const run = this._runsData.find(r => r.id === runId);
-        const ok = await Modal.confirm({ message: `Видалити потік «${run?.title || ''}»? Записи учасників залишаться, але потік буде відв'язаний.`, danger: true });
+        const ok = await Modal.confirm({ message: `Видалити групу «${run?.title || ''}»? Записи учасників залишаться, але група буде відв'язана.`, danger: true });
         if (!ok) return;
         Loader.show();
         try {

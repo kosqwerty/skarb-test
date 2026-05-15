@@ -153,9 +153,8 @@ const API = {
             const { data } = await supabase.from('course_runs')
                 .select('*')
                 .eq('course_id', courseId)
-                .or(`start_date.is.null,start_date.lte.${today}`)
                 .or(`end_date.is.null,end_date.gte.${today}`)
-                .order('start_date', { ascending: false })
+                .order('created_at', { ascending: false })
                 .limit(1)
                 .maybeSingle();
             return data;
@@ -215,11 +214,33 @@ const API = {
     enrollments: {
         async getMyEnrollments() {
             const { data, error } = await supabase.from('enrollments')
-                .select(`*, course:courses(*, teacher:profiles!teacher_id(full_name))`)
+                .select(`*, course:courses(*, teacher:profiles!teacher_id(full_name)), run:course_runs(id, title, start_date, end_date)`)
                 .eq('user_id', AppState.user.id)
                 .order('enrolled_at', { ascending: false });
             if (error) throw error;
             return data;
+        },
+
+        async getMyCompleted() {
+            const today = new Date().toISOString().slice(0, 10);
+            const { data, error } = await supabase.from('enrollments')
+                .select(`*, course:courses(id, title, thumbnail_url), run:course_runs(id, title, start_date, end_date)`)
+                .eq('user_id', AppState.user.id)
+                .order('enrolled_at', { ascending: false });
+            if (error) throw error;
+            return (data || []).filter(e =>
+                (e.completed_at) ||
+                (e.run && e.run.end_date && e.run.end_date < today)
+            );
+        },
+
+        async getRunParticipants(courseId, runId) {
+            const { data, error } = await supabase.from('enrollments')
+                .select(`user:profiles!user_id(id, full_name, avatar_url, city)`)
+                .eq('course_id', courseId)
+                .eq('run_id', runId);
+            if (error) throw error;
+            return (data || []).map(e => e.user).filter(Boolean);
         },
 
         async isEnrolled(courseId, runId = null) {
@@ -228,7 +249,7 @@ const API = {
                 .eq('user_id', AppState.user.id)
                 .eq('course_id', courseId);
             if (runId) q = q.eq('run_id', runId);
-            const { data } = await q.order('created_at', { ascending: false }).limit(1).maybeSingle();
+            const { data } = await q.order('enrolled_at', { ascending: false }).limit(1).maybeSingle();
             return data || null;
         },
 
@@ -261,7 +282,7 @@ const API = {
 
         async getCourseEnrollments(courseId) {
             const { data, error } = await supabase.from('enrollments')
-                .select(`*, user:profiles!user_id(id, full_name, email, avatar_url, role)`)
+                .select(`*, user:profiles!user_id(id, full_name, email, avatar_url, role, city)`)
                 .eq('course_id', courseId)
                 .order('enrolled_at', { ascending: false });
             if (error) throw error;

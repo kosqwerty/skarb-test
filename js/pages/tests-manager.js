@@ -2368,7 +2368,7 @@ const MyTestsPage = {
         </div>
     </div>`}
 
-    <div class="mt-tabs${fromExpert?' ep-style':''}">
+    ${!fromExpert ? `<div class="mt-tabs">
         <button class="mt-tab${this._tab==='pending'?' active':''}" onclick="MyTestsPage._switchTab('pending',this)">
             <i class="fa-solid fa-clipboard-list"></i> Призначені
             <span class="mt-ep-count">${assignments.filter(a=>!completedTestIds.has(a.test_id)).length}</span>
@@ -2377,7 +2377,7 @@ const MyTestsPage = {
             <i class="fa-solid fa-trophy"></i> Пройдені
             <span class="mt-ep-count">${attempts.length}</span>
         </button>
-    </div>
+    </div>` : ''}
 
     <div id="mt-content">
         ${this._tab === 'pending' ? this._pendingHtml(assignments, completedTestIds) : this._historyHtml(attempts)}

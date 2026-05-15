@@ -108,12 +108,9 @@ const SurveysPage = {
 </style>
 
 <div class="sv-list-wrap">
-    <div class="sv-toolbar">
-        <div class="sv-filters" id="sv-filters">
-            ${this._filterBtnsHtml()}
-        </div>
-        ${canManage ? `<button class="sv-btn sv-btn-primary" style="flex:none;padding:7px 18px" onclick="SurveysPage.openBuilder()"><i class="fa-solid fa-plus"></i> Створити</button>` : ''}
-    </div>
+    ${canManage ? `<div style="display:flex;justify-content:flex-end;margin-bottom:.75rem">
+        <button class="btn btn-primary btn-sm" onclick="SurveysPage.openBuilder()"><i class="fa-solid fa-plus"></i> Створити</button>
+    </div>` : ''}
     <div id="sv-grid" class="sv-grid">${this._cardsHtml()}</div>
 </div>`;
     },

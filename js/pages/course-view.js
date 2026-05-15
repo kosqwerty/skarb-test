@@ -201,6 +201,7 @@ const CourseViewPage = {
                 <div class="cv-staff-bar" style="border-radius:var(--radius-lg) var(--radius-lg) 0 0;margin-bottom:0">
                     <button class="btn btn-ghost btn-sm" onclick="Router.go('analytics?course=${course.id}')"><i class="fa-solid fa-chart-bar"></i> Аналітика</button>
                     <button class="btn btn-ghost btn-sm" onclick="CourseViewPage.manageEnrollments('${course.id}')"><i class="fa-solid fa-users"></i> Стажери</button>
+                    ${AppState.isAdmin() ? `<button class="btn btn-ghost btn-sm" onclick="CourseViewPage._openRunModal('${course.id}')"><i class="fa-solid fa-rotate"></i> Нова група</button>` : ''}
                     <button class="btn btn-ghost btn-sm" onclick="Router.go('admin?tab=courses&edit=${course.id}')"><i class="fa-solid fa-gear"></i> Налаштування</button>
                 </div>` : ''}
                 <div class="cv-hero-wrap${AppState.isStaff() ? ' cv-hero-no-top-radius' : ''}${enrolled ? ' enrolled' : ''}">
@@ -657,6 +658,104 @@ const CourseViewPage = {
             const el = document.getElementById('cv-info-tab-meet');
             if (el) el.innerHTML = this._renderMeetTab(this._course);
             Toast.success('Збережено');
+        } catch(e) { Toast.error('Помилка', e.message); }
+        finally { Loader.hide(); }
+    },
+
+    _openRunModal(courseId) {
+        Modal.open({
+            title: '🔄 Нова група',
+            size: 'sm',
+            body: `
+            <div style="display:flex;flex-direction:column;gap:.75rem">
+                <div>
+                    <label style="font-size:.82rem;font-weight:600;display:block;margin-bottom:.3rem">Назва групи *</label>
+                    <input id="cvrun-title" class="form-control" placeholder="Наприклад: Група Червень 2025">
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem">
+                    <div>
+                        <label style="font-size:.82rem;font-weight:600;display:block;margin-bottom:.3rem">Дата початку</label>
+                        <input id="cvrun-start" class="form-control" type="date">
+                    </div>
+                    <div>
+                        <label style="font-size:.82rem;font-weight:600;display:block;margin-bottom:.3rem">Дата завершення</label>
+                        <input id="cvrun-end" class="form-control" type="date">
+                    </div>
+                </div>
+            </div>`,
+            footer: `
+                <button class="btn btn-primary" onclick="CourseViewPage._saveRunModal('${courseId}')">
+                    <i class="fa-regular fa-floppy-disk"></i> Зберегти
+                </button>
+                <button class="btn btn-ghost" onclick="Modal.close()">Скасувати</button>`
+        });
+    },
+
+    _editRunModal(runId, courseId) {
+        const run = (this._allRuns || []).find(r => r.id === runId);
+        if (!run) return;
+        Modal.open({
+            title: '✏️ Редагувати групу',
+            size: 'sm',
+            body: `
+            <div style="display:flex;flex-direction:column;gap:.75rem">
+                <div>
+                    <label style="font-size:.82rem;font-weight:600;display:block;margin-bottom:.3rem">Назва групи *</label>
+                    <input id="cvrun-title" class="form-control" value="${Fmt.esc(run.title)}">
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem">
+                    <div>
+                        <label style="font-size:.82rem;font-weight:600;display:block;margin-bottom:.3rem">Дата початку</label>
+                        <input id="cvrun-start" class="form-control" type="date" value="${run.start_date || ''}">
+                    </div>
+                    <div>
+                        <label style="font-size:.82rem;font-weight:600;display:block;margin-bottom:.3rem">Дата завершення</label>
+                        <input id="cvrun-end" class="form-control" type="date" value="${run.end_date || ''}">
+                    </div>
+                </div>
+            </div>`,
+            footer: `
+                <button class="btn btn-primary" onclick="CourseViewPage._saveRunModal('${courseId}','${runId}')">
+                    <i class="fa-regular fa-floppy-disk"></i> Зберегти
+                </button>
+                <button class="btn btn-ghost" onclick="Modal.close()">Скасувати</button>`
+        });
+    },
+
+    async _deleteRun(runId, courseId) {
+        const run = (this._allRuns || []).find(r => r.id === runId);
+        const ok = await Modal.confirm({ message: `Видалити групу «${run?.title || ''}»? Записи учасників залишаться.`, danger: true });
+        if (!ok) return;
+        Loader.show();
+        try {
+            await API.courseRuns.remove(runId);
+            this._allRuns = await API.courseRuns.getByCourse(courseId);
+            this._activeRun = await API.courseRuns.getActive(courseId);
+            const container = document.getElementById('page-content');
+            if (container) await CourseViewPage.init(container, { id: courseId, from: this._from });
+            Toast.success('Видалено');
+        } catch(e) { Toast.error('Помилка', e.message); }
+        finally { Loader.hide(); }
+    },
+
+    async _saveRunModal(courseId, runId = null) {
+        const title      = document.getElementById('cvrun-title')?.value.trim();
+        const start_date = document.getElementById('cvrun-start')?.value || null;
+        const end_date   = document.getElementById('cvrun-end')?.value || null;
+        if (!title) { Toast.warning('Введіть назву групи'); return; }
+        Loader.show();
+        try {
+            if (runId) {
+                await API.courseRuns.update(runId, { title, start_date, end_date });
+            } else {
+                await API.courseRuns.create(courseId, { title, start_date, end_date });
+            }
+            Modal.close();
+            this._allRuns = await API.courseRuns.getByCourse(courseId);
+            this._activeRun = await API.courseRuns.getActive(courseId);
+            Toast.success(runId ? 'Збережено' : 'Групу створено');
+            const container = document.getElementById('page-content');
+            if (container) await CourseViewPage.init(container, { id: courseId, from: this._from });
         } catch(e) { Toast.error('Помилка', e.message); }
         finally { Loader.hide(); }
     },
@@ -1261,11 +1360,23 @@ const CourseViewPage = {
     _renderEnrollAction(course) { return ''; },
 
     _renderRunBlock(course, enrolled) {
-        const run    = this._activeRun;
-        const allRuns = this._allRuns || [];
-        const today  = new Date().toISOString().slice(0, 10);
+        const run         = this._activeRun;
+        const allRuns     = this._allRuns || [];
+        const today       = new Date().toISOString().slice(0, 10);
+        const enrollment  = this._enrollmentRow;
+        const enrolledRunId = enrollment?.run_id || null;
 
-        // No runs configured at all
+        const fmtDate = d => d ? Fmt.dateShort(new Date(d + 'T00:00:00')) : '';
+        const runStatus = r => {
+            const ended   = r.end_date && r.end_date < today;
+            const started = !r.start_date || r.start_date <= today;
+            if (ended)    return { label: 'Завершено', color: '#94a3b8' };
+            if (started)  return { label: 'Активна',   color: '#10b981' };
+            return            { label: 'Заплановано', color: '#6366f1' };
+        };
+        const adminBlock = '';
+
+        // No runs at all
         if (!allRuns.length) {
             if (!enrolled) return `
                 <button class="cv-enroll-btn" style="width:100%;margin-bottom:.75rem;background:rgba(0,0,0,.07);border-color:var(--border);color:var(--text-primary)"
@@ -1276,53 +1387,63 @@ const CourseViewPage = {
             return '';
         }
 
-        // Has runs — find which one user is enrolled in
-        const enrollment = this._enrollmentRow;
-        const enrolledRunId = enrollment?.run_id || null;
-
-        // Already enrolled in active run
+        // Already enrolled in active run — show current group + admin list
         if (enrolled && run && enrolledRunId === run.id) {
             const ended = run.end_date && run.end_date < today;
-            return `
+            return adminBlock + `
             <div style="padding:.65rem .9rem;border-radius:10px;background:color-mix(in srgb,var(--primary) 8%,transparent);border:1px solid color-mix(in srgb,var(--primary) 20%,transparent);margin-bottom:.75rem">
                 <div style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:.2rem">
-                    <i class="fa-solid fa-rotate"></i> Поточний потік
+                    <i class="fa-solid fa-rotate"></i> Поточна група
                 </div>
                 <div style="font-weight:700;font-size:.9rem">${Fmt.esc(run.title)}</div>
                 ${run.start_date || run.end_date ? `<div style="font-size:.75rem;color:var(--text-muted);margin-top:.2rem">
-                    ${run.start_date ? Fmt.dateShort(new Date(run.start_date + 'T00:00:00')) : ''}${run.start_date && run.end_date ? ' — ' : ''}${run.end_date ? Fmt.dateShort(new Date(run.end_date + 'T00:00:00')) : ''}
+                    ${fmtDate(run.start_date)}${run.start_date && run.end_date ? ' — ' : ''}${fmtDate(run.end_date)}
                     ${ended ? '<span style="color:#ef4444;margin-left:.4rem">• Завершено</span>' : ''}
                 </div>` : ''}
             </div>`;
         }
 
-        // Active run exists but user not enrolled (or enrolled in different run)
-        if (run) {
-            const isReEnroll = enrolled; // enrolled in a past run, active run is different
-            return `
-            <div style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:.75rem">
-                <div style="padding:.65rem .9rem;border-radius:10px;background:color-mix(in srgb,#10b981 8%,transparent);border:1px solid color-mix(in srgb,#10b981 25%,transparent)">
-                    <div style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:.2rem">
-                        <i class="fa-solid fa-rotate" style="color:#10b981"></i> ${isReEnroll ? 'Новий потік' : 'Активний потік'}
-                    </div>
-                    <div style="font-weight:700;font-size:.9rem">${Fmt.esc(run.title)}</div>
-                    ${run.start_date || run.end_date ? `<div style="font-size:.75rem;color:var(--text-muted);margin-top:.2rem">
-                        ${run.start_date ? Fmt.dateShort(new Date(run.start_date + 'T00:00:00')) : ''}${run.start_date && run.end_date ? ' — ' : ''}${run.end_date ? Fmt.dateShort(new Date(run.end_date + 'T00:00:00')) : ''}
-                    </div>` : ''}
-                </div>
-                <button class="cv-enroll-btn" style="width:100%;background:rgba(0,0,0,.07);border-color:var(--border);color:var(--text-primary)"
-                        onmouseenter="this.style.background='rgba(0,0,0,.13)'" onmouseleave="this.style.background='rgba(0,0,0,.07)'"
-                        onclick="CourseViewPage.enroll('${course.id}','${run.id}')">
-                    <i class="fa-solid fa-${isReEnroll ? 'rotate' : 'circle-plus'}"></i> ${isReEnroll ? 'Записатися на новий потік' : 'Записатися'}
-                </button>
+        // Available runs for enrollment (not ended)
+        const availableRuns = allRuns.filter(r => !r.end_date || r.end_date >= today);
+
+        if (!enrolled && !availableRuns.length) {
+            return adminBlock + `<div style="padding:.65rem;border-radius:10px;background:var(--bg-raised);border:1px solid var(--border);margin-bottom:.75rem;font-size:.82rem;color:var(--text-muted);text-align:center">
+                <i class="fa-solid fa-calendar-xmark"></i> Активних груп немає
             </div>`;
         }
 
-        // Only past/upcoming runs, no active — show nothing or past-run info
-        if (enrolled) return '';
-        return `<div style="padding:.65rem;border-radius:10px;background:var(--bg-raised);border:1px solid var(--border);margin-bottom:.75rem;font-size:.82rem;color:var(--text-muted);text-align:center">
-            <i class="fa-solid fa-calendar-xmark"></i> Активних потоків немає
-        </div>`;
+        // User not enrolled or enrolled in past run — show group picker
+        if (!enrolled || (enrolled && enrolledRunId && !availableRuns.find(r => r.id === enrolledRunId))) {
+            if (!availableRuns.length) return adminBlock;
+            return adminBlock + `
+            <div style="margin-bottom:.75rem">
+                <div style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:.4rem">
+                    <i class="fa-solid fa-circle-plus"></i> ${enrolled ? 'Записатися на нову групу' : 'Оберіть групу'}
+                </div>
+                <div style="display:flex;flex-direction:column;gap:.35rem">
+                    ${availableRuns.map(r => {
+                        const dates = [fmtDate(r.start_date), fmtDate(r.end_date)].filter(Boolean).join(' — ');
+                        const st = runStatus(r);
+                        return `
+                        <div style="display:flex;align-items:center;gap:.5rem;padding:.55rem .75rem;border-radius:9px;border:1px solid var(--border);background:var(--bg-raised);transition:border-color .15s"
+                             onmouseenter="this.style.borderColor='var(--primary)'" onmouseleave="this.style.borderColor='var(--border)'">
+                            <span style="width:7px;height:7px;border-radius:50%;background:${st.color};flex-shrink:0"></span>
+                            <div style="flex:1;min-width:0;cursor:pointer" onclick="CourseViewPage.enroll('${course.id}','${r.id}')">
+                                <div style="font-size:.85rem;font-weight:600">${Fmt.esc(r.title)}</div>
+                                ${dates ? `<div style="font-size:.72rem;color:var(--text-muted)">${dates}</div>` : ''}
+                            </div>
+                            ${AppState.isAdmin() ? `
+                            <button onclick="CourseViewPage._editRunModal('${r.id}','${course.id}')" style="flex-shrink:0;padding:.2rem .4rem;border:none;background:transparent;color:var(--text-muted);cursor:pointer;border-radius:5px" title="Редагувати" onmouseenter="this.style.color='var(--primary)'" onmouseleave="this.style.color='var(--text-muted)'"><i class="fa-solid fa-pen-to-square" style="font-size:.75rem"></i></button>
+                            <button onclick="CourseViewPage._deleteRun('${r.id}','${course.id}')" style="flex-shrink:0;padding:.2rem .4rem;border:none;background:transparent;color:var(--text-muted);cursor:pointer;border-radius:5px" title="Видалити" onmouseenter="this.style.color='var(--danger)'" onmouseleave="this.style.color='var(--text-muted)'"><i class="fa-solid fa-trash" style="font-size:.75rem"></i></button>
+                            ` : `<i class="fa-solid fa-arrow-right" style="color:var(--text-muted);font-size:.75rem;flex-shrink:0"></i>`}
+                        </div>`;
+                    }).join('')}
+                </div>
+            </div>`;
+        }
+
+        // No active run
+        if (enrolled) return adminBlock;
     },
 
     _renderEnrolledActions(course, pct) {
@@ -1371,32 +1492,81 @@ const CourseViewPage = {
                 </div>`;
                 return;
             }
+
             const colors = ['#6366f1','#10b981','#f59e0b','#ef4444','#ec4899','#3b82f6','#8b5cf6','#14b8a6'];
             const colorFor = uid => colors[Math.abs([...uid].reduce((a,c)=>a+c.charCodeAt(0),0)) % colors.length];
+
+            const renderUser = e => {
+                const u = e.user;
+                const c = colorFor(u.id);
+                return `<div style="display:flex;align-items:center;gap:.55rem;padding:.35rem .2rem;border-radius:var(--radius-sm);transition:background .1s" onmouseover="this.style.background='var(--bg-raised)'" onmouseout="this.style.background=''">
+                    <div style="width:28px;height:28px;border-radius:50%;background:${c}22;display:flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:700;color:${c};flex-shrink:0;overflow:hidden">
+                        ${u.avatar_url ? `<img src="${u.avatar_url}" style="width:100%;height:100%;object-fit:cover">` : Fmt.initials(u.full_name||'?')}
+                    </div>
+                    <div style="flex:1;min-width:0;overflow:hidden">
+                        <div style="font-size:.78rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Fmt.esc(u.full_name||u.email)}</div>
+                        ${u.city ? `<div style="font-size:.68rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><i class="fa-solid fa-location-dot" style="font-size:.6rem"></i> ${Fmt.esc(u.city)}</div>` : ''}
+                    </div>
+                </div>`;
+            };
+
+            // Filter by user's run for non-admins
+            const userRunId = this._enrollmentRow?.run_id || null;
+            const filteredData = AppState.isAdmin() ? data : (userRunId ? data.filter(e => e.run_id === userRunId) : data);
+
+            // Group by run_id
+            const allRuns = this._allRuns || [];
+            const hasRuns = AppState.isAdmin() && allRuns.length > 0;
+            let bodyHtml = '';
+
+            if (hasRuns) {
+                // Group enrollments by run
+                const byRun = {};
+                filteredData.forEach(e => {
+                    const key = e.run_id || '__none__';
+                    if (!byRun[key]) byRun[key] = [];
+                    byRun[key].push(e);
+                });
+
+                // Render each run group
+                allRuns.forEach(r => {
+                    const group = byRun[r.id] || [];
+                    if (!group.length) return;
+                    bodyHtml += `
+                    <div style="margin-bottom:.6rem">
+                        <div style="font-size:.7rem;font-weight:700;color:var(--text-muted);margin-bottom:.3rem;padding:.2rem 0;border-bottom:1px solid var(--border)">
+                            <i class="fa-solid fa-rotate" style="margin-right:.3rem"></i>${Fmt.esc(r.title)}
+                            <span style="margin-left:.4rem;font-weight:400">(${group.length})</span>
+                        </div>
+                        ${group.map(renderUser).join('')}
+                    </div>`;
+                });
+
+                // Enrollments without a run
+                const noRun = byRun['__none__'] || [];
+                if (noRun.length) {
+                    bodyHtml += `
+                    <div style="margin-bottom:.6rem">
+                        <div style="font-size:.7rem;font-weight:700;color:var(--text-muted);margin-bottom:.3rem;padding:.2rem 0;border-bottom:1px solid var(--border)">
+                            Без групи <span style="font-weight:400">(${noRun.length})</span>
+                        </div>
+                        ${noRun.map(renderUser).join('')}
+                    </div>`;
+                }
+            } else {
+                bodyHtml = filteredData.map(renderUser).join('');
+            }
+
             el.innerHTML = `
                 <div style="border-top:1px solid var(--border);padding-top:.75rem">
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.6rem">
                         <span style="font-weight:700;font-size:.82rem;color:var(--text-muted)"><i class="fa-solid fa-users" style="margin-right:.35rem"></i>Записані</span>
                         <div style="display:flex;align-items:center;gap:.4rem">
-                            <span style="font-size:.72rem;color:var(--text-muted);background:var(--bg-raised);padding:.1rem .5rem;border-radius:999px;font-weight:600">${data.length}</span>
+                            <span style="font-size:.72rem;color:var(--text-muted);background:var(--bg-raised);padding:.1rem .5rem;border-radius:999px;font-weight:600">${filteredData.length}</span>
                             ${AppState.isAdmin() ? `<button onclick="CourseViewPage._resetEnrollees('${courseId}')" style="font-size:.7rem;padding:.15rem .5rem;border:1px solid var(--danger);border-radius:var(--radius-sm);background:transparent;color:var(--danger);cursor:pointer" title="Обнулити список записів"><i class="fa-solid fa-rotate-left"></i> Обнулити</button>` : ''}
                         </div>
                     </div>
-                    <div style="display:flex;flex-direction:column;gap:.3rem;max-height:300px;overflow-y:auto">
-                        ${data.map(e => {
-                            const u   = e.user;
-                            const c   = colorFor(u.id);
-                            const pct = e.progress_percentage || 0;
-                            const done = !!e.completed_at;
-                            return `
-                            <div style="display:flex;align-items:center;gap:.55rem;padding:.35rem .2rem;border-radius:var(--radius-sm);transition:background .1s" onmouseover="this.style.background='var(--bg-raised)'" onmouseout="this.style.background=''">
-                                <div style="width:28px;height:28px;border-radius:50%;background:${c}22;display:flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:700;color:${c};flex-shrink:0;overflow:hidden">
-                                    ${u.avatar_url ? `<img src="${u.avatar_url}" style="width:100%;height:100%;object-fit:cover">` : Fmt.initials(u.full_name||'?')}
-                                </div>
-                                <div style="font-size:.78rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0">${Fmt.esc(u.full_name||u.email)}</div>
-                            </div>`;
-                        }).join('')}
-                    </div>
+                    <div style="display:flex;flex-direction:column;max-height:300px;overflow-y:auto">${bodyHtml}</div>
                 </div>`;
         } catch(e) { el.innerHTML = ''; }
     },

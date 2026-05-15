@@ -107,7 +107,7 @@ const MyCalendarPage = {
     _render() {
         const days    = new Date(this._year, this._month + 1, 0).getDate();
         const firstDow = (new Date(this._year, this._month, 1).getDay() + 6) % 7; // Mon=0
-        const today   = new Date().toISOString().slice(0, 10);
+        const _d = new Date(); const today = `${_d.getFullYear()}-${String(_d.getMonth()+1).padStart(2,'0')}-${String(_d.getDate()).padStart(2,'0')}`;
         const readOnly = this._isReadOnly();
 
         const evByDate = {};
@@ -144,10 +144,10 @@ const MyCalendarPage = {
             <div class="mc-chip-body">
                 <div class="mc-chip-top">
                     ${e.time ? `<span class="mc-chip-time">${e.time.slice(0,5)}${e.end_time ? '–'+e.end_time.slice(0,5) : ''}</span>` : ''}
-                    <span class="mc-chip-title">${e.title}</span>
+                    <span class="mc-chip-title">${Fmt.esc(e.title)}</span>
                     ${e.repeat_type && e.repeat_type !== 'none' ? `<span class="mc-chip-repeat">🔁</span>` : ''}
                 </div>
-                ${e.notes ? `<div class="mc-chip-notes">${e.notes}</div>` : ''}
+                ${e.notes ? `<div class="mc-chip-notes">${Fmt.esc(e.notes)}</div>` : ''}
             </div>
         </div>`).join('')}
     </div>
@@ -336,14 +336,14 @@ ${this._styles()}`;
     <div class="mc-mhdr">
         <div style="display:flex;align-items:center;gap:10px">
             <div style="width:14px;height:14px;border-radius:50%;background:${ev.color};flex-shrink:0"></div>
-            <h3 style="margin:0;font-size:1rem">${ev.title}</h3>
+            <h3 style="margin:0;font-size:1rem">${Fmt.esc(ev.title)}</h3>
         </div>
         <button class="mc-mclose" onclick="document.getElementById('mc-view-modal').remove()">✕</button>
     </div>
     <div style="display:flex;flex-direction:column;gap:8px;font-size:.85rem;margin-top:4px">
         <div>📅 ${new Date(ev.date+'T00:00:00').toLocaleDateString('uk-UA',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</div>
         ${ev.time ? `<div>🕐 ${ev.time.slice(0,5)}${ev.end_time ? ' – ' + ev.end_time.slice(0,5) : ''}${ev.end_time ? `<span style="color:var(--text-muted);font-size:.8rem;margin-left:.5rem">${this._durationLabel(ev.time, ev.end_time).replace(/<[^>]+>/g,'')}</span>` : ''}</div>` : ''}
-        ${ev.notes ? `<div style="color:var(--text-muted);line-height:1.5;margin-top:4px">${ev.notes}</div>` : ''}
+        ${ev.notes ? `<div style="color:var(--text-muted);line-height:1.5;margin-top:4px">${Fmt.esc(ev.notes)}</div>` : ''}
     </div>
     ${readOnly ? '' : `
     <div class="mc-modal-actions" style="margin-top:16px">
@@ -380,7 +380,7 @@ ${this._styles()}`;
         ${this._viewers.length
             ? this._viewers.map(v => `
             <div class="mc-viewer-row">
-                <span>${v.name}</span>
+                <span>${Fmt.esc(v.name)}</span>
                 <button class="mc-viewer-remove" onclick="MyCalendarPage._removeViewer('${v.id}')">✕</button>
             </div>`).join('')
             : `<div style="font-size:.82rem;color:var(--text-muted);font-style:italic">Немає глядачів</div>`}
@@ -402,7 +402,7 @@ ${this._styles()}`;
         res.innerHTML = filtered.length
             ? filtered.map(p => `
             <div class="mc-viewer-row mc-viewer-result" onclick="MyCalendarPage._addViewer('${p.id}',${JSON.stringify(p.full_name||'').replace(/"/g,'&quot;')})">
-                <span>${p.full_name || '—'}</span>
+                <span>${Fmt.esc(p.full_name || '—')}</span>
                 <span class="mc-viewer-add">＋</span>
             </div>`).join('')
             : `<div style="font-size:.82rem;color:var(--text-muted);font-style:italic;padding:6px 0">Нікого не знайдено</div>`;

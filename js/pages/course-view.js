@@ -471,7 +471,8 @@ const CourseViewPage = {
         if (!userId) { Toast.error('Помилка', 'Оберіть людину'); return; }
         Loader.show();
         try {
-            await supabase.from('course_teachers').insert({ course_id: courseId, user_id: userId, label, is_active: true });
+            const { error: insErr } = await supabase.from('course_teachers').insert({ course_id: courseId, user_id: userId, label, is_active: true });
+            if (insErr) { Toast.error('Помилка', insErr.message); return; }
             Modal.close();
             const teachers = await API.courseTeachers.getByCourse(courseId);
             this._courseTeachers = teachers;
@@ -648,7 +649,8 @@ const CourseViewPage = {
         try {
             const { data: fresh } = await supabase.from('courses').select('course_info').eq('id', courseId).single();
             const info = { ...(fresh?.course_info || {}), meet_url: url };
-            await supabase.from('courses').update({ course_info: info }).eq('id', courseId);
+            const { error: updErr } = await supabase.from('courses').update({ course_info: info }).eq('id', courseId);
+            if (updErr) { Toast.error('Помилка збереження', updErr.message); return; }
             if (this._course) { this._course.course_info = info; }
             Modal.close();
             const el = document.getElementById('cv-info-tab-meet');

@@ -236,11 +236,11 @@ const NotificationsPage = {
         return `<div class="ntf-item" data-id="${n.id}" data-type="${n.type}">
             <div class="ntf-icon ntf-icon-${n.type}">${typeIcon}</div>
             <div class="ntf-body">
-                <div class="ntf-item-title">${n.title}</div>
-                <div class="ntf-item-msg">${n.message}</div>
+                <div class="ntf-item-title">${Fmt.esc(n.title)}</div>
+                <div class="ntf-item-msg">${Fmt.esc(n.message || '')}</div>
                 <div class="ntf-item-meta">
                     <span class="${typeCls}">${typeLabel}</span>
-                    <span>від ${sender}</span>
+                    <span>від ${Fmt.esc(sender)}</span>
                     <span>·</span>
                     <span>${timeAgo}</span>
                 </div>

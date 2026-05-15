@@ -172,6 +172,10 @@ const Auth = {
                     supabase.removeChannel(this._blockChannel);
                     this._blockChannel = null;
                 }
+                if (UI._notifChannel) {
+                    supabase.removeChannel(UI._notifChannel);
+                    UI._notifChannel = null;
+                }
                 AppState.user    = null;
                 AppState.profile = null;
                 AppState.session = null;

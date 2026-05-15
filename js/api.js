@@ -739,6 +739,15 @@ const API = {
                 .update({ is_read: true })
                 .eq('user_id', AppState.user.id)
                 .eq('is_read', false);
+        },
+
+        async create({ user_id, title, message, type = 'info', link = null }) {
+            const { error } = await supabase.from('notifications').insert({
+                user_id, title, message, type, link,
+                created_by: AppState.user?.id || null,
+                is_read: false
+            });
+            if (error) throw error;
         }
     },
 

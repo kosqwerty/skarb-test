@@ -95,7 +95,7 @@ const AdminPage = {
         const s = this._sortState;
         if (s.field !== field) this._sortUsers(field, 1);   // нова колонка → asc
         else if (s.dir === 1)  this._sortUsers(field, -1);  // asc → desc
-        else                   this._sortUsers(field, -1);  // desc + той самий dir = скидання
+        else                   { s.field = null; s.dir = 1; this._renderUsersTable(); } // desc → скидання
     },
 
     _sortUsers(field, dir) {
@@ -282,7 +282,7 @@ const AdminPage = {
                 </td>
                 <td>
                     <div style="display:flex;align-items:center;gap:.6rem;cursor:pointer;min-width:160px"
-                         onclick="AdminPage.viewProfile(${JSON.stringify(u).replace(/"/g,'&quot;')})" title="Переглянути профіль">
+                         onclick="AdminPage.viewProfile(AdminPage._usersAll.find(x=>x.id==='${u.id}'))" title="Переглянути профіль">
                         <div style="width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--secondary));display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden">
                             ${u.avatar_url ? `<img src="${u.avatar_url}" style="width:100%;height:100%;object-fit:cover">` : Fmt.initials(u.full_name)}
                         </div>
@@ -307,7 +307,7 @@ const AdminPage = {
                
                 <td>
                     <div style="display:flex;flex-direction:column;gap:.25rem;align-items:flex-start">
-                        ${canEdit ? `<button class="btn btn-ghost btn-sm" style="width:100%;justify-content:flex-start;gap:.4rem" onclick="AdminPage.openEditUser(${JSON.stringify(u).replace(/"/g,'&quot;')})"><i class="fa-solid fa-pen"></i></button>` : ''}
+                        ${canEdit ? `<button class="btn btn-ghost btn-sm" style="width:100%;justify-content:flex-start;gap:.4rem" onclick="AdminPage.openEditUser(AdminPage._usersAll.find(x=>x.id==='${u.id}'))"><i class="fa-solid fa-pen"></i></button>` : ''}
                         ${canHide ? `
                             <button class="btn btn-ghost btn-sm" style="width:100%;justify-content:flex-start;gap:.4rem" onclick="AdminPage.toggleHidden('${u.id}',${!!u.is_hidden})" title="${u.is_hidden ? 'Показати в контактах' : 'Приховати з контактів'}">
                                 ${u.is_hidden ? '👁' : '🙈'}
@@ -385,8 +385,8 @@ const AdminPage = {
                         onclick="Modal.close();AdminPage.toggleBlock('${u.id}',${u.is_active !== false})">
                         ${u.is_active !== false ? '🔒 Заблокувати' : '🔓 Розблокувати'}
                     </button>` : ''}
-                ${AppState.isAdmin() && u.id !== AppState.user?.id ? `<button class="btn btn-ghost" onclick="Modal.close();AppState.impersonate(${JSON.stringify(u).replace(/"/g,'&quot;')})" title="Переглянути інтерфейс від імені цього користувача"><i class="fa-solid fa-eye"></i> Переглянути як</button>` : ''}
-                ${(u.role !== 'owner' || AppState.isOwner()) ? `<button class="btn btn-primary" onclick="Modal.close();AdminPage.openEditUser(${JSON.stringify(u).replace(/"/g,'&quot;')})"><i class="fa-solid fa-pen"></i> Редагувати</button>` : ''}
+                ${AppState.isAdmin() && u.id !== AppState.user?.id ? `<button class="btn btn-ghost" onclick="Modal.close();AppState.impersonate(AdminPage._usersAll.find(x=>x.id==='${u.id}'))" title="Переглянути інтерфейс від імені цього користувача"><i class="fa-solid fa-eye"></i> Переглянути як</button>` : ''}
+                ${(u.role !== 'owner' || AppState.isOwner()) ? `<button class="btn btn-primary" onclick="Modal.close();AdminPage.openEditUser(AdminPage._usersAll.find(x=>x.id==='${u.id}'))"><i class="fa-solid fa-pen"></i> Редагувати</button>` : ''}
             `
         });
     },

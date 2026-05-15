@@ -36,7 +36,7 @@ const DashboardPage = {
             @media(max-width:700px){.db-grid3,.db-grid2{grid-template-columns:1fr}}
 
             .db-card{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden}
-            .db-card-head{padding:.75rem 1.1rem;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--primary);border-bottom:1px solid var(--border);background:rgba(99,102,241,.04);display:flex;align-items:center;justify-content:space-between}
+            .db-card-head{padding:.75rem 1.1rem;font-size:1rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;border-bottom:1px solid var(--border);background:rgba(99,102,241,.025);display:flex;align-items:center;justify-content:space-between}
             .db-card-desc{padding:.45rem 1.1rem .55rem;font-size:.72rem;color:var(--text-muted);line-height:1.45;border-bottom:1px solid var(--border);background:var(--bg-raised)}
             .db-card-body{padding:1rem 1.1rem}
 
@@ -91,7 +91,7 @@ const DashboardPage = {
             .db-main-grid{display:grid;grid-template-columns:1fr 1fr 390px;gap:1.25rem;margin-bottom:1.5rem;align-items:start}
             @media(max-width:1100px){.db-main-grid{grid-template-columns:1fr}}
             .db-news-w{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden}
-            .db-news-w-head{padding:.75rem 1rem .6rem;border-bottom:1px solid var(--border);font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--primary);display:flex;align-items:center;justify-content:space-between;background:rgba(99,102,241,.025)}
+            .db-news-w-head{padding:.75rem 1rem .6rem;border-bottom:1px solid var(--border);font-size:.95rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--primary);display:flex;align-items:center;justify-content:space-between;background:rgba(99,102,241,.025)}
             .db-news-grid{display:flex;flex-direction:column;gap:.5rem;padding:.65rem}
             .db-ncard{display:flex;gap:.65rem;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;cursor:pointer;transition:background .15s,box-shadow .15s,border-color .15s;align-items:stretch}
             .db-ncard:hover{background:var(--bg-raised);border-color:var(--border-light)}
@@ -133,7 +133,7 @@ const DashboardPage = {
             .db-cwrap{padding:1rem 1.1rem .75rem}
             .db-cnav{display:flex;align-items:center;justify-content:space-between;margin-bottom:.85rem}
             .db-cnav-left{display:flex;flex-direction:column;gap:.05rem}
-            .db-cnav-title{font-size:.9rem;font-weight:700;color:var(--text-primary)}
+            .db-cnav-title{font-size:.95rem;font-weight:700;color:var(--text-primary)}
             .db-cnav-sub{font-size:.72rem;color:var(--text-muted);font-weight:500;text-transform:capitalize}
             .db-cnav-arrows{display:flex;gap:.3rem}
             .db-cnav-btn{width:26px;height:26px;border-radius:50%;border:1px solid var(--border);background:var(--bg-raised);color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.65rem;transition:all .15s;font-family:inherit}
@@ -402,13 +402,13 @@ const DashboardPage = {
     },
 
 
-    _ackImportant(eventId, date) {
-        supabase.from('personal_cal_events')
+    async _ackImportant(eventId, date) {
+        const { error } = await supabase.from('personal_cal_events')
             .update({ acked_date: date, is_done: true })
             .eq('id', eventId).eq('user_id', AppState.user.id);
+        if (error) { Toast.error('Помилка збереження'); return; }
         const el = document.getElementById(`db-imp-${eventId}`);
-        if (el) el.style.transition = 'opacity .3s', el.style.opacity = '0', setTimeout(() => el.remove(), 300);
-        this._refreshEvents();
+        if (el) { el.style.transition = 'opacity .3s'; el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }
     },
 
     _renderAlerts(unackedDocs, recentNotifs) {
@@ -504,74 +504,149 @@ const DashboardPage = {
     _renderBirthdays(people) {
         const el = document.getElementById('db-birthdays');
         if (!el || !people.length) return;
-        el.innerHTML = `
-            <div class="db-alert db-alert-warn" style="background:linear-gradient(135deg,rgba(245,158,11,.08),rgba(245,158,11,.04));border-color:rgba(245,158,11,.3);margin-bottom:1.5rem">
-                <div class="db-alert-icon">🎂</div>
-                <div class="db-alert-body">
-                    <div class="db-alert-title" style="color:#b45309">Сьогодні день народження!</div>
-                    <div class="db-alert-items">
-                        ${people.map(p => `
-                            <span class="db-alert-chip">
-                                🎉 <strong>${Fmt.esc(p.full_name)}</strong>${p.job_position ? ` · ${Fmt.esc(p.job_position)}` : ''}
-                            </span>`).join('')}
+
+        this._bdayPeople = people;
+
+        const cards = people.map(p => {
+            const initials = Fmt.initials(p.full_name || '?');
+            const fallbackHtml = `<span style="font-size:1.6rem;font-weight:800;color:#fff;line-height:1">${Fmt.esc(initials)}</span>`;
+            const avatarHtml = p.avatar_url
+                ? `<img src="${p.avatar_url}" alt="${Fmt.esc(p.full_name)}" style="width:100%;height:100%;object-fit:cover;display:block"
+                       onerror="this.replaceWith(Object.assign(document.createElement('span'),{innerHTML:'${Fmt.esc(initials)}',style:'font-size:1.6rem;font-weight:800;color:#fff;line-height:1'}))">`
+                : fallbackHtml;
+            return `
+                <div class="db-bday-card">
+                    <div class="db-bday-avatar-ring">
+                        <div class="db-bday-avatar">${avatarHtml}</div>
                     </div>
-                </div>
+                    <div class="db-bday-name">${Fmt.esc(p.full_name || '—')}</div>
+                    ${p.job_position ? `<div class="db-bday-pos">${Fmt.esc(p.job_position)}</div>` : ''}
+                    <div class="db-bday-badge">🎂 День народження</div>
+                    ${p.id !== AppState.user?.id ? `
+                    <button class="db-bday-wish-btn" style="margin-top:.3rem"
+                        data-bday-btn="${p.id}"
+                        onclick="DashboardPage._openWishModal('${p.id}')">
+                        💌 Привітати
+                    </button>` : ''}
+                </div>`;
+        }).join('');
+
+        el.innerHTML = `
+            <style>
+                @keyframes db-confetti-fall{0%{transform:translateY(-10px) rotate(0deg);opacity:1}100%{transform:translateY(80px) rotate(720deg);opacity:0}}
+                @keyframes db-bday-glow{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.4)}50%{box-shadow:0 0 0 10px rgba(245,158,11,0)}}
+                @keyframes db-bday-pop{0%{transform:scale(.85);opacity:0}100%{transform:scale(1);opacity:1}}
+                @keyframes db-wish-in{0%{transform:translateY(12px);opacity:0}100%{transform:translateY(0);opacity:1}}
+                .db-bday-wrap{position:relative;overflow:hidden;border-radius:var(--radius-xl);margin-bottom:1.5rem;
+                    background:linear-gradient(135deg,#fffbeb 0%,#fef3c7 40%,#fde68a 100%);
+                    border:2px solid rgba(245,158,11,.4);padding:2rem 1.5rem 1.75rem;text-align:center}
+                body.dark-theme .db-bday-wrap{background:linear-gradient(135deg,rgba(120,80,0,.35) 0%,rgba(180,110,0,.25) 50%,rgba(120,70,0,.3) 100%);border-color:rgba(245,158,11,.35)}
+                .db-bday-confetti{position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;overflow:hidden}
+                .db-bday-conf-dot{position:absolute;border-radius:2px;animation:db-confetti-fall linear infinite}
+                .db-bday-headline{font-size:1.45rem;font-weight:800;color:#92400e;letter-spacing:-.01em;margin-bottom:.25rem}
+                body.dark-theme .db-bday-headline{color:#fcd34d}
+                .db-bday-sub{font-size:.85rem;color:#b45309;margin-bottom:1.75rem;opacity:.8}
+                body.dark-theme .db-bday-sub{color:#fbbf24}
+                .db-bday-list{display:flex;flex-wrap:wrap;justify-content:center;gap:2rem}
+                .db-bday-card{display:flex;flex-direction:column;align-items:center;gap:.45rem;animation:db-bday-pop .4s ease both}
+                .db-bday-avatar-ring{width:90px;height:90px;border-radius:50%;padding:3px;background:linear-gradient(135deg,#f59e0b,#ef4444,#ec4899);
+                    animation:db-bday-glow 2.2s ease-in-out infinite;flex-shrink:0}
+                .db-bday-avatar{width:100%;height:100%;border-radius:50%;background:linear-gradient(135deg,#f59e0b,#d97706);
+                    display:flex;align-items:center;justify-content:center;overflow:hidden;border:2px solid #fff}
+                .db-bday-name{font-size:1rem;font-weight:700;color:#1c1917;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;text-align:center}
+                body.dark-theme .db-bday-name{color:#fef3c7}
+                .db-bday-pos{font-size:.75rem;color:#78350f;opacity:.85;text-align:center}
+                body.dark-theme .db-bday-pos{color:#fcd34d;opacity:.7}
+.db-bday-badge{display:inline-flex;align-items:center;gap:.3rem;font-size:.72rem;font-weight:700;
+                    background:rgba(245,158,11,.2);border:1px solid rgba(245,158,11,.4);border-radius:999px;
+                    padding:.2rem .7rem;color:#92400e;margin-top:.1rem}
+                body.dark-theme .db-bday-badge{background:rgba(245,158,11,.15);color:#fcd34d}
+                .db-bday-wish-btn{display:inline-flex;align-items:center;gap:.4rem;background:linear-gradient(135deg,#f59e0b,#d97706);
+                    color:#fff;border:none;border-radius:var(--radius-md);padding:.45rem 1rem;font-size:.8rem;font-weight:700;
+                    cursor:pointer;transition:opacity .15s,transform .1s;white-space:nowrap;font-family:inherit}
+                .db-bday-wish-btn:hover{opacity:.9;transform:translateY(-1px)}
+                .db-bday-wish-btn:active{transform:translateY(0)}
+                .db-bday-wish-btn:disabled{opacity:.45;cursor:default;transform:none}
+            </style>
+            <div class="db-bday-wrap">
+                <div class="db-bday-confetti" id="db-bday-conf"></div>
+                <div class="db-bday-headline">🎉 Сьогодні день народження!</div>
+                <div class="db-bday-sub">Вітаємо колег з особливим днем</div>
+                <div class="db-bday-list">${cards}</div>
             </div>`;
+
+        const confEl = document.getElementById('db-bday-conf');
+        if (confEl) {
+            const colors = ['#f59e0b','#ef4444','#ec4899','#8b5cf6','#10b981','#3b82f6','#f97316'];
+            for (let i = 0; i < 32; i++) {
+                const d = document.createElement('div');
+                d.className = 'db-bday-conf-dot';
+                d.style.cssText = `left:${Math.random()*100}%;top:${Math.random()*-20}%;background:${colors[i%colors.length]};width:${5+Math.random()*7}px;height:${5+Math.random()*7}px;animation-duration:${2.5+Math.random()*3}s;animation-delay:${Math.random()*4}s`;
+                confEl.appendChild(d);
+            }
+        }
     },
 
-    _renderStats(adminStats, enrollments) {
-        const el = document.getElementById('db-stats');
-        if (!el) return;
-
-        let stats;
-        if (AppState.isStaff() && adminStats) {
-            stats = [
-                { icon: '👥', label: 'Користувачів',     value: Fmt.num(adminStats.totalUsers),       color: '#6366f1' },
-                { icon: '📚', label: 'Курсів',            value: Fmt.num(adminStats.totalCourses || 0), color: '#8b5cf6' },
-                { icon: '🎓', label: 'Записів',           value: Fmt.num(adminStats.totalEnrollments || 0), color: '#06b6d4' },
-                { icon: '📝', label: 'Спроб тестів',      value: Fmt.num(adminStats.totalAttempts || 0), color: '#10b981' },
-            ];
-        } else {
-            const completed   = enrollments.filter(e => e.completed_at).length;
-            const inProgress  = enrollments.filter(e => !e.completed_at && (e.progress_percentage || 0) > 0).length;
-            const avgProgress = enrollments.length
-                ? Math.round(enrollments.reduce((s, e) => s + (e.progress_percentage || 0), 0) / enrollments.length)
-                : 0;
-            stats = [
-                { icon: '📚', label: 'Моїх курсів',      value: enrollments.length, color: '#6366f1' },
-                { icon: '✅', label: 'Завершено',         value: completed,          color: '#10b981' },
-                { icon: '🔥', label: 'В процесі',        value: inProgress,         color: '#f59e0b' },
-                { icon: '📊', label: 'Середній прогрес', value: avgProgress + '%',   color: '#06b6d4' },
-            ];
-        }
-
-        // Prepend section label above stats grid
-        const statsParent = el.parentElement;
-        let statsLabel = statsParent?.querySelector('#db-stats-label');
-        if (!statsLabel) {
-            statsLabel = document.createElement('div');
-            statsLabel.id = 'db-stats-label';
-            statsLabel.style.cssText = 'font-size:.72rem;color:var(--text-muted);margin-bottom:.5rem;margin-top:-.75rem';
-            statsLabel.textContent = AppState.isStaff() && adminStats
-                ? 'Загальна статистика платформи — дані оновлюються щодня'
-                : 'Ваш особистий прогрес навчання';
-            el.insertAdjacentElement('beforebegin', statsLabel);
-        }
-
-        el.innerHTML = stats.map(s => `
-            <div class="db-stat" style="--s-color:${s.color}">
-                <div class="db-stat-icon">${s.icon}</div>
-                <div class="db-stat-val" data-target="${s.value}">${s.value}</div>
-                <div class="db-stat-label">${s.label}</div>
-            </div>`).join('');
+    _openWishModal(personId) {
+        const p = (this._bdayPeople || []).find(x => x.id === personId);
+        if (!p) return;
+        Modal.open({
+            title: `🎂 Привітання для ${Fmt.esc(p.full_name || '?')}`,
+            size: 'sm',
+            body: `
+                <div style="margin-bottom:.65rem;font-size:.82rem;color:var(--text-muted)">
+                    Привітання прийде у сповіщення іменинника
+                </div>
+                <textarea id="db-bday-wish-text" rows="4" style="width:100%;border:1px solid var(--border);
+                    border-radius:var(--radius-md);padding:.65rem .85rem;font-size:.9rem;line-height:1.55;
+                    resize:none;background:var(--bg-surface);color:var(--text-primary);font-family:inherit;
+                    box-sizing:border-box;outline:none;transition:border-color .15s"
+                    placeholder="Щиро вітаю з Днем народження! Бажаю…"
+                    onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'"></textarea>`,
+            footer: `
+                <button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
+                <button class="btn btn-primary" id="db-bday-send-btn"
+                    onclick="DashboardPage._sendBdayWish('${personId}', this)"
+                    style="background:linear-gradient(135deg,#f59e0b,#d97706);border-color:transparent">
+                    🎊 Надіслати
+                </button>`
+        });
+        setTimeout(() => document.getElementById('db-bday-wish-text')?.focus(), 100);
     },
+
+    async _sendBdayWish(personId, btn) {
+        const text = (document.getElementById('db-bday-wish-text')?.value || '').trim();
+        if (!text) { Toast.warning('Порожнє поле', 'Напишіть привітання перед відправкою'); return; }
+        btn.disabled = true;
+        btn.textContent = 'Надсилаю…';
+        const from = AppState.profile?.full_name || 'Колега';
+        const p = (this._bdayPeople || []).find(x => x.id === personId);
+        try {
+            await API.notifications.create({
+                user_id: personId,
+                title: `🎂 Привітання від ${from}`,
+                message: text,
+                type: 'birthday_wish',
+                link: null
+            });
+            Modal.close();
+            const btn = document.querySelector(`[data-bday-btn="${personId}"]`);
+            if (btn) { btn.textContent = '✅ Надіслано'; btn.disabled = true; btn.style.opacity = '.5'; }
+            Toast.success('Надіслано! 🎉', `Привітання для ${p?.full_name || ''} відправлено`);
+        } catch(e) {
+            btn.disabled = false;
+            btn.textContent = '🎊 Надіслати';
+            Toast.error('Помилка', e.message);
+        }
+    },
+
 
     _renderContinue(enrollments) {
         const el = document.getElementById('db-continue');
         if (!el) return;
         const next = enrollments.find(e => !e.completed_at) || enrollments[0];
 
-        el.innerHTML = `<div class="db-card-head"><span style="color:#8b5cf6"><i class="fa-solid fa-play"></i> Продовжити навчання</span></div>
+        el.innerHTML = `<div class="db-card-head"><span style="color:#E2E8F0"><i class="fa-solid fa-play"></i> Продовжити навчання</span></div>
             <div class="db-card-desc">Ваш поточний курс та прогрес проходження</div>`;
 
         if (!next) {
@@ -644,39 +719,4 @@ const DashboardPage = {
     },
 
 
-    _renderCourses(enrollments) {
-        const el = document.getElementById('db-courses');
-        if (!el || !enrollments.length) return;
-
-        el.innerHTML = `
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.35rem">
-                <h3 style="font-size:1rem;font-weight:700">Мої курси</h3>
-                <button class="btn btn-ghost btn-sm" onclick="Router.go('expert-path')">Всі курси <i class="fa-solid fa-arrow-right" style="position:relative;top:1.5px"></i></button>
-            </div>
-            <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.85rem">Курси, на які ви записані — клікніть, щоб продовжити проходження</div>
-            <div class="db-courses-scroll">
-                ${enrollments.slice(0, 10).map(e => this._courseCard(e)).join('')}
-            </div>`;
-    },
-
-    _courseCard(e) {
-        const course = e.course;
-        const pct    = e.progress_percentage || 0;
-        return `
-            <div class="db-course-card" onclick="Router.go('courses/${course.id}')">
-                <div class="db-course-thumb">
-                    ${course.thumbnail_url
-                        ? `<img src="${course.thumbnail_url}" alt="${Fmt.esc(course.title)}" loading="lazy">`
-                        : `<div style="height:100%;display:flex;align-items:center;justify-content:center;font-size:2rem;background:linear-gradient(135deg,rgba(99,102,241,.08),rgba(139,92,246,.08))">📖</div>`}
-                </div>
-                <div class="db-course-body">
-                    <div class="db-course-name">${Fmt.esc(course.title)}</div>
-                    <div style="display:flex;justify-content:space-between;font-size:.7rem;color:var(--text-muted);margin-bottom:.3rem">
-                        <span>${pct === 100 ? '✅ Завершено' : 'Прогрес'}</span>
-                        <span style="font-weight:700;color:var(--text-primary)">${pct}%</span>
-                    </div>
-                    <div class="db-pbar"><div class="db-pbar-fill" style="width:${pct}%;background:${pct === 100 ? '#10b981' : 'var(--primary)'}"></div></div>
-                </div>
-            </div>`;
-    },
 };

@@ -74,7 +74,7 @@ const CoursesPage = {
             if (this._currentTab === 'enrolled' || !AppState.isStaff()) {
                 myEnrollments = await API.enrollments.getMyEnrollments();
                 let items = myEnrollments.map(e => e.course).filter(Boolean);
-                if (this._search) items = items.filter(c => c.title.toLowerCase().includes(this._search.toLowerCase()));
+                if (this._search) items = items.filter(c => (c.title || '').toLowerCase().includes(this._search.toLowerCase()));
                 if (level) items = items.filter(c => c.level === level);
                 courses = items; total = items.length;
             } else if (this._currentTab === 'mine') {
@@ -179,7 +179,7 @@ const CoursesPage = {
                 <div class="form-row">
                     <div class="form-group">
                         <label>Назва курсу *</label>
-                        <input id="c-title" type="text" placeholder="Введіть назву" value="${course?.title || ''}">
+                        <input id="c-title" type="text" placeholder="Введіть назву" value="${Fmt.esc(course?.title || '')}">
                     </div>
                     <div class="form-group">
                         <label>Рівень</label>
@@ -192,12 +192,12 @@ const CoursesPage = {
                 </div>
                 <div class="form-group">
                     <label>Опис</label>
-                    <textarea id="c-desc" placeholder="Опис курсу">${course?.description || ''}</textarea>
+                    <textarea id="c-desc" placeholder="Опис курсу">${Fmt.esc(course?.description || '')}</textarea>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
                         <label>Категорія</label>
-                        <input id="c-category" type="text" placeholder="Наприклад: Програмування" value="${course?.category || ''}">
+                        <input id="c-category" type="text" placeholder="Наприклад: Програмування" value="${Fmt.esc(course?.category || '')}">
                     </div>
                     <div class="form-group">
                         <label>Тривалість (годин)</label>

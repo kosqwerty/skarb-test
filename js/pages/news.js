@@ -164,7 +164,7 @@ const NewsPage = {
 
     _renderPagination(total) {
         const el    = document.getElementById('news-pagination');
-        const pages = Math.ceil(total / 12);
+        const pages = Math.ceil(total / APP_CONFIG.pageSize);
         if (!el || pages <= 1) { if (el) el.innerHTML = ''; return; }
         el.innerHTML = Array.from({ length: pages }, (_, i) => `
             <button class="btn ${i === this._page ? 'btn-primary' : 'btn-ghost'} btn-sm"

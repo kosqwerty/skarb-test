@@ -91,7 +91,7 @@ Full namespace list: `API.profiles`, `API.courses`, `API.enrollments`, `API.less
 
 ### Database migrations
 
-`sql/migration_v*.sql` — incremental, numbered. The current schema is the result of applying all migrations in order. When adding a new column/table, create `migration_v{N+1}.sql` and run it in the Supabase SQL Editor. **Latest is v52** (`image_url` on `survey_questions`).
+`sql/migration_v*.sql` — incremental, numbered. The current schema is the result of applying all migrations in order. When adding a new column/table, create `migration_v{N+1}.sql` and run it in the Supabase SQL Editor. **Latest is v63** (notifications: added `message`, `is_read`, `link`, `created_by` columns; dropped `notifications_type_check` constraint; enabled realtime publication).
 
 When writing a migration, always include `IF NOT EXISTS` / `IF EXISTS` guards and end with RLS + policies.
 
@@ -102,6 +102,7 @@ When writing a migration, always include `IF NOT EXISTS` / `IF EXISTS` guards an
 | `js/config.js` | Supabase credentials, `AppState`, `APP_CONFIG` (buckets, roles, `pageSize: 12`) |
 | `js/app.js` | Route definitions, sidebar rendering, post-login bootstrap, `ImpersonationBanner` |
 | `js/api.js` | All DB/storage access — add new methods here, never call `supabase` from page files |
+| `js/pages/dashboard.js` | Main dashboard: 2-row CSS grid layout (docs/notif/calendar + continue/news), Realtime notification badge |
 | `js/pages/tests-manager.js` | Largest page (~2300 lines): test builder, question editor (Quill), auto-assign, results |
 | `js/pages/admin.js` | Multi-tab admin panel: users, courses, tests, logs |
 | `js/pages/scheduler.js` | Schedule management (owner/admin/manager only — `canSchedule()`) |
@@ -464,6 +465,29 @@ Drag handle between sidebar and content (`sg-sidebar-resizer`). Width saved to `
 
 ### ScheduleViewPage — location picker
 Replaces tab bar with searchable dropdown (`sgv-loc-search` + `sgv-loc-dropdown`). On focus → `_openLocList()` shows all; on input → `_filterLocs(q)` filters; on select → `_pickLoc(locId, name)`. Works for 200+ locations.
+
+## dashboard.js specifics
+
+### Layout
+Two-row CSS grid (`db-main-grid`): `grid-template-columns: 1fr 1fr 390px`.
+- Row 1: `db-alerts-docs` | `db-alerts-notif` | `db-cal-widget`
+- Row 2: `db-continue` (350px wide wrapper) | empty | `db-news-widget`
+
+### Notifications — Supabase Realtime
+`UI._subscribeNotifications()` in `js/utils.js` opens a Realtime channel on `notifications` table filtered by `user_id`. Called once after `UI.loadNotificationCount()`. The `notifications` table must be in `supabase_realtime` publication (added in migration v63).
+
+### Date formatting in calendar
+**Never use `.toISOString().slice(0,10)`** — it converts local midnight to UTC causing a +1 day shift for UTC+ users. Always use local formatter:
+```js
+const _pad = n => String(n).padStart(2, '0');
+const _fmtLocal = d => `${d.getFullYear()}-${_pad(d.getMonth()+1)}-${_pad(d.getDate())}`;
+```
+
+### Theme-aware sidebar logo
+`index.html` sidebar has two `<img>` tags inside `.logo-icon`: `.logo-dark` (shown by default) and `.logo-light` (shown when `body.light-theme`). CSS in `main.css` toggles `display` based on theme class.
+
+### Notification insert (tests-manager.js)
+Supabase JS v2 `.insert()` never throws — always returns `{data, error}`. Check `r.error` explicitly after `Promise.all`. Type `'test_assigned'` is valid (constraint dropped in v63).
 
 ## surveys.js specifics
 

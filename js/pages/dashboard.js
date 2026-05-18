@@ -91,7 +91,7 @@ const DashboardPage = {
             .db-main-grid{display:grid;grid-template-columns:1fr 1fr 390px;gap:1.25rem;margin-bottom:1.5rem;align-items:start}
             @media(max-width:1100px){.db-main-grid{grid-template-columns:1fr}}
             .db-news-w{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden}
-            .db-news-w-head{padding:.75rem 1rem .6rem;border-bottom:1px solid var(--border);font-size:.95rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--primary);display:flex;align-items:center;justify-content:space-between;background:rgba(99,102,241,.025)}
+            .db-news-w-head{padding:.75rem 1rem .6rem;border-bottom:1px solid var(--border);font-size:.95rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-primary);display:flex;align-items:center;justify-content:space-between;background:transparent}
             .db-news-grid{display:flex;flex-direction:column;gap:.5rem;padding:.65rem}
             .db-ncard{display:flex;gap:.65rem;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;cursor:pointer;transition:background .15s,box-shadow .15s,border-color .15s;align-items:stretch}
             .db-ncard:hover{background:var(--bg-raised);border-color:var(--border-light)}
@@ -292,7 +292,8 @@ const DashboardPage = {
                 c.other ? 'db-othm' : ''
             ].filter(Boolean).join(' ');
             const tip = evs.map(e => Fmt.esc(e.title)).join(', ');
-            return `<div class="${cls}" onclick="Router.go('my-calendar')"${tip ? ` title="${tip}"` : ''}>${c.day}</div>`;
+            const dayOnclick = c.other ? `Router.go('my-calendar')` : `DashboardPage._calDayClick('${c.date}')`;
+            return `<div class="${cls}" onclick="${dayOnclick}"${tip ? ` title="${tip}"` : ''}>${c.day}</div>`;
         }).join('');
 
         // Upcoming list — events from today (or all in viewed month if past)
@@ -462,10 +463,13 @@ const DashboardPage = {
                     <div class="db-alc-nlist">
                         ${recentNotifs.slice(0, 5).map(n => {
                             const m = typeMap(n.type);
-                            const dest = n.link ? `Router.go(${JSON.stringify(n.link).replace(/"/g,'&quot;')})` : `Router.go('notifications')`;
-                            return `<div class="db-alc-nitem" onclick="${dest}">
+                            const dest = n.link ? JSON.stringify(n.link).replace(/"/g,'&quot;') : '&quot;notifications&quot;';
+                            return `<div class="db-alc-nitem" onclick="DashboardPage._openNotif('${n.id}',${dest})">
                                 <div class="db-alc-nicon" style="background:${m.bg};color:${m.color}"><i class="fa-solid ${m.icon}"></i></div>
-                                <span class="db-alc-ntitle">${Fmt.esc(n.title)}</span>
+                                <div style="flex:1;min-width:0;overflow:hidden">
+                                    <div class="db-alc-ntitle">${Fmt.esc(n.title)}</div>
+                                    ${n.message ? `<div style="font-size:.72rem;color:var(--text-muted);margin-top:1px">${Fmt.esc(n.message)}</div>` : ''}
+                                </div>
                                 <i class="fa-solid fa-chevron-right" style="font-size:.6rem;color:var(--text-muted);flex-shrink:0"></i>
                             </div>`;
                         }).join('')}
@@ -484,6 +488,17 @@ const DashboardPage = {
                     <div class="db-alc-body">${body}</div>
                 </div>`;
         }
+    },
+
+    _calDayClick(date) {
+        MyCalendarPage._pendingNewDate = date;
+        Router.go('my-calendar');
+    },
+
+    async _openNotif(id, link) {
+        await API.notifications.markRead(id).catch(() => {});
+        UI.updateNotificationBadge(-1);
+        Router.go(link);
     },
 
     async _dismissNotifAlert() {
@@ -646,7 +661,7 @@ const DashboardPage = {
         if (!el) return;
         const next = enrollments.find(e => !e.completed_at) || enrollments[0];
 
-        el.innerHTML = `<div class="db-card-head"><span style="color:#E2E8F0"><i class="fa-solid fa-play"></i> Продовжити навчання</span></div>
+        el.innerHTML = `<div class="db-card-head"><span style="color:var(--text-primary)"><i class="fa-solid fa-play"></i> Продовжити навчання</span></div>
             <div class="db-card-desc">Ваш поточний курс та прогрес проходження</div>`;
 
         if (!next) {
@@ -683,10 +698,10 @@ const DashboardPage = {
         const el = document.getElementById('db-news-widget');
         if (!el) return;
 
+        items.forEach(n => { this._newsCache[n.id] = n; });
+
         const newsCard = n => {
-            const dest = `news/${n.slug || n.id}`;
             const url = Fmt.safeUrl(n.thumbnail_url);
-            const pos = n.thumbnail_position || 'center';
             const thumb = n.thumbnail_url
                 ? `<div class="db-ncard-thumb"><img src="${url}" alt="" loading="lazy"></div>`
                 : `<div class="db-ncard-thumb-ph">📰</div>`;
@@ -694,7 +709,7 @@ const DashboardPage = {
                 ? `<div class="db-ncard-desc">${Fmt.esc(n.excerpt)}</div>`
                 : '';
             return `
-            <div class="db-ncard" onclick="Router.go('${dest}')">
+            <div class="db-ncard" onclick="DashboardPage._openNewsModal('${n.id}')">
                 ${thumb}
                 <div class="db-ncard-body">
                     <div class="db-ncard-title">${Fmt.esc(n.title)}</div>
@@ -705,18 +720,178 @@ const DashboardPage = {
         };
 
         const body = items.length
-            ? `<div class="db-news-grid">${items.slice(0, 5).map(newsCard).join('')}</div>`
+            ? `<div class="db-news-grid">${items.slice(0, 3).map(newsCard).join('')}</div>`
             : `<div style="padding:1.5rem;text-align:center;color:var(--text-muted);font-size:.82rem">Новин поки немає</div>`;
 
         el.innerHTML = `
             <div class="db-news-w">
                 <div class="db-news-w-head">
-                    <span style="color:#0ea5e9"><i class="fa-regular fa-newspaper"></i> Новини</span>
+                    <span><i class="fa-regular fa-newspaper"></i> Новини</span>
                     <button class="btn btn-ghost btn-sm" onclick="Router.go('news')" style="font-size:.68rem">Всі <i class="fa-solid fa-arrow-right"></i></button>
                 </div>
                 ${body}
             </div>`;
     },
 
+    _newsCache: {},
+
+    async _toggleEmoji(newsId, emoji, btn) {
+        try {
+            const added = await API.news.toggleEmoji(newsId, emoji);
+            btn.classList.toggle('active', added);
+            const countEl = btn.querySelector('.dnm-r-count');
+            let count = parseInt(countEl.textContent) || 0;
+            count = added ? count + 1 : Math.max(0, count - 1);
+            countEl.textContent = count || '';
+            btn.style.transform = 'scale(1.25)';
+            setTimeout(() => { btn.style.transform = ''; }, 200);
+        } catch(e) { Toast.error('Помилка', e.message); }
+    },
+
+    async _toggleNewsBm(id, title, btn) {
+        await Bookmarks.toggleNews(id, title);
+        const bookmarked = Bookmarks.isBookmarked(`news/${id}`);
+        btn.classList.toggle('bookmarked', bookmarked);
+        btn.innerHTML = bookmarked ? '<i class="fa-solid fa-bookmark"></i>' : '<i class="fa-regular fa-bookmark"></i>';
+        btn.style.transform = 'scale(1.3)';
+        setTimeout(() => { btn.style.transform = ''; }, 200);
+    },
+
+    async _openNewsModal(id) {
+        let n = this._newsCache[id];
+        if (!n) {
+            try {
+                const { data } = await API.news.getById(id);
+                n = data;
+                this._newsCache[id] = n;
+            } catch(e) { Toast.error('Помилка завантаження новини'); return; }
+        }
+
+        const url = n.thumbnail_url ? Fmt.safeUrl(n.thumbnail_url) : null;
+        const pos = n.thumbnail_position || 'center';
+        const date = Fmt.date(n.published_at || n.created_at);
+
+        const body = `
+        <style>
+        .dnm-wrap { font-family: inherit; }
+        .dnm-hero {
+            width: calc(100% + 3rem);
+            margin: -1.5rem -1.5rem 1.25rem;
+            height: 220px;
+            background: #0f1f42;
+            position: relative;
+            overflow: hidden;
+        }
+        .dnm-hero-bg {
+            position: absolute; inset: -12px;
+            background-image: url('${url || ''}');
+            background-size: cover;
+            background-position: ${pos};
+            filter: blur(18px) brightness(.35);
+            transform: scale(1.1);
+        }
+        .dnm-hero-img {
+            position: absolute; inset: 0;
+            background-image: url('${url || ''}');
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            z-index: 1;
+        }
+        .dnm-hero-grad {
+            position: absolute; inset: 0;
+            background: linear-gradient(to top, rgba(0,0,0,.7) 0%, transparent 60%);
+            z-index: 2;
+        }
+        .dnm-meta {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: .75rem;
+        }
+        .dnm-date {
+            font-size: .75rem;
+            color: var(--text-muted);
+            display: flex; align-items: center; gap: .4rem;
+        }
+        .dnm-bm-btn {
+            background: none; border: none; cursor: pointer;
+            font-size: 1.15rem; color: var(--text-muted);
+            transition: color .2s, transform .2s;
+            padding: .2rem .4rem;
+            border-radius: 6px;
+            line-height: 1;
+        }
+        .dnm-bm-btn:hover { color: var(--primary); transform: scale(1.15); }
+        .dnm-bm-btn.bookmarked { color: #f59e0b; }
+        .dnm-bm-btn.bookmarked:hover { color: #d97706; }
+        .dnm-reactions { display: flex; gap: .4rem; flex-wrap: wrap; margin-bottom: 1rem; }
+        .dnm-reaction {
+            display: inline-flex; align-items: center; gap: .3rem;
+            padding: .25rem .6rem;
+            border-radius: 99px;
+            border: 1.5px solid var(--border);
+            background: var(--bg-raised);
+            cursor: pointer; font-size: .95rem;
+            transition: all .18s cubic-bezier(.4,0,.2,1);
+            user-select: none;
+        }
+        .dnm-reaction:hover { border-color: var(--primary); background: rgba(37,99,235,.07); transform: scale(1.08); }
+        .dnm-reaction.active { border-color: #f59e0b; background: rgba(245,158,11,.12); }
+        .dnm-reaction .dnm-r-count { font-size: .72rem; font-weight: 600; color: var(--text-muted); min-width: 8px; }
+        .dnm-content { font-size: .9rem; line-height: 1.7; color: var(--text-secondary); }
+        .dnm-content img { max-width: 100%; border-radius: 8px; margin: .5rem 0; }
+        .dnm-footer { display: flex; justify-content: flex-end; gap: .5rem; padding-top: .5rem; }
+        </style>
+        <div class="dnm-wrap">
+            ${url ? `<div class="dnm-hero"><div class="dnm-hero-bg"></div><div class="dnm-hero-img"></div><div class="dnm-hero-grad"></div></div>` : ''}
+            <div class="dnm-meta">
+                <div class="dnm-date"><i class="fa-regular fa-calendar"></i> ${date}</div>
+                <button class="dnm-bm-btn ${Bookmarks.isBookmarked(`news/${n.id}`) ? 'bookmarked' : ''}" id="dnm-bm-${n.id}" onclick="DashboardPage._toggleNewsBm('${n.id}', ${JSON.stringify(n.title).replace(/"/g,'&quot;')}, this)" title="Закладки">
+                    ${Bookmarks.isBookmarked(`news/${n.id}`) ? '<i class="fa-solid fa-bookmark"></i>' : '<i class="fa-regular fa-bookmark"></i>'}
+                </button>
+            </div>
+            <div class="dnm-reactions" id="dnm-reactions-${n.id}">
+                ${['👍','❤️','😂','😮','👏','🔥'].map(e => `
+                <button class="dnm-reaction" data-emoji="${e}" onclick="DashboardPage._toggleEmoji('${n.id}', '${e}', this)">
+                    ${e} <span class="dnm-r-count">0</span>
+                </button>`).join('')}
+            </div>
+            <div class="dnm-content">${n.content || n.excerpt || ''}</div>
+        </div>`;
+
+        const footer = `
+        <div class="dnm-footer">
+            <button class="btn btn-ghost btn-sm" onclick="Modal.close()">Закрити</button>
+            <button class="btn btn-primary btn-sm" onclick="Modal.close();Router.go('news/${n.slug || n.id}')">
+                Читати повністю <i class="fa-solid fa-arrow-right"></i>
+            </button>
+        </div>`;
+
+        Modal.open({ title: Fmt.esc(n.title), body, footer, size: 'lg' });
+
+        // завантажити реакції
+        API.news.getEmojiReactions(n.id).then(({ counts, myEmojis }) => {
+            const wrap = document.getElementById(`dnm-reactions-${n.id}`);
+            if (!wrap) return;
+            wrap.querySelectorAll('.dnm-reaction').forEach(btn => {
+                const e = btn.dataset.emoji;
+                btn.querySelector('.dnm-r-count').textContent = counts[e] || '';
+                if (myEmojis.has(e)) btn.classList.add('active');
+            });
+        }).catch(() => {});
+
+        // вау-анімація появи модального вікна
+        requestAnimationFrame(() => {
+            const box = document.getElementById('modal-box');
+            if (!box) return;
+            box.style.opacity = '0';
+            box.style.transform = 'translateY(30px) scale(0.97)';
+            box.style.transition = 'none';
+            requestAnimationFrame(() => {
+                box.style.transition = 'opacity .4s cubic-bezier(.4,0,.2,1), transform .4s cubic-bezier(.34,1.56,.64,1)';
+                box.style.opacity = '1';
+                box.style.transform = 'translateY(0) scale(1)';
+            });
+        });
+    },
 
 };

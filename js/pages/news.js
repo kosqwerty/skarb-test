@@ -96,8 +96,8 @@ const NewsPage = {
                     <div style="position:absolute;inset:0;background-image:url('${news.thumbnail_url}');background-size:contain;background-repeat:no-repeat;background-position:${news.thumbnail_position || 'center'} center;z-index:1"></div>
                     <div style="position:absolute;inset:-20px;background-image:url('${news.thumbnail_url}');background-size:cover;background-position:${news.thumbnail_position || 'center'} center;filter:blur(18px) brightness(.45) saturate(1.2);transform:scale(1.05);z-index:0"></div>
                 ` : `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1e1b4b,#312e81);z-index:1"><i class="fa-regular fa-newspaper" style="font-size:5rem;color:rgba(255,255,255,.15)"></i></div>`}
-                <div style="position:absolute;inset:0;background:linear-gradient(to right,rgba(0,0,0,.75) 0%,rgba(0,0,0,.3) 45%,transparent 100%);z-index:2"></div>
-                <div style="position:absolute;inset:0;z-index:3;display:flex;flex-direction:column;justify-content:space-between;padding:1.75rem 2.5rem;max-width:55%">
+                <div style="position:absolute;inset:0;background:linear-gradient(to right,rgba(0,0,0,.82) 0%,rgba(0,0,0,.6) 40%,rgba(0,0,0,.15) 60%,transparent 100%);z-index:2"></div>
+                <div style="position:absolute;top:0;left:0;bottom:0;width:48%;z-index:3;display:flex;flex-direction:column;justify-content:space-between;padding:1.75rem 2.5rem">
                     <!-- top -->
                     <div>
                         <span style="color:#fbbf24;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;display:block;margin-bottom:.55rem">
@@ -143,20 +143,18 @@ const NewsPage = {
                     <span style="display:flex;align-items:center;gap:.35rem;font-size:.78rem;color:var(--text-muted)">
                         <i class="fa-regular fa-calendar"></i>${Fmt.date(news.published_at || news.created_at, { day:'numeric', month:'short' })}
                     </span>
-                    <div style="display:flex;align-items:center;gap:.4rem" onclick="event.stopPropagation()">
+                    <div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap" onclick="event.stopPropagation()">
                         <button class="kb-star res-star-btn${Bookmarks.isBookmarked('news/'+news.id) ? ' active' : ''}"
                             data-bm-route="news/${news.id}"
                             title="${Bookmarks.isBookmarked('news/'+news.id) ? 'Видалити з закладок' : 'Зберегти в закладки'}"
                             onclick="event.stopPropagation();Bookmarks.toggleNews('${news.id}',${JSON.stringify(news.title||'').replace(/"/g,'&quot;')},'')">
-                            ${Bookmarks.isBookmarked('news/'+news.id) ? '<i class="fa-solid fa-star"></i>' : '<i class="fa-regular fa-star"></i>'}
+                            ${Bookmarks.isBookmarked('news/'+news.id) ? '<i class="fa-solid fa-bookmark"></i>' : '<i class="fa-regular fa-bookmark"></i>'}
                         </button>
-                        ${news.allow_reactions !== false ? `
-                            <button id="cr-up-${news.id}" class="nv-react-btn" onclick="event.stopPropagation();NewsPage._reactCard('${news.id}','up')" style="font-size:.8rem;padding:.3rem .7rem">
-                                👍 <span id="cu-${news.id}" class="nv-react-count">0</span>
-                            </button>
-                            <button id="cr-dn-${news.id}" class="nv-react-btn" onclick="event.stopPropagation();NewsPage._reactCard('${news.id}','down')" style="font-size:.8rem;padding:.3rem .7rem">
-                                👎 <span id="cd-${news.id}" class="nv-react-count">0</span>
-                            </button>` : ''}
+                        ${news.allow_reactions !== false ? ['👍','❤️','😂','😮','👏','🔥'].map(e => `
+                            <button class="nv-emoji-btn" id="ce-${news.id}-${e.codePointAt(0)}" data-emoji="${e}"
+                                onclick="event.stopPropagation();NewsPage._reactEmoji('${news.id}','${e}',this)" title="${e}">
+                                ${e}<span class="nv-react-count"></span>
+                            </button>`).join('') : ''}
                     </div>
                 </div>
             </div>`;
@@ -194,8 +192,8 @@ const NewsPage = {
                     .nv-hero-bg{position:absolute;inset:-20px;background-size:cover;background-position:center;filter:blur(18px) brightness(.45) saturate(1.2);transform:scale(1.05)}
                     .nv-hero img{position:relative;width:100%;height:100%;object-fit:contain;display:block;z-index:1}
                     .nv-hero-ph{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1e1b4b,#312e81);z-index:1}
-                    .nv-hero-overlay{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.72) 0%,rgba(0,0,0,.15) 40%,transparent 100%);z-index:2}
-                    .nv-hero-content{position:absolute;bottom:0;left:0;right:0;padding:1.75rem 2rem;z-index:3}
+                    .nv-hero-overlay{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.82) 0%,rgba(0,0,0,.4) 50%,transparent 100%),linear-gradient(to right,rgba(0,0,0,.6) 0%,rgba(0,0,0,.2) 55%,transparent 100%);z-index:2}
+                    .nv-hero-content{position:absolute;bottom:0;left:0;width:60%;max-width:680px;padding:1.75rem 2rem;z-index:3}
                     .nv-hero-badges{display:flex;gap:.5rem;margin-bottom:.65rem;flex-wrap:wrap}
                     .nv-hero-title{font-size:2rem;font-weight:800;color:#fff;line-height:1.25;margin:0;text-shadow:0 2px 12px rgba(0,0,0,.4)}
                     .nv-hero-meta{display:flex;align-items:center;gap:1.25rem;margin-top:.65rem;color:rgba(255,255,255,.75);font-size:.82rem}
@@ -241,13 +239,12 @@ const NewsPage = {
                             </div>
                         </div>
                         ${news.allow_reactions !== false ? `
-                        <div style="position:absolute;bottom:1.75rem;right:2rem;display:flex;align-items:center;gap:.6rem;z-index:3">
-                            <button id="btn-react-up" class="nv-react-btn" onclick="NewsPage._react('${news.id}','up')" style="background:rgba(0,0,0,.35);border-color:rgba(255,255,255,.2);color:#fff;backdrop-filter:blur(6px)">
-                                <span id="react-up-label">Подобається </span>👍 <span id="react-up-count" class="nv-react-count">—</span>
-                            </button>
-                            <button id="btn-react-down" class="nv-react-btn" onclick="NewsPage._react('${news.id}','down')" style="background:rgba(0,0,0,.35);border-color:rgba(255,255,255,.2);color:#fff;backdrop-filter:blur(6px)">
-                                <span id="react-down-label">Ну таке… </span>👎 <span id="react-down-count" class="nv-react-count">—</span>
-                            </button>
+                        <div style="position:absolute;bottom:1.25rem;right:1.5rem;display:flex;align-items:center;gap:.4rem;z-index:3">
+                            ${['👍','❤️','😂','😮','👏','🔥'].map(e => `
+                                <button class="nv-emoji-btn nv-emoji-hero" id="nv-react-${news.id}-${e.codePointAt(0)}"
+                                    onclick="NewsPage._reactArticleEmoji('${news.id}','${e}',this)" title="${e}">
+                                    ${e}<span class="nv-react-count"></span>
+                                </button>`).join('')}
                         </div>` : ''}
                         <div class="nv-hero-actions">
                             <button class="btn btn-ghost btn-sm" onclick="Router.go('news')" style="backdrop-filter:blur(6px);background:rgba(0,0,0,.35);border-color:rgba(255,255,255,.2);color:#fff">
@@ -288,7 +285,7 @@ const NewsPage = {
                 <!-- ── Article body ── -->
                 <article class="nv-article">
                     <div class="nv-article-body">
-                        <div class="news-content-body">${this._fixImgUrls(news.content)}</div>
+                        <div class="news-content-body">${this._safeHtml(this._fixImgUrls(news.content))}</div>
                     </div>
                 </article>`;
 
@@ -300,76 +297,65 @@ const NewsPage = {
 
     async _loadCardReactions(ids) {
         try {
-            const [{ data: all }, { data: mine }] = await Promise.all([
-                supabase.from('news_reactions').select('news_id,type').in('news_id', ids),
-                supabase.from('news_reactions').select('news_id,type').in('news_id', ids).eq('user_id', AppState.user.id)
-            ]);
+            const { data: all } = await supabase.from('news_reactions').select('news_id,emoji').in('news_id', ids.filter(Boolean));
+            const { data: mine } = await supabase.from('news_reactions').select('news_id,emoji').in('news_id', ids.filter(Boolean)).eq('user_id', AppState.user.id);
+            const mySet = new Set((mine || []).map(r => `${r.news_id}:${r.emoji}`));
             for (const id of ids) {
-                const upEl  = document.getElementById(`cu-${id}`);
-                const dnEl  = document.getElementById(`cd-${id}`);
-                const upBtn = document.getElementById(`cr-up-${id}`);
-                const dnBtn = document.getElementById(`cr-dn-${id}`);
-                if (!upEl) continue;
-                const up   = all?.filter(r => r.news_id === id && r.type === 'up').length  || 0;
-                const down = all?.filter(r => r.news_id === id && r.type === 'down').length || 0;
-                const myR  = mine?.find(r => r.news_id === id)?.type || null;
-                upEl.textContent = up;
-                dnEl.textContent = down;
-                upBtn.classList.toggle('active-up',   myR === 'up');
-                dnBtn.classList.toggle('active-down', myR === 'down');
-                if (myR) {
-                    upBtn.onclick = null; upBtn.style.cursor = 'default';
-                    dnBtn.onclick = null; dnBtn.style.cursor = 'default';
+                const counts = {};
+                (all || []).filter(r => r.news_id === id).forEach(r => { counts[r.emoji] = (counts[r.emoji] || 0) + 1; });
+                for (const e of ['👍','❤️','😂','😮','👏','🔥']) {
+                    const btn = document.getElementById(`ce-${id}-${e.codePointAt(0)}`);
+                    if (!btn) continue;
+                    const cnt = counts[e] || 0;
+                    btn.querySelector('.nv-react-count').textContent = cnt || '';
+                    btn.classList.toggle('active', mySet.has(`${id}:${e}`));
                 }
             }
         } catch { /* ігноруємо якщо таблиці ще немає */ }
     },
 
-    async _reactCard(newsId, type) {
+    async _reactEmoji(newsId, emoji, btn) {
         try {
-            await API.news.react(newsId, type);
-            await this._loadCardReactions([newsId]);
+            const added = await API.news.toggleEmoji(newsId, emoji);
+            const countEl = btn.querySelector('.nv-react-count');
+            const cur = parseInt(countEl.textContent) || 0;
+            countEl.textContent = added ? (cur + 1 || '') : (cur - 1 > 0 ? cur - 1 : '');
+            btn.classList.toggle('active', added);
+            btn.style.transform = 'scale(1.35)';
+            setTimeout(() => { btn.style.transform = ''; }, 200);
         } catch(e) { Toast.error('Помилка', e.message); }
     },
 
     async _loadReactions(newsId) {
         try {
-            const { up, down, mine } = await API.news.getReactions(newsId);
-            const upEl    = document.getElementById('react-up-count');
-            const downEl  = document.getElementById('react-down-count');
-            const upBtn   = document.getElementById('btn-react-up');
-            const dnBtn   = document.getElementById('btn-react-down');
-            const upLabel = document.getElementById('react-up-label');
-            const dnLabel = document.getElementById('react-down-label');
-            if (!upEl) return;
-            upEl.textContent   = up || 0;
-            downEl.textContent = down || 0;
-            upBtn.classList.toggle('active-up',   mine === 'up');
-            dnBtn.classList.toggle('active-down', mine === 'down');
-            // After vote: hide text labels, lock buttons
-            if (mine) {
-                if (upLabel)  upLabel.style.display = 'none';
-                if (dnLabel)  dnLabel.style.display = 'none';
-                upBtn.onclick = null;
-                dnBtn.onclick = null;
-                upBtn.style.cursor = 'default';
-                dnBtn.style.cursor = 'default';
+            const { counts, myEmojis } = await API.news.getEmojiReactions(newsId);
+            for (const e of ['👍','❤️','😂','😮','👏','🔥']) {
+                const btn = document.getElementById(`nv-react-${newsId}-${e.codePointAt(0)}`);
+                if (!btn) continue;
+                const cnt = counts[e] || 0;
+                btn.querySelector('.nv-react-count').textContent = cnt || '';
+                btn.classList.toggle('active', myEmojis.has(e));
             }
         } catch { /* ігноруємо якщо таблиці ще немає */ }
     },
 
-    async _react(newsId, type) {
+    async _reactArticleEmoji(newsId, emoji, btn) {
         try {
-            await API.news.react(newsId, type);
-            await this._loadReactions(newsId);
-        } catch(e) {
-            Toast.error('Помилка', e.message);
-        }
+            const added = await API.news.toggleEmoji(newsId, emoji);
+            const countEl = btn.querySelector('.nv-react-count');
+            const cur = parseInt(countEl.textContent) || 0;
+            countEl.textContent = added ? (cur + 1 || '') : (cur - 1 > 0 ? cur - 1 : '');
+            btn.classList.toggle('active', added);
+            btn.style.transform = 'scale(1.4)';
+            setTimeout(() => { btn.style.transform = ''; }, 200);
+        } catch(e) { Toast.error('Помилка', e.message); }
     },
 
     // ── Create / Edit ──────────────────────────────────────────────
     _backToList() {
-        location.hash = '#/news';
+        const container = document.getElementById('page-content');
+        if (container) { history.replaceState(null, '', '#/news'); NewsPage.init(container, {}); }
+        else Router.go('news');
     },
 
     openCreate() {
@@ -387,12 +373,6 @@ const NewsPage = {
     _accessGroups: [],
 
     _openForm(news) {
-        // Destroy previous Quill instance before wiping the DOM
-        if (this._quill) {
-            if (this._resizeAbort) { this._resizeAbort.abort(); this._resizeAbort = null; }
-            this._quill = null;
-        }
-        this._htmlMode = false;
         const isEdit = !!news?.id;
         const pubDateVal = news?.published_at
             ? new Date(news.published_at).toISOString().slice(0,16)
@@ -484,20 +464,13 @@ const NewsPage = {
                     <div class="nf-field">
                         <label>Текст *</label>
                         <div class="nf-editor-wrap">
-                            <!-- Quill WYSIWYG -->
                             <div class="nf-editor-left">
-                                <div class="nf-quill-wrap">
-                                    <div id="n-quill-editor"></div>
-                                </div>
                                 <div class="nf-html-toggle">
-                                    <button type="button" class="btn btn-ghost btn-sm" onclick="NewsPage._toggleHtmlMode()" id="n-html-toggle-btn" style="font-size:.75rem">
-                                        <i class="fa-solid fa-code"></i> HTML
-                                    </button>
                                     <button type="button" class="btn btn-ghost btn-sm" onclick="NewsPage._previewNews()" style="font-size:.75rem">
                                         <i class="fa-solid fa-eye"></i> Перегляд
                                     </button>
                                 </div>
-                                <textarea id="n-html-src" style="display:none;flex:1;width:100%;min-height:460px;padding:1rem;font-family:monospace;font-size:.82rem;background:var(--bg-raised);color:var(--text-primary);border:none;border-top:1px solid var(--border);outline:none;resize:none;line-height:1.6;tab-size:2;box-sizing:border-box" placeholder="HTML..."></textarea>
+                                <textarea id="n-html-src" style="flex:1;width:100%;min-height:460px;padding:1rem;font-family:monospace;font-size:.82rem;background:var(--bg-raised);color:var(--text-primary);border:none;border-top:1px solid var(--border);outline:none;resize:none;line-height:1.6;tab-size:2;box-sizing:border-box" placeholder="HTML...">${Fmt.esc(news?.content || '')}</textarea>
                             </div>
                             <!-- Медіатека -->
                             <div class="nf-media-panel" id="n-media-panel">
@@ -604,23 +577,6 @@ const NewsPage = {
                 groups.map(g => `<option value="${g.id}" ${news?.access_group_id === g.id ? 'selected' : ''}>${Fmt.esc(g.name)}${g.is_public ? '' : ' 🔐'}</option>`).join('');
         }).catch(() => {});
 
-        // If content has complex HTML that Quill can't represent in its Delta model,
-        // open directly in HTML mode to avoid Quill stripping it on normalization
-        const rawContent = news?.content || '';
-        const isComplexHtml = /<table[\s>]/i.test(rawContent) ||
-            (/position\s*:|overflow\s*:|radial-gradient|linear-gradient.*\(|display\s*:\s*grid|display\s*:\s*flex.*position/i.test(rawContent)
-            && /<div/i.test(rawContent));
-        this._initQuill(isComplexHtml ? '' : rawContent);
-        if (isComplexHtml) {
-            this._htmlMode = true;
-            const ta  = document.getElementById('n-html-src');
-            const qw  = document.querySelector('.nf-quill-wrap');
-            const btn = document.getElementById('n-html-toggle-btn');
-            if (ta)  { ta.value = rawContent; ta.style.display = 'block'; }
-            if (qw)  qw.style.display = 'none';
-            if (btn) { btn.classList.add('btn-primary'); btn.classList.remove('btn-ghost'); }
-        }
-
         // Папка медіатеки: для існуючої новини — news-{id}, для нової — draft-{timestamp}
         this._mediaFolder = news?.id ? `news-${news.id}` : `draft-${Date.now().toString(36)}`;
         this._newsImgFile = null;
@@ -705,27 +661,15 @@ const NewsPage = {
 
 
     _insertMediaFile(url, name, isImage) {
-        if (this._htmlMode) {
-            const ta  = document.getElementById('n-html-src');
-            if (!ta) return;
-            const pos = ta.selectionStart ?? ta.value.length;
-            const ins = isImage
-                ? `<img src="${url}" alt="${name}" style="max-width:100%">`
-                : `<a href="${url}" target="_blank" rel="noopener">${name}</a>`;
-            ta.value = ta.value.slice(0, pos) + ins + ta.value.slice(pos);
-            ta.selectionStart = ta.selectionEnd = pos + ins.length;
-            ta.focus();
-            return;
-        }
-        if (!this._quill) return;
-        const range = this._quill.getSelection(true) || { index: this._quill.getLength() };
-        if (isImage) {
-            this._quill.insertEmbed(range.index, 'image', url);
-        } else {
-            this._quill.insertText(range.index, name, 'link', url);
-        }
-        this._quill.setSelection(range.index + 1);
-        this._quill.focus();
+        const ta = document.getElementById('n-html-src');
+        if (!ta) return;
+        const pos = ta.selectionStart ?? ta.value.length;
+        const ins = isImage
+            ? `<img src="${url}" alt="${name}" style="max-width:100%">`
+            : `<a href="${url}" target="_blank" rel="noopener">${name}</a>`;
+        ta.value = ta.value.slice(0, pos) + ins + ta.value.slice(pos);
+        ta.selectionStart = ta.selectionEnd = pos + ins.length;
+        ta.focus();
     },
 
     async _attachFile(input) {
@@ -768,185 +712,14 @@ const NewsPage = {
         return html.replace(/(<img[^>]+src=")(\/)([^"]+)"/gi, `$1${SUPABASE_URL}/$3"`);
     },
 
-    _quill: null,
-    _htmlMode: false,
-
-    _initQuill(content) {
-        // Register fonts/sizes once
-        if (!NewsPage._quillSetupDone) {
-            NewsPage._quillSetupDone = true;
-            const FontStyle = Quill.import('attributors/style/font');
-            FontStyle.whitelist = ['Arial', 'Georgia', 'Courier New', 'Tahoma', 'Verdana'];
-            Quill.register(FontStyle, true);
-            const SizeStyle = Quill.import('attributors/style/size');
-            SizeStyle.whitelist = ['12px','14px',false,'18px','20px','24px','28px','36px'];
-            Quill.register(SizeStyle, true);
-        }
-
-        this._quill = new Quill('#n-quill-editor', {
-            theme: 'snow',
-            placeholder: 'Введіть текст новини...',
-            modules: {
-                toolbar: {
-                    container: [
-                        [{ font: ['Arial','Georgia','Courier New','Tahoma','Verdana'] }],
-                        [{ size: ['12px','14px',false,'18px','20px','24px','28px','36px'] }],
-                        ['bold','italic','underline','strike'],
-                        [{ color: [] },{ background: [] }],
-                        [{ align: [] }],
-                        [{ list: 'ordered'},{ list: 'bullet' }],
-                        ['blockquote'],
-                        ['link','image'],
-                        ['clean'],
-                    ],
-                    handlers: {
-                        image: () => this._quillImageHandler()
-                    }
-                }
-            }
-        });
-
-        if (content) setTimeout(() => {
-            if (!this._quill) return;
-            this._quill.disable();
-            this._quill.root.innerHTML = content;
-            this._quill.enable();
-        }, 0);
-
-        // Image resize + alignment overlay
-        if (this._resizeAbort) this._resizeAbort.abort();
-        this._resizeAbort = this._initImageResize(this._quill);
-
-        // Paste image
-        this._quill.root.addEventListener('paste', async e => {
-            const item = Array.from(e.clipboardData?.items || []).find(i => i.type.startsWith('image/'));
-            if (!item) return;
-            e.preventDefault();
-            const file = item.getAsFile();
-            if (file) await this._quillUploadAndInsert(file);
-        });
-
-        // Drag from media grid → drop into editor
-        this._quill.root.addEventListener('dragover', e => {
-            if (NewsPage._draggedImgUrl) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }
-        });
-        this._quill.root.addEventListener('drop', e => {
-            const url = NewsPage._draggedImgUrl;
-            if (!url) return;
-            e.preventDefault();
-            const range = this._quill.getSelection(true) || { index: this._quill.getLength() };
-            this._quill.insertEmbed(range.index, 'image', url);
-            this._quill.setSelection(range.index + 1);
-        });
+    // Escape structural tags that would break innerHTML parsing (</html>, </body>, </head>)
+    _safeHtml(html) {
+        if (!html) return html;
+        return html.replace(/<\/?(html|body|head|meta|title|base|link|script|style)\b[^>]*>/gi,
+            m => m.replace(/</g, '&lt;').replace(/>/g, '&gt;'));
     },
 
     _draggedImgUrl: null,
-
-    async _quillImageHandler() {
-        const input = document.createElement('input');
-        input.type = 'file'; input.accept = 'image/*';
-        input.onchange = async () => {
-            if (input.files[0]) await this._quillUploadAndInsert(input.files[0]);
-        };
-        input.click();
-    },
-
-    async _quillUploadAndInsert(file) {
-        Loader.show();
-        try {
-            const comp = await this._compressImage(file);
-            const url  = await API.news.uploadImage(this._mediaFolder, comp);
-            const range = this._quill.getSelection(true) || { index: this._quill.getLength() };
-            this._quill.insertEmbed(range.index, 'image', url);
-            this._quill.setSelection(range.index + 1);
-            this._loadMedia();
-        } catch(e) { Toast.error('Помилка', e.message); }
-        finally { Loader.hide(); }
-    },
-
-    _initImageResize(quill) {
-        const ac  = new AbortController();
-        const sig = ac.signal;
-        let activeImg = null;
-
-        const wrap = quill.root.parentElement;
-        wrap.style.position = 'relative';
-
-        const ov = document.createElement('div');
-        ov.style.cssText = 'position:absolute;box-sizing:border-box;border:2px solid var(--primary,#6366f1);pointer-events:none;display:none;z-index:5;border-radius:2px';
-        const handle = document.createElement('div');
-        handle.title = 'Змінити розмір';
-        handle.style.cssText = 'position:absolute;bottom:-6px;right:-6px;width:12px;height:12px;background:var(--primary,#6366f1);border:2px solid #fff;border-radius:2px;cursor:se-resize;pointer-events:all';
-        ov.appendChild(handle);
-        wrap.appendChild(ov);
-
-        const tbar = document.createElement('div');
-        tbar.className = 'ql-img-toolbar';
-        tbar.innerHTML = [
-            ['block',  '<i class="fa-solid fa-expand"></i>',       'Блок (повна ширина)'],
-            ['center', '<i class="fa-solid fa-align-center"></i>',  'По центру'],
-            ['left',   '<i class="fa-solid fa-align-left"></i>',   'Обтікання ліворуч'],
-            ['right',  '<i class="fa-solid fa-align-right"></i>',  'Обтікання праворуч'],
-        ].map(([a, ic, t]) => `<button data-align="${a}" title="${t}">${ic}</button>`).join('');
-        wrap.appendChild(tbar);
-
-        const hideAll = () => { ov.style.display = 'none'; tbar.style.display = 'none'; activeImg = null; };
-
-        const syncOv = () => {
-            if (!activeImg || !quill.root.contains(activeImg)) { hideAll(); return; }
-            const ir = activeImg.getBoundingClientRect();
-            const wr = wrap.getBoundingClientRect();
-            const top = ir.top - wr.top, left = ir.left - wr.left;
-            ov.style.cssText += `;top:${top}px;left:${left}px;width:${ir.width}px;height:${ir.height}px;display:block`;
-            const tbW = tbar.offsetWidth || 172, tbH = tbar.offsetHeight || 46;
-            tbar.style.top  = (top + ir.height / 2 - tbH / 2) + 'px';
-            tbar.style.left = Math.max(0, Math.min(left + ir.width / 2 - tbW / 2, wr.width - tbW - 4)) + 'px';
-            tbar.style.display = 'flex';
-            const fl = activeImg.style.float, centered = !fl && activeImg.style.marginLeft === 'auto';
-            tbar.querySelectorAll('button').forEach(btn => {
-                const a = btn.dataset.align;
-                btn.classList.toggle('on',
-                    (a === 'left'   && fl === 'left') ||
-                    (a === 'right'  && fl === 'right') ||
-                    (a === 'center' && centered) ||
-                    (a === 'block'  && !fl && !centered)
-                );
-            });
-        };
-
-        quill.root.addEventListener('click', e => {
-            if (e.target.tagName !== 'IMG') { hideAll(); return; }
-            activeImg = e.target; syncOv();
-        }, { signal: sig });
-        quill.root.addEventListener('scroll', syncOv, { signal: sig });
-
-        tbar.addEventListener('click', e => {
-            const btn = e.target.closest('button[data-align]');
-            if (!btn || !activeImg) return;
-            e.stopPropagation();
-            activeImg.style.float = activeImg.style.display = activeImg.style.margin = '';
-            const a = btn.dataset.align;
-            if (a === 'block')  { activeImg.style.display = 'block'; activeImg.style.margin = '8px 0'; }
-            if (a === 'center') { activeImg.style.display = 'block'; activeImg.style.margin = '8px auto'; }
-            if (a === 'left')   { activeImg.style.float = 'left';  activeImg.style.margin = '0 12px 8px 0'; }
-            if (a === 'right')  { activeImg.style.float = 'right'; activeImg.style.margin = '0 0 8px 12px'; }
-            syncOv();
-        }, { signal: sig });
-
-        handle.addEventListener('mousedown', e => {
-            if (!activeImg) return;
-            e.preventDefault();
-            const startX = e.clientX, startW = activeImg.getBoundingClientRect().width;
-            const onMove = ev => { activeImg.style.width = Math.max(40, startW + ev.clientX - startX) + 'px'; activeImg.style.height = 'auto'; syncOv(); };
-            const onUp   = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
-            document.addEventListener('mousemove', onMove);
-            document.addEventListener('mouseup', onUp);
-        }, { signal: sig });
-
-        document.addEventListener('click', e => { if (!wrap.contains(e.target)) hideAll(); }, { signal: sig });
-
-        return ac;
-    },
 
     _compressImage(file, maxWidth = 1400, quality = 0.85) {
         return new Promise(resolve => {
@@ -970,46 +743,8 @@ const NewsPage = {
         });
     },
 
-    _toggleHtmlMode() {
-        // If currently in HTML mode and content has a table — stay in HTML mode,
-        // Quill 1.x strips <table> on normalization
-        if (this._htmlMode) {
-            const ta = document.getElementById('n-html-src');
-            if (ta && /<table[\s>]/i.test(ta.value)) {
-                Toast.warning('HTML-режим', 'Таблиці підтримуються тільки в HTML-режимі — залишаємось тут');
-                return;
-            }
-        }
-        this._htmlMode = !this._htmlMode;
-        const ta  = document.getElementById('n-html-src');
-        const qw  = document.querySelector('.nf-quill-wrap');
-        const btn = document.getElementById('n-html-toggle-btn');
-        if (this._htmlMode) {
-            // Only overwrite textarea if Quill actually has content typed by the user.
-            // If Quill is empty (it stripped complex HTML on load), keep the existing textarea value.
-            const quillHtml = this._quill.root.innerHTML;
-            const quillEmpty = !quillHtml || quillHtml === '<p><br></p>';
-            if (!quillEmpty) ta.value = quillHtml;
-            ta.style.display = 'block';
-            if (qw) qw.style.display = 'none';
-            btn.classList.add('btn-primary');
-            btn.classList.remove('btn-ghost');
-        } else {
-            // Disable Quill's MutationObserver before setting innerHTML to prevent
-            // it from normalizing away custom HTML/CSS that it doesn't know about
-            this._quill.disable();
-            this._quill.root.innerHTML = ta.value;
-            this._quill.enable();
-            ta.style.display = 'none';
-            if (qw) qw.style.display = 'flex';
-            btn.classList.remove('btn-primary');
-            btn.classList.add('btn-ghost');
-        }
-    },
-
     _getContent() {
-        if (this._htmlMode) return document.getElementById('n-html-src')?.value || '';
-        return this._quill ? this._quill.root.innerHTML : '';
+        return document.getElementById('n-html-src')?.value || '';
     },
 
     _setThumbPos(pos) {
@@ -1087,7 +822,9 @@ const NewsPage = {
 
             AuditLog.write(id ? 'news_update' : 'news_create', 'news', title);
             Toast.success('Успішно!', `Новина "${title}" ${id ? 'оновлена' : 'додана'}`);
-            location.hash = '#/news';
+            const container = document.getElementById('page-content');
+            if (container) { history.replaceState(null, '', '#/news'); await NewsPage.init(container, {}); }
+            else Router.go('news');
         } catch(e) {
             Toast.error('Помилка', e.message);
         } finally { Loader.hide(); }

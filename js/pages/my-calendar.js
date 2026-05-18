@@ -23,6 +23,16 @@ const MyCalendarPage = {
         container.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
         await this._load();
         this._render();
+        if (MyCalendarPage._pendingNewDate) {
+            const date = MyCalendarPage._pendingNewDate;
+            MyCalendarPage._pendingNewDate = null;
+            // Navigate calendar to the correct month first
+            const d = new Date(date + 'T00:00:00');
+            this._month = d.getMonth();
+            this._year  = d.getFullYear();
+            this._render();
+            this._openEventModal(date);
+        }
     },
 
     _ownerId() {
@@ -343,7 +353,7 @@ ${this._styles()}`;
     <div style="display:flex;flex-direction:column;gap:8px;font-size:.85rem;margin-top:4px">
         <div>📅 ${new Date(ev.date+'T00:00:00').toLocaleDateString('uk-UA',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</div>
         ${ev.time ? `<div>🕐 ${ev.time.slice(0,5)}${ev.end_time ? ' – ' + ev.end_time.slice(0,5) : ''}${ev.end_time ? `<span style="color:var(--text-muted);font-size:.8rem;margin-left:.5rem">${this._durationLabel(ev.time, ev.end_time).replace(/<[^>]+>/g,'')}</span>` : ''}</div>` : ''}
-        ${ev.notes ? `<div style="color:var(--text-muted);line-height:1.5;margin-top:4px">${Fmt.esc(ev.notes)}</div>` : ''}
+        ${ev.notes ? `<div style="color:var(--text-muted);line-height:1.5;margin-top:4px">${ev.notes}</div>` : ''}
     </div>
     ${readOnly ? '' : `
     <div class="mc-modal-actions" style="margin-top:16px">

@@ -233,7 +233,10 @@ const NotificationsPage = {
         const timeAgo   = this._timeAgo(n.created_at);
         const sender    = n.sender?.full_name || 'Система';
 
-        return `<div class="ntf-item" data-id="${n.id}" data-type="${n.type}">
+        const clickHandler = n.link
+            ? `NotificationsPage._openItem('${n.id}',${JSON.stringify(n.link).replace(/"/g,'&quot;')},this)`
+            : '';
+        return `<div class="ntf-item${n.link ? ' ntf-item-clickable' : ''}" data-id="${n.id}" data-type="${n.type}" ${clickHandler ? `onclick="${clickHandler}"` : ''}>
             <div class="ntf-icon ntf-icon-${n.type}">${typeIcon}</div>
             <div class="ntf-body">
                 <div class="ntf-item-title">${Fmt.esc(n.title)}</div>
@@ -248,6 +251,7 @@ const NotificationsPage = {
             <div class="ntf-actions" onclick="event.stopPropagation()">
                 <button class="ntf-act" title="Видалити" onclick="NotificationsPage._deleteOne('${n.id}', this.closest('.ntf-item'))"><i class="fa-solid fa-trash"></i></button>
             </div>
+            ${n.link ? `<i class="fa-solid fa-chevron-right" style="font-size:.6rem;color:var(--text-muted);align-self:center;flex-shrink:0"></i>` : ''}
         </div>`;
     },
 
@@ -264,6 +268,18 @@ const NotificationsPage = {
     async _markRead(id) {
         await supabase.from('notifications').update({ is_read: true }).eq('id', id);
         UI.updateNotificationBadge(-1);
+    },
+
+    async _openItem(id, link, el) {
+        const item = el.closest('.ntf-item');
+        if (item?.classList.contains('unread')) {
+            await supabase.from('notifications').update({ is_read: true }).eq('id', id).catch(() => {});
+            item.classList.remove('unread');
+            const dot = item.querySelector('.ntf-dot');
+            if (dot) dot.remove();
+            UI.updateNotificationBadge(-1);
+        }
+        Router.go(link);
     },
 
     async _deleteOne(id, el) {

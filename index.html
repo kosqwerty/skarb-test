@@ -132,33 +132,24 @@
 ================================================ -->
 <div id="app-shell" class="app-shell hidden">
 
-    <!-- Бічна панель -->
-    <aside id="sidebar" class="sidebar">
-        <div class="sidebar-header">
-            <div class="logo">
+    <!-- Верхня панель -->
+    <header class="top-bar">
+        <div class="top-bar-left">
+            <button class="sidebar-toggle" onclick="UI.toggleSidebar()" title="Згорнути меню">
+                <i class="fa-solid fa-bars"></i>
+            </button>
+            <div class="logo" onclick="Router.go('dashboard')" style="cursor:pointer;">
                 <span class="logo-icon">
                     <img class="logo-dark"  src="/dark.png"  alt="">
                     <img class="logo-light" src="/light.png" alt="">
                 </span>
-                <!-- <span class="logo-text">Скарбниця</span> -->
             </div>
-            
         </div>
-
-        <nav id="sidebar-nav" class="sidebar-nav"></nav>
-
-    </aside>
-
-    <div id="sidebar-overlay" class="sidebar-overlay" onclick="UI.closeSidebar()"></div>
-
-    <!-- Основний контент -->
-    <div class="main-wrapper">
-        <header class="top-bar">
-            <div class="top-bar-left">
-                <button class="mobile-menu-btn" onclick="UI.openSidebar()">☰</button>
-                <nav class="breadcrumb" id="breadcrumb"></nav>
-            </div>
-            <div class="top-bar-right">
+        <div class="top-bar-right">
+            <span class="logo-icon-extra">
+                <img src="/light_new.png" alt="">
+            </span>
+            <div class="sidebar-bottom" id="sidebar-bottom">
                 <button class="ntf-bell-btn" id="ntf-bell" onclick="Router.go('notifications')" title="Сповіщення">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
@@ -182,8 +173,18 @@
                     </div>
                 </div>
             </div>
-        </header>
+        </div>
+    </header>
 
+    <!-- Бічна панель -->
+    <aside id="sidebar" class="sidebar">
+        <nav id="sidebar-nav" class="sidebar-nav"></nav>
+    </aside>
+
+    <div id="sidebar-overlay" class="sidebar-overlay" onclick="UI.closeSidebar()"></div>
+
+    <!-- Основний контент -->
+    <div class="main-wrapper">
         <main id="page-content" class="page-content"></main>
     </div>
 </div>

@@ -748,6 +748,44 @@ const API = {
                 is_read: false
             });
             if (error) throw error;
+        },
+
+        async notifyResourcePublished(resource, overrideLink = null, isUpdate = false) {
+            const staffRoles = ['owner', 'admin', 'smm', 'teacher', 'manager'];
+            const { data: staffData } = await supabase.from('profiles').select('id').eq('is_active', true).in('role', staffRoles);
+            const staffIds = (staffData || []).map(p => p.id);
+
+            let regularIds = [];
+            if (resource.id) {
+                const { data: resDovs } = await supabase.from('resource_dovirenosti').select('dovirenost_id').eq('resource_id', resource.id);
+                const dovIds = (resDovs || []).map(r => r.dovirenost_id);
+                if (dovIds.length) {
+                    const { data: profDovs } = await supabase.from('profile_dovirenosti').select('profile_id').in('dovirenost_id', dovIds);
+                    regularIds = [...new Set((profDovs || []).map(r => r.profile_id))];
+                } else {
+                    const { data: allUsers } = await supabase.from('profiles').select('id').eq('is_active', true).eq('role', 'user');
+                    regularIds = (allUsers || []).map(p => p.id);
+                }
+            }
+
+            const userIds = [...new Set([...staffIds, ...regularIds])];
+            if (!userIds.length) return;
+            const isDoc = resource.is_tracked_download;
+            const link = resource.id ? `resource/${resource.id}` : (overrideLink || (isDoc ? 'documents' : 'knowledge-base'));
+            const typeIcon = isDoc ? '📋' : '📁';
+            const action = isUpdate ? 'Оновлено' : 'Новий';
+            const actionTitle = `${typeIcon} ${action}${resource.category ? ` · ${resource.category}` : ''}`;
+            const actionMsg = `«${resource.title}»${resource.description ? ': ' + resource.description.slice(0, 100) : ''}.`;
+            const rows = userIds.map(uid => ({
+                user_id:    uid,
+                title:      actionTitle,
+                message:    actionMsg,
+                type:       'general',
+                link,
+                created_by: AppState.user.id,
+                is_read:    false
+            }));
+            await supabase.from('notifications').insert(rows);
         }
     },
 
@@ -1111,6 +1149,29 @@ const API = {
             return { up, down, mine: mine?.type || null };
         },
 
+        async getEmojiReactions(newsId) {
+            const [{ data: all }, { data: mine }] = await Promise.all([
+                supabase.from('news_reactions').select('emoji').eq('news_id', newsId).not('emoji', 'is', null),
+                supabase.from('news_reactions').select('emoji').eq('news_id', newsId).eq('user_id', AppState.user.id).not('emoji', 'is', null)
+            ]);
+            const counts = {};
+            (all || []).forEach(r => { counts[r.emoji] = (counts[r.emoji] || 0) + 1; });
+            const myEmojis = new Set((mine || []).map(r => r.emoji));
+            return { counts, myEmojis };
+        },
+
+        async toggleEmoji(newsId, emoji) {
+            const { data: existing } = await supabase.from('news_reactions')
+                .select('id').eq('news_id', newsId).eq('user_id', AppState.user.id).eq('emoji', emoji).maybeSingle();
+            if (existing) {
+                await supabase.from('news_reactions').delete().eq('id', existing.id);
+                return false;
+            } else {
+                await supabase.from('news_reactions').insert({ news_id: newsId, user_id: AppState.user.id, emoji });
+                return true;
+            }
+        },
+
         async react(newsId, type) {
             const { data: existing } = await supabase.from('news_reactions')
                 .select('id, type').eq('news_id', newsId).eq('user_id', AppState.user.id).maybeSingle();
@@ -1310,32 +1371,36 @@ const API = {
         },
 
         // Send notifications to all users who have access to a document
-        async notifyOnPublish(resource) {
-            let userIds = [];
-            if (resource.access_group) {
-                const ag = resource.access_group;
-                let q = supabase.from('profiles').select('id');
-                if (!ag.is_public) {
-                    if (ag.cities?.length)     q = q.in('city', ag.cities.map(c => c.city));
-                    if (ag.positions?.length)  q = q.in('job_position', ag.positions.map(p => p.position));
-                    if (ag.departments?.length) q = q.in('subdivision', ag.departments.map(d => d.department));
-                    if (ag.labels?.length)     q = q.in('label', ag.labels.map(l => l.label));
+        async notifyOnPublish(resource, isUpdate = false) {
+            const staffRoles = ['owner', 'admin', 'smm', 'teacher', 'manager'];
+            const { data: staffData } = await supabase.from('profiles').select('id').eq('is_active', true).in('role', staffRoles);
+            const staffIds = (staffData || []).map(p => p.id);
+
+            let regularIds = [];
+            if (resource.id) {
+                const { data: resDovs } = await supabase.from('resource_dovirenosti').select('dovirenost_id').eq('resource_id', resource.id);
+                const dovIds = (resDovs || []).map(r => r.dovirenost_id);
+                if (dovIds.length) {
+                    const { data: profDovs } = await supabase.from('profile_dovirenosti').select('profile_id').in('dovirenost_id', dovIds);
+                    regularIds = [...new Set((profDovs || []).map(r => r.profile_id))];
+                } else {
+                    const { data: allUsers } = await supabase.from('profiles').select('id').eq('is_active', true).eq('role', 'user');
+                    regularIds = (allUsers || []).map(p => p.id);
                 }
-                const { data } = await q.catch(() => ({ data: [] }));
-                userIds = (data || []).map(p => p.id);
-            } else {
-                const { data } = await supabase.from('profiles').select('id').catch(() => ({ data: [] }));
-                userIds = (data || []).map(p => p.id);
             }
+
+            const userIds = [...new Set([...staffIds, ...regularIds])];
             if (!userIds.length) return;
             const rows = userIds.map(uid => ({
                 user_id:    uid,
-                title:      '📋 Новий документ для ознайомлення',
-                message:    `З'явився новий документ «${resource.title}», який потребує вашого ознайомлення.${resource.deadline_days ? ` Термін: ${resource.deadline_days} дн.` : ''}`,
+                title:      `📋 ${isUpdate ? 'Оновлено документ' : 'Новий документ'}${resource.category ? ` · ${resource.category}` : ''}`,
+                message:    `«${resource.title}»${resource.deadline_days ? `. Термін ознайомлення: ${resource.deadline_days} дн.` : ''}.`,
                 type:       'general',
-                created_by: AppState.user.id
+                link:       resource.id ? `resource/${resource.id}` : 'documents',
+                created_by: AppState.user.id,
+                is_read:    false
             }));
-            await supabase.from('notifications').insert(rows).catch(() => {});
+            await supabase.from('notifications').insert(rows);
         },
 
         // Tries to find today's active shift location for current user

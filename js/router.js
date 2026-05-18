@@ -85,6 +85,8 @@ const Router = {
         const container = document.getElementById('page-content');
         document.documentElement.scrollTop = 0;
         document.body.scrollTop = 0;
+        container.style.opacity = '0';
+        container.style.transform = 'translateY(8px)';
         container.innerHTML = `
             <div style="display:flex;align-items:center;justify-content:center;min-height:300px">
                 <div class="spinner"></div>
@@ -97,6 +99,11 @@ const Router = {
                 segments
             });
             this._prevCleanup = cleanup || null;
+            requestAnimationFrame(() => {
+                container.style.transition = 'opacity 0.6s cubic-bezier(.4,0,.2,1), transform 0.6s cubic-bezier(.4,0,.2,1)';
+                container.style.opacity = '1';
+                container.style.transform = 'translateY(0)';
+            });
         } catch(err) {
             console.error('Router error:', err);
             container.innerHTML = `

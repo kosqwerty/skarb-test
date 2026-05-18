@@ -117,8 +117,8 @@ const Bookmarks = {
             btn.classList.toggle('active', active);
             btn.title = active ? 'Видалити з закладок' : 'Зберегти в закладки';
             btn.innerHTML = active
-                ? '<i class="fa-solid fa-star"></i>'
-                : '<i class="fa-regular fa-star"></i>';
+                ? '<i class="fa-solid fa-bookmark"></i>'
+                : '<i class="fa-regular fa-bookmark"></i>';
         });
     }
 };
@@ -143,7 +143,7 @@ const BookmarksPage = {
     <div class="bm-hero">
         <div class="bm-hero-glow"></div>
         <div class="bm-hero-inner">
-            <div class="bm-hero-icon"><i class="fa-solid fa-star"></i></div>
+            <div class="bm-hero-icon"><i class="fa-solid fa-bookmark"></i></div>
             <div>
                 <h1 class="bm-hero-title">Мої закладки</h1>
                 <p class="bm-hero-sub" id="bm-hero-sub">${all.length} ${this._plural(all.length)}</p>
@@ -292,7 +292,7 @@ const BookmarksPage = {
 
     _filterChips(all) {
         const types = [
-            { f: 'all',        label: 'Всі',       icon: '<i class="fa-solid fa-star"></i>' },
+            { f: 'all',        label: 'Всі',       icon: '<i class="fa-solid fa-bookmark"></i>' },
             { f: 'resource',   label: 'Ресурси',   icon: '<i class="fa-regular fa-file"></i>' },
             { f: 'news',       label: 'Новини',    icon: '<i class="fa-solid fa-newspaper"></i>' },
             { f: 'collection', label: 'Портал',    icon: '<i class="fa-solid fa-wand-magic-sparkles"></i>' }
@@ -308,9 +308,9 @@ const BookmarksPage = {
     _gridHtml(items) {
         if (!items.length) return `
             <div class="bm-empty">
-                <div class="bm-empty-ico"><i class="fa-solid fa-star"></i></div>
+                <div class="bm-empty-ico"><i class="fa-solid fa-bookmark"></i></div>
                 <div class="bm-empty-head">Закладок поки немає</div>
-                <div class="bm-empty-txt">Натисніть <i class="fa-regular fa-star"></i> на ресурсі, новині або сторінці порталу, щоб зберегти тут</div>
+                <div class="bm-empty-txt">Натисніть <i class="fa-solid fa-bookmark"></i> на ресурсі, новині або сторінці порталу, щоб зберегти тут</div>
             </div>`;
         return items.map(b => this._cardHtml(b)).join('');
     },

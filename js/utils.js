@@ -91,7 +91,14 @@ const UI = {
     toggleSidebar() {
         const sidebar = document.getElementById('sidebar');
         sidebar.classList.toggle('collapsed');
-        localStorage.setItem('sidebar_collapsed', sidebar.classList.contains('collapsed'));
+        const isCollapsed = sidebar.classList.contains('collapsed');
+        document.body.classList.toggle('sidebar-collapsed', isCollapsed);
+        localStorage.setItem('sidebar_collapsed', isCollapsed);
+        const btn = sidebar.querySelector('.sidebar-toggle');
+        if (btn) {
+            btn.querySelector('i').className = isCollapsed ? 'fa-solid fa-bars' : 'fa-solid fa-bars';
+            btn.title = isCollapsed ? 'Розгорнути меню' : 'Згорнути меню';
+        }
     },
     openSidebar() {
         document.getElementById('sidebar').classList.add('open');
@@ -133,13 +140,15 @@ const UI = {
             if (!visible.length) return '';
             return `
             <div class="nav-section">
-                <div class="nav-section-title">${section.title}</div>
+                <div class="nav-section-title" style="background:linear-gradient(90deg,#C9A227,#2563EB);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">${section.title}</div>
                 ${visible.map(item => `
-                    <div class="nav-item" data-route="${item.route}" onclick="Router.go('${item.route}')">
-                        <span class="nav-icon">${item.icon}</span>
+                    <div class="nav-item" data-route="${item.route}" data-label="${item.label}" onclick="Router.go('${item.route}')">
+                        <span class="nav-icon">
+                            ${item.icon}
+                            ${item.badge ? `<span class="nav-badge nav-badge-dot">${item.badge}</span>` : ''}
+                            ${item.badgeId ? `<span class="nav-badge nav-badge-dot hidden" id="${item.badgeId}"></span>` : ''}
+                        </span>
                         <span class="nav-label">${item.label}</span>
-                        ${item.badge ? `<span class="nav-badge">${item.badge}</span>` : ''}
-                        ${item.badgeId ? `<span class="nav-badge hidden" id="${item.badgeId}"></span>` : ''}
                     </div>`).join('')}
             </div>`;
         }).join('');
@@ -684,6 +693,7 @@ const CreatableSelect = {
 
     _pick(opt) {
         const wrap = opt.closest('.cs-wrap');
+        if (!wrap) return;
         wrap.querySelector('.cs-input').value = opt.dataset.lbl;
         document.getElementById(wrap.dataset.cs).value = opt.dataset.val;
         wrap.querySelector('.cs-list').hidden = true;

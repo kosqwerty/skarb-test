@@ -898,7 +898,7 @@ ${HelpTip.render('kb', {
         <button class="kb-star res-star-btn${isBm?' active':''}"
             data-bm-route="resource/${resource.id}"
             title="${isBm?'Видалити з закладок':'Зберегти в закладки'}"
-            onclick="Bookmarks.toggleResource('${resource.id}',${safeTitle},${safeIcon},${safeCat})">${isBm ? '<i class="fa-solid fa-star"></i>' : '<i class="fa-regular fa-star"></i>'}</button>
+            onclick="Bookmarks.toggleResource('${resource.id}',${safeTitle},${safeIcon},${safeCat})">${isBm ? '<i class="fa-solid fa-bookmark"></i>' : '<i class="fa-regular fa-bookmark"></i>'}</button>
     </div>
 </div>`;
     },
@@ -929,7 +929,7 @@ ${HelpTip.render('kb', {
         <button class="kb-star res-star-btn${isBm?' active':''}"
             data-bm-route="resource/${resource.id}"
             title="${isBm?'Видалити з закладок':'Зберегти в закладки'}"
-            onclick="Bookmarks.toggleResource('${resource.id}',${safeTitle},${safeIcon},${safeCat})">${isBm ? '<i class="fa-solid fa-star"></i>' : '<i class="fa-regular fa-star"></i>'}</button>
+            onclick="Bookmarks.toggleResource('${resource.id}',${safeTitle},${safeIcon},${safeCat})">${isBm ? '<i class="fa-solid fa-bookmark"></i>' : '<i class="fa-regular fa-bookmark"></i>'}</button>
     </div>
 </div>`;
     },
@@ -1479,6 +1479,10 @@ ${HelpTip.render('kb', {
 
                 </div>`,
             footer: `
+                <label class="checkbox-item" style="margin-right:auto;cursor:pointer;font-size:.82rem;color:var(--text-secondary)">
+                    <input type="checkbox" id="res-notify" ${!isEdit ? 'checked' : ''}>
+                    <span><i class="fa-regular fa-bell" style="color:var(--primary)"></i> Надіслати сповіщення</span>
+                </label>
                 <button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
                 <button class="btn btn-primary" onclick="ResourcesPage.saveResource(${resource ? `'${resource.id}'` : ''})">${isEdit ? '<i class="fa-regular fa-floppy-disk"></i> Зберегти' : '<i class="fa-solid fa-plus"></i> Додати'}</button>`
         });
@@ -1564,6 +1568,7 @@ ${HelpTip.render('kb', {
             const dovIds = CreatableMultiSelect.getValues('res-dovirenosti');
             let savedId = resourceId;
 
+            const notifyLink = this._view === 'docs' ? 'documents' : 'knowledge-base';
             if (resourceId) {
                 // Bump doc_version if file changed or manually requested
                 if (fields._bump_version || this._resourceFile) {
@@ -1572,19 +1577,32 @@ ${HelpTip.render('kb', {
                 }
                 delete fields._bump_version;
                 await API.resources.update(resourceId, fields);
+                if (document.getElementById('res-notify')?.checked) {
+                    if (fields.is_tracked_download) {
+                        API.documentDownloads.notifyOnPublish({ ...fields, id: resourceId }, true).catch(e => console.error('[notify] notifyOnPublish error:', e));
+                    } else {
+                        API.notifications.notifyResourcePublished({ ...fields, id: resourceId }, notifyLink, true).catch(e => console.error('[notify] notifyResourcePublished error:', e));
+                    }
+                }
                 Toast.success('Збережено', 'Ресурс оновлено' + (fields.doc_version ? ` (версія ${fields.doc_version})` : ''));
             } else {
                 fields.doc_version = 1;
                 const created = await API.resources.create(fields);
                 savedId = created.id;
-                // Notify users on publish of tracked document
-                if (fields.is_tracked_download && created) {
-                    API.documentDownloads.notifyOnPublish({ ...fields, id: created.id }).catch(() => {});
+                const sendNotify = document.getElementById('res-notify')?.checked;
+                // Save dovirenosti first so notify functions can query them
+                await API.resources.setDovirenosti(savedId, dovIds).catch(() => {});
+                if (sendNotify && created) {
+                    if (fields.is_tracked_download) {
+                        API.documentDownloads.notifyOnPublish({ ...fields, id: created.id }).catch(e => console.error('[notify] notifyOnPublish error:', e));
+                    } else {
+                        API.notifications.notifyResourcePublished({ ...fields, id: created.id }, notifyLink).catch(e => console.error('[notify] notifyResourcePublished error:', e));
+                    }
                 }
                 Toast.success('Додано', 'Новий ресурс успішно створено');
             }
 
-            await API.resources.setDovirenosti(savedId, dovIds).catch(() => {});
+            if (resourceId) await API.resources.setDovirenosti(savedId, dovIds).catch(() => {});
 
             Modal.close();
             await Promise.all([this.load(), this._loadFilters()]);
@@ -1830,7 +1848,7 @@ const ResourceViewPage = {
                             <button class="res-star-btn${Bookmarks.isBookmarked('resource/'+resource.id) ? ' active' : ''}"
                                 data-bm-route="resource/${resource.id}"
                                 title="${Bookmarks.isBookmarked('resource/'+resource.id) ? 'Видалити з закладок' : 'Зберегти в закладки'}"
-                                onclick="Bookmarks.toggleResource('${resource.id}',${JSON.stringify(resource.title||'').replace(/"/g,'&quot;')},${JSON.stringify(ResourcesPage._resourceIcon(resource.type||resource.file_type||'file')).replace(/"/g,'&quot;')},${JSON.stringify(resource.category||'').replace(/"/g,'&quot;')})">${Bookmarks.isBookmarked('resource/'+resource.id) ? '<i class="fa-solid fa-star"></i>' : '<i class="fa-regular fa-star"></i>'}</button>
+                                onclick="Bookmarks.toggleResource('${resource.id}',${JSON.stringify(resource.title||'').replace(/"/g,'&quot;')},${JSON.stringify(ResourcesPage._resourceIcon(resource.type||resource.file_type||'file')).replace(/"/g,'&quot;')},${JSON.stringify(resource.category||'').replace(/"/g,'&quot;')})">${Bookmarks.isBookmarked('resource/'+resource.id) ? '<i class="fa-solid fa-bookmark"></i>' : '<i class="fa-regular fa-bookmark"></i>'}</button>
                         </div>
                         <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
                             ${categoryBadge}

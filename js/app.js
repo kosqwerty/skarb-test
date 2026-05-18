@@ -10,7 +10,10 @@ const App = {
 
         // Restore sidebar collapsed state
         const collapsed = localStorage.getItem('sidebar_collapsed') === 'true';
-        if (collapsed) document.getElementById('sidebar')?.classList.add('collapsed');
+        if (collapsed) {
+            document.getElementById('sidebar')?.classList.add('collapsed');
+            document.body.classList.add('sidebar-collapsed');
+        }
 
         // Initialize auth
         const loggedIn = await Auth.init();

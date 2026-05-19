@@ -1749,7 +1749,7 @@ body.light-theme .logo-icon .logo-dark  { display: none; }
 .nav-imp-bolt {
     position: absolute;
     top: -9px;
-    left: -9px;
+    right: -9px;
     width: 16px;
     height: 16px;
     border-radius: 50%;

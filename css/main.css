@@ -1538,7 +1538,8 @@ body.light-theme .logo-icon .logo-dark  { display: none; }
 .sidebar-nav {
     flex: 1;
     overflow-y: auto;
-    padding: 0.75rem 0.5rem;
+    overflow-x: visible;
+    padding: 1rem 0.5rem 0.75rem;
     scrollbar-width: thin;
     scrollbar-color: var(--border) transparent;
 }
@@ -1733,8 +1734,8 @@ body.light-theme .logo-icon .logo-dark  { display: none; }
 }
 .nav-badge-dot {
     position: absolute;
-    top: -10px;
-    right: -15px;
+    top: -6px;
+    right: -10px;
     min-width: 18px;
     height: 18px;
     padding: 0 3px 2px;
@@ -1749,8 +1750,8 @@ body.light-theme .logo-icon .logo-dark  { display: none; }
 @keyframes nav-bolt-bounce { 0%,100% { transform: scale(1); } 40% { transform: scale(1.15); } 70% { transform: scale(.97); } }
 .nav-imp-bolt {
     position: absolute;
-    top: -9px;
-    right: -9px;
+    top: -6px;
+    right: -6px;
     width: 16px;
     height: 16px;
     border-radius: 50%;

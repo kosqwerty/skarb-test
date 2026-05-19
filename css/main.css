@@ -1755,12 +1755,12 @@ body.light-theme .logo-icon .logo-dark  { display: none; }
     height: 16px;
     border-radius: 50%;
     background: linear-gradient(135deg, #f59e0b, #d97706);
-    border: 2px solid var(--sidebar-bg, #0f172a);
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: .5rem;
     color: #fff;
+    border: 2px solid rgba(245,158,11,.35);
     animation: nav-bolt-glow 3s ease-in-out infinite, nav-bolt-bounce 3s ease-in-out infinite;
 }
 #nav-ntf-badge {

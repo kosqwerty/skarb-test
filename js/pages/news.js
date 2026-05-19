@@ -241,7 +241,7 @@ const NewsPage = {
                         ${news.allow_reactions !== false ? `
                         <div style="position:absolute;bottom:1.25rem;right:1.5rem;display:flex;align-items:center;gap:.4rem;z-index:3">
                             ${['👍','❤️','😂','😮','👏','🔥'].map(e => `
-                                <button class="nv-emoji-btn nv-emoji-hero" id="nv-react-${news.id}-${e.codePointAt(0)}"
+                                <button class="nv-emoji-btn nv-emoji-hero" id="nv-react-${news.id}-${e.codePointAt(0)}" data-emoji="${e}"
                                     onclick="NewsPage._reactArticleEmoji('${news.id}','${e}',this)" title="${e}">
                                     ${e}<span class="nv-react-count"></span>
                                 </button>`).join('')}
@@ -295,6 +295,14 @@ const NewsPage = {
         }
     },
 
+    _sortEmojiRow(buttons, counts) {
+        if (!buttons.length) return;
+        const parent = buttons[0].parentElement;
+        if (!parent) return;
+        const sorted = [...buttons].sort((a, b) => (counts[b.dataset.emoji] || 0) - (counts[a.dataset.emoji] || 0));
+        sorted.forEach(btn => parent.appendChild(btn));
+    },
+
     async _loadCardReactions(ids) {
         try {
             const { data: all } = await supabase.from('news_reactions').select('news_id,emoji').in('news_id', ids.filter(Boolean));
@@ -303,24 +311,35 @@ const NewsPage = {
             for (const id of ids) {
                 const counts = {};
                 (all || []).filter(r => r.news_id === id).forEach(r => { counts[r.emoji] = (counts[r.emoji] || 0) + 1; });
+                const btns = [];
                 for (const e of ['👍','❤️','😂','😮','👏','🔥']) {
                     const btn = document.getElementById(`ce-${id}-${e.codePointAt(0)}`);
                     if (!btn) continue;
-                    const cnt = counts[e] || 0;
-                    btn.querySelector('.nv-react-count').textContent = cnt || '';
+                    btn.querySelector('.nv-react-count').textContent = counts[e] || '';
                     btn.classList.toggle('active', mySet.has(`${id}:${e}`));
+                    btns.push(btn);
                 }
+                this._sortEmojiRow(btns, counts);
             }
         } catch { /* ігноруємо якщо таблиці ще немає */ }
     },
 
     async _reactEmoji(newsId, emoji, btn) {
         try {
-            const added = await API.news.toggleEmoji(newsId, emoji);
+            const { added, prev } = await API.news.toggleEmoji(newsId, emoji);
+            // Deactivate previous reaction if switched
+            if (prev && prev !== emoji) {
+                const prevBtn = document.getElementById(`ce-${newsId}-${prev.codePointAt(0)}`);
+                if (prevBtn) {
+                    prevBtn.classList.remove('active');
+                    const c = prevBtn.querySelector('.nv-react-count');
+                    c.textContent = Math.max(0, (parseInt(c.textContent) || 0) - 1) || '';
+                }
+            }
+            btn.classList.toggle('active', added);
             const countEl = btn.querySelector('.nv-react-count');
             const cur = parseInt(countEl.textContent) || 0;
-            countEl.textContent = added ? (cur + 1 || '') : (cur - 1 > 0 ? cur - 1 : '');
-            btn.classList.toggle('active', added);
+            countEl.textContent = (added ? cur + 1 : Math.max(0, cur - 1)) || '';
             btn.style.transform = 'scale(1.35)';
             setTimeout(() => { btn.style.transform = ''; }, 200);
         } catch(e) { Toast.error('Помилка', e.message); }
@@ -329,25 +348,43 @@ const NewsPage = {
     async _loadReactions(newsId) {
         try {
             const { counts, myEmojis } = await API.news.getEmojiReactions(newsId);
+            const btns = [];
             for (const e of ['👍','❤️','😂','😮','👏','🔥']) {
                 const btn = document.getElementById(`nv-react-${newsId}-${e.codePointAt(0)}`);
                 if (!btn) continue;
-                const cnt = counts[e] || 0;
-                btn.querySelector('.nv-react-count').textContent = cnt || '';
+                btn.querySelector('.nv-react-count').textContent = counts[e] || '';
                 btn.classList.toggle('active', myEmojis.has(e));
+                btns.push(btn);
             }
+            this._sortEmojiRow(btns, counts);
         } catch { /* ігноруємо якщо таблиці ще немає */ }
     },
 
     async _reactArticleEmoji(newsId, emoji, btn) {
         try {
-            const added = await API.news.toggleEmoji(newsId, emoji);
+            const { added, prev } = await API.news.toggleEmoji(newsId, emoji);
+            if (prev && prev !== emoji) {
+                const prevBtn = document.getElementById(`nv-react-${newsId}-${prev.codePointAt(0)}`);
+                if (prevBtn) {
+                    prevBtn.classList.remove('active');
+                    const c = prevBtn.querySelector('.nv-react-count');
+                    c.textContent = Math.max(0, (parseInt(c.textContent) || 0) - 1) || '';
+                }
+            }
+            btn.classList.toggle('active', added);
             const countEl = btn.querySelector('.nv-react-count');
             const cur = parseInt(countEl.textContent) || 0;
-            countEl.textContent = added ? (cur + 1 || '') : (cur - 1 > 0 ? cur - 1 : '');
-            btn.classList.toggle('active', added);
+            countEl.textContent = (added ? cur + 1 : Math.max(0, cur - 1)) || '';
             btn.style.transform = 'scale(1.4)';
             setTimeout(() => { btn.style.transform = ''; }, 200);
+            // re-sort by count
+            const parent = btn.parentElement;
+            if (parent) {
+                const btns = [...parent.querySelectorAll('.nv-emoji-btn')];
+                const counts = {};
+                btns.forEach(b => { counts[b.dataset.emoji] = parseInt(b.querySelector('.nv-react-count').textContent) || 0; });
+                this._sortEmojiRow(btns, counts);
+            }
         } catch(e) { Toast.error('Помилка', e.message); }
     },
 

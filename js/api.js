@@ -1151,8 +1151,8 @@ const API = {
 
         async getEmojiReactions(newsId) {
             const [{ data: all }, { data: mine }] = await Promise.all([
-                supabase.from('news_reactions').select('emoji').eq('news_id', newsId).not('emoji', 'is', null),
-                supabase.from('news_reactions').select('emoji').eq('news_id', newsId).eq('user_id', AppState.user.id).not('emoji', 'is', null)
+                supabase.from('news_reactions').select('emoji').eq('news_id', newsId),
+                supabase.from('news_reactions').select('emoji').eq('news_id', newsId).eq('user_id', AppState.user.id)
             ]);
             const counts = {};
             (all || []).forEach(r => { counts[r.emoji] = (counts[r.emoji] || 0) + 1; });
@@ -1161,15 +1161,15 @@ const API = {
         },
 
         async toggleEmoji(newsId, emoji) {
-            const { data: existing } = await supabase.from('news_reactions')
-                .select('id').eq('news_id', newsId).eq('user_id', AppState.user.id).eq('emoji', emoji).maybeSingle();
-            if (existing) {
-                await supabase.from('news_reactions').delete().eq('id', existing.id);
-                return false;
-            } else {
-                await supabase.from('news_reactions').insert({ news_id: newsId, user_id: AppState.user.id, emoji });
-                return true;
-            }
+            // One reaction per user per news
+            const { data: rows } = await supabase.from('news_reactions')
+                .select('emoji').eq('news_id', newsId).eq('user_id', AppState.user.id).limit(1);
+            const prev = rows?.[0]?.emoji || null;
+            // Delete all existing reactions for this user+news
+            await supabase.from('news_reactions').delete().eq('news_id', newsId).eq('user_id', AppState.user.id);
+            if (prev === emoji) return { added: false, prev };
+            await supabase.from('news_reactions').insert({ news_id: newsId, user_id: AppState.user.id, emoji });
+            return { added: true, prev };
         },
 
         async react(newsId, type) {

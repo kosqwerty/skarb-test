@@ -127,6 +127,9 @@ const DashboardPage = {
             .db-alc-nlist{display:flex;flex-direction:column;gap:.3rem}
             .db-alc-nitem{display:flex;align-items:center;gap:.55rem;padding:.4rem .5rem;border-radius:var(--radius-md);cursor:pointer;transition:background .12s;border:1px solid var(--border);background:var(--bg-surface)}
             .db-alc-nitem:hover{background:var(--bg-raised);border-color:var(--primary)}
+            .db-ntf-check{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.58rem;flex-shrink:0;transition:all .15s;font-family:inherit;opacity:0}
+            .db-alc-nitem:hover .db-ntf-check{opacity:1}
+            .db-ntf-check:hover{border-color:var(--success);color:var(--success);background:rgba(16,185,129,.1)}
             .db-alc-nicon{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.95rem;flex-shrink:0}
             .db-alc-ntitle{font-size:.85rem;font-weight:500;color:var(--text-primary);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
             .db-cal-w{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden}
@@ -152,7 +155,15 @@ const DashboardPage = {
             .db-cup-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
             .db-cup-item{display:flex;gap:.65rem;align-items:flex-start;padding:.45rem .4rem;border-radius:var(--radius-md);cursor:pointer;transition:background .12s}
             .db-cup-item:hover{background:var(--bg-raised)}
-            .db-cup-item.db-cup-done .db-cup-name{text-decoration:line-through;opacity:.5}
+            .db-cup-item.db-cup-done .db-cup-name{opacity:.4}
+            .db-cup-item.db-cup-done{opacity:.55}
+            .db-cup-check{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--border);background:var(--bg-raised);color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.6rem;flex-shrink:0;transition:all .18s;font-family:inherit}
+            .db-cup-check:hover{border-color:var(--success);color:var(--success);background:rgba(16,185,129,.08)}
+            .db-cup-check.done{border-color:var(--success);background:rgba(16,185,129,.12);color:var(--success)}
+            .db-cup-check.done:hover{border-color:var(--text-muted);color:var(--text-muted);background:var(--bg-raised)}
+            .db-cup-section-title{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);padding:.55rem .9rem .3rem;display:flex;align-items:center;gap:.4rem}
+            .db-cup-sep{height:1px;background:var(--border);margin:.5rem .9rem}
+            .db-cup-empty{text-align:center;font-size:.8rem;color:var(--text-muted);padding:.75rem .5rem;display:flex;align-items:center;justify-content:center;gap:.4rem}
             .db-cup-badge{min-width:38px;padding:.3rem .2rem;border-radius:8px;background:rgba(99,102,241,.07);border:1px solid rgba(99,102,241,.12);display:flex;flex-direction:column;align-items:center;flex-shrink:0;line-height:1.15}
             .db-cup-bday{font-size:.9rem;font-weight:800;color:var(--primary)}
             .db-cup-bmon{font-size:.55rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.03em}
@@ -306,18 +317,9 @@ const DashboardPage = {
             return `<div class="${cls}" onclick="${dayOnclick}"${tip ? ` title="${tip}"` : ''}>${c.day}</div>`;
         }).join('');
 
-        // Upcoming list — events from today (or all in viewed month if past)
-        const listCutoff = isCurrentMonth ? today : `${year}-${_pd(month+1)}-01`;
-        const upcoming = calEvents
-            .filter(ev => ev.date >= listCutoff)
-            .sort((a, b) => a.date.localeCompare(b.date) || (a.time || '').localeCompare(b.time || ''));
-
         const fmtBadge = dateStr => {
             const d = new Date(dateStr + 'T00:00:00');
-            return {
-                day: d.getDate(),
-                mon: d.toLocaleDateString('uk-UA', { month: 'short' }).replace('.', '')
-            };
+            return { day: d.getDate(), mon: d.toLocaleDateString('uk-UA', { month: 'short' }).replace('.', '') };
         };
 
         const chipHtml = ev => {
@@ -329,22 +331,55 @@ const DashboardPage = {
             return `<span class="db-cup-chip" style="background:${hex22};color:${color}"><span class="db-cup-chip-dot" style="background:${color}"></span>Весь день</span>`;
         };
 
-        const upcomingHtml = upcoming.length
-            ? upcoming.slice(0, 10).map(ev => {
-                const b = fmtBadge(ev.date);
-                return `
-                <div class="db-cup-item${ev.is_done ? ' db-cup-done' : ''}" onclick="Router.go('my-calendar')">
-                    <div class="db-cup-badge">
-                        <span class="db-cup-bday">${b.day}</span>
-                        <span class="db-cup-bmon">${b.mon}</span>
-                    </div>
-                    <div class="db-cup-body">
-                        <div class="db-cup-name">${Fmt.esc(ev.title)}</div>
-                        ${chipHtml(ev)}
-                    </div>
-                </div>`;
-              }).join('')
-            : `<div style="padding:.75rem .5rem;text-align:center;font-size:.82rem;color:var(--text-muted)"><i class="fa-regular fa-calendar-check"></i> Подій немає</div>`;
+        // Split: today vs future
+        const todayEvs  = isCurrentMonth
+            ? calEvents.filter(ev => ev.date === today).sort((a, b) => (a.is_done ? 1 : 0) - (b.is_done ? 1 : 0) || (a.time || '').localeCompare(b.time || ''))
+            : [];
+        const futureEvs = calEvents
+            .filter(ev => ev.date > today)
+            .sort((a, b) => a.date.localeCompare(b.date) || (a.time || '').localeCompare(b.time || ''))
+            .slice(0, 8);
+
+        const todayItemHtml = ev => `
+            <div class="db-cup-item${ev.is_done ? ' db-cup-done' : ''}" id="db-cal-ev-${ev.id}" onclick="DashboardPage._calToggleDone('${ev.id}',this.querySelector('.db-cup-check'))" style="cursor:pointer">
+                <button class="db-cup-check${ev.is_done ? ' done' : ''}" onclick="event.stopPropagation();DashboardPage._calToggleDone('${ev.id}',this)" title="${ev.is_done ? 'Відновити' : 'Виконано'}">
+                    <i class="fa-solid ${ev.is_done ? 'fa-rotate-left' : 'fa-check'}"></i>
+                </button>
+                <div class="db-cup-body" style="flex:1;min-width:0">
+                    <div class="db-cup-name">${Fmt.esc(ev.title)}</div>
+                    ${chipHtml(ev)}
+                </div>
+            </div>`;
+
+        const futureItemHtml = ev => {
+            const b = fmtBadge(ev.date);
+            return `
+            <div class="db-cup-item" onclick="Router.go('my-calendar')" style="cursor:pointer">
+                <div class="db-cup-badge">
+                    <span class="db-cup-bday">${b.day}</span>
+                    <span class="db-cup-bmon">${b.mon}</span>
+                </div>
+                <div class="db-cup-body">
+                    <div class="db-cup-name">${Fmt.esc(ev.title)}</div>
+                    ${chipHtml(ev)}
+                </div>
+            </div>`;
+        };
+
+        const todaySection = isCurrentMonth ? `
+            <div class="db-cup-section-title">Сьогодні</div>
+            <div class="db-cup-list" id="db-cup-today">
+                ${todayEvs.length
+                    ? todayEvs.map(todayItemHtml).join('')
+                    : `<div class="db-cup-empty"><i class="fa-regular fa-calendar-check"></i> Вільний день</div>`}
+            </div>
+            ${futureEvs.length ? `<div class="db-cup-sep"></div>` : ''}` : '';
+
+        const futureSection = futureEvs.length ? `
+            <div class="db-cup-section-title">Майбутні події</div>
+            <div class="db-cup-list">
+                ${futureEvs.map(futureItemHtml).join('')}
+            </div>` : '';
 
         el.innerHTML = `
             <div class="db-cal-w">
@@ -365,8 +400,9 @@ const DashboardPage = {
                     </div>
                 </div>
                 <div class="db-cup-wrap">
-                    <div class="db-cup-title">Майбутні події</div>
-                    <div class="db-cup-list">${upcomingHtml}</div>
+                    ${todaySection}
+                    ${futureSection}
+                    ${!todayEvs.length && !futureEvs.length ? `<div class="db-cup-empty" style="padding:1.25rem"><i class="fa-regular fa-calendar-check"></i> Подій немає</div>` : ''}
                 </div>
             </div>`;
     },
@@ -436,8 +472,8 @@ const DashboardPage = {
                         <div class="db-imp-title">${Fmt.esc(ev.title)}</div>
                         ${ev.time ? `<div class="db-imp-time"><i class="fa-regular fa-clock"></i>${ev.time.slice(0,5)}</div>` : ''}
                     </div>
-                    <button class="db-imp-ack" onclick="DashboardPage._ackImportant('${ev.id}','${today}')">
-                        <i class="fa-solid fa-check"></i> Підтверджую
+                    <button class="db-imp-ack" onclick="DashboardPage._ackImportant('${ev.id}','${today}')" title="Підтверджую">
+                        <i class="fa-solid fa-check"></i>
                     </button>
                 </div>
             </div>`).join('');
@@ -505,13 +541,15 @@ const DashboardPage = {
                         ${recentNotifs.slice(0, 5).map(n => {
                             const m = typeMap(n.type);
                             const dest = n.link ? JSON.stringify(n.link).replace(/"/g,'&quot;') : '&quot;notifications&quot;';
-                            return `<div class="db-alc-nitem" onclick="DashboardPage._openNotif('${n.id}',${dest})">
+                            return `<div class="db-alc-nitem" id="db-ntf-${n.id}" onclick="DashboardPage._openNotif('${n.id}',${dest})">
                                 <div class="db-alc-nicon" style="background:${m.bg};color:${m.color}"><i class="fa-solid ${m.icon}"></i></div>
                                 <div style="flex:1;min-width:0;overflow:hidden">
                                     <div class="db-alc-ntitle">${Fmt.esc(n.title)}</div>
                                     ${n.message ? `<div style="font-size:.72rem;color:var(--text-muted);margin-top:1px">${Fmt.esc(n.message)}</div>` : ''}
                                 </div>
-                                <i class="fa-solid fa-chevron-right" style="font-size:.6rem;color:var(--text-muted);flex-shrink:0"></i>
+                                <button class="db-ntf-check" onclick="event.stopPropagation();DashboardPage._markNotifRead('${n.id}')" title="Відмітити прочитаним">
+                                    <i class="fa-solid fa-check"></i>
+                                </button>
                             </div>`;
                         }).join('')}
                         ${unreadCount > 5 ? `<div style="text-align:center;font-size:.72rem;color:var(--primary);cursor:pointer;padding:.25rem" onclick="Router.go('notifications')">ще ${unreadCount - 5}… <i class="fa-solid fa-arrow-right"></i></div>` : ''}
@@ -531,15 +569,52 @@ const DashboardPage = {
         }
     },
 
+    async _calToggleDone(eventId, btn) {
+        const item = document.getElementById(`db-cal-ev-${eventId}`);
+        if (!item) return;
+        const isDone = item.classList.contains('db-cup-done');
+        const newDone = !isDone;
+        await supabase.from('personal_cal_events').update({ is_done: newDone }).eq('id', eventId).eq('user_id', AppState.user.id);
+        item.classList.toggle('db-cup-done', newDone);
+        btn.classList.toggle('done', newDone);
+        btn.innerHTML = `<i class="fa-solid ${newDone ? 'fa-rotate-left' : 'fa-check'}"></i>`;
+        btn.title = newDone ? 'Відновити' : 'Виконано';
+        // Move to bottom of today list
+        const list = document.getElementById('db-cup-today');
+        if (list) {
+            if (newDone) list.appendChild(item);
+            else list.prepend(item);
+        }
+    },
+
     _calDayClick(date) {
-        MyCalendarPage._pendingNewDate = date;
-        Router.go('my-calendar');
+        if (!document.getElementById('mc-styles')) {
+            document.head.insertAdjacentHTML('beforeend', MyCalendarPage._styles().replace('<style>', '<style id="mc-styles">'));
+        }
+        MyCalendarPage._openEventModal(date);
+    },
+
+    async _refreshCalWidget() {
+        if (!document.getElementById('db-cal-widget')) return;
+        await DashboardPage._loadCalEvents();
     },
 
     async _openNotif(id, link) {
         await API.notifications.markRead(id).catch(() => {});
         UI.updateNotificationBadge(-1);
         Router.go(link);
+    },
+
+    async _markNotifRead(id) {
+        await API.notifications.markRead(id).catch(() => {});
+        UI.updateNotificationBadge(-1);
+        const el = document.getElementById(`db-ntf-${id}`);
+        if (el) {
+            el.style.transition = 'opacity .25s, transform .25s';
+            el.style.opacity = '0';
+            el.style.transform = 'translateX(12px)';
+            setTimeout(() => el.remove(), 250);
+        }
     },
 
     async _dismissNotifAlert() {
@@ -778,12 +853,21 @@ const DashboardPage = {
 
     async _toggleEmoji(newsId, emoji, btn) {
         try {
-            const added = await API.news.toggleEmoji(newsId, emoji);
+            const { added, prev } = await API.news.toggleEmoji(newsId, emoji);
+            const wrap = btn.closest(`#dnm-reactions-${newsId}`);
+            // Deactivate previous reaction if switched
+            if (prev && prev !== emoji && wrap) {
+                const prevBtn = wrap.querySelector(`[data-emoji="${prev}"]`);
+                if (prevBtn) {
+                    prevBtn.classList.remove('active');
+                    const c = prevBtn.querySelector('.dnm-r-count');
+                    c.textContent = Math.max(0, (parseInt(c.textContent) || 0) - 1) || '';
+                }
+            }
             btn.classList.toggle('active', added);
             const countEl = btn.querySelector('.dnm-r-count');
             let count = parseInt(countEl.textContent) || 0;
-            count = added ? count + 1 : Math.max(0, count - 1);
-            countEl.textContent = count || '';
+            countEl.textContent = (added ? count + 1 : Math.max(0, count - 1)) || '';
             btn.style.transform = 'scale(1.25)';
             setTimeout(() => { btn.style.transform = ''; }, 200);
         } catch(e) { Toast.error('Помилка', e.message); }
@@ -878,8 +962,8 @@ const DashboardPage = {
         .dnm-reaction:hover { border-color: var(--primary); background: rgba(37,99,235,.07); transform: scale(1.08); }
         .dnm-reaction.active { border-color: #f59e0b; background: rgba(245,158,11,.12); }
         .dnm-reaction .dnm-r-count { font-size: .72rem; font-weight: 600; color: var(--text-muted); min-width: 8px; }
-        .dnm-content { font-size: .9rem; line-height: 1.7; color: var(--text-secondary); }
-        .dnm-content img { max-width: 100%; border-radius: 8px; margin: .5rem 0; }
+        .dnm-content { position: relative; max-height: 220px; overflow: hidden; }
+        .dnm-content::after { content:''; position:absolute; bottom:0; left:0; right:0; height:60px; background:linear-gradient(to bottom, transparent, var(--bg-surface)); pointer-events:none; }
         .dnm-footer { display: flex; justify-content: flex-end; gap: .5rem; padding-top: .5rem; }
         </style>
         <div class="dnm-wrap">
@@ -896,7 +980,7 @@ const DashboardPage = {
                     ${e} <span class="dnm-r-count">0</span>
                 </button>`).join('')}
             </div>
-            <div class="dnm-content">${n.content || n.excerpt || ''}</div>
+            <div class="dnm-content news-content-body">${n.content || n.excerpt || ''}</div>
         </div>`;
 
         const footer = `
@@ -913,11 +997,14 @@ const DashboardPage = {
         API.news.getEmojiReactions(n.id).then(({ counts, myEmojis }) => {
             const wrap = document.getElementById(`dnm-reactions-${n.id}`);
             if (!wrap) return;
-            wrap.querySelectorAll('.dnm-reaction').forEach(btn => {
+            const btns = [...wrap.querySelectorAll('.dnm-reaction')];
+            btns.forEach(btn => {
                 const e = btn.dataset.emoji;
                 btn.querySelector('.dnm-r-count').textContent = counts[e] || '';
                 if (myEmojis.has(e)) btn.classList.add('active');
             });
+            const sorted = [...btns].sort((a, b) => (counts[b.dataset.emoji] || 0) - (counts[a.dataset.emoji] || 0));
+            sorted.forEach(btn => wrap.appendChild(btn));
         }).catch(() => {});
 
         // вау-анімація появи модального вікна

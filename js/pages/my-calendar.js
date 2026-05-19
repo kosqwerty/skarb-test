@@ -319,6 +319,7 @@ ${this._styles()}`;
         Toast.success(id ? 'Подію оновлено' : 'Подію додано');
         await this._load();
         this._render();
+        DashboardPage._refreshCalWidget?.();
     },
 
     async _deleteEvent(id) {
@@ -329,6 +330,7 @@ ${this._styles()}`;
         Toast.success('Подію видалено');
         await this._load();
         this._render();
+        DashboardPage._refreshCalWidget?.();
     },
 
     // ── View modal (read-only click on chip) ─────────────────────

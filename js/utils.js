@@ -132,7 +132,7 @@ const UI = {
     renderNavigation(role) {
         const nav   = document.getElementById('sidebar-nav');
         const items = this._getNavItems(role);
-        nav.innerHTML = `<div id="sidebar-imp-badge"></div>` + items.map(section => {
+        nav.innerHTML = items.map(section => {
             const visible = section.items.filter(item => {
                 try { return typeof AccessRestrictions !== 'undefined' ? AccessRestrictions.canAccess(item.route) : true; }
                 catch { return true; }
@@ -147,6 +147,7 @@ const UI = {
                             ${item.icon}
                             ${item.badge ? `<span class="nav-badge nav-badge-dot">${item.badge}</span>` : ''}
                             ${item.badgeId ? `<span class="nav-badge nav-badge-dot hidden" id="${item.badgeId}"></span>` : ''}
+                            ${item.impBadgeId ? `<span class="nav-imp-bolt hidden" id="${item.impBadgeId}"><i class="fa-solid fa-bolt"></i></span>` : ''}
                         </span>
                         <span class="nav-label">${item.label}</span>
                     </div>`).join('')}
@@ -212,7 +213,7 @@ const UI = {
     _getNavItems(role) {
         const expertItem   = { icon: '<i class="fa-solid fa-ranking-star"></i>', label: 'Skill Up', route: 'expert-path' };
         const common = [
-            { icon: '<i class="fa-solid fa-house" style="color:#C9A227"></i>',        label: 'Головна',  route: 'dashboard' },
+            { icon: '<i class="fa-solid fa-house" style="color:#C9A227"></i>', label: 'Головна', route: 'dashboard', impBadgeId: 'nav-imp-bolt' },
             expertItem,
             { icon: '<i class="fa-solid fa-newspaper" style="color:#60a5fa"></i>',    label: 'Новини',   route: 'news' }
         ];

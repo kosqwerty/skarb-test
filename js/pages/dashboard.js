@@ -387,38 +387,9 @@ const DashboardPage = {
         const pending = important.filter(ev => ev.acked_date !== today);
         if (!pending.length) return;
 
-        // Sidebar badge above home icon
-        const sidebarBadge = document.getElementById('sidebar-imp-badge');
-        if (sidebarBadge) {
-            sidebarBadge.innerHTML = `
-                <style>
-                    @keyframes db-sb-glow{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.5)}50%{box-shadow:0 0 0 6px rgba(245,158,11,0)}}
-                    .db-sb-imp{display:flex;align-items:center;gap:.6rem;margin:.5rem .6rem .25rem;
-                        padding:.5rem .7rem;border-radius:var(--radius-md);cursor:pointer;
-                        background:linear-gradient(135deg,rgba(245,158,11,.12),rgba(239,68,68,.07));
-                        border:1px solid rgba(245,158,11,.35);transition:background .15s}
-                    .db-sb-imp:hover{background:linear-gradient(135deg,rgba(245,158,11,.2),rgba(239,68,68,.12))}
-                    .db-sb-imp-ico{width:28px;height:28px;border-radius:8px;flex-shrink:0;
-                        background:linear-gradient(135deg,#f59e0b,#d97706);
-                        display:flex;align-items:center;justify-content:center;
-                        animation:db-sb-glow 2s ease-in-out infinite}
-                    .db-sb-imp-text{flex:1;min-width:0;overflow:hidden}
-                    .db-sb-imp-label{font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#b45309;line-height:1}
-                    body.dark-theme .db-sb-imp-label{color:#fbbf24}
-                    .db-sb-imp-title{font-size:.75rem;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:.1rem}
-                    .sidebar.collapsed .db-sb-imp-text{display:none}
-                    .sidebar.collapsed .db-sb-imp{justify-content:center;padding:.5rem}
-                    .sidebar.collapsed .db-sb-imp-ico{animation:db-sb-glow 2s ease-in-out infinite}
-                </style>
-                ${pending.map(ev => `
-                <div class="db-sb-imp" onclick="Router.go('my-calendar')" title="${Fmt.esc(ev.title)}">
-                    <div class="db-sb-imp-ico"><i class="fa-solid fa-bolt" style="color:#fff;font-size:.75rem"></i></div>
-                    <div class="db-sb-imp-text">
-                        <div class="db-sb-imp-label">Сьогодні</div>
-                        <div class="db-sb-imp-title">${Fmt.esc(ev.title)}</div>
-                    </div>
-                </div>`).join('')}`;
-        }
+        // Lightning bolt badge on home nav icon
+        const boltBadge = document.getElementById('nav-imp-bolt');
+        if (boltBadge) boltBadge.classList.remove('hidden');
 
         el.innerHTML = `<style>
             @keyframes db-imp-pulse{0%,100%{opacity:1}50%{opacity:.6}}

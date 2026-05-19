@@ -98,6 +98,10 @@ const App = {
                 await ResourcesPage.init(container, { view: 'docs' });
             },
 
+            'branch-docs': async ({ container }) => {
+                await BranchDocsPage.init(container);
+            },
+
             'collections': async ({ container }) => {
                 await CollectionsPage.init(container);
             },

@@ -1647,6 +1647,21 @@ body.light-theme .logo-icon .logo-dark  { display: none; }
     border-color: rgba(201,162,39,.4);
     box-shadow: 0 2px 10px rgba(201,162,39,.35);
 }
+.light-theme .nav-item {
+    color: #374151;
+}
+.light-theme .nav-item:hover { color: #111827; }
+.light-theme .nav-item.active { color: #111827; }
+.light-theme .nav-icon {
+    background: rgba(55,65,81,.07);
+    border-color: rgba(55,65,81,.1);
+    color: #374151;
+}
+.light-theme .nav-item:hover .nav-icon {
+    background: rgba(55,65,81,.13);
+    border-color: rgba(55,65,81,.18);
+    box-shadow: 0 2px 8px rgba(0,0,0,.08);
+}
 .nav-label { font-size: 0.875rem; flex: 1; transition: opacity var(--transition); }
 .sidebar.collapsed .nav-label { opacity: 0; width: 0; overflow: hidden; }
 .sidebar.collapsed .nav-item { justify-content: center; position: relative; }

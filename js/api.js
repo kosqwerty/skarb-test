@@ -533,6 +533,19 @@ const API = {
                 txt: 'text/plain', csv: 'text/csv', zip: 'application/zip', rar: 'application/vnd.rar'
             };
             return map[ext] || 'application/octet-stream';
+        },
+
+        async getBranchDocs(dovirenostId) {
+            let q = supabase.from('resources')
+                .select('id, title, display_block, type, storage_path, url, dovirenost_id, dovirenosti(id,name)')
+                .not('display_block', 'is', null)
+                .is('lesson_id', null)
+                .order('display_block');
+            // dovirenost_id filter added after migration v68 is applied
+            // if (dovirenostId) q = q.or(`dovirenost_id.eq.${dovirenostId},dovirenost_id.is.null`);
+            const { data, error } = await q;
+            if (error) throw error;
+            return data || [];
         }
     },
 
@@ -1611,6 +1624,31 @@ const API = {
             const { data, error } = await supabase.rpc('get_db_size');
             if (error) throw error;
             return data; // { bytes, pretty }
+        }
+    },
+
+    // ── Branch Doc Blocks ─────────────────────────────────────────────
+    branchDocBlocks: {
+        async getAll() {
+            const { data, error } = await supabase.from('branch_doc_blocks')
+                .select('*').order('order_index').order('number');
+            if (error) throw error;
+            return data || [];
+        },
+        async create(fields) {
+            const { data, error } = await supabase.from('branch_doc_blocks')
+                .insert(fields).select().single();
+            if (error) throw error;
+            return data;
+        },
+        async update(id, fields) {
+            const { error } = await supabase.from('branch_doc_blocks')
+                .update(fields).eq('id', id);
+            if (error) throw error;
+        },
+        async remove(id) {
+            const { error } = await supabase.from('branch_doc_blocks').delete().eq('id', id);
+            if (error) throw error;
         }
     },
 

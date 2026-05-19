@@ -317,8 +317,7 @@ ${this._styles()}`;
 
         document.getElementById('mc-event-modal')?.remove();
         Toast.success(id ? 'Подію оновлено' : 'Подію додано');
-        await this._load();
-        this._render();
+        try { await this._load(); this._render(); } catch {}
         DashboardPage._refreshCalWidget?.();
     },
 
@@ -328,8 +327,7 @@ ${this._styles()}`;
         if (error) { Toast.error('Помилка'); return; }
         document.getElementById('mc-event-modal')?.remove();
         Toast.success('Подію видалено');
-        await this._load();
-        this._render();
+        try { await this._load(); this._render(); } catch {}
         DashboardPage._refreshCalWidget?.();
     },
 

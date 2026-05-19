@@ -88,8 +88,10 @@ const DashboardPage = {
             .db-course-body{padding:.75rem}
             .db-course-name{font-size:.82rem;font-weight:600;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:.5rem}
 
-            .db-main-grid{display:grid;grid-template-columns:1fr 1fr 390px;gap:1.25rem;margin-bottom:1.5rem;align-items:start}
-            @media(max-width:1100px){.db-main-grid{grid-template-columns:1fr}}
+            .db-main-grid{display:flex;gap:1.25rem;margin-bottom:1.5rem;align-items:flex-start}
+            .db-main-left{flex:1;min-width:0;display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;align-content:start}
+            .db-main-right{width:390px;flex-shrink:0;display:flex;flex-direction:column;gap:1.25rem}
+            @media(max-width:1100px){.db-main-grid{flex-direction:column}.db-main-right{width:100%}}
             .db-news-w{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden}
             .db-news-w-head{padding:.75rem 1rem .6rem;border-bottom:1px solid var(--border);font-size:.95rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-primary);display:flex;align-items:center;justify-content:space-between;background:transparent}
             .db-news-grid{display:flex;flex-direction:column;gap:.5rem;padding:.65rem}
@@ -102,7 +104,7 @@ const DashboardPage = {
             .db-ncard-title{font-size:.8rem;font-weight:600;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:.2rem}
             .db-ncard-desc{font-size:.71rem;color:var(--text-muted);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:.2rem}
             .db-ncard-date{font-size:.65rem;color:var(--text-muted)}
-            .db-alc-w{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden;height:450px;display:flex;flex-direction:column}
+            .db-alc-w{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden;height:410px;display:flex;flex-direction:column}
             .db-alc-head{padding:.85rem 1.1rem .7rem;border-bottom:1px solid var(--border);font-size:1rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;display:flex;align-items:center;gap:.4rem;background:rgba(99,102,241,.025)}
             .db-alc-body{padding:.45rem 1rem .85rem;overflow-y:auto;flex:1;display:flex;flex-direction:column}
             .db-alc-label{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:flex;align-items:center;gap:.35rem;margin-bottom:.4rem}
@@ -161,8 +163,12 @@ const DashboardPage = {
             .db-cup-check:hover{border-color:var(--success);color:var(--success);background:rgba(16,185,129,.08)}
             .db-cup-check.done{border-color:var(--success);background:rgba(16,185,129,.12);color:var(--success)}
             .db-cup-check.done:hover{border-color:var(--text-muted);color:var(--text-muted);background:var(--bg-raised)}
-            .db-cup-section-title{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);padding:.55rem .9rem .3rem;display:flex;align-items:center;gap:.4rem}
-            .db-cup-sep{height:1px;background:var(--border);margin:.5rem .9rem}
+            .db-cup-acc-hdr{display:flex;align-items:center;justify-content:space-between;padding:.45rem .9rem .3rem;cursor:pointer;user-select:none}
+            .db-cup-acc-hdr span{font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted)}
+            .db-cup-acc-hdr:hover span{color:var(--text-secondary)}
+            .db-cup-acc-icon{font-size:.55rem;color:var(--text-muted);transition:transform .22s cubic-bezier(.4,0,.2,1)}
+            .db-cup-acc-body{display:none}
+            .db-cup-acc-body.open{display:block}
             .db-cup-empty{text-align:center;font-size:.8rem;color:var(--text-muted);padding:.75rem .5rem;display:flex;align-items:center;justify-content:center;gap:.4rem}
             .db-cup-badge{min-width:38px;padding:.3rem .2rem;border-radius:8px;background:rgba(99,102,241,.07);border:1px solid rgba(99,102,241,.12);display:flex;flex-direction:column;align-items:center;flex-shrink:0;line-height:1.15}
             .db-cup-bday{font-size:.9rem;font-weight:800;color:var(--primary)}
@@ -181,12 +187,15 @@ const DashboardPage = {
 
         <!-- ── Main grid: row1 = docs|notif|calendar, row2 = continue|empty|news ── -->
         <div class="db-main-grid">
-            <div id="db-alerts-docs"></div>
-            <div id="db-alerts-notif"></div>
-            <div id="db-cal-widget"></div>
-            <div style="grid-column:1/2"><div id="db-continue" class="db-card" style="width:350px"></div></div>
-            <div></div>
-            <div id="db-news-widget"></div>
+            <div class="db-main-left">
+                <div id="db-alerts-docs"></div>
+                <div id="db-news-widget"></div>
+                <div id="db-alerts-notif"></div>
+            </div>
+            <div class="db-main-right">
+                <div id="db-cal-widget"></div>
+                <div id="db-continue" class="db-card"></div>
+            </div>
         </div>
 
         `;
@@ -267,6 +276,7 @@ const DashboardPage = {
     _drawCalWidget() {
         const el = document.getElementById('db-cal-widget');
         if (!el) return;
+        const _prevOpen = { today: document.getElementById('db-cup-today-body')?.classList.contains('open') ?? true, future: document.getElementById('db-cup-future-body')?.classList.contains('open') ?? true };
 
         const { _calViewYear: year, _calViewMonth: month, _calViewEvents: calEvents, _calViewToday: today } = this;
         const now = new Date();
@@ -354,7 +364,7 @@ const DashboardPage = {
         const futureItemHtml = ev => {
             const b = fmtBadge(ev.date);
             return `
-            <div class="db-cup-item" onclick="Router.go('my-calendar')" style="cursor:pointer">
+            <div class="db-cup-item" onclick="DashboardPage._calEditEvent('${ev.id}')" style="cursor:pointer">
                 <div class="db-cup-badge">
                     <span class="db-cup-bday">${b.day}</span>
                     <span class="db-cup-bmon">${b.mon}</span>
@@ -367,18 +377,28 @@ const DashboardPage = {
         };
 
         const todaySection = isCurrentMonth ? `
-            <div class="db-cup-section-title">Сьогодні</div>
-            <div class="db-cup-list" id="db-cup-today">
-                ${todayEvs.length
-                    ? todayEvs.map(todayItemHtml).join('')
-                    : `<div class="db-cup-empty"><i class="fa-regular fa-calendar-check"></i> Вільний день</div>`}
+            <div class="db-cup-acc-hdr" onclick="DashboardPage._toggleAcc('db-cup-today-body')">
+                <span>Сьогодні</span>
+                <i class="fa-solid fa-chevron-down db-cup-acc-icon" id="db-cup-today-icon"></i>
             </div>
-            ${futureEvs.length ? `<div class="db-cup-sep"></div>` : ''}` : '';
+            <div class="db-cup-acc-body" id="db-cup-today-body">
+                <div class="db-cup-list" id="db-cup-today">
+                    ${todayEvs.length
+                        ? todayEvs.map(todayItemHtml).join('')
+                        : `<div class="db-cup-empty"><i class="fa-regular fa-calendar-check"></i> Вільний день</div>`}
+                </div>
+            </div>` : '';
 
         const futureSection = futureEvs.length ? `
-            <div class="db-cup-section-title">Майбутні події</div>
-            <div class="db-cup-list">
-                ${futureEvs.map(futureItemHtml).join('')}
+            ${isCurrentMonth ? '<div style="height:1px;background:var(--border);margin:.25rem .9rem"></div>' : ''}
+            <div class="db-cup-acc-hdr" onclick="DashboardPage._toggleAcc('db-cup-future-body')">
+                <span>Майбутні події</span>
+                <i class="fa-solid fa-chevron-down db-cup-acc-icon" id="db-cup-future-icon"></i>
+            </div>
+            <div class="db-cup-acc-body" id="db-cup-future-body">
+                <div class="db-cup-list">
+                    ${futureEvs.map(futureItemHtml).join('')}
+                </div>
             </div>` : '';
 
         el.innerHTML = `
@@ -405,6 +425,23 @@ const DashboardPage = {
                     ${!todayEvs.length && !futureEvs.length ? `<div class="db-cup-empty" style="padding:1.25rem"><i class="fa-regular fa-calendar-check"></i> Подій немає</div>` : ''}
                 </div>
             </div>`;
+
+        // restore accordion state
+        const todayAllDone = todayEvs.length > 0 && todayEvs.every(ev => ev.is_done);
+        const todayEmpty = todayEvs.length === 0;
+        ['today','future'].forEach(key => {
+            const body = document.getElementById(`db-cup-${key}-body`);
+            const icon = document.getElementById(`db-cup-${key}-icon`);
+            if (!body) return;
+            let open;
+            if (key === 'today') {
+                // auto-close if empty or all done; otherwise restore previous state (default open)
+                open = (todayEmpty || todayAllDone) ? false : (_prevOpen[key] !== false);
+            } else {
+                open = _prevOpen[key] !== false;
+            }
+            if (open) { body.classList.add('open'); if (icon) icon.style.transform = 'rotate(180deg)'; }
+        });
     },
 
     async _getUnackedDocs() {
@@ -587,6 +624,16 @@ const DashboardPage = {
         }
     },
 
+    _calEditEvent(eventId) {
+        if (!document.getElementById('mc-styles')) {
+            document.head.insertAdjacentHTML('beforeend', MyCalendarPage._styles().replace('<style>', '<style id="mc-styles">'));
+        }
+        const ev = (this._calViewEvents || []).find(e => e.id === eventId);
+        if (!ev) return;
+        MyCalendarPage._events = this._calViewEvents || [];
+        MyCalendarPage._openEventModal(ev.date, eventId);
+    },
+
     _calDayClick(date) {
         if (!document.getElementById('mc-styles')) {
             document.head.insertAdjacentHTML('beforeend', MyCalendarPage._styles().replace('<style>', '<style id="mc-styles">'));
@@ -594,9 +641,36 @@ const DashboardPage = {
         MyCalendarPage._openEventModal(date);
     },
 
+    _toggleAcc(bodyId) {
+        const body = document.getElementById(bodyId);
+        if (!body) return;
+        const isOpen = body.classList.toggle('open');
+        const iconId = bodyId.replace('-body', '-icon');
+        const icon = document.getElementById(iconId);
+        if (icon) icon.style.transform = isOpen ? 'rotate(180deg)' : '';
+    },
+
     async _refreshCalWidget() {
         if (!document.getElementById('db-cal-widget')) return;
-        await DashboardPage._loadCalEvents();
+        const now = new Date();
+        const year  = this._calViewYear  ?? now.getFullYear();
+        const month = this._calViewMonth ?? now.getMonth();
+        if (!this._calViewYear)  this._calViewYear  = year;
+        if (!this._calViewMonth && this._calViewMonth !== 0) this._calViewMonth = month;
+        if (!this._calViewToday) {
+            const _p = n => String(n).padStart(2, '0');
+            this._calViewToday = `${now.getFullYear()}-${_p(now.getMonth()+1)}-${_p(now.getDate())}`;
+        }
+        const _p2 = n => String(n).padStart(2, '0');
+        const ms = `${year}-${_p2(month+1)}-01`;
+        const me = `${year}-${_p2(month+1)}-${_p2(new Date(year, month+1, 0).getDate())}`;
+        const { data } = await supabase.from('personal_cal_events')
+            .select('id,title,date,time,end_time,color,is_important,is_done,acked_date,repeat_type')
+            .eq('user_id', AppState.user.id)
+            .gte('date', ms).lte('date', me)
+            .order('date').order('time', { nullsFirst: true });
+        this._calViewEvents = data || [];
+        this._drawCalWidget();
     },
 
     async _openNotif(id, link) {

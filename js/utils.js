@@ -221,6 +221,7 @@ const UI = {
             ...common,
             { icon: '<i class="fa-solid fa-folder-open" style="color:#C9A227"></i>',  label: 'База знань',  route: 'knowledge-base' },
             { icon: '<i class="fa-solid fa-file-lines"></i>',   label: 'Документи',   route: 'documents', badgeId: 'nav-doc-badge' },
+            { icon: '<i class="fa-solid fa-scale-balanced"></i>', label: 'Куточок споживача', route: 'branch-docs' },
             { icon: '<i class="fa-solid fa-wand-magic-sparkles" style="background:linear-gradient(135deg,#818cf8,#c084fc);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-size:1rem"></i>', label: 'Меню порталу', route: 'collections' }
         ];
         const ntfItem      = { icon: '<i class="fa-solid fa-bell" style="color:#C9A227"></i>',        label: 'Сповіщення', route: 'notifications', badgeId: 'nav-ntf-badge' };

@@ -387,18 +387,45 @@ const DashboardPage = {
         const pending = important.filter(ev => ev.acked_date !== today);
         if (!pending.length) return;
 
-        el.innerHTML = pending.map(ev => `
-            <div id="db-imp-${ev.id}" style="display:flex;align-items:center;gap:1rem;background:linear-gradient(135deg,rgba(245,158,11,.12),rgba(239,68,68,.08));border:1px solid rgba(245,158,11,.4);border-radius:var(--radius-lg);padding:1rem 1.25rem;margin-bottom:1rem;flex-wrap:wrap">
-                <span style="font-size:1.5rem;flex-shrink:0">⚡</span>
-                <div style="flex:1;min-width:0">
-                    <div style="font-weight:700;color:#92400e;font-size:.82rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.2rem">Важлива подія сьогодні</div>
-                    <div style="font-weight:600;font-size:.95rem">${Fmt.esc(ev.title)}</div>
-                    ${ev.time ? `<div style="font-size:.78rem;color:var(--text-muted);margin-top:.1rem"><i class="fa-regular fa-clock"></i> ${ev.time.slice(0,5)}</div>` : ''}
+        el.innerHTML = `<style>
+            @keyframes db-imp-pulse{0%,100%{opacity:1}50%{opacity:.6}}
+            .db-imp-bar{position:relative;overflow:hidden;border-radius:var(--radius-xl);margin-bottom:1rem;
+                background:linear-gradient(100deg,#fffbeb,#fef3c7 60%,#fff7ed);
+                border:1.5px solid rgba(245,158,11,.45);
+                box-shadow:0 2px 16px rgba(245,158,11,.12),0 1px 4px rgba(0,0,0,.04)}
+            body.dark-theme .db-imp-bar{background:linear-gradient(100deg,rgba(120,70,0,.35),rgba(100,50,0,.25) 60%,rgba(130,60,0,.2));border-color:rgba(245,158,11,.4)}
+            .db-imp-stripe{position:absolute;left:0;top:0;bottom:0;width:4px;background:linear-gradient(to bottom,#f59e0b,#d97706)}
+            .db-imp-inner{display:flex;align-items:center;gap:1.1rem;padding:.85rem 1.1rem .85rem 1.4rem}
+            .db-imp-icon{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,#f59e0b,#d97706);
+                display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:1.1rem;
+                box-shadow:0 3px 10px rgba(245,158,11,.35)}
+            .db-imp-label{font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:#b45309;margin-bottom:.18rem}
+            body.dark-theme .db-imp-label{color:#fbbf24}
+            .db-imp-title{font-weight:700;font-size:.95rem;color:#1c1917;line-height:1.3}
+            body.dark-theme .db-imp-title{color:#fef3c7}
+            .db-imp-time{display:inline-flex;align-items:center;gap:.3rem;font-size:.73rem;color:#92400e;margin-top:.2rem;font-weight:500}
+            body.dark-theme .db-imp-time{color:#fcd34d}
+            .db-imp-ack{margin-left:auto;flex-shrink:0;display:inline-flex;align-items:center;gap:.45rem;
+                padding:.5rem 1.1rem;border-radius:var(--radius-lg);border:none;cursor:pointer;
+                font-size:.82rem;font-weight:700;font-family:inherit;
+                background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;
+                box-shadow:0 2px 8px rgba(245,158,11,.4);transition:opacity .15s,transform .1s}
+            .db-imp-ack:hover{opacity:.9;transform:translateY(-1px)}
+            .db-imp-ack:active{transform:translateY(0)}
+        </style>` + pending.map(ev => `
+            <div id="db-imp-${ev.id}" class="db-imp-bar">
+                <div class="db-imp-stripe"></div>
+                <div class="db-imp-inner">
+                    <div class="db-imp-icon">⚡</div>
+                    <div style="flex:1;min-width:0">
+                        <div class="db-imp-label">Важлива подія сьогодні</div>
+                        <div class="db-imp-title">${Fmt.esc(ev.title)}</div>
+                        ${ev.time ? `<div class="db-imp-time"><i class="fa-regular fa-clock"></i>${ev.time.slice(0,5)}</div>` : ''}
+                    </div>
+                    <button class="db-imp-ack" onclick="DashboardPage._ackImportant('${ev.id}','${today}')">
+                        <i class="fa-solid fa-check"></i> Підтверджую
+                    </button>
                 </div>
-                <button class="btn btn-sm" style="background:#f59e0b;color:#fff;border:none;flex-shrink:0"
-                    onclick="DashboardPage._ackImportant('${ev.id}','${today}')">
-                    <i class="fa-solid fa-check"></i> Підтверджую
-                </button>
             </div>`).join('');
     },
 

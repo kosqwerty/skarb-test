@@ -416,7 +416,7 @@ const DashboardPage = {
             <div id="db-imp-${ev.id}" class="db-imp-bar">
                 <div class="db-imp-stripe"></div>
                 <div class="db-imp-inner">
-                    <div class="db-imp-icon">⚡</div>
+                    <div class="db-imp-icon"><i class="fa-solid fa-bolt" style="color:#fff;filter:drop-shadow(0 1px 3px rgba(0,0,0,.25))"></i></div>
                     <div style="flex:1;min-width:0">
                         <div class="db-imp-label">Важлива подія сьогодні</div>
                         <div class="db-imp-title">${Fmt.esc(ev.title)}</div>

@@ -214,6 +214,16 @@ const DashboardPage = {
         this._renderBirthdays(birthdays);
         this._renderContinue(enrollments);
         this._renderNewsWidget(newsRes.data || []);
+
+        // Показати головну новину один раз за сесію
+        const featured = (newsRes.data || []).find(n => n.is_featured || n.is_pinned);
+        if (featured) {
+            const sessionKey = `db_featured_news_${featured.id}`;
+            if (!sessionStorage.getItem(sessionKey)) {
+                sessionStorage.setItem(sessionKey, '1');
+                setTimeout(() => this._openNewsModal(featured.id), 800);
+            }
+        }
     },
 
 
@@ -393,7 +403,7 @@ const DashboardPage = {
 
         el.innerHTML = `<style>
             @keyframes db-imp-pulse{0%,100%{opacity:1}50%{opacity:.6}}
-            .db-imp-bar{position:relative;overflow:hidden;border-radius:var(--radius-xl);margin-bottom:1rem;
+            .db-imp-bar{width:610px;position:relative;overflow:hidden;border-radius:var(--radius-xl);margin-bottom:1rem;
                 background:linear-gradient(100deg,#fffbeb,#fef3c7 60%,#fff7ed);
                 border:1.5px solid rgba(245,158,11,.45);
                 box-shadow:0 2px 16px rgba(245,158,11,.12),0 1px 4px rgba(0,0,0,.04)}

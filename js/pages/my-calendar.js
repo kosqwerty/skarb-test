@@ -468,7 +468,7 @@ ${this._styles()}`;
         const [{ data: exact }, { data: recurring }] = await Promise.all([
             supabase.from('personal_cal_events').select('*')
                 .eq('user_id', AppState.user.id)
-                .eq('repeat_type', 'none')
+                .or('repeat_type.eq.none,repeat_type.is.null')
                 .gte('date', rangeDates[0])
                 .lte('date', rangeDates[rangeDates.length - 1])
                 .neq('is_done', true)
@@ -476,6 +476,7 @@ ${this._styles()}`;
             supabase.from('personal_cal_events').select('*')
                 .eq('user_id', AppState.user.id)
                 .neq('repeat_type', 'none')
+                .not('repeat_type', 'is', null)
                 .lte('date', rangeDates[rangeDates.length - 1])
                 .neq('is_done', true),
         ]);
@@ -501,8 +502,8 @@ ${this._styles()}`;
             a.date !== b.date ? (a.date < b.date ? -1 : 1) : (a.time || '') < (b.time || '') ? -1 : 1
         );
 
-        // Сегодняшние события: без времени (весь день) или время ещё не прошло
-        const todayEvents    = allEvents.filter(e => e.date === today && (!e.time || e.time.slice(0,5) >= nowTime));
+        // Сегодняшние события: всі події на сьогодні
+        const todayEvents    = allEvents.filter(e => e.date === today);
         const upcomingEvents = allEvents.filter(e => e.date > today);
 
         // Ничего актуального — тихо сохраняем флаг и выходим

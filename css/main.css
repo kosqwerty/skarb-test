@@ -1742,7 +1742,7 @@ body.light-theme .logo-icon .logo-dark  { display: none; }
     line-height: 14px;
     text-align: center;
     border-radius: 99px;
-    border: 2px solid var(--sidebar-bg, #0f172a);
+    border: 2px solid transparent;
     box-sizing: border-box;
 }
 @keyframes nav-bolt-glow { 0%,100% { box-shadow: 0 0 0 0 rgba(245,158,11,.7); } 50% { box-shadow: 0 0 0 6px rgba(245,158,11,0); } }

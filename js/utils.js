@@ -132,7 +132,7 @@ const UI = {
     renderNavigation(role) {
         const nav   = document.getElementById('sidebar-nav');
         const items = this._getNavItems(role);
-        nav.innerHTML = items.map(section => {
+        nav.innerHTML = `<div id="sidebar-imp-badge"></div>` + items.map(section => {
             const visible = section.items.filter(item => {
                 try { return typeof AccessRestrictions !== 'undefined' ? AccessRestrictions.canAccess(item.route) : true; }
                 catch { return true; }

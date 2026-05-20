@@ -85,6 +85,7 @@ const Router = {
         const container = document.getElementById('page-content');
         document.documentElement.scrollTop = 0;
         document.body.scrollTop = 0;
+        container.style.transition = 'none';
         container.style.opacity = '0';
         container.style.transform = 'translateY(8px)';
         container.innerHTML = `

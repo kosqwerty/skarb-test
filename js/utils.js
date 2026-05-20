@@ -211,71 +211,59 @@ const UI = {
         if (bellBtn) bellBtn.classList.toggle('has-unread', count > 0);
     },
     _getNavItems(role) {
-        const expertItem   = { icon: '<i class="fa-solid fa-ranking-star"></i>', label: 'Skill Up', route: 'expert-path' };
+        const expertItem   = { icon: '<i class="fa-solid fa-ranking-star" style="color:#a78bfa"></i>', label: 'Skill Up', route: 'expert-path' };
         const common = [
-            { icon: '<i class="fa-solid fa-house" style="color:#C9A227"></i>', label: 'Головна', route: 'dashboard', impBadgeId: 'nav-imp-bolt' },
+            { icon: '<i class="fa-solid fa-house"     style="color:#C9A227"></i>', label: 'Головна', route: 'dashboard', impBadgeId: 'nav-imp-bolt' },
             expertItem,
-            { icon: '<i class="fa-solid fa-newspaper" style="color:#60a5fa"></i>',    label: 'Новини',   route: 'news' }
+            { icon: '<i class="fa-solid fa-newspaper" style="color:#60a5fa"></i>', label: 'Новини',  route: 'news' }
         ];
         const contentItems = [
             ...common,
-            { icon: '<i class="fa-solid fa-folder-open" style="color:#C9A227"></i>',  label: 'База знань',  route: 'knowledge-base' },
-            { icon: '<i class="fa-solid fa-file-lines"></i>',   label: 'Документи',   route: 'documents', badgeId: 'nav-doc-badge' },
-            { icon: '<i class="fa-solid fa-scale-balanced"></i>', label: 'Куточок споживача', route: 'branch-docs' },
+            { icon: '<i class="fa-solid fa-folder-open"   style="color:#C9A227"></i>',  label: 'База знань',        route: 'knowledge-base' },
+            { icon: '<i class="fa-solid fa-file-lines"    style="color:#f87171"></i>',  label: 'Документи',         route: 'documents', badgeId: 'nav-doc-badge' },
+            { icon: '<i class="fa-solid fa-scale-balanced" style="color:#818cf8"></i>', label: 'Куточок споживача', route: 'branch-docs' },
             { icon: '<i class="fa-solid fa-wand-magic-sparkles" style="background:linear-gradient(135deg,#818cf8,#c084fc);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-size:1rem"></i>', label: 'Меню порталу', route: 'collections' }
         ];
-        const ntfItem      = { icon: '<i class="fa-solid fa-bell" style="color:#C9A227"></i>',        label: 'Сповіщення', route: 'notifications', badgeId: 'nav-ntf-badge' };
-        const contactsItem = { icon: '<i class="fa-solid fa-address-book"></i>', label: 'Контакти',   route: 'contacts' };
-        const bmItem       = { icon: '<i class="fa-solid fa-bookmark" style="color:#C9A227"></i>',    label: 'Закладки',   route: 'bookmarks', noStar: true };
+        const ntfItem      = { icon: '<i class="fa-solid fa-bell"         style="color:#C9A227"></i>', label: 'Сповіщення', route: 'notifications', badgeId: 'nav-ntf-badge' };
+        const contactsItem = { icon: '<i class="fa-solid fa-address-book" style="color:#059669"></i>', label: 'Контакти',   route: 'contacts' };
+        const bmItem       = { icon: '<i class="fa-solid fa-bookmark"     style="color:#FBBF24"></i>', label: 'Закладки',   route: 'bookmarks', noStar: true };
+        const analyticsItem   = { icon: '<i class="fa-solid fa-chart-bar"    style="color:#34d399"></i>', label: 'Аналітика',        route: 'analytics' };
+        const schedulerItem   = { icon: '<i class="fa-solid fa-calendar-days" style="color:#60a5fa"></i>', label: 'Розділ планування', route: 'scheduler' };
+        const schedulerItemNs = { icon: '<i class="fa-solid fa-calendar-days" style="color:#60a5fa"></i>', label: 'Розділ планування', route: 'scheduler', noStar: true };
+        const adminItem       = { icon: '<i class="fa-solid fa-gear"          style="color:#f87171"></i>', label: 'Адміністрування',   route: 'admin' };
+        const contentAdmItem  = { icon: '<i class="fa-solid fa-gear"          style="color:#f87171"></i>', label: 'Контент',           route: 'admin' };
 
         if (role === 'owner' || role === 'admin') {
             return [
-                { title: 'Навчання', items: contentItems },
-                { title: 'Управління', items: [
-                    { icon: '<i class="fa-solid fa-chart-bar"></i>',     label: 'Аналітика',         route: 'analytics' },
-                    { icon: '<i class="fa-solid fa-calendar-days" style="color:#60a5fa"></i>', label: 'Розділ планування', route: 'scheduler' },
-                    { icon: '<i class="fa-solid fa-gear" style="color:#f87171"></i>',          label: 'Адміністрування',   route: 'admin' }
-                ]},
-                { title: 'Особисте', items: [ contactsItem, bmItem ] }
+                { title: 'Навчання',    items: contentItems },
+                { title: 'Управління',  items: [ analyticsItem, schedulerItem, adminItem ] },
+                { title: 'Особисте',    items: [ contactsItem, bmItem ] }
             ];
         }
         if (role === 'manager') {
             return [
-                { title: 'Навчання', items: contentItems },
-                { title: 'Управління', items: [
-                    { icon: '<i class="fa-solid fa-calendar-days" style="color:#60a5fa"></i>', label: 'Розділ планування', route: 'scheduler' }
-                ]},
-                { title: 'Особисте', items: [ contactsItem, bmItem ] }
+                { title: 'Навчання',   items: contentItems },
+                { title: 'Управління', items: [ schedulerItem ] },
+                { title: 'Особисте',   items: [ contactsItem, bmItem ] }
             ];
         }
         if (role === 'smm') {
             return [
-                { title: 'Навчання', items: contentItems },
-                { title: 'Управління', items: [
-                    { icon: '<i class="fa-solid fa-chart-bar"></i>',     label: 'Аналітика',        route: 'analytics' },
-                    { icon: '<i class="fa-solid fa-gear"></i>',          label: 'Контент',          route: 'admin' },
-                    { icon: '<i class="fa-solid fa-calendar-days" style="color:#60a5fa"></i>', label: 'Розділ планування', route: 'scheduler', noStar: true }
-                ]},
-                { title: 'Особисте', items: [ contactsItem, bmItem ] }
+                { title: 'Навчання',   items: contentItems },
+                { title: 'Управління', items: [ analyticsItem, contentAdmItem, schedulerItemNs ] },
+                { title: 'Особисте',   items: [ contactsItem, bmItem ] }
             ];
         }
         if (role === 'teacher') {
             return [
-                { title: 'Навчання', items: contentItems },
-                { title: 'Управління', items: [
-                    { icon: '<i class="fa-solid fa-chart-bar"></i>',     label: 'Аналітика',        route: 'analytics' },
-                    { icon: '<i class="fa-solid fa-calendar-days" style="color:#60a5fa"></i>', label: 'Розділ планування', route: 'scheduler', noStar: true }
-                ]},
-                { title: 'Особисте', items: [ contactsItem, bmItem ] }
+                { title: 'Навчання',   items: contentItems },
+                { title: 'Управління', items: [ analyticsItem, schedulerItemNs ] },
+                { title: 'Особисте',   items: [ contactsItem, bmItem ] }
             ];
         }
         return [
-            { title: 'Навчання', items: contentItems },
-            { title: 'Особисте', items: [
-                contactsItem,
-                { icon: '<i class="fa-solid fa-calendar-days" style="color:#60a5fa"></i>', label: 'Розділ планування', route: 'scheduler', noStar: true },
-                bmItem
-            ]}
+            { title: 'Навчання',  items: contentItems },
+            { title: 'Особисте',  items: [ contactsItem, schedulerItemNs, bmItem ] }
         ];
     },
     updateActiveNav(route) {

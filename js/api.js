@@ -643,6 +643,19 @@ const API = {
                 .select('*, course:courses(title)').order('created_at', { ascending: false });
             if (error) throw error;
             return data;
+        },
+
+        async getMyPendingCount() {
+            const uid = AppState.user?.id;
+            if (!uid) return 0;
+            const { data: assignments } = await supabase.from('test_assignments')
+                .select('test_id').eq('user_id', uid);
+            if (!assignments?.length) return 0;
+            const testIds = assignments.map(a => a.test_id);
+            const { data: done } = await supabase.from('test_attempts')
+                .select('test_id').eq('user_id', uid).not('completed_at', 'is', null).in('test_id', testIds);
+            const doneIds = new Set((done || []).map(a => a.test_id));
+            return testIds.filter(id => !doneIds.has(id)).length;
         }
     },
 
@@ -1773,6 +1786,19 @@ const API = {
             const { error } = await supabase.from('survey_assignments')
                 .delete().eq('survey_id', surveyId).eq('user_id', userId);
             if (error) throw error;
+        },
+
+        async getMyPendingCount() {
+            const uid = AppState.user?.id;
+            if (!uid) return 0;
+            const { data: assignments } = await supabase.from('survey_assignments')
+                .select('survey_id').eq('user_id', uid);
+            if (!assignments?.length) return 0;
+            const surveyIds = assignments.map(a => a.survey_id);
+            const { data: responses } = await supabase.from('survey_responses')
+                .select('survey_id').eq('user_id', uid).in('survey_id', surveyIds);
+            const respondedIds = new Set((responses || []).map(r => r.survey_id));
+            return surveyIds.filter(id => !respondedIds.has(id)).length;
         }
     }
 };

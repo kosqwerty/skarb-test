@@ -28,7 +28,7 @@ const NewsPage = {
                 </div>
             </div>
 
-            <div id="featured-news" style="margin-bottom:2rem"></div>
+            <div id="featured-news" style="margin-bottom:.75rem"></div>
 
             <div id="news-grid" class="news-grid"></div>
             <div id="news-pagination" style="display:flex;justify-content:center;gap:.5rem;margin-top:2rem"></div>`;
@@ -89,7 +89,7 @@ const NewsPage = {
         el.innerHTML = `
             <div onclick="Router.go('news/${news.slug || news.id}')" class="featured-card" style="
                 position:relative;height:420px;border-radius:var(--radius-xl);overflow:hidden;
-                max-width:1300px;
+                max-width:1450px;
                 cursor:pointer;background:#0f0c29;border:1px solid var(--border);transition:border-color var(--transition)"
                 onmouseenter="this.style.borderColor='var(--primary)'" onmouseleave="this.style.borderColor='var(--border)'">
                 ${news.thumbnail_url ? `
@@ -143,7 +143,7 @@ const NewsPage = {
                     <span style="display:flex;align-items:center;gap:.35rem;font-size:.78rem;color:var(--text-muted)">
                         <i class="fa-regular fa-calendar"></i>${Fmt.date(news.published_at || news.created_at, { day:'numeric', month:'short' })}
                     </span>
-                    <div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap" onclick="event.stopPropagation()">
+                    <div style="display:flex;align-items:center;gap:.3rem;flex-wrap:nowrap" onclick="event.stopPropagation()">
                         <button class="kb-star res-star-btn${Bookmarks.isBookmarked('news/'+news.id) ? ' active' : ''}"
                             data-bm-route="news/${news.id}"
                             title="${Bookmarks.isBookmarked('news/'+news.id) ? 'Видалити з закладок' : 'Зберегти в закладки'}"

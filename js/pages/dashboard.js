@@ -2,6 +2,22 @@
 // EduFlow LMS — Головна сторінка (Dashboard) — WOW redesign
 // ================================================================
 
+// ── Recently Viewed tracker (global, localStorage-based) ─────────
+const RecentlyViewed = {
+    _key: 'lms_rv',
+    _max: 20,
+    track({ type, id, title, thumbnail = null, route, color = '#6366f1', icon = 'fa-file' }) {
+        let items = this.get();
+        items = items.filter(i => !(i.type === type && i.id === id));
+        items.unshift({ type, id, title, thumbnail, route, color, icon, viewedAt: Date.now() });
+        if (items.length > this._max) items = items.slice(0, this._max);
+        try { localStorage.setItem(this._key, JSON.stringify(items)); } catch {}
+    },
+    get() {
+        try { return JSON.parse(localStorage.getItem(this._key) || '[]'); } catch { return []; }
+    }
+};
+
 const DashboardPage = {
     async init(container) {
         UI.setBreadcrumb([{ label: 'Головна' }]);
@@ -48,12 +64,7 @@ const DashboardPage = {
             .db-stat-val{font-size:1.8rem;font-weight:800;color:var(--text-primary);line-height:1}
             .db-stat-label{font-size:.75rem;color:var(--text-muted);font-weight:500}
 
-            .db-continue{display:flex;flex-direction:column;gap:0}
-            .db-continue-thumb{height:145px;position:relative;overflow:hidden;background:#0f0c29;flex-shrink:0}
-            .db-continue-thumb-bg{position:absolute;inset:-8px;background-size:cover;background-position:center;filter:blur(12px) brightness(.4);transform:scale(1.05)}
-            .db-continue-thumb-main{position:absolute;inset:0;background-size:contain;background-repeat:no-repeat;background-position:center;z-index:1}
-            .db-continue-body{padding:1rem;flex:1;display:flex;flex-direction:column;gap:.6rem}
-            .db-continue-title{font-weight:700;font-size:.92rem;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+
             .db-pbar{height:6px;background:var(--bg-raised);border-radius:3px;overflow:hidden}
             .db-pbar-fill{height:100%;background:linear-gradient(to right,${colors.from},${colors.to});border-radius:3px;transition:width .6s ease}
 
@@ -88,52 +99,64 @@ const DashboardPage = {
             .db-course-body{padding:.75rem}
             .db-course-name{font-size:.82rem;font-weight:600;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:.5rem}
 
-            .db-main-grid{display:flex;gap:1.25rem;margin-bottom:1.5rem;align-items:flex-start}
-            .db-main-left{flex:1;min-width:0;display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;align-content:start}
-            .db-main-right{width:390px;flex-shrink:0;display:flex;flex-direction:column;gap:1.25rem}
-            @media(max-width:1100px){.db-main-grid{flex-direction:column}.db-main-right{width:100%}}
-            .db-news-w{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden}
-            .db-news-w-head{padding:.75rem 1rem .6rem;border-bottom:1px solid var(--border);font-size:.95rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-primary);display:flex;align-items:center;justify-content:space-between;background:transparent}
-            .db-news-grid{display:flex;flex-direction:column;gap:.5rem;padding:.65rem}
-            .db-ncard{display:flex;gap:.65rem;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;cursor:pointer;transition:background .15s,box-shadow .15s,border-color .15s;align-items:stretch}
-            .db-ncard:hover{background:var(--bg-raised);border-color:var(--border-light)}
-            .db-ncard-thumb{flex-shrink:0;display:flex;align-items:center;justify-content:center;overflow:hidden;background:var(--bg-raised);border-radius:var(--radius-md) 0 0 var(--radius-md)}
-            .db-ncard-thumb img{max-width:150px;max-height:100px;width:auto;height:auto;display:block;object-fit:contain}
-            .db-ncard-thumb-ph{width:80px;height:80px;flex-shrink:0;background:var(--bg-raised);display:flex;align-items:center;justify-content:center;font-size:1.6rem;border-radius:var(--radius-md) 0 0 var(--radius-md)}
-            .db-ncard-body{flex:1;min-width:0;padding:.55rem .65rem .55rem 0;display:flex;flex-direction:column;justify-content:center}
-            .db-ncard-title{font-size:.8rem;font-weight:600;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:.2rem}
-            .db-ncard-desc{font-size:.71rem;color:var(--text-muted);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:.2rem}
-            .db-ncard-date{font-size:.65rem;color:var(--text-muted)}
-            .db-alc-w{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden;height:410px;display:flex;flex-direction:column}
-            .db-alc-head{padding:.85rem 1.1rem .7rem;border-bottom:1px solid var(--border);font-size:1rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;display:flex;align-items:center;gap:.4rem;background:rgba(99,102,241,.025)}
-            .db-alc-body{padding:.45rem 1rem .85rem;overflow-y:auto;flex:1;display:flex;flex-direction:column}
-            .db-alc-label{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:flex;align-items:center;gap:.35rem;margin-bottom:.4rem}
-            .db-alc-divider{border-top:1px solid var(--border);margin:.65rem 0}
-            .db-alc-ok{display:flex;align-items:center;gap:.5rem;font-size:.78rem;color:var(--text-muted);padding:.35rem .1rem;line-height:1.4}
-            .db-alc-ok i{flex-shrink:0;font-size:.95rem}
-            .db-alc-warn{background:var(--bg-raised);border-radius:var(--radius-md);padding:.5rem .65rem;border:1px solid var(--border)}
-            .db-alc-warn-head{display:flex;align-items:center;gap:.4rem;margin-bottom:.35rem;font-size:.8rem;font-weight:600}
-            .db-alc-chips{display:flex;flex-direction:column;gap:.35rem;margin-top:.5rem}
-            .db-alc-chip{display:inline-flex;align-items:center;gap:.3rem;font-size:.85rem;font-weight:400;padding:.22rem .6rem;border-radius:4px;background:var(--bg-surface);border:1px solid var(--border);color:var(--text-primary);cursor:pointer;transition:border-color .15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-            .db-alc-chip i{color:var(--text-muted);font-size:.9rem;flex-shrink:0}
-            .db-alc-chip:hover{border-color:var(--primary)}
-            .db-alc-chip-more{color:var(--text-muted);background:var(--bg-raised)}
-            .db-alc-danger-wrap{background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.25);border-radius:var(--radius-md);padding:.7rem .85rem}
-            .db-alc-danger-head{display:flex;align-items:center;gap:.5rem;margin-bottom:.1rem}
-            .db-alc-ok-wrap{background:rgba(16,185,129,.05);border:1px solid rgba(16,185,129,.2);border-radius:var(--radius-md);padding:.6rem .85rem;display:flex;align-items:center;gap:.5rem;font-size:.8rem;color:#065f46}
-            .db-alc-ok-wrap i{color:#10b981;font-size:1rem;flex-shrink:0}
-            .db-alc-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:.5rem;padding:2rem;text-align:center}
-            .db-alc-empty-icon{font-size:2.2rem;color:var(--text-muted);opacity:.4}
-            .db-alc-empty-title{font-size:.88rem;font-weight:600;color:var(--text-muted)}
-            .db-alc-empty-sub{font-size:.75rem;color:var(--text-muted);opacity:.7}
-            .db-alc-nlist{display:flex;flex-direction:column;gap:.3rem}
-            .db-alc-nitem{display:flex;align-items:center;gap:.55rem;padding:.4rem .5rem;border-radius:var(--radius-md);cursor:pointer;transition:background .12s;border:1px solid var(--border);background:var(--bg-surface)}
-            .db-alc-nitem:hover{background:var(--bg-raised);border-color:var(--primary)}
-            .db-ntf-check{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.58rem;flex-shrink:0;transition:all .15s;font-family:inherit;opacity:0}
+            .db-main-grid{display:grid;grid-template-columns:1fr 1fr 1fr 390px;gap:0.85rem;margin-bottom:1.5rem;align-items:start}
+            .db-main-grid>*{display:flex;flex-direction:column}
+            @media(max-width:1300px){.db-main-grid{grid-template-columns:1fr 1fr;}}
+            @media(max-width:700px){.db-main-grid{grid-template-columns:1fr}}
+            .db-news-w{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden;height:400px;display:flex;flex-direction:column;position:relative}
+            .db-news-w::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:#f59e0b;z-index:1}
+            .db-news-w-head{padding:.75rem 1rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+            .db-news-w-head-left{display:flex;align-items:center;gap:.55rem}
+            .db-news-w-icon{width:32px;height:32px;border-radius:9px;background:rgba(245,158,11,.12);color:#f59e0b;display:flex;align-items:center;justify-content:center;font-size:.9rem;flex-shrink:0}
+            .db-news-w-title{font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-primary)}
+            .db-news-hero{flex:0 0 200px;position:relative;overflow:hidden;cursor:pointer;background:#0f0c29}
+            .db-news-hero-img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .4s ease}
+            .db-news-hero:hover .db-news-hero-img{transform:scale(1.05)}
+            .db-news-hero-ph{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:3rem;background:linear-gradient(135deg,#1e1b4b,#312e81)}
+            .db-news-hero-grad{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.85) 0%,rgba(0,0,0,.2) 55%,transparent 100%)}
+            .db-news-hero-body{position:absolute;bottom:0;left:0;right:0;padding:.75rem .9rem;z-index:1}
+            .db-news-hero-badge{display:inline-block;background:#f59e0b;color:#000;font-size:.6rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;padding:.1rem .45rem;border-radius:3px;margin-bottom:.35rem}
+            .db-news-hero-title{font-size:.88rem;font-weight:700;color:#fff;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+            .db-news-hero-date{font-size:.68rem;color:rgba(255,255,255,.5);margin-top:.3rem}
+            .db-news-rows{flex:1;overflow-y:auto;display:flex;flex-direction:column;scrollbar-width:thin}
+            .db-news-row{display:flex;align-items:center;gap:.65rem;padding:.55rem .9rem;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s}
+            .db-news-row:hover{background:var(--bg-raised)}
+            .db-news-row:last-child{border-bottom:none}
+            .db-news-row-dot{width:6px;height:6px;border-radius:50%;background:#f59e0b;flex-shrink:0}
+            .db-news-row-title{font-size:.8rem;font-weight:500;color:var(--text-primary);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+            .db-news-row-date{font-size:.65rem;color:var(--text-muted);flex-shrink:0}
+            .db-news-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:.4rem;color:var(--text-muted);font-size:.82rem}
+            .db-alc-w{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden;height:400px;display:flex;flex-direction:column;position:relative}
+            .db-alc-w::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--alc-accent,var(--primary));z-index:1}
+            .db-alc-head{padding:.75rem 1rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;background:var(--bg-surface)}
+            .db-alc-head-left{display:flex;align-items:center;gap:.55rem}
+            .db-alc-head-icon{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:.9rem;flex-shrink:0}
+            .db-alc-head-title{font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-primary)}
+            .db-alc-badge{font-size:.65rem;font-weight:800;padding:.15rem .5rem;border-radius:20px;line-height:1.4}
+            .db-alc-body{flex:1;overflow-y:auto;scrollbar-width:thin;display:flex;flex-direction:column}
+            .db-alc-doc-item{display:flex;align-items:center;gap:.6rem;padding:.55rem 1rem;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s}
+            .db-alc-doc-item:hover{background:var(--bg-raised)}
+            .db-alc-doc-item:last-child{border-bottom:none}
+            .db-alc-doc-icon{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:.8rem;flex-shrink:0;background:rgba(239,68,68,.1);color:#ef4444}
+            .db-alc-doc-name{font-size:.82rem;font-weight:500;color:var(--text-primary);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+            .db-alc-doc-more{padding:.5rem 1rem;font-size:.75rem;color:var(--primary);cursor:pointer;text-align:center;border-top:1px solid var(--border)}
+            .db-alc-doc-more:hover{background:var(--bg-raised)}
+            .db-alc-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:.4rem;padding:2rem;text-align:center}
+            .db-alc-empty-bubble{width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.5rem;margin-bottom:.3rem}
+            .db-alc-empty-title{font-size:.88rem;font-weight:700;color:var(--text-primary)}
+            .db-alc-empty-sub{font-size:.75rem;color:var(--text-muted)}
+            .db-alc-nitem{display:flex;align-items:flex-start;gap:.6rem;padding:.6rem 1rem;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s;position:relative}
+            .db-alc-nitem:hover{background:var(--bg-raised)}
+            .db-alc-nitem:last-child{border-bottom:none}
+            .db-alc-nicon{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:.9rem;flex-shrink:0}
+            .db-alc-ntitle{font-size:.82rem;font-weight:600;color:var(--text-primary);line-height:1.35}
+            .db-alc-nmsg{font-size:.71rem;color:var(--text-muted);margin-top:.1rem;line-height:1.3;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+            .db-ntf-check{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.58rem;flex-shrink:0;transition:all .15s;font-family:inherit;opacity:0;margin-top:.05rem}
             .db-alc-nitem:hover .db-ntf-check{opacity:1}
-            .db-ntf-check:hover{border-color:var(--success);color:var(--success);background:rgba(16,185,129,.1)}
-            .db-alc-nicon{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.95rem;flex-shrink:0}
-            .db-alc-ntitle{font-size:.85rem;font-weight:500;color:var(--text-primary);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+            .db-ntf-check:hover{border-color:#10b981;color:#10b981;background:rgba(16,185,129,.1)}
+            .db-alc-notif-meta{display:flex;align-items:center;justify-content:space-between;padding:.45rem 1rem .35rem;border-bottom:1px solid var(--border);background:var(--bg-raised)}
+            .db-alc-more-row{padding:.5rem 1rem;font-size:.75rem;color:var(--primary);cursor:pointer;text-align:center}
+            .db-alc-more-row:hover{background:var(--bg-raised)}
             .db-cal-w{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden}
             .db-cwrap{padding:1rem 1.1rem .75rem}
             .db-cnav{display:flex;align-items:center;justify-content:space-between;margin-bottom:.85rem}
@@ -179,23 +202,22 @@ const DashboardPage = {
             .db-cup-chip-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
         </style>
 
-        <!-- ── Important events ── -->
-        <div id="db-important"></div>
+        <!-- ── Welcome hero ── -->
+        <div id="db-welcome"></div>
 
         <!-- ── Birthdays ── -->
         <div id="db-birthdays"></div>
 
-        <!-- ── Main grid: row1 = docs|notif|calendar, row2 = continue|empty|news ── -->
+        <!-- ── Main grid: docs | notif | news | calendar / carousel ── -->
         <div class="db-main-grid">
-            <div class="db-main-left">
-                <div id="db-alerts-docs"></div>
-                <div id="db-news-widget"></div>
-                <div id="db-alerts-notif"></div>
-            </div>
-            <div class="db-main-right">
+            <div id="db-alerts-docs"></div>
+            <div id="db-alerts-notif"></div>
+            <div id="db-news-widget"></div>
+            <div style="grid-column:4;grid-row:1/3;display:flex;flex-direction:column;gap:.85rem;min-width:0">
                 <div id="db-cal-widget"></div>
-                <div id="db-continue" class="db-card"></div>
+                <div id="db-important"></div>
             </div>
+            <div id="db-recent-courses" style="grid-column:1/4;grid-row:2"></div>
         </div>
 
         `;
@@ -225,27 +247,131 @@ const DashboardPage = {
         ]);
         const unreadCount = recentNotifs.length;
 
-        // Unacked docs
-        const unackedDocs = await this._getUnackedDocs().catch(() => []);
+        // Unacked docs + pending assignments
+        const [unackedDocs, testsCount, surveysCount] = await Promise.all([
+            this._getUnackedDocs().catch(() => []),
+            API.tests.getMyPendingCount().catch(() => 0),
+            API.surveys.getMyPendingCount().catch(() => 0),
+        ]);
 
+        this._renderWelcome(enrollments, testsCount, surveysCount);
+        this._renderRecentlyViewed();
         this._renderCalWidget(calEvents, today);
         this._renderImportantEvents(calEvents, today);
         this._renderAlerts(unackedDocs, recentNotifs);
         this._renderBirthdays(birthdays);
-        this._renderContinue(enrollments);
+
         this._renderNewsWidget(newsRes.data || []);
 
-        // Показати головну новину один раз за сесію
+        // Показати головну новину один раз за сесію (якщо не відхилено назавжди)
         const featured = (newsRes.data || []).find(n => n.is_featured || n.is_pinned);
+        this._featuredNewsId = featured?.id || null;
         if (featured) {
             const sessionKey = `db_featured_news_${featured.id}`;
-            if (!sessionStorage.getItem(sessionKey)) {
+            const dismissed = AppState.profile?.dismissed_news || [];
+            if (!sessionStorage.getItem(sessionKey) && !dismissed.includes(featured.id)) {
                 sessionStorage.setItem(sessionKey, '1');
                 setTimeout(() => this._openNewsModal(featured.id), 800);
             }
         }
     },
 
+
+    _renderRecentlyViewed() {
+        const el = document.getElementById('db-recent-courses');
+        if (!el) return;
+
+        const items = RecentlyViewed.get().slice(0, 15);
+        if (!items.length) { el.innerHTML = ''; return; }
+
+        const typeLabel = { course: 'Курс', news: 'Новина', document: 'Документ', test: 'Тест', survey: 'Опитування', resource: 'Матеріал' };
+
+        const cards = items.map(item => {
+            const thumb = item.thumbnail ? Fmt.safeUrl(item.thumbnail) : null;
+            const thumbBg = thumb
+                ? `background-image:url('${thumb}')`
+                : `background:linear-gradient(135deg,${item.color}33,${item.color}88)`;
+            const thumbContent = thumb
+                ? `<div class="dbrc-thumb-grad"></div>`
+                : `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:2.5rem;opacity:.35;color:${item.color}"><i class="fa-solid ${item.icon}"></i></div><div class="dbrc-thumb-grad"></div>`;
+            const badge = typeLabel[item.type] || item.type;
+            const ago = (() => {
+                const m = Math.floor((Date.now() - item.viewedAt) / 60000);
+                if (m < 1) return 'щойно';
+                if (m < 60) return `${m} хв тому`;
+                const h = Math.floor(m / 60);
+                if (h < 24) return `${h} год тому`;
+                return `${Math.floor(h / 24)} дн тому`;
+            })();
+            return `
+            <div class="dbrc-card" onclick="Router.go(${JSON.stringify(item.route).replace(/"/g,'&quot;')})">
+                <div class="dbrc-thumb" style="${thumbBg}">
+                    ${thumbContent}
+                    <div class="dbrc-thumb-body">
+                        <span class="dbrc-level" style="color:${item.color}">${badge.toUpperCase()}</span>
+                        <div class="dbrc-title">${Fmt.esc(item.title)}</div>
+                    </div>
+                </div>
+                <div class="dbrc-footer">
+                    <i class="fa-solid ${item.icon}" style="font-size:.7rem;color:${item.color};flex-shrink:0"></i>
+                    <span class="dbrc-ago">${ago}</span>
+                </div>
+            </div>`;
+        }).join('');
+
+        el.innerHTML = `
+        <style>
+            .dbrc-wrap{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden;position:relative;display:flex;flex-direction:column;height:20px}
+            .dbrc-wrap::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:#6366f1;z-index:1}
+            .dbrc-head{display:flex;align-items:center;justify-content:space-between;padding:.75rem 1rem;border-bottom:1px solid var(--border);background:var(--bg-surface)}
+            .dbrc-head-left{display:flex;align-items:center;gap:.55rem}
+            .dbrc-head-icon{width:32px;height:32px;border-radius:9px;background:rgba(99,102,241,.12);color:#6366f1;display:flex;align-items:center;justify-content:center;font-size:.9rem;flex-shrink:0}
+            .dbrc-head-title{font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-primary)}
+            .dbrc-arrows{display:flex;gap:.35rem}
+            .dbrc-arrow{width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:var(--bg-raised);color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.65rem;transition:all .15s;font-family:inherit}
+            .dbrc-arrow:hover{border-color:#6366f1;color:#6366f1}
+            .dbrc-scroll{display:flex;align-items:stretch;gap:.75rem;overflow-x:auto;padding:.75rem 1rem;scrollbar-width:none;background:var(--bg-raised);flex:1}
+            .dbrc-scroll::-webkit-scrollbar{display:none}
+            .dbrc-card{flex:0 0 350px;border-radius:var(--radius-lg);overflow:hidden;cursor:pointer;border:1px solid var(--border);transition:transform .18s,box-shadow .18s,border-color .18s;flex-shrink:0;background:var(--bg-surface);display:flex;flex-direction:column}
+            .dbrc-card:hover{transform:translateY(-3px);box-shadow:0 8px 24px rgba(0,0,0,.14);border-color:#6366f1}
+            .dbrc-thumb{flex:1;min-height:100px;position:relative;background-size:contain;background-position:center;background-repeat:no-repeat;overflow:hidden;width:100%}
+            .dbrc-thumb-grad{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.82) 0%,rgba(0,0,0,.1) 55%,transparent 100%)}
+            .dbrc-thumb-body{position:absolute;bottom:0;left:0;right:0;padding:.5rem .65rem;z-index:1}
+            .dbrc-level{font-size:.58rem;font-weight:800;letter-spacing:.07em;display:block;margin-bottom:.18rem}
+            .dbrc-title{font-size:.78rem;font-weight:700;color:#fff;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+            .dbrc-footer{display:flex;align-items:center;gap:.4rem;padding:.45rem .65rem;border-top:1px solid var(--border)}
+            .dbrc-ago{font-size:.67rem;color:var(--text-muted);flex:1}
+        </style>
+        <div class="dbrc-wrap">
+            <div class="dbrc-head">
+                <div class="dbrc-head-left">
+                    <div class="dbrc-head-icon"><i class="fa-solid fa-clock-rotate-left"></i></div>
+                    <span class="dbrc-head-title">Нещодавно переглянуті</span>
+                </div>
+                <div class="dbrc-arrows">
+                    <button class="dbrc-arrow" onclick="document.getElementById('dbrc-scroll').scrollBy({left:-240,behavior:'smooth'})">
+                        <i class="fa-solid fa-chevron-left"></i>
+                    </button>
+                    <button class="dbrc-arrow" onclick="document.getElementById('dbrc-scroll').scrollBy({left:240,behavior:'smooth'})">
+                        <i class="fa-solid fa-chevron-right"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="dbrc-scroll" id="dbrc-scroll">${cards}</div>
+        </div>`;
+
+        requestAnimationFrame(() => {
+            const wrap = el.querySelector('.dbrc-wrap');
+            if (!wrap) return;
+            const pageContent = document.querySelector('.page-content');
+            if (!pageContent) return;
+            const pb  = parseFloat(getComputedStyle(pageContent).paddingBottom) || 16;
+            const pcTop = pageContent.getBoundingClientRect().top;
+            const wrapTop = wrap.getBoundingClientRect().top;
+            const h = pageContent.clientHeight - (wrapTop - pcTop) - pb;
+            if (h > 100) wrap.style.height = h + 'px';
+        });
+    },
 
     _renderCalWidget(calEvents, today) {
         const now = new Date();
@@ -476,7 +602,8 @@ const DashboardPage = {
 
         el.innerHTML = `<style>
             @keyframes db-imp-pulse{0%,100%{opacity:1}50%{opacity:.6}}
-            .db-imp-bar{width:610px;position:relative;overflow:hidden;border-radius:var(--radius-xl);margin-bottom:1rem;
+            .db-imp-row{display:flex;flex-direction:column;gap:.75rem}
+            .db-imp-bar{width:100%;position:relative;overflow:hidden;border-radius:var(--radius-xl);
                 background:linear-gradient(100deg,#fffbeb,#fef3c7 60%,#fff7ed);
                 border:1.5px solid rgba(245,158,11,.45);
                 box-shadow:0 2px 16px rgba(245,158,11,.12),0 1px 4px rgba(0,0,0,.04)}
@@ -499,7 +626,7 @@ const DashboardPage = {
                 box-shadow:0 2px 8px rgba(245,158,11,.4);transition:opacity .15s,transform .1s}
             .db-imp-ack:hover{opacity:.9;transform:translateY(-1px)}
             .db-imp-ack:active{transform:translateY(0)}
-        </style>` + pending.map(ev => `
+        </style><div class="db-imp-row">` + pending.map(ev => `
             <div id="db-imp-${ev.id}" class="db-imp-bar">
                 <div class="db-imp-stripe"></div>
                 <div class="db-imp-inner">
@@ -513,7 +640,7 @@ const DashboardPage = {
                         <i class="fa-solid fa-check"></i>
                     </button>
                 </div>
-            </div>`).join('');
+            </div>`).join('') + `</div>`;
     },
 
 
@@ -532,29 +659,40 @@ const DashboardPage = {
         const unreadCount = recentNotifs.length;
 
         if (docsEl) {
-            const body = unackedDocs.length
-                ? `<div class="db-alc-danger-wrap">
-                    <div class="db-alc-danger-head">
-                        <i class="fa-solid fa-triangle-exclamation" style="color:#f59e0b;font-size:1.1rem;flex-shrink:0"></i>
-                        <span style="color:var(--danger);font-weight:700;font-size:.85rem">Не ознайомлені з ${unackedDocs.length} документ${unackedDocs.length > 1 ? 'ами' : 'ом'}</span>
-                    </div>
-                    <div class="db-alc-chips">
-                        ${unackedDocs.slice(0, 8).map(d => `
-                            <span class="db-alc-chip" onclick="Router.go('documents')">
-                                <i class="fa-regular fa-file-lines"></i>${Fmt.esc(d.title)}
-                            </span>`).join('')}
-                        ${unackedDocs.length > 8 ? `<span class="db-alc-chip db-alc-chip-more" onclick="Router.go('documents')">ще ${unackedDocs.length - 8}…</span>` : ''}
-                    </div>
-                   </div>`
+            const hasIssue = unackedDocs.length > 0;
+            const accentDoc = hasIssue ? '#ef4444' : '#10b981';
+            const iconBg    = hasIssue ? 'rgba(239,68,68,.12)' : 'rgba(16,185,129,.12)';
+            const badgeHtml = hasIssue
+                ? `<span class="db-alc-badge" style="background:rgba(239,68,68,.12);color:#ef4444">${unackedDocs.length}</span>`
+                : `<span class="db-alc-badge" style="background:rgba(16,185,129,.12);color:#10b981"><i class="fa-solid fa-check"></i></span>`;
+
+            const body = hasIssue
+                ? `${unackedDocs.slice(0, 9).map(d => `
+                    <div class="db-alc-doc-item" onclick="Router.go('resource/${d.id}?from=documents')">
+                        <div class="db-alc-doc-icon"><i class="fa-regular fa-file-lines"></i></div>
+                        <span class="db-alc-doc-name">${Fmt.esc(d.title)}</span>
+                        <i class="fa-solid fa-chevron-right" style="font-size:.6rem;color:var(--text-muted);flex-shrink:0"></i>
+                    </div>`).join('')}
+                  ${unackedDocs.length > 9 ? `<div class="db-alc-doc-more" onclick="Router.go('documents')">ще ${unackedDocs.length - 9} документів <i class="fa-solid fa-arrow-right"></i></div>` : ''}`
                 : `<div class="db-alc-empty">
-                    <i class="fa-regular fa-folder-open db-alc-empty-icon"></i>
+                    <div class="db-alc-empty-bubble" style="background:rgba(16,185,129,.1);color:#10b981">
+                        <i class="fa-solid fa-shield-check"></i>
+                    </div>
                     <div class="db-alc-empty-title">Документи в порядку</div>
-                    <div class="db-alc-empty-sub">Ознайомлений з усією документацією</div>
+                    <div class="db-alc-empty-sub">Ви ознайомлені з усіма документами</div>
                    </div>`;
 
             docsEl.innerHTML = `
-                <div class="db-alc-w">
-                    <div class="db-alc-head"><i class="fa-regular fa-file-lines"></i> Документи</div>
+                <div class="db-alc-w" style="--alc-accent:${accentDoc}">
+                    <div class="db-alc-head">
+                        <div class="db-alc-head-left">
+                            <div class="db-alc-head-icon" style="background:${iconBg};color:${accentDoc}">
+                                <i class="fa-regular fa-file-lines"></i>
+                            </div>
+                            <span class="db-alc-head-title">Документи</span>
+                        </div>
+                        ${badgeHtml}
+                    </div>
                     <div class="db-alc-body">${body}</div>
                 </div>`;
         }
@@ -568,39 +706,54 @@ const DashboardPage = {
                 if (t.includes('doc') || t.includes('resource')) return { icon:'fa-file-lines', color:'#ef4444', bg:'rgba(239,68,68,.12)' };
                 return { icon:'fa-bell', color:'#6366f1', bg:'rgba(99,102,241,.12)' };
             };
+            const accentNotif = unreadCount > 0 ? '#6366f1' : '#10b981';
+            const badgeNotif = unreadCount > 0
+                ? `<span class="db-alc-badge" style="background:rgba(99,102,241,.12);color:#6366f1">${unreadCount}</span>`
+                : `<span class="db-alc-badge" style="background:rgba(16,185,129,.12);color:#10b981"><i class="fa-solid fa-check"></i></span>`;
+
             const body = unreadCount > 0
-                ? `<div id="db-alc-notif">
-                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.45rem">
-                        <span style="font-size:.75rem;color:var(--text-muted)">${unreadCount} непрочитаних</span>
-                        <span style="font-size:.7rem;color:var(--primary);cursor:pointer" onclick="DashboardPage._dismissNotifAlert()"><i class="fa-solid fa-check-double"></i> Прочитати всі</span>
-                    </div>
-                    <div class="db-alc-nlist">
+                ? `<div class="db-alc-notif-meta">
+                        <span style="font-size:.72rem;color:var(--text-muted)">${unreadCount} непрочитаних</span>
+                        <span style="font-size:.7rem;color:var(--primary);cursor:pointer;font-weight:600" onclick="DashboardPage._dismissNotifAlert()">
+                            <i class="fa-solid fa-check-double"></i> Прочитати всі
+                        </span>
+                   </div>
+                   <div id="db-alc-notif">
                         ${recentNotifs.slice(0, 5).map(n => {
                             const m = typeMap(n.type);
                             const dest = n.link ? JSON.stringify(n.link).replace(/"/g,'&quot;') : '&quot;notifications&quot;';
                             return `<div class="db-alc-nitem" id="db-ntf-${n.id}" onclick="DashboardPage._openNotif('${n.id}',${dest})">
                                 <div class="db-alc-nicon" style="background:${m.bg};color:${m.color}"><i class="fa-solid ${m.icon}"></i></div>
-                                <div style="flex:1;min-width:0;overflow:hidden">
+                                <div style="flex:1;min-width:0">
                                     <div class="db-alc-ntitle">${Fmt.esc(n.title)}</div>
-                                    ${n.message ? `<div style="font-size:.72rem;color:var(--text-muted);margin-top:1px">${Fmt.esc(n.message)}</div>` : ''}
+                                    ${n.message ? `<div class="db-alc-nmsg">${Fmt.esc(n.message)}</div>` : ''}
                                 </div>
                                 <button class="db-ntf-check" onclick="event.stopPropagation();DashboardPage._markNotifRead('${n.id}')" title="Відмітити прочитаним">
                                     <i class="fa-solid fa-check"></i>
                                 </button>
                             </div>`;
                         }).join('')}
-                        ${unreadCount > 5 ? `<div style="text-align:center;font-size:.72rem;color:var(--primary);cursor:pointer;padding:.25rem" onclick="Router.go('notifications')">ще ${unreadCount - 5}… <i class="fa-solid fa-arrow-right"></i></div>` : ''}
-                    </div>
+                        ${unreadCount > 5 ? `<div class="db-alc-more-row" onclick="Router.go('notifications')">ще ${unreadCount - 5}… <i class="fa-solid fa-arrow-right"></i></div>` : ''}
                    </div>`
                 : `<div class="db-alc-empty">
-                    <i class="fa-regular fa-bell-slash db-alc-empty-icon"></i>
+                    <div class="db-alc-empty-bubble" style="background:rgba(16,185,129,.1);color:#10b981">
+                        <i class="fa-solid fa-bell-slash"></i>
+                    </div>
                     <div class="db-alc-empty-title">Немає сповіщень</div>
                     <div class="db-alc-empty-sub">Усі сповіщення прочитані</div>
                    </div>`;
 
             notifEl.innerHTML = `
-                <div class="db-alc-w">
-                    <div class="db-alc-head"><i class="fa-regular fa-bell"></i> Сповіщення</div>
+                <div class="db-alc-w" style="--alc-accent:${accentNotif}">
+                    <div class="db-alc-head">
+                        <div class="db-alc-head-left">
+                            <div class="db-alc-head-icon" style="background:rgba(99,102,241,.12);color:#6366f1">
+                                <i class="fa-regular fa-bell"></i>
+                            </div>
+                            <span class="db-alc-head-title">Сповіщення</span>
+                        </div>
+                        ${badgeNotif}
+                    </div>
                     <div class="db-alc-body">${body}</div>
                 </div>`;
         }
@@ -712,72 +865,98 @@ const DashboardPage = {
 
         this._bdayPeople = people;
 
-        const cards = people.map(p => {
+        const cards = people.map((p, i) => {
             const initials = Fmt.initials(p.full_name || '?');
-            const fallbackHtml = `<span style="font-size:1.6rem;font-weight:800;color:#fff;line-height:1">${Fmt.esc(initials)}</span>`;
+            const fallbackHtml = `<span style="font-size:1.1rem;font-weight:800;color:#fff;line-height:1">${Fmt.esc(initials)}</span>`;
             const avatarHtml = p.avatar_url
                 ? `<img src="${p.avatar_url}" alt="${Fmt.esc(p.full_name)}" style="width:100%;height:100%;object-fit:cover;display:block"
-                       onerror="this.replaceWith(Object.assign(document.createElement('span'),{innerHTML:'${Fmt.esc(initials)}',style:'font-size:1.6rem;font-weight:800;color:#fff;line-height:1'}))">`
+                       onerror="this.replaceWith(Object.assign(document.createElement('span'),{innerHTML:'${Fmt.esc(initials)}',style:'font-size:1.1rem;font-weight:800;color:#fff;line-height:1'}))">`
                 : fallbackHtml;
             return `
-                <div class="db-bday-card">
+                <div class="db-bday-card" style="animation-delay:${i * 0.07}s">
                     <div class="db-bday-avatar-ring">
                         <div class="db-bday-avatar">${avatarHtml}</div>
                     </div>
-                    <div class="db-bday-name">${Fmt.esc(p.full_name || '—')}</div>
-                    ${p.job_position ? `<div class="db-bday-pos">${Fmt.esc(p.job_position)}</div>` : ''}
-                    <div class="db-bday-badge">🎂 День народження</div>
+                    <div class="db-bday-info">
+                        <div class="db-bday-name">${Fmt.esc(p.full_name || '—')}</div>
+                        ${p.job_position ? `<div class="db-bday-pos">${Fmt.esc(p.job_position)}</div>` : ''}
+                    </div>
                     ${p.id !== AppState.user?.id ? `
-                    <button class="db-bday-wish-btn" style="margin-top:.3rem"
+                    <button class="db-bday-wish-btn"
                         data-bday-btn="${p.id}"
                         onclick="DashboardPage._openWishModal('${p.id}')">
                         💌 Привітати
-                    </button>` : ''}
+                    </button>` : `<span class="db-bday-self-badge">🎂 Це ви!</span>`}
                 </div>`;
         }).join('');
 
         el.innerHTML = `
             <style>
-                @keyframes db-confetti-fall{0%{transform:translateY(-10px) rotate(0deg);opacity:1}100%{transform:translateY(80px) rotate(720deg);opacity:0}}
-                @keyframes db-bday-glow{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.4)}50%{box-shadow:0 0 0 10px rgba(245,158,11,0)}}
-                @keyframes db-bday-pop{0%{transform:scale(.85);opacity:0}100%{transform:scale(1);opacity:1}}
+                @keyframes db-confetti-fall{0%{transform:translateY(-10px) rotate(0deg);opacity:1}100%{transform:translateY(60px) rotate(720deg);opacity:0}}
+                @keyframes db-bday-glow{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.5)}50%{box-shadow:0 0 0 8px rgba(245,158,11,0)}}
+                @keyframes db-bday-pop{0%{transform:scale(.82) translateY(6px);opacity:0}100%{transform:scale(1) translateY(0);opacity:1}}
                 @keyframes db-wish-in{0%{transform:translateY(12px);opacity:0}100%{transform:translateY(0);opacity:1}}
-                .db-bday-wrap{position:relative;overflow:hidden;border-radius:var(--radius-xl);margin-bottom:1.5rem;
-                    background:linear-gradient(135deg,#fffbeb 0%,#fef3c7 40%,#fde68a 100%);
-                    border:2px solid rgba(245,158,11,.4);padding:2rem 1.5rem 1.75rem;text-align:center}
-                body.dark-theme .db-bday-wrap{background:linear-gradient(135deg,rgba(120,80,0,.35) 0%,rgba(180,110,0,.25) 50%,rgba(120,70,0,.3) 100%);border-color:rgba(245,158,11,.35)}
+                .db-bday-wrap{display:flex;align-items:center;width:100%;position:relative;overflow:hidden;border-radius:var(--radius-xl);
+                    margin-bottom:1.5rem;gap:1.25rem;padding:.9rem 1.5rem;
+                    background:linear-gradient(100deg,#fffbeb 0%,#fef3c7 45%,#fff7ed 100%);
+                    border:1.5px solid rgba(245,158,11,.45);
+                    box-shadow:0 2px 20px rgba(245,158,11,.1),0 1px 4px rgba(0,0,0,.04)}
+                body.dark-theme .db-bday-wrap{background:linear-gradient(100deg,rgba(120,80,0,.4) 0%,rgba(160,100,0,.28) 50%,rgba(120,70,0,.32) 100%);border-color:rgba(245,158,11,.4)}
                 .db-bday-confetti{position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;overflow:hidden}
                 .db-bday-conf-dot{position:absolute;border-radius:2px;animation:db-confetti-fall linear infinite}
-                .db-bday-headline{font-size:1.45rem;font-weight:800;color:#92400e;letter-spacing:-.01em;margin-bottom:.25rem}
+                .db-bday-left{display:flex;align-items:center;gap:.9rem;flex-shrink:0}
+                .db-bday-icon-box{width:52px;height:52px;border-radius:14px;
+                    background:linear-gradient(135deg,#f59e0b,#d97706);
+                    display:flex;align-items:center;justify-content:center;font-size:1.55rem;
+                    box-shadow:0 4px 14px rgba(245,158,11,.45);flex-shrink:0}
+                .db-bday-headline{font-size:.95rem;font-weight:800;color:#92400e;letter-spacing:-.01em;line-height:1.2}
                 body.dark-theme .db-bday-headline{color:#fcd34d}
-                .db-bday-sub{font-size:.85rem;color:#b45309;margin-bottom:1.75rem;opacity:.8}
+                .db-bday-sub{font-size:.72rem;color:#b45309;opacity:.8;margin-top:.15rem}
                 body.dark-theme .db-bday-sub{color:#fbbf24}
-                .db-bday-list{display:flex;flex-wrap:wrap;justify-content:center;gap:2rem}
-                .db-bday-card{display:flex;flex-direction:column;align-items:center;gap:.45rem;animation:db-bday-pop .4s ease both}
-                .db-bday-avatar-ring{width:90px;height:90px;border-radius:50%;padding:3px;background:linear-gradient(135deg,#f59e0b,#ef4444,#ec4899);
+                .db-bday-divider{width:1px;height:48px;background:rgba(245,158,11,.35);flex-shrink:0}
+                .db-bday-scroll{display:flex;gap:.75rem;overflow-x:auto;flex:1;align-items:center;scrollbar-width:none;padding:.1rem 0}
+                .db-bday-scroll::-webkit-scrollbar{display:none}
+                .db-bday-card{display:flex;align-items:center;gap:.65rem;flex-shrink:0;
+                    padding:.5rem .85rem .5rem .55rem;border-radius:var(--radius-lg);
+                    background:rgba(255,255,255,.7);border:1px solid rgba(245,158,11,.25);
+                    animation:db-bday-pop .4s ease both;transition:box-shadow .15s,border-color .15s}
+                body.dark-theme .db-bday-card{background:rgba(255,255,255,.06);border-color:rgba(245,158,11,.2)}
+                .db-bday-card:hover{box-shadow:0 4px 16px rgba(245,158,11,.18);border-color:rgba(245,158,11,.5)}
+                .db-bday-avatar-ring{width:46px;height:46px;border-radius:50%;padding:2px;
+                    background:linear-gradient(135deg,#f59e0b,#ef4444,#ec4899);
                     animation:db-bday-glow 2.2s ease-in-out infinite;flex-shrink:0}
-                .db-bday-avatar{width:100%;height:100%;border-radius:50%;background:linear-gradient(135deg,#f59e0b,#d97706);
+                .db-bday-avatar{width:100%;height:100%;border-radius:50%;
+                    background:linear-gradient(135deg,#f59e0b,#d97706);
                     display:flex;align-items:center;justify-content:center;overflow:hidden;border:2px solid #fff}
-                .db-bday-name{font-size:1rem;font-weight:700;color:#1c1917;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;text-align:center}
+                .db-bday-info{min-width:0}
+                .db-bday-name{font-size:.82rem;font-weight:700;color:#1c1917;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
                 body.dark-theme .db-bday-name{color:#fef3c7}
-                .db-bday-pos{font-size:.75rem;color:#78350f;opacity:.85;text-align:center}
-                body.dark-theme .db-bday-pos{color:#fcd34d;opacity:.7}
-.db-bday-badge{display:inline-flex;align-items:center;gap:.3rem;font-size:.72rem;font-weight:700;
-                    background:rgba(245,158,11,.2);border:1px solid rgba(245,158,11,.4);border-radius:999px;
-                    padding:.2rem .7rem;color:#92400e;margin-top:.1rem}
-                body.dark-theme .db-bday-badge{background:rgba(245,158,11,.15);color:#fcd34d}
-                .db-bday-wish-btn{display:inline-flex;align-items:center;gap:.4rem;background:linear-gradient(135deg,#f59e0b,#d97706);
-                    color:#fff;border:none;border-radius:var(--radius-md);padding:.45rem 1rem;font-size:.8rem;font-weight:700;
-                    cursor:pointer;transition:opacity .15s,transform .1s;white-space:nowrap;font-family:inherit}
+                .db-bday-pos{font-size:.68rem;color:#78350f;opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px;margin-top:.1rem}
+                body.dark-theme .db-bday-pos{color:#fcd34d;opacity:.65}
+                .db-bday-wish-btn{display:inline-flex;align-items:center;gap:.35rem;
+                    background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border:none;
+                    border-radius:var(--radius-md);padding:.38rem .85rem;font-size:.76rem;font-weight:700;
+                    cursor:pointer;transition:opacity .15s,transform .1s;white-space:nowrap;font-family:inherit;
+                    flex-shrink:0;box-shadow:0 2px 8px rgba(245,158,11,.35)}
                 .db-bday-wish-btn:hover{opacity:.9;transform:translateY(-1px)}
                 .db-bday-wish-btn:active{transform:translateY(0)}
                 .db-bday-wish-btn:disabled{opacity:.45;cursor:default;transform:none}
+                .db-bday-self-badge{display:inline-flex;align-items:center;gap:.3rem;font-size:.72rem;font-weight:700;
+                    background:rgba(245,158,11,.18);border:1px solid rgba(245,158,11,.35);border-radius:999px;
+                    padding:.25rem .7rem;color:#92400e;white-space:nowrap;flex-shrink:0}
+                body.dark-theme .db-bday-self-badge{color:#fcd34d;background:rgba(245,158,11,.12)}
             </style>
             <div class="db-bday-wrap">
                 <div class="db-bday-confetti" id="db-bday-conf"></div>
-                <div class="db-bday-headline">🎉 Сьогодні день народження!</div>
-                <div class="db-bday-sub">Вітаємо колег з особливим днем</div>
-                <div class="db-bday-list">${cards}</div>
+                <div class="db-bday-left">
+                    <div class="db-bday-icon-box">🎂</div>
+                    <div>
+                        <div class="db-bday-headline">День народження!</div>
+                        <div class="db-bday-sub">Вітаємо колег з особливим днем</div>
+                    </div>
+                </div>
+                <div class="db-bday-divider"></div>
+                <div class="db-bday-scroll">${cards}</div>
             </div>`;
 
         const confEl = document.getElementById('db-bday-conf');
@@ -845,44 +1024,194 @@ const DashboardPage = {
         }
     },
 
-
-    _renderContinue(enrollments) {
-        const el = document.getElementById('db-continue');
-        if (!el) return;
-        const next = enrollments.find(e => !e.completed_at) || enrollments[0];
-
-        el.innerHTML = `<div class="db-card-head"><span style="color:var(--text-primary)"><i class="fa-solid fa-play"></i> Продовжити навчання</span></div>
-            <div class="db-card-desc">Ваш поточний курс та прогрес проходження</div>`;
-
-        if (!next) {
-            el.innerHTML += `<div class="db-card-body" style="text-align:center;padding:2rem;color:var(--text-muted)">
-                <div style="font-size:2rem;margin-bottom:.5rem">🎉</div>
-                <div style="font-weight:600">Всі курси завершено!</div>
-                <button class="btn btn-primary btn-sm" style="margin-top:1rem" onclick="Router.go('expert-path')">Знайти нові</button>
-            </div>`;
-            return;
+    async _dismissNews(newsId, btn) {
+        // Заповнити кнопку жовтим
+        if (btn) {
+            btn.disabled = true;
+            btn.style.background = '#f59e0b';
+            btn.style.color = '#fff';
+            btn.style.borderColor = '#f59e0b';
+            btn.innerHTML = '<i class="fa-solid fa-bell-slash"></i> Збережено';
         }
 
-        const course = next.course;
-        const pct    = next.progress_percentage || 0;
-        const thumb  = course.thumbnail_url;
+        // Зберегти в базу
+        const current = AppState.profile?.dismissed_news || [];
+        if (!current.includes(newsId)) {
+            const updated = [...current, newsId];
+            try {
+                await API.profiles.update(AppState.user.id, { dismissed_news: updated });
+                if (AppState.profile) AppState.profile.dismissed_news = updated;
+            } catch(e) { /* не критично */ }
+        }
 
-        el.innerHTML += `
-            <div class="db-continue">
-                <div class="db-continue-thumb" onclick="Router.go('courses/${course.id}?from=expert-path')" style="cursor:pointer">
-                    ${thumb
-                        ? `<div class="db-continue-thumb-bg" style="background-image:url('${thumb}')"></div>
-                           <div class="db-continue-thumb-main" style="background-image:url('${thumb}')"></div>`
-                        : `<div style="height:100%;display:flex;align-items:center;justify-content:center;font-size:2.5rem;position:relative;z-index:1">📖</div>`}
-                </div>
-                <div class="db-continue-body">
-                    <div class="db-continue-title">${Fmt.esc(course.title)}</div>
-                    <button class="btn btn-primary btn-sm" style="margin-top:.75rem;width:100%" onclick="Router.go('courses/${course.id}?from=expert-path')">
-                        <i class="fa-solid fa-play"></i> Перейти до курсу
-                    </button>
-                </div>
-            </div>`;
+        // Затухання модалки через 1.5с
+        setTimeout(() => {
+            const backdrop = document.getElementById('modal-backdrop');
+            const container = document.getElementById('modal-container');
+            if (backdrop)  { backdrop.style.transition  = 'opacity .4s'; backdrop.style.opacity  = '0'; }
+            if (container) { container.style.transition = 'opacity .4s, transform .4s'; container.style.opacity = '0'; container.style.transform = 'scale(.95)'; }
+            setTimeout(() => {
+                Modal.close();
+                if (backdrop)  { backdrop.style.transition  = ''; backdrop.style.opacity  = ''; }
+                if (container) { container.style.transition = ''; container.style.opacity = ''; container.style.transform = ''; }
+            }, 400);
+        }, 1500);
     },
+
+
+    _renderWelcome(enrollments, testsCount = 0, surveysCount = 0) {
+        const el = document.getElementById('db-welcome');
+        if (!el) return;
+
+        const role = AppState.profile?.role || 'user';
+        const accent = { owner:'#2563eb', admin:'#2563eb', smm:'#ec4899', teacher:'#10b981', manager:'#f59e0b', user:'#3b82f6' }[role] || '#3b82f6';
+
+        const fullName  = AppState.profile?.full_name || '';
+        const parts = fullName.trim().split(/\s+/);
+        const firstName = parts[1] || parts[0] || 'Привіт';
+        const h = new Date().getHours();
+        const greeting  = h < 6 ? 'Добраніч' : h < 12 ? 'Доброго ранку' : h < 18 ? 'Добрий день' : 'Добрий вечір';
+
+        const avatar   = AppState.profile?.avatar_url;
+        const initials = Fmt.initials(fullName || '?');
+        const avatarHtml = avatar
+            ? `<img src="${avatar}" style="width:100%;height:100%;object-fit:cover;display:block">`
+            : `<span style="font-size:.85rem;font-weight:800;color:#fff;line-height:1">${Fmt.esc(initials)}</span>`;
+
+        const next  = enrollments.find(e => !e.completed_at && (e.progress_percentage || 0) > 0)
+                   || enrollments.find(e => !e.completed_at);
+        const incompleteCount = enrollments.filter(e => !e.completed_at).length;
+        const pct   = next?.progress_percentage || 0;
+        const title = next?.course?.title || '';
+        const cid   = next?.course?.id || '';
+
+        const courseHtml = next ? `
+            <div class="dbw-sep"></div>
+            <div class="dbw-course-block">
+                <span class="dbw-course-hint">Незавершений курс</span>
+                <span class="dbw-course-name">${Fmt.esc(title)}</span>
+            </div>
+            <div class="dbw-pbar-wrap">
+                <div class="dbw-pbar"><div class="dbw-pbar-fill" style="width:${pct}%;background:${accent}"></div></div>
+                <span class="dbw-pct">${pct}%</span>
+            </div>
+            <button class="dbw-btn" style="--ac:${accent}" onclick="Router.go('courses/${cid}?from=expert-path')">
+                <i class="fa-solid fa-play"></i> Продовжити
+            </button>` : `
+            <div class="dbw-sep"></div>
+            <span class="dbw-course-hint">🏆 Всі курси завершено</span>
+            <button class="dbw-btn" style="--ac:${accent}" onclick="Router.go('courses')">Знайти нові <i class="fa-solid fa-arrow-right"></i></button>`;
+
+        const _cap = n => n > 9 ? '9+' : String(n);
+        const _courseLabel = n => n === 1 ? 'курс' : n < 5 ? 'курси' : 'курсів';
+        const _testLabel   = n => n === 1 ? 'тест' : n < 5 ? 'тести' : 'тестів';
+        const _hex2rgb = h => [parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)].join(',');
+        const chipDefs = [
+            { icon:'fa-book-open',             count:incompleteCount, label:`${_cap(incompleteCount)} ${_courseLabel(incompleteCount)}`, route:'expert-path', color:'#6366f1', title:'Незавершені курси' },
+            { icon:'fa-file-pen',              count:testsCount,      label:`${_cap(testsCount)} ${_testLabel(testsCount)}`,             route:'my-tests',    color:'#f59e0b', title:'Тести' },
+            { icon:'fa-square-poll-horizontal', count:surveysCount,    label:`${_cap(surveysCount)} опитувань`,                           route:'expert-path', color:'#8b5cf6', title:'Опитування' },
+        ];
+        const chips = chipDefs.map(c => {
+            const done = c.count === 0;
+            const col  = done ? '#10b981' : c.color;
+            const rgb  = _hex2rgb(col);
+            return `<button class="dbw-chip" style="--cc:${col};--cc-rgb:${rgb}" onclick="Router.go('${c.route}')" title="${c.title}">
+                <i class="fa-solid ${c.icon}"></i>${c.label}${done ? '<i class="fa-solid fa-check dbw-chip-check"></i>' : ''}
+            </button>`;
+        });
+        const chipsHtml = `<div class="dbw-sep"></div><div class="dbw-chips">${chips.join('')}</div>`;
+
+        el.innerHTML = `
+        <style>
+            @keyframes dbw-in{0%{opacity:0;transform:translateY(-6px)}100%{opacity:1;transform:translateY(0)}}
+            .db-welcome-bar{display:flex;align-items:center;gap:1rem;padding:.75rem 1.25rem;
+                background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);
+                margin-bottom:0.85rem;border-left:4px solid ${accent};
+                box-shadow:var(--shadow-sm);animation:dbw-in .3s ease both;flex-wrap:wrap;
+                position:relative;overflow:hidden}
+            .dbw-deco{position:absolute;right:0;top:0;height:100%;width:min(65%,620px);pointer-events:none;flex-shrink:0}
+            .dbw-ava{width:36px;height:36px;border-radius:50%;overflow:hidden;flex-shrink:0;
+                background:${accent};display:flex;align-items:center;justify-content:center}
+            .dbw-greet{font-size:.8rem;color:var(--text-muted);flex-shrink:0}
+            .dbw-greet strong{color:var(--text-primary);font-weight:700}
+            .dbw-sep{width:1px;height:20px;background:var(--border);flex-shrink:0}
+            .dbw-course-block{display:flex;flex-direction:column;min-width:0}
+            .dbw-course-hint{font-size:.68rem;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;line-height:1}
+            .dbw-course-name{font-size:.82rem;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}
+            .dbw-pbar-wrap{display:flex;align-items:center;gap:.5rem;flex-shrink:0}
+            .dbw-pbar{width:100px;height:5px;background:var(--bg-raised);border-radius:3px;overflow:hidden;flex-shrink:0}
+            .dbw-pbar-fill{height:100%;border-radius:3px;transition:width .6s ease}
+            .dbw-pct{font-size:.72rem;font-weight:700;color:var(--text-muted);min-width:26px}
+            .dbw-btn{display:inline-flex;align-items:center;gap:.35rem;background:var(--ac,${accent});
+                border:none;border-radius:var(--radius-md);color:#fff;padding:.38rem .85rem;
+                font-size:.78rem;font-weight:700;cursor:pointer;font-family:inherit;
+                transition:opacity .15s,transform .1s;flex-shrink:0;white-space:nowrap}
+            .dbw-btn:hover{opacity:.88;transform:translateY(-1px)}
+            .dbw-btn:active{transform:translateY(0)}
+            .dbw-chips{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap}
+            .dbw-chip{display:inline-flex;align-items:center;gap:.35rem;
+                border-radius:999px;padding:.28rem .75rem;
+                font-size:.8rem;font-weight:700;line-height:1;
+                color:var(--cc);
+                background:rgba(var(--cc-rgb),.09);
+                border:1px solid rgba(var(--cc-rgb),.28);
+                cursor:pointer;font-family:inherit;white-space:nowrap;
+                transition:all .18s ease}
+            .dbw-chip:hover{background:rgba(var(--cc-rgb),.16);border-color:rgba(var(--cc-rgb),.55);
+                box-shadow:0 0 0 3px rgba(var(--cc-rgb),.12);transform:translateY(-1px)}
+            .dbw-chip:active{transform:translateY(0)}
+            .dbw-chip-check{font-size:.58rem;margin-left:.1rem}
+        </style>
+        <div class="db-welcome-bar">
+            <div class="dbw-ava">${avatarHtml}</div>
+            <div class="dbw-greet">${greeting}, <strong>${Fmt.esc(firstName)}!</strong></div>
+            ${courseHtml}
+            ${chipsHtml}
+            <svg class="dbw-deco" viewBox="0 0 620 80" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" preserveAspectRatio="xMaxYMid slice">
+                <defs>
+                    <filter id="dbw-f-glow" x="-60%" y="-60%" width="220%" height="220%">
+                        <feGaussianBlur stdDeviation="18"/>
+                    </filter>
+                    <linearGradient id="dbw-g-fade" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%"   stop-color="${accent}" stop-opacity="0"/>
+                        <stop offset="40%"  stop-color="${accent}" stop-opacity="0.04"/>
+                        <stop offset="100%" stop-color="${accent}" stop-opacity="0.10"/>
+                    </linearGradient>
+                </defs>
+                <!-- background gradient wash -->
+                <rect x="0" y="0" width="620" height="80" fill="url(#dbw-g-fade)"/>
+                <!-- glow blobs -->
+                <circle cx="530" cy="40" r="70" fill="${accent}" fill-opacity="0.11" filter="url(#dbw-f-glow)"/>
+                <circle cx="320" cy="20" r="35" fill="${accent}" fill-opacity="0.07" filter="url(#dbw-f-glow)"/>
+                <!-- main ring group — right anchor -->
+                <circle cx="560" cy="40" r="130" fill="none" stroke="${accent}" stroke-width=".5"  opacity="0.08"/>
+                <circle cx="560" cy="40" r="100" fill="none" stroke="${accent}" stroke-width=".7"  opacity="0.11"/>
+                <circle cx="560" cy="40" r="74"  fill="none" stroke="${accent}" stroke-width="1.0" opacity="0.16"/>
+                <circle cx="560" cy="40" r="50"  fill="none" stroke="${accent}" stroke-width="1.3" opacity="0.22"/>
+                <circle cx="560" cy="40" r="30"  fill="none" stroke="${accent}" stroke-width="1.7" opacity="0.30"/>
+                <circle cx="560" cy="40" r="14"  fill="${accent}" fill-opacity="0.16"/>
+                <circle cx="560" cy="40" r="5.5" fill="${accent}" fill-opacity="0.35"/>
+                <!-- mid ring cluster -->
+                <circle cx="370" cy="55" r="52"  fill="none" stroke="${accent}" stroke-width=".6"  opacity="0.09"/>
+                <circle cx="370" cy="55" r="34"  fill="none" stroke="${accent}" stroke-width=".9"  opacity="0.13"/>
+                <circle cx="370" cy="55" r="18"  fill="none" stroke="${accent}" stroke-width="1.1" opacity="0.18"/>
+                <circle cx="370" cy="55" r="6.5" fill="${accent}" fill-opacity="0.13"/>
+                <!-- small top cluster -->
+                <circle cx="270" cy="12" r="28"  fill="none" stroke="${accent}" stroke-width=".6"  opacity="0.09"/>
+                <circle cx="270" cy="12" r="15"  fill="none" stroke="${accent}" stroke-width=".9"  opacity="0.13"/>
+                <circle cx="270" cy="12" r="5"   fill="${accent}" fill-opacity="0.12"/>
+                <!-- scattered dots -->
+                <circle cx="200" cy="62" r="2.8" fill="${accent}" fill-opacity="0.20"/>
+                <circle cx="240" cy="38" r="1.8" fill="${accent}" fill-opacity="0.15"/>
+                <circle cx="310" cy="68" r="2.2" fill="${accent}" fill-opacity="0.18"/>
+                <circle cx="430" cy="8"  r="2.5" fill="${accent}" fill-opacity="0.18"/>
+                <circle cx="460" cy="70" r="1.8" fill="${accent}" fill-opacity="0.14"/>
+                <circle cx="490" cy="14" r="2.0" fill="${accent}" fill-opacity="0.16"/>
+                <circle cx="185" cy="20" r="1.5" fill="${accent}" fill-opacity="0.12"/>
+            </svg>
+        </div>`;
+    },
+
 
     _renderNewsWidget(items) {
         const el = document.getElementById('db-news-widget');
@@ -890,37 +1219,51 @@ const DashboardPage = {
 
         items.forEach(n => { this._newsCache[n.id] = n; });
 
-        const newsCard = n => {
-            const url = Fmt.safeUrl(n.thumbnail_url);
-            const thumb = n.thumbnail_url
-                ? `<div class="db-ncard-thumb"><img src="${url}" alt="" loading="lazy"></div>`
-                : `<div class="db-ncard-thumb-ph">📰</div>`;
-            const desc = n.excerpt
-                ? `<div class="db-ncard-desc">${Fmt.esc(n.excerpt)}</div>`
-                : '';
-            return `
-            <div class="db-ncard" onclick="DashboardPage._openNewsModal('${n.id}')">
-                ${thumb}
-                <div class="db-ncard-body">
-                    <div class="db-ncard-title">${Fmt.esc(n.title)}</div>
-                    ${desc}
-                    <div class="db-ncard-date">${Fmt.dateShort(n.published_at || n.created_at)}</div>
+        let body = '';
+        if (!items.length) {
+            body = `<div class="db-news-empty"><i class="fa-regular fa-newspaper" style="font-size:2rem;opacity:.3"></i><span>Новин поки немає</span></div>`;
+        } else {
+            const [hero, ...rest] = items;
+            const heroUrl = Fmt.safeUrl(hero.thumbnail_url);
+            const heroImg = hero.thumbnail_url
+                ? `<img class="db-news-hero-img" src="${heroUrl}" alt="" loading="lazy">`
+                : `<div class="db-news-hero-ph">📰</div>`;
+            const pinnedBadge = hero.is_pinned ? `<span class="db-news-hero-badge">Закріплено</span><br>` : '';
+            body = `
+                <div class="db-news-hero" onclick="DashboardPage._openNewsModal('${hero.id}')">
+                    ${heroImg}
+                    <div class="db-news-hero-grad"></div>
+                    <div class="db-news-hero-body">
+                        ${pinnedBadge}
+                        <div class="db-news-hero-title">${Fmt.esc(hero.title)}</div>
+                        <div class="db-news-hero-date">${Fmt.dateShort(hero.published_at || hero.created_at)}</div>
+                    </div>
                 </div>
-            </div>`;
-        };
-
-        const body = items.length
-            ? `<div class="db-news-grid">${items.slice(0, 3).map(newsCard).join('')}</div>`
-            : `<div style="padding:1.5rem;text-align:center;color:var(--text-muted);font-size:.82rem">Новин поки немає</div>`;
+                <div class="db-news-rows">
+                    ${rest.slice(0, 4).map(n => `
+                        <div class="db-news-row" onclick="DashboardPage._openNewsModal('${n.id}')">
+                            <div class="db-news-row-dot"></div>
+                            <span class="db-news-row-title">${Fmt.esc(n.title)}</span>
+                            <span class="db-news-row-date">${Fmt.dateShort(n.published_at || n.created_at)}</span>
+                        </div>`).join('')}
+                </div>`;
+        }
 
         el.innerHTML = `
             <div class="db-news-w">
                 <div class="db-news-w-head">
-                    <span><i class="fa-regular fa-newspaper"></i> Новини</span>
+                    <div class="db-news-w-head-left">
+                        <div class="db-news-w-icon"><i class="fa-regular fa-newspaper"></i></div>
+                        <span class="db-news-w-title">Новини</span>
+                    </div>
                     <button class="btn btn-ghost btn-sm" onclick="Router.go('news')" style="font-size:.68rem">Всі <i class="fa-solid fa-arrow-right"></i></button>
                 </div>
                 ${body}
             </div>`;
+    },
+
+    destroy() {
+        document.getElementById('page-content')?.classList.remove('no-scroll');
     },
 
     _newsCache: {},
@@ -1057,14 +1400,29 @@ const DashboardPage = {
             <div class="dnm-content news-content-body">${n.content || n.excerpt || ''}</div>
         </div>`;
 
+        const dismissed   = AppState.profile?.dismissed_news || [];
+        const showDismiss = id === this._featuredNewsId && !dismissed.includes(id);
+
+        const dismissBtn = showDismiss
+            ? `<button class="btn btn-ghost btn-sm" id="dnm-dismiss-btn" style="color:#92400e;font-size:.75rem;border:1px solid #f59e0b;border-radius:var(--radius-md);transition:background .3s,color .3s"
+                onclick="DashboardPage._dismissNews('${n.id}', this)"
+                title="Ця новина більше не з'являтиметься при вході">
+                <i class="fa-regular fa-bell-slash"></i> Не нагадувати
+               </button>`
+            : '';
+
         const footer = `
-        <div class="dnm-footer">
-            <button class="btn btn-ghost btn-sm" onclick="Modal.close()">Закрити</button>
-            <button class="btn btn-primary btn-sm" onclick="Modal.close();Router.go('news/${n.slug || n.id}')">
-                Читати повністю <i class="fa-solid fa-arrow-right"></i>
-            </button>
+        <div class="dnm-footer" style="justify-content:space-between;width:100%">
+            ${dismissBtn}
+            <div style="display:flex;gap:.5rem;margin-left:auto">
+                <button class="btn btn-ghost btn-sm" onclick="Modal.close()">Закрити</button>
+                <button class="btn btn-primary btn-sm" onclick="Modal.close();Router.go('news/${n.slug || n.id}')">
+                    Читати повністю <i class="fa-solid fa-arrow-right"></i>
+                </button>
+            </div>
         </div>`;
 
+        RecentlyViewed.track({ type: 'news', id: n.id, title: n.title, thumbnail: n.thumbnail_url || null, route: `news/${n.slug || n.id}`, color: '#f59e0b', icon: 'fa-newspaper' });
         Modal.open({ title: Fmt.esc(n.title), body, footer, size: 'lg' });
 
         // завантажити реакції

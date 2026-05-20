@@ -127,7 +127,7 @@ const ResourcesPage = {
         container.innerHTML = `
 <style>
 /* ── KB Hero ── */
-.kb-hero{position:relative;overflow:hidden;border-radius:32px;padding:36px 44px 34px;margin-bottom:28px;
+.kb-hero{position:relative;overflow:hidden;border-radius:32px;padding:36px 44px 34px;margin-bottom:14px;
     background:linear-gradient(135deg,#2563eb 0%,#4338ca 45%,#7c3aed 100%);
     box-shadow:0 20px 60px rgba(37,99,235,.18),inset 0 1px 0 rgba(255,255,255,.25)}
 .kb-hero::before{content:'';position:absolute;width:480px;height:480px;background:radial-gradient(circle,rgba(255,255,255,.16),transparent 70%);top:-200px;right:-140px;pointer-events:none}
@@ -385,16 +385,9 @@ ${HelpTip.render('kb', {
             };
 
             el.innerHTML = `
-<div style="display:flex;gap:.75rem;background:rgba(0,0,0,.18);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:.55rem 1rem">
-  <div style="display:flex;flex-direction:column;gap:.2rem;min-width:160px">
-    <div style="font-size:.7rem;font-weight:600;opacity:.6;letter-spacing:.04em;text-transform:uppercase">Файли (Storage)</div>
-    ${bar(data.storage_bytes, maxGb, '#60a5fa')}
-  </div>
-  <div style="width:1px;background:rgba(255,255,255,.1)"></div>
-  <div style="display:flex;flex-direction:column;gap:.2rem;min-width:160px">
-    <div style="font-size:.7rem;font-weight:600;opacity:.6;letter-spacing:.04em;text-transform:uppercase">База даних</div>
-    ${bar(data.db_bytes, maxGb, '#a78bfa')}
-  </div>
+<div style="background:rgba(0,0,0,.18);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:.55rem 1rem;min-width:180px;color:#fff">
+  <div style="font-size:.7rem;font-weight:600;opacity:.6;letter-spacing:.04em;text-transform:uppercase;margin-bottom:.2rem">Файли (Storage)</div>
+  ${bar(data.storage_bytes, maxGb, '#60a5fa')}
 </div>`;
         } catch (_) {}
     },

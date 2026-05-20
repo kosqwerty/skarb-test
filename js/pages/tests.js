@@ -21,6 +21,7 @@ const TestsPage = {
         try {
             const test = await API.tests.getById(testId);
             this._test = test;
+            RecentlyViewed.track({ type: 'test', id: test.id, title: test.title, thumbnail: null, route: `tests/${test.id}`, color: '#f59e0b', icon: 'fa-file-pen' });
 
             if (this._from === 'expert-path') {
                 UI.setBreadcrumb([

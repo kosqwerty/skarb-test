@@ -9,7 +9,21 @@
       "Bash(node -c \"c:/Users/neoli/OneDrive/Desktop/lms/js/pages/schedule-graph.js\")",
       "Bash(echo \"exit:$?\")",
       "Bash(git -C \"c:/Users/neoli/OneDrive/Desktop/lms\" status)",
-      "Bash(git -C \"c:/Users/neoli/OneDrive/Desktop/lms\" remote -v)"
+      "Bash(git -C \"c:/Users/neoli/OneDrive/Desktop/lms\" remote -v)",
+      "Bash(Get-ChildItem \"d:\\\\lms\\\\js\\\\\" -Filter \"*.js\" | Select-Object Name)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(git pull *)",
+      "PowerShell($lines = [System.IO.File]::ReadAllLines\\(\"d:\\\\lms\\\\js\\\\pages\\\\admin.js\", [System.Text.Encoding]::UTF8\\); $line = $lines[1542]; [System.Text.Encoding]::UTF8.GetBytes\\($line\\) | ForEach-Object { $_.ToString\\(\"X2\"\\) } | Join-String -Separator ' ' | Select-Object -First 1)",
+      "PowerShell($lines = [System.IO.File]::ReadAllLines\\(\"d:\\\\lms\\\\js\\\\pages\\\\admin.js\", [System.Text.Encoding]::UTF8\\); $line = $lines[1542]; $bytes = [System.Text.Encoding]::UTF8.GetBytes\\($line\\); \\($bytes | ForEach-Object { $_.ToString\\(\"X2\"\\) }\\) -join ' ')",
+      "Bash(Get-ChildItem -Path \"d:\\\\lms\" -Recurse -Directory)",
+      "Bash(Select-Object FullName)",
+      "Bash(awk -F: '{print $2}')",
+      "Bash(mkdir .claude/commands)"
+    ],
+    "additionalDirectories": [
+      "D:\\lms\\.claude"
     ]
   }
 }

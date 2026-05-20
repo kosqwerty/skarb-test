@@ -32,6 +32,7 @@ const CourseViewPage = {
             this._allRuns        = allRuns;
             this._courseTeachers = courseTeachers;
             UI.setBreadcrumb([{ label: backLabel, route: backRoute }, { label: course.title }]);
+            RecentlyViewed.track({ type: 'course', id: course.id, title: course.title, thumbnail: course.thumbnail_url || null, route: `courses/${course.id}`, color: '#6366f1', icon: 'fa-book-open' });
             this._render(container, course, this._enrolled);
         } catch(e) {
             container.innerHTML = `

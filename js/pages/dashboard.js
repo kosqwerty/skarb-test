@@ -237,7 +237,7 @@ const DashboardPage = {
             API.birthdays.getToday().catch(() => []),
             API.notifications.getMine().then(all => all.filter(n => !n.is_read).slice(0, 6)).catch(() => []),
             supabase.from('personal_cal_events')
-                .select('id,title,date,time,end_time,color,is_important,is_done,acked_date,repeat_type')
+                .select('id,title,date,time,end_time,color,is_important,is_done,acked_date,repeat_type,remind_before_days')
                 .eq('user_id', AppState.user.id)
                 .gte('date', monthStart)
                 .lte('date', monthEnd)
@@ -391,7 +391,7 @@ const DashboardPage = {
         const ms = `${this._calViewYear}-${_p2(this._calViewMonth+1)}-01`;
         const me = _fl(new Date(this._calViewYear, this._calViewMonth + 1, 0));
         const { data } = await supabase.from('personal_cal_events')
-            .select('id,title,date,time,end_time,color,is_important,is_done,acked_date,repeat_type')
+            .select('id,title,date,time,end_time,color,is_important,is_done,acked_date,repeat_type,remind_before_days')
             .eq('user_id', AppState.user.id)
             .gte('date', ms).lte('date', me)
             .order('date').order('time', { nullsFirst: true });
@@ -818,7 +818,7 @@ const DashboardPage = {
         const ms = `${year}-${_p2(month+1)}-01`;
         const me = `${year}-${_p2(month+1)}-${_p2(new Date(year, month+1, 0).getDate())}`;
         const { data } = await supabase.from('personal_cal_events')
-            .select('id,title,date,time,end_time,color,is_important,is_done,acked_date,repeat_type')
+            .select('id,title,date,time,end_time,color,is_important,is_done,acked_date,repeat_type,remind_before_days')
             .eq('user_id', AppState.user.id)
             .gte('date', ms).lte('date', me)
             .order('date').order('time', { nullsFirst: true });

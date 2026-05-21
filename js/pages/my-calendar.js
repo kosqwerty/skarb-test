@@ -211,58 +211,126 @@ ${this._styles()}`;
     _openEventModal(date, eventId) {
         const ev = eventId ? this._events.find(e => e.id === eventId) : null;
         const colors = ['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316'];
+        const activeColor = ev?.color || '#6366f1';
         document.getElementById('mc-event-modal')?.remove();
         const el = document.createElement('div');
         el.id = 'mc-event-modal';
         el.className = 'mc-overlay';
         el.innerHTML = `
-<div class="mc-modal">
-    <div class="mc-mhdr">
-        <h3>${ev ? 'Редагувати подію' : 'Нова подія'}</h3>
-        <button class="mc-mclose" onclick="document.getElementById('mc-event-modal').remove()">✕</button>
+<div class="mc-modal mc-em">
+    <div class="mc-em-header" style="--em-color:${activeColor}">
+        <div class="mc-em-header-icon">
+            <i class="fa-solid ${ev ? 'fa-pen-to-square' : 'fa-calendar-plus'}"></i>
+        </div>
+        <div class="mc-em-header-text">
+            <div class="mc-em-title">${ev ? 'Редагувати подію' : 'Нова подія'}</div>
+            ${ev?.date ? `<div class="mc-em-subtitle">${new Date(ev.date+'T00:00:00').toLocaleDateString('uk-UA',{weekday:'long',day:'numeric',month:'long'})}</div>` : '<div class="mc-em-subtitle">Особистий календар</div>'}
+        </div>
+        <button class="mc-mclose mc-em-close" onclick="document.getElementById('mc-event-modal').remove()"><i class="fa-solid fa-xmark"></i></button>
     </div>
-    <div class="mc-form">
-        <label class="mc-label">Назва *</label>
-        <input class="mc-input" id="mc-ev-title" placeholder="Назва події" value="${ev?.title || ''}" maxlength="120">
 
-        <label class="mc-label">Дата *</label>
-        <input class="mc-input" id="mc-ev-date" type="date" value="${ev?.date || date || ''}">
-
-        <label class="mc-label">Час початку</label>
-        <div style="display:flex;gap:.5rem;align-items:center">
-            <input class="mc-input" id="mc-ev-time" type="time" value="${ev?.time?.slice(0,5) || ''}" style="flex:1" oninput="MyCalendarPage._updateDuration()">
-            <span style="color:var(--text-muted);font-size:.85rem;flex-shrink:0">до</span>
-            <input class="mc-input" id="mc-ev-end-time" type="time" value="${ev?.end_time?.slice(0,5) || ''}" style="flex:1" oninput="MyCalendarPage._updateDuration()">
-        </div>
-        <div id="mc-ev-duration" style="font-size:.75rem;color:var(--primary);min-height:1.2em;margin-top:.1rem">${ev?.time && ev?.end_time ? MyCalendarPage._durationLabel(ev.time, ev.end_time) : ''}</div>
-
-        <label class="mc-label">Нотатки</label>
-        <textarea class="mc-input mc-textarea" id="mc-ev-notes" placeholder="Додаткова інформація...">${ev?.notes || ''}</textarea>
-
-        <label class="mc-label">Повторення</label>
-        <select class="mc-input" id="mc-ev-repeat">
-            <option value="none"    ${(ev?.repeat_type||'none')==='none'    ? 'selected':''}>Не повторюється</option>
-            <option value="weekly"  ${ev?.repeat_type==='weekly'  ? 'selected':''}>Щотижня</option>
-            <option value="monthly" ${ev?.repeat_type==='monthly' ? 'selected':''}>Щомісяця</option>
-        </select>
-
-        <label class="mc-label">Колір</label>
-        <div class="mc-colors" id="mc-ev-colors">
-            ${colors.map(c => `
-            <div class="mc-color-dot${(ev?.color || '#6366f1') === c ? ' active' : ''}"
-                style="background:${c}" data-color="${c}"
-                onclick="MyCalendarPage._pickColor('${c}')"></div>`).join('')}
+    <div class="mc-em-body">
+        <!-- Назва -->
+        <div class="mc-em-field">
+            <div class="mc-em-field-icon" style="color:${activeColor}"><i class="fa-solid fa-heading"></i></div>
+            <div class="mc-em-field-inner">
+                <label class="mc-em-label">Назва події *</label>
+                <input class="mc-em-input" id="mc-ev-title" placeholder="Що відбувається?" value="${Fmt.esc(ev?.title || '')}" maxlength="120">
+            </div>
         </div>
 
-        <label class="checkbox-item" style="cursor:pointer;margin-top:.5rem;padding:.6rem .75rem;background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.25);border-radius:var(--radius-md)">
-            <input type="checkbox" id="mc-ev-important" ${ev?.is_important ? 'checked' : ''}>
-            <span>⚡ Важлива подія — нагадувати весь день</span>
+        <!-- Дата + Час -->
+        <div class="mc-em-row2">
+            <div class="mc-em-field">
+                <div class="mc-em-field-icon"><i class="fa-regular fa-calendar"></i></div>
+                <div class="mc-em-field-inner">
+                    <label class="mc-em-label">Дата *</label>
+                    <input class="mc-em-input" id="mc-ev-date" type="date" value="${ev?.date || date || ''}">
+                </div>
+            </div>
+            <div class="mc-em-field">
+                <div class="mc-em-field-icon"><i class="fa-regular fa-clock"></i></div>
+                <div class="mc-em-field-inner">
+                    <label class="mc-em-label">Час</label>
+                    <div style="display:flex;gap:6px;align-items:center">
+                        <input class="mc-em-input" id="mc-ev-time" type="time" value="${ev?.time?.slice(0,5) || ''}" style="flex:1;min-width:0" oninput="MyCalendarPage._updateDuration()">
+                        <span class="mc-em-sep">→</span>
+                        <input class="mc-em-input" id="mc-ev-end-time" type="time" value="${ev?.end_time?.slice(0,5) || ''}" style="flex:1;min-width:0" oninput="MyCalendarPage._updateDuration()">
+                    </div>
+                    <div id="mc-ev-duration" class="mc-em-duration">${ev?.time && ev?.end_time ? MyCalendarPage._durationLabel(ev.time, ev.end_time) : ''}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Нотатки -->
+        <div class="mc-em-field mc-em-field--top">
+            <div class="mc-em-field-icon"><i class="fa-regular fa-note-sticky"></i></div>
+            <div class="mc-em-field-inner">
+                <label class="mc-em-label">Нотатки</label>
+                <textarea class="mc-em-input mc-em-textarea" id="mc-ev-notes" placeholder="Додаткова інформація...">${Fmt.esc(ev?.notes || '')}</textarea>
+            </div>
+        </div>
+
+        <div class="mc-em-divider"></div>
+
+        <!-- Повторення + Нагадування -->
+        <div class="mc-em-row2">
+            <div class="mc-em-field">
+                <div class="mc-em-field-icon"><i class="fa-solid fa-rotate"></i></div>
+                <div class="mc-em-field-inner">
+                    <label class="mc-em-label">Повторення</label>
+                    <select class="mc-em-input mc-em-select" id="mc-ev-repeat">
+                        <option value="none"    ${(ev?.repeat_type||'none')==='none'    ? 'selected':''}>Без повторень</option>
+                        <option value="weekly"  ${ev?.repeat_type==='weekly'  ? 'selected':''}>Щотижня</option>
+                        <option value="monthly" ${ev?.repeat_type==='monthly' ? 'selected':''}>Щомісяця</option>
+                    </select>
+                </div>
+            </div>
+            <div class="mc-em-field">
+                <div class="mc-em-field-icon"><i class="fa-regular fa-bell"></i></div>
+                <div class="mc-em-field-inner">
+                    <label class="mc-em-label">Нагадати за</label>
+                    <select class="mc-em-input mc-em-select" id="mc-ev-remind">
+                        <option value=""  ${!ev?.remind_before_days          ? 'selected' : ''}>Не нагадувати</option>
+                        <option value="1" ${ev?.remind_before_days === 1     ? 'selected' : ''}>За 1 день</option>
+                        <option value="2" ${ev?.remind_before_days === 2     ? 'selected' : ''}>За 2 дні</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Колір -->
+        <div class="mc-em-field mc-em-field--center">
+            <div class="mc-em-field-icon"><i class="fa-solid fa-palette"></i></div>
+            <div class="mc-em-field-inner">
+                <label class="mc-em-label">Колір події</label>
+                <div class="mc-em-colors" id="mc-ev-colors">
+                    ${colors.map(c => `<button class="mc-em-cdot${activeColor === c ? ' active' : ''}" style="--cdot:${c}" data-color="${c}" onclick="MyCalendarPage._pickColor('${c}')" title="${c}"></button>`).join('')}
+                </div>
+            </div>
+        </div>
+
+        <!-- Важлива -->
+        <label class="mc-em-toggle-row" id="mc-em-important-row" onclick="MyCalendarPage._toggleImportant()">
+            <div class="mc-em-toggle-icon">⚡</div>
+            <div class="mc-em-toggle-text">
+                <span class="mc-em-toggle-label">Важлива подія</span>
+                <span class="mc-em-toggle-sub">Нагадування весь день</span>
+            </div>
+            <div class="mc-em-toggle-pill${ev?.is_important ? ' on' : ''}" id="mc-em-imp-pill">
+                <div class="mc-em-toggle-knob"></div>
+            </div>
+            <input type="checkbox" id="mc-ev-important" ${ev?.is_important ? 'checked' : ''} style="display:none">
         </label>
     </div>
-    <div class="mc-modal-actions">
-        <button class="mc-btn-save" onclick="MyCalendarPage._saveEvent(${ev ? `'${ev.id}'` : 'null'})">${ev ? '<i class="fa-regular fa-floppy-disk"></i> Зберегти' : '<i class="fa-solid fa-plus"></i> Додати'}</button>
-        ${ev ? `<button class="mc-btn-danger" onclick="MyCalendarPage._deleteEvent('${ev.id}')">Видалити</button>` : ''}
-        <button class="mc-btn-cancel" onclick="document.getElementById('mc-event-modal').remove()">Скасувати</button>
+
+    <div class="mc-em-footer">
+        <button class="mc-em-btn-save" onclick="MyCalendarPage._saveEvent(${ev ? `'${ev.id}'` : 'null'})">
+            <i class="fa-solid ${ev ? 'fa-floppy-disk' : 'fa-plus'}"></i>
+            ${ev ? 'Зберегти' : 'Додати подію'}
+        </button>
+        <button class="mc-em-btn-cancel" onclick="document.getElementById('mc-event-modal').remove()">Скасувати</button>
+        ${ev ? `<button class="mc-em-btn-delete" onclick="MyCalendarPage._deleteEvent('${ev.id}')"><i class="fa-solid fa-trash"></i></button>` : ''}
     </div>
 </div>`;
         document.body.appendChild(el);
@@ -270,8 +338,18 @@ ${this._styles()}`;
         document.getElementById('mc-ev-title')?.focus();
     },
 
+    _toggleImportant() {
+        const cb   = document.getElementById('mc-ev-important');
+        const pill = document.getElementById('mc-em-imp-pill');
+        if (!cb || !pill) return;
+        cb.checked = !cb.checked;
+        pill.classList.toggle('on', cb.checked);
+    },
+
     _pickColor(color) {
-        document.querySelectorAll('#mc-ev-colors .mc-color-dot').forEach(d => d.classList.toggle('active', d.dataset.color === color));
+        document.querySelectorAll('#mc-ev-colors .mc-em-cdot').forEach(d => d.classList.toggle('active', d.dataset.color === color));
+        const hdr = document.querySelector('.mc-em-header');
+        if (hdr) hdr.style.setProperty('--em-color', color);
     },
 
     _durationLabel(start, end) {
@@ -297,9 +375,11 @@ ${this._styles()}`;
         const time        = document.getElementById('mc-ev-time')?.value || null;
         const end_time    = document.getElementById('mc-ev-end-time')?.value || null;
         const notes       = document.getElementById('mc-ev-notes')?.value.trim() || null;
-        const color       = document.querySelector('#mc-ev-colors .mc-color-dot.active')?.dataset.color || '#6366f1';
+        const color       = document.querySelector('#mc-ev-colors .mc-em-cdot.active')?.dataset.color || '#6366f1';
         const repeat_type = document.getElementById('mc-ev-repeat')?.value || 'none';
-        const is_important = document.getElementById('mc-ev-important')?.checked || false;
+        const is_important       = document.getElementById('mc-ev-important')?.checked || false;
+        const remindRaw          = document.getElementById('mc-ev-remind')?.value;
+        const remind_before_days = remindRaw ? parseInt(remindRaw, 10) : null;
 
         if (!title) { Toast.error('Введіть назву події'); return; }
         if (!date)  { Toast.error('Оберіть дату'); return; }
@@ -308,10 +388,10 @@ ${this._styles()}`;
         let error;
         if (id) {
             ({ error } = await supabase.from('personal_cal_events')
-                .update({ title, date, time, end_time, notes, color, repeat_type, is_important }).eq('id', id));
+                .update({ title, date, time, end_time, notes, color, repeat_type, is_important, remind_before_days }).eq('id', id));
         } else {
             ({ error } = await supabase.from('personal_cal_events')
-                .insert({ user_id: AppState.user.id, title, date, time, end_time, notes, color, repeat_type, is_important }));
+                .insert({ user_id: AppState.user.id, title, date, time, end_time, notes, color, repeat_type, is_important, remind_before_days }));
         }
         if (error) { Toast.error('Помилка збереження'); return; }
 
@@ -514,10 +594,15 @@ ${this._styles()}`;
 
         // DB-уведомления — только один раз в день, проверяем существующие
         const timedToday = todayEvents.filter(e => e.time && !e._virtual);
-        if (timedToday.length) {
+        // События с нагадуванням: завтра (remind>=1) або після завтра (remind>=2)
+        const tomorrow       = dateStr(1);
+        const dayAfterTomorrow = dateStr(2);
+        const remindEvents = allEvents.filter(e => !e._virtual && e.remind_before_days &&
+            ((e.date === tomorrow && e.remind_before_days >= 1) ||
+             (e.date === dayAfterTomorrow && e.remind_before_days >= 2)));
+
+        if (timedToday.length || remindEvents.length) {
             try {
-                // Получаем уже созданные сегодня уведомления, чтобы не дублировать
-                // Перетворюємо локальну північ в UTC, щоб уникнути timezone-зсуву
                 const todayLocalMidnightUTC = new Date(today + 'T00:00:00').toISOString();
                 const { data: existingNtf } = await supabase
                     .from('notifications')
@@ -525,17 +610,37 @@ ${this._styles()}`;
                     .eq('user_id', AppState.user.id)
                     .gte('created_at', todayLocalMidnightUTC);
                 const existingTitles = new Set((existingNtf || []).map(n => n.title));
-                const toInsert = timedToday.filter(e => !existingTitles.has(`📅 Сьогодні: ${e.title}`));
-                if (toInsert.length) {
-                    await supabase.from('notifications').insert(
-                        toInsert.map(e => ({
+
+                const ntfToday = timedToday
+                    .filter(e => !existingTitles.has(`📅 Сьогодні: ${e.title}`))
+                    .map(e => ({
+                        user_id:    AppState.user.id,
+                        title:      `📅 Сьогодні: ${e.title}`,
+                        message:    `о ${e.time.slice(0,5)}${e.end_time ? '–'+e.end_time.slice(0,5) : ''}${e.notes ? ' — ' + e.notes : ''}`,
+                        type:       'general',
+                        created_by: AppState.user.id,
+                    }));
+
+                const ntfRemind = remindEvents
+                    .map(e => {
+                        const daysLeft = e.date === tomorrow ? 1 : 2;
+                        const label = daysLeft === 1 ? 'Завтра' : 'Післязавтра';
+                        const ntfTitle = `🔔 ${label}: ${e.title}`;
+                        return existingTitles.has(ntfTitle) ? null : {
                             user_id:    AppState.user.id,
-                            title:      `📅 Сьогодні: ${e.title}`,
-                            message:    `о ${e.time.slice(0,5)}${e.end_time ? '–'+e.end_time.slice(0,5) : ''}${e.notes ? ' — ' + e.notes : ''}`,
+                            title:      ntfTitle,
+                            message:    e.time
+                                ? `о ${e.time.slice(0,5)}${e.end_time ? '–'+e.end_time.slice(0,5) : ''}${e.notes ? ' — ' + e.notes : ''}`
+                                : (e.notes || ''),
                             type:       'general',
                             created_by: AppState.user.id,
-                        }))
-                    );
+                        };
+                    })
+                    .filter(Boolean);
+
+                const toInsert = [...ntfToday, ...ntfRemind];
+                if (toInsert.length) {
+                    await supabase.from('notifications').insert(toInsert);
                     UI.loadNotificationCount?.();
                 }
             } catch (_) {}
@@ -697,13 +802,13 @@ ${this._styles()}`;
 .mc-fab { position:fixed;bottom:32px;right:32px;width:52px;height:52px;border-radius:50%;background:var(--primary);color:#fff;font-size:1.5rem;border:none;cursor:pointer;box-shadow:0 4px 20px rgba(99,102,241,.45);display:flex;align-items:center;justify-content:center;transition:transform .15s; }
 .mc-fab:hover { transform:scale(1.1); }
 
-/* Modal */
-.mc-overlay { position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(4px);animation:fadeIn .15s; }
+/* Modal base */
+.mc-overlay { position:fixed;inset:0;background:rgba(0,0,0,.52);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(6px);animation:fadeIn .15s; }
 .mc-modal { background:var(--bg-surface);border:1px solid var(--border);border-radius:20px;padding:24px;width:100%;max-width:480px;height:auto;max-height:85vh;overflow-y:auto;box-shadow:0 24px 64px rgba(0,0,0,.4);animation:scaleIn .2s cubic-bezier(.16,1,.3,1); }
 .mc-mhdr { display:flex;align-items:center;justify-content:space-between;margin-bottom:16px; }
 .mc-mhdr h3 { margin:0;font-size:1.05rem; }
-.mc-mclose { background:none;border:none;cursor:pointer;font-size:1.1rem;color:var(--text-muted);padding:2px 6px;border-radius:6px; }
-.mc-mclose:hover { background:var(--bg-hover); }
+.mc-mclose { background:none;border:none;cursor:pointer;font-size:1rem;color:var(--text-muted);padding:4px 7px;border-radius:8px;line-height:1;transition:all .15s; }
+.mc-mclose:hover { background:var(--bg-hover);color:var(--text); }
 .mc-form { display:flex;flex-direction:column;gap:10px; }
 .mc-label { font-size:.78rem;font-weight:600;color:var(--text-muted);margin-bottom:-6px; }
 .mc-input { background:var(--bg-input,var(--bg-hover));border:1px solid var(--border);border-radius:10px;padding:9px 12px;font-size:.88rem;color:var(--text);outline:none;width:100%;box-sizing:border-box;transition:border-color .15s; }
@@ -720,6 +825,57 @@ ${this._styles()}`;
 .mc-btn-cancel:hover { background:var(--border); }
 .mc-btn-danger { background:rgba(239,68,68,.12);color:#ef4444;border:1px solid rgba(239,68,68,.25);border-radius:10px;padding:9px 16px;font-size:.88rem;cursor:pointer;margin-left:auto; }
 .mc-btn-danger:hover { background:rgba(239,68,68,.22); }
+
+/* Event modal redesign */
+.mc-em { padding:0;max-width:500px;overflow:hidden; }
+.mc-em-header { display:flex;align-items:center;gap:14px;padding:20px 22px 18px;background:linear-gradient(135deg,color-mix(in srgb,var(--em-color) 14%,var(--bg-surface)),color-mix(in srgb,var(--em-color) 5%,var(--bg-surface)));border-bottom:1px solid var(--border);position:relative; }
+.mc-em-header-icon { width:42px;height:42px;border-radius:12px;background:var(--em-color);color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0;box-shadow:0 4px 14px color-mix(in srgb,var(--em-color) 40%,transparent); }
+.mc-em-title { font-size:1rem;font-weight:700;color:var(--text); }
+.mc-em-subtitle { font-size:.75rem;color:var(--text-muted);margin-top:2px;text-transform:capitalize; }
+.mc-em-close { position:absolute;top:14px;right:14px; }
+.mc-em-body { padding:18px 22px;display:flex;flex-direction:column;gap:14px; }
+.mc-em-field { display:flex;align-items:flex-start;gap:12px; }
+.mc-em-field--top { align-items:flex-start; }
+.mc-em-field--center { align-items:center; }
+.mc-em-field-icon { width:32px;height:32px;border-radius:8px;background:var(--bg-hover);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:.82rem;color:var(--text-muted);flex-shrink:0;margin-top:18px; }
+.mc-em-field--center .mc-em-field-icon { margin-top:0; }
+.mc-em-field-inner { flex:1;min-width:0; }
+.mc-em-label { display:block;font-size:.72rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px; }
+.mc-em-input { background:var(--bg-input,var(--bg-hover));border:1.5px solid var(--border);border-radius:10px;padding:9px 12px;font-size:.88rem;color:var(--text);outline:none;width:100%;box-sizing:border-box;transition:border-color .18s,box-shadow .18s;font-family:inherit; }
+.mc-em-input:focus { border-color:var(--primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 15%,transparent); }
+.mc-em-textarea { min-height:68px;resize:vertical; }
+.mc-em-select { appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23888' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px;cursor:pointer; }
+.mc-em-row2 { display:grid;grid-template-columns:1fr 1fr;gap:12px; }
+.mc-em-sep { font-size:.75rem;color:var(--text-muted);flex-shrink:0;font-weight:600; }
+.mc-em-duration { font-size:.73rem;color:var(--primary);min-height:1.1em;margin-top:4px; }
+.mc-em-divider { height:1px;background:var(--border);margin:0 -22px;width:calc(100% + 44px); }
+.mc-em-colors { display:flex;gap:8px;flex-wrap:wrap;padding:2px 0; }
+.mc-em-cdot { width:28px;height:28px;border-radius:50%;cursor:pointer;border:2.5px solid transparent;background:var(--cdot);position:relative;transition:transform .15s,border-color .15s;flex-shrink:0; }
+.mc-em-cdot:hover { transform:scale(1.15); }
+.mc-em-cdot.active { border-color:#fff;transform:scale(1.15);box-shadow:0 0 0 2px var(--cdot); }
+.mc-em-cdot.active::after { content:'✓';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:.6rem;font-weight:900; }
+.mc-em-toggle-row { display:flex;align-items:center;gap:12px;padding:10px 14px;background:rgba(245,158,11,.06);border:1.5px solid rgba(245,158,11,.2);border-radius:12px;cursor:pointer;transition:background .15s,border-color .15s;user-select:none; }
+.mc-em-toggle-row:hover { background:rgba(245,158,11,.1);border-color:rgba(245,158,11,.35); }
+.mc-em-toggle-icon { font-size:1.1rem;flex-shrink:0; }
+.mc-em-toggle-text { flex:1;min-width:0; }
+.mc-em-toggle-label { display:block;font-size:.85rem;font-weight:600;color:var(--text); }
+.mc-em-toggle-sub { display:block;font-size:.73rem;color:var(--text-muted);margin-top:1px; }
+.mc-em-toggle-pill { width:40px;height:22px;border-radius:11px;background:var(--border);position:relative;flex-shrink:0;transition:background .2s; }
+.mc-em-toggle-pill.on { background:#f59e0b; }
+.mc-em-toggle-knob { position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.25);transition:transform .2s; }
+.mc-em-toggle-pill.on .mc-em-toggle-knob { transform:translateX(18px); }
+.mc-em-footer { display:flex;align-items:center;gap:8px;padding:16px 22px;border-top:1px solid var(--border);background:var(--bg-hover); }
+.mc-em-btn-save { display:inline-flex;align-items:center;gap:7px;background:var(--primary);color:#fff;border:none;border-radius:10px;padding:9px 20px;font-size:.88rem;font-weight:600;cursor:pointer;transition:opacity .15s,transform .1s; }
+.mc-em-btn-save:hover { opacity:.88; }
+.mc-em-btn-save:active { transform:scale(.97); }
+.mc-em-btn-cancel { background:none;color:var(--text-muted);border:1px solid var(--border);border-radius:10px;padding:9px 16px;font-size:.88rem;cursor:pointer;transition:all .15s; }
+.mc-em-btn-cancel:hover { background:var(--bg-surface);color:var(--text); }
+.mc-em-btn-delete { margin-left:auto;width:36px;height:36px;border-radius:9px;background:rgba(239,68,68,.1);color:#ef4444;border:1px solid rgba(239,68,68,.2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.85rem;transition:all .15s; }
+.mc-em-btn-delete:hover { background:rgba(239,68,68,.2);border-color:rgba(239,68,68,.4); }
+@supports not (color: color-mix(in srgb, red 50%, blue)) {
+  .mc-em-header { background:var(--bg-hover); }
+  .mc-em-header-icon { box-shadow:0 4px 14px rgba(0,0,0,.25); }
+}
 
 /* Access modal */
 .mc-viewer-row { display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-radius:8px;font-size:.85rem; }

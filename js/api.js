@@ -787,6 +787,10 @@ const API = {
             if (error) throw error;
         },
 
+        async deleteByLink(link) {
+            await supabase.from('notifications').delete().eq('link', link);
+        },
+
         async notifyResourcePublished(resource, overrideLink = null, isUpdate = false) {
             const staffRoles = ['owner', 'admin', 'smm', 'teacher', 'manager'];
             const { data: staffData } = await supabase.from('profiles').select('id').eq('is_active', true).in('role', staffRoles);

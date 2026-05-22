@@ -1779,6 +1779,7 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
         if (btn) { btn.disabled = true; btn.textContent = '...'; }
         try {
             await API.resources.softDelete(id);
+            API.notifications.deleteByLink(`resource/${id}`).catch(() => {});
             Modal.close();
             Toast.success('Переміщено до кошика');
             await this.load();
@@ -1837,6 +1838,7 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
         if (!await Modal.confirm(`Видалити «${title}» назавжди? Це незворотна дія.`)) return;
         try {
             await API.resources.delete(id);
+            API.notifications.deleteByLink(`resource/${id}`).catch(() => {});
             Toast.success('Видалено назавжди');
             await this._openTrash();
             await this.load();
@@ -1864,6 +1866,16 @@ const ResourceViewPage = {
 
         try {
             const resource = await API.resources.getById(id);
+            if (resource.deleted_at) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">🗑️</div>
+                        <h3>Документ видалено</h3>
+                        <p style="color:var(--text-muted)">Цей файл було переміщено до кошика і більше недоступний.</p>
+                        <button class="btn btn-primary" onclick="Router.go('documents')" style="display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i> До документів</button>
+                    </div>`;
+                return;
+            }
             const url      = await this._getUrl(resource);
             const isDoc = from === 'documents';
             RecentlyViewed.track({ type: isDoc ? 'document' : 'resource', id: resource.id, title: resource.title, thumbnail: null, route: `resource/${resource.id}${from ? '?from='+from : ''}`, color: isDoc ? '#ef4444' : '#3b82f6', icon: isDoc ? 'fa-file-lines' : 'fa-paperclip' });

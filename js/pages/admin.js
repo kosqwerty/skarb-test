@@ -33,6 +33,7 @@ const AdminPage = {
                 ${AppState.isOwner() ? `<button class="tab" data-tab="label-access" onclick="AdminPage.switchTab('label-access', this)"><i class="fa-solid fa-lock"></i> Обмеження доступу</button>` : ''}
                 ${AppState.isOwner() ? `<button class="tab" data-tab="trash" onclick="AdminPage.switchTab('trash', this)"><i class="fa-solid fa-trash"></i> Кошик</button>` : ''}
                 ${AppState.isOwner() ? `<button class="tab" data-tab="logs" onclick="AdminPage.switchTab('logs', this)">📋 Логи</button>` : ''}
+                ${canManageUsers ? `<button class="tab" data-tab="supersearch" onclick="AdminPage.switchTab('supersearch', this)"><i class="fa-solid fa-magnifying-glass-chart"></i> Супер пошук</button>` : ''}
             </div>
 
             <div id="admin-content"></div>`;
@@ -71,6 +72,7 @@ const AdminPage = {
                 case 'label-access':  await LabelAccessPage.init(el);              break;
                 case 'trash':         await this._renderTrash(el);                  break;
                 case 'logs':          await this._renderLogs(el);                   break;
+                case 'supersearch':   await this._renderSuperSearch(el);            break;
             }
         } catch(e) {
             el.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>${e.message}</h3></div>`;
@@ -3263,6 +3265,211 @@ const AdminPage = {
             Loader.hide();
         }
         await this._renderTrash(document.getElementById('admin-content'));
+    },
+
+    // ── Супер пошук ───────────────────────────────────────────────
+    async _renderSuperSearch(el) {
+        el.innerHTML = `
+        <style>
+            .ss-wrap{display:flex;flex-direction:column;gap:1.25rem}
+            .ss-bar{display:flex;gap:.75rem;align-items:center;flex-wrap:wrap}
+            .ss-input{flex:1;min-width:220px;padding:.6rem 1rem;border:1.5px solid var(--border);border-radius:var(--radius-lg);background:var(--bg-raised);color:var(--text-primary);font-size:.95rem;outline:none;transition:border-color .15s}
+            .ss-input:focus{border-color:var(--primary)}
+            .ss-type-btns{display:flex;gap:.4rem;flex-wrap:wrap}
+            .ss-type-btn{padding:.35rem .85rem;border-radius:var(--radius-md);border:1.5px solid var(--border);background:var(--bg-raised);color:var(--text-muted);font-size:.8rem;font-weight:600;cursor:pointer;transition:all .15s}
+            .ss-type-btn.active{border-color:var(--primary);background:rgba(99,102,241,.1);color:var(--primary)}
+            .ss-results{display:flex;flex-direction:column;gap:.5rem}
+            .ss-item{display:flex;align-items:center;gap:.9rem;padding:.75rem 1rem;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--bg-surface);cursor:pointer;transition:border-color .15s,background .15s}
+            .ss-item:hover{border-color:var(--primary);background:var(--bg-raised)}
+            .ss-icon{width:36px;height:36px;border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0}
+            .ss-body{flex:1;min-width:0}
+            .ss-title{font-weight:600;font-size:.88rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+            .ss-meta{font-size:.73rem;color:var(--text-muted);margin-top:.15rem;display:flex;gap:.5rem;flex-wrap:wrap}
+            .ss-badge{padding:.1rem .45rem;border-radius:9px;background:var(--bg-raised);border:1px solid var(--border);font-size:.68rem;font-weight:600}
+            .ss-highlight{background:rgba(245,158,11,.25);border-radius:2px;padding:0 1px}
+            .ss-empty{text-align:center;padding:3rem;color:var(--text-muted)}
+            .ss-empty i{font-size:2.5rem;margin-bottom:.75rem;display:block;opacity:.4}
+            .ss-count{font-size:.78rem;color:var(--text-muted);padding:.25rem 0}
+        </style>
+        <div class="ss-wrap">
+            <div class="ss-bar">
+                <input class="ss-input" id="ss-input" placeholder="Пошук по всьому проекту..." autocomplete="off"
+                       oninput="AdminPage._ssSearch()" onkeydown="if(event.key==='Escape')this.value=AdminPage._ssClear()">
+                <div class="ss-type-btns">
+                    <button class="ss-type-btn active" data-type="all"       onclick="AdminPage._ssType('all',this)">Все</button>
+                    <button class="ss-type-btn"         data-type="documents" onclick="AdminPage._ssType('documents',this)"><i class="fa-solid fa-file-lines"></i> Документи</button>
+                    <button class="ss-type-btn"         data-type="courses"   onclick="AdminPage._ssType('courses',this)"><i class="fa-solid fa-book"></i> Курси</button>
+                    <button class="ss-type-btn"         data-type="news"      onclick="AdminPage._ssType('news',this)"><i class="fa-solid fa-newspaper"></i> Новини</button>
+                    <button class="ss-type-btn"         data-type="users"     onclick="AdminPage._ssType('users',this)"><i class="fa-solid fa-users"></i> Користувачі</button>
+                    <button class="ss-type-btn"         data-type="tests"     onclick="AdminPage._ssType('tests',this)"><i class="fa-solid fa-list-check"></i> Тести</button>
+                </div>
+            </div>
+            <div id="ss-count" class="ss-count"></div>
+            <div id="ss-results" class="ss-results">
+                <div class="ss-empty"><i class="fa-solid fa-magnifying-glass-chart"></i>Введіть запит для пошуку по всьому проекту</div>
+            </div>
+        </div>`;
+        this._ssType_ = 'all';
+        this._ssTimer = null;
+        document.getElementById('ss-input')?.focus();
+    },
+
+    _ssType(type, btn) {
+        this._ssType_ = type;
+        document.querySelectorAll('.ss-type-btn').forEach(b => b.classList.toggle('active', b === btn));
+        this._ssSearch();
+    },
+
+    _ssClear() {
+        document.getElementById('ss-results').innerHTML = `<div class="ss-empty"><i class="fa-solid fa-magnifying-glass-chart"></i>Введіть запит для пошуку по всьому проекту</div>`;
+        document.getElementById('ss-count').textContent = '';
+        return '';
+    },
+
+    _ssSearch() {
+        clearTimeout(this._ssTimer);
+        const q = document.getElementById('ss-input')?.value.trim() || '';
+        if (q.length < 2) { this._ssClear(); return; }
+        this._ssTimer = setTimeout(() => this._ssRun(q), 280);
+    },
+
+    async _ssRun(q) {
+        const resultsEl = document.getElementById('ss-results');
+        const countEl   = document.getElementById('ss-count');
+        if (!resultsEl) return;
+        resultsEl.innerHTML = `<div style="display:flex;justify-content:center;padding:2rem"><div class="spinner"></div></div>`;
+
+        const type = this._ssType_ || 'all';
+        const ql = q.toLowerCase();
+        const hi = str => {
+            if (!str) return '';
+            return Fmt.esc(str).replace(new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi'),
+                '<mark class="ss-highlight">$1</mark>');
+        };
+
+        try {
+            const promises = [];
+
+            if (type === 'all' || type === 'documents') {
+                promises.push(
+                    supabase.from('resources')
+                        .select('id,title,type,category,description,is_tracked_download,deleted_at')
+                        .is('deleted_at', null).is('display_block', null).is('red_folder_item_id', null).is('lesson_id', null)
+                        .or(`title.ilike.%${q}%,description.ilike.%${q}%,category.ilike.%${q}%`)
+                        .limit(30)
+                        .then(r => (r.data || []).map(d => ({ _type: 'document', ...d })))
+                );
+            }
+            if (type === 'all' || type === 'courses') {
+                promises.push(
+                    supabase.from('courses')
+                        .select('id,title,category,level,is_published')
+                        .or(`title.ilike.%${q}%,category.ilike.%${q}%,description.ilike.%${q}%`)
+                        .limit(20)
+                        .then(r => (r.data || []).map(d => ({ _type: 'course', ...d })))
+                );
+            }
+            if (type === 'all' || type === 'news') {
+                promises.push(
+                    supabase.from('news')
+                        .select('id,title,excerpt,is_published,created_at')
+                        .or(`title.ilike.%${q}%,excerpt.ilike.%${q}%`)
+                        .limit(20)
+                        .then(r => (r.data || []).map(d => ({ _type: 'news', ...d })))
+                );
+            }
+            if (type === 'all' || type === 'users') {
+                promises.push(
+                    supabase.from('profiles')
+                        .select('id,full_name,email,role,job_position,city,is_active')
+                        .or(`full_name.ilike.%${q}%,email.ilike.%${q}%,job_position.ilike.%${q}%,city.ilike.%${q}%`)
+                        .limit(30)
+                        .then(r => (r.data || []).map(d => ({ _type: 'user', ...d })))
+                );
+            }
+            if (type === 'all' || type === 'tests') {
+                promises.push(
+                    supabase.from('tests')
+                        .select('id,title,is_published,passing_score')
+                        .ilike('title', `%${q}%`)
+                        .limit(20)
+                        .then(r => (r.data || []).map(d => ({ _type: 'test', ...d })))
+                );
+            }
+
+            const groups = await Promise.all(promises);
+            const items = groups.flat();
+
+            if (!items.length) {
+                resultsEl.innerHTML = `<div class="ss-empty"><i class="fa-solid fa-circle-xmark"></i>Нічого не знайдено за запитом «${Fmt.esc(q)}»</div>`;
+                countEl.textContent = '';
+                return;
+            }
+
+            countEl.textContent = `Знайдено: ${items.length} результатів`;
+
+            const typeIcon = { document: { icon: 'fa-file-lines', bg: 'rgba(239,68,68,.1)', color: '#ef4444' },
+                               course:   { icon: 'fa-book',        bg: 'rgba(99,102,241,.1)',  color: '#6366f1' },
+                               news:     { icon: 'fa-newspaper',   bg: 'rgba(96,165,250,.1)',  color: '#60a5fa' },
+                               user:     { icon: 'fa-user',        bg: 'rgba(16,185,129,.1)',  color: '#10b981' },
+                               test:     { icon: 'fa-list-check',  bg: 'rgba(245,158,11,.1)',  color: '#f59e0b' } };
+            const typeLabel = { document: 'Документ', course: 'Курс', news: 'Новина', user: 'Користувач', test: 'Тест' };
+            const typeRoute = {
+                document: d => `resource/${d.id}?from=documents`,
+                course:   d => `courses/${d.id}`,
+                news:     d => `news/${d.id}`,
+                user:     d => `admin?tab=users`,
+                test:     d => `admin?tab=tests`,
+            };
+
+            resultsEl.innerHTML = items.map(item => {
+                const t = typeIcon[item._type] || typeIcon.document;
+                const label = typeLabel[item._type] || '';
+                const route = typeRoute[item._type]?.(item) || '';
+
+                let title = '', meta = [];
+                if (item._type === 'document') {
+                    title = item.title;
+                    if (item.category) meta.push(`<span class="ss-badge">${Fmt.esc(item.category)}</span>`);
+                    if (item.is_tracked_download) meta.push(`<span class="ss-badge" style="color:#f59e0b">📋 Відстежується</span>`);
+                    if (item.description) meta.push(Fmt.esc(item.description.slice(0, 80)));
+                } else if (item._type === 'course') {
+                    title = item.title;
+                    if (item.category) meta.push(`<span class="ss-badge">${Fmt.esc(item.category)}</span>`);
+                    meta.push(item.is_published ? `<span style="color:#10b981">● Опублікований</span>` : `<span style="color:var(--text-muted)">● Чернетка</span>`);
+                } else if (item._type === 'news') {
+                    title = item.title;
+                    if (item.excerpt) meta.push(Fmt.esc(item.excerpt.slice(0, 80)));
+                    meta.push(item.is_published ? `<span style="color:#10b981">● Опублікована</span>` : `<span style="color:var(--text-muted)">● Чернетка</span>`);
+                } else if (item._type === 'user') {
+                    title = item.full_name || item.email;
+                    meta.push(Fmt.esc(item.email));
+                    if (item.job_position) meta.push(Fmt.esc(item.job_position));
+                    if (item.city) meta.push(Fmt.esc(item.city));
+                    meta.push(Fmt.role(item.role));
+                    if (!item.is_active) meta.push(`<span style="color:#ef4444">Неактивний</span>`);
+                } else if (item._type === 'test') {
+                    title = item.title;
+                    if (item.passing_score) meta.push(`Прохідний бал: ${item.passing_score}%`);
+                    meta.push(item.is_published ? `<span style="color:#10b981">● Опублікований</span>` : `<span style="color:var(--text-muted)">● Чернетка</span>`);
+                }
+
+                return `<div class="ss-item" onclick="Router.go('${route}')">
+                    <div class="ss-icon" style="background:${t.bg};color:${t.color}"><i class="fa-solid ${t.icon}"></i></div>
+                    <div class="ss-body">
+                        <div class="ss-title">${hi(title)}</div>
+                        <div class="ss-meta">
+                            <span class="ss-badge" style="color:${t.color};border-color:${t.color}40">${label}</span>
+                            ${meta.join('<span style="color:var(--border)">·</span>')}
+                        </div>
+                    </div>
+                    <i class="fa-solid fa-arrow-up-right-from-square" style="color:var(--text-muted);font-size:.8rem;flex-shrink:0"></i>
+                </div>`;
+            }).join('');
+
+        } catch(e) {
+            resultsEl.innerHTML = `<div class="ss-empty"><i class="fa-solid fa-triangle-exclamation"></i>${Fmt.esc(e.message)}</div>`;
+        }
     },
 
     // ── Утиліти ───────────────────────────────────────────────────

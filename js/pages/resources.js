@@ -1062,7 +1062,8 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
             const { data, count } = await API.resources.getAll({
                 courseId: this._courseId || undefined,
                 search: this._search || undefined,
-                category: this._category || undefined,
+                // docs view: load all at once, category filtered frontend-side to avoid race conditions
+                category: isDocs ? undefined : (this._category || undefined),
                 page: (isKb || isDocs) ? 0 : this._page,
                 pageSize: (isKb || isDocs) ? 500 : this._pageSize,
                 includeLessonResources: false,
@@ -1135,17 +1136,19 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
             }
 
             if (this._view === 'docs') {
-                // rebuild category chips from actual visible docs (only when unfiltered)
-                if (!this._category) {
-                    const cats = [...new Set(filtered.map(r => r.category).filter(c => c && c.toLowerCase() !== 'general'))].sort();
-                    const catChips = document.getElementById('docs-cat-chips');
-                    if (catChips) {
-                        catChips.innerHTML = cats.map(c => `
-                            <button class="btn btn-ghost btn-sm docs-cat-chip"
-                                    onclick="ResourcesPage._setCatFilter(${JSON.stringify(c).replace(/"/g,'&quot;')},this)">
-                                ${Fmt.esc(c)}
-                            </button>`).join('');
-                    }
+                // always rebuild category chips from full unfiltered visible list
+                const cats = [...new Set(filtered.map(r => r.category).filter(c => c && c.toLowerCase() !== 'general'))].sort();
+                const catChips = document.getElementById('docs-cat-chips');
+                if (catChips) {
+                    catChips.innerHTML = cats.map(c => `
+                        <button class="btn btn-sm docs-cat-chip ${this._category === c ? 'btn-primary' : 'btn-ghost'}"
+                                onclick="ResourcesPage._setCatFilter(${JSON.stringify(c).replace(/"/g,'&quot;')},this)">
+                            ${Fmt.esc(c)}
+                        </button>`).join('');
+                }
+                // apply category filter frontend-side
+                if (this._category) {
+                    filtered = filtered.filter(r => r.category === this._category);
                 }
                 filtered = this._sortDocs(filtered);
             }

@@ -115,9 +115,7 @@ const App = {
             },
 
             'news': async ({ container, params }) => {
-                document.getElementById('page-content')?.classList.add('no-scroll');
                 await NewsPage.init(container, params);
-                return () => document.getElementById('page-content')?.classList.remove('no-scroll');
             },
 
             'news/:id': async ({ container, params }) => {

@@ -90,9 +90,7 @@ const ResourcesPage = {
                         </div>
                         ${AppState.isStaff() ? '<button class="btn btn-primary" onclick="ResourcesPage.openForm()"><i class="fa-solid fa-plus"></i> Додати</button>' : ''}
                             ${AppState.isOwner() ? '<button class="btn btn-ghost btn-sm" onclick="ResourcesPage._openTrash()" title="Кошик"><i class="fa-solid fa-trash"></i> Кошик</button>' : ''}
-                    </div>
-                </div>
-                ${HelpTip.render('docs', {
+                        ${HelpTip.render('docs', {
                     icon: 'fa-file-lines',
                     gradient: '135deg,#ef4444,#f97316',
                     title: 'Як користуватись розділом «Документи»',
@@ -105,6 +103,8 @@ const ResourcesPage = {
                         { icon: 'fa-chart-bar', color: '#6366f1', text: 'Вкладка «Статус» — показує хто з команди ознайомився з кожним документом.', roles: ['manager'] },
                     ]
                 })}
+                    </div>
+                </div>
                 ${isManager ? `
                 <div style="display:flex;gap:.5rem;margin-bottom:1.25rem;border-bottom:1px solid var(--border);padding-bottom:.75rem">
                     <button id="docs-tab-list" class="btn btn-primary btn-sm" onclick="ResourcesPage.switchTab('list',this)">📋 Документи</button>
@@ -145,8 +145,8 @@ const ResourcesPage = {
 .kb-hero-stat-val{font-size:2rem;font-weight:800;line-height:1;margin-bottom:6px}
 .kb-hero-stat-label{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;opacity:.7;font-weight:600}
 @media(max-width:900px){.kb-hero-stats{display:none}}
-.kb-search-bar{margin-bottom:22px;display:flex;justify-content:left}
-.kb-search-wrap{position:relative;width:100%;max-width:640px}
+.kb-search-bar{margin-bottom:22px;display:flex;align-items:center;gap:.75rem}
+.kb-search-wrap{position:relative;flex:1;max-width:640px}
 .kb-search-wrap input{width:100%;height:58px;padding:0 20px 0 54px;border-radius:20px;
     border:1.5px solid rgba(255,255,255,.85);background:rgba(255,255,255,.78);
     backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
@@ -301,25 +301,14 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
     </div>
 </div>
 
-${HelpTip.render('kb', {
-    icon: 'fa-book-open',
-    gradient: '135deg,#2563eb,#6366f1',
-    title: 'Як користуватись Базою знань',
-    items: [
-        { icon: 'fa-magnifying-glass', text: 'Шукайте матеріали за назвою через рядок пошуку або фільтруйте за типом (PDF, відео, посилання, SCORM) та категорією.' },
-        { icon: 'fa-hand-pointer', color: '#6366f1', text: 'Натисніть на картку, щоб відкрити матеріал. Для PDF та відео — перегляд прямо в браузері.' },
-        { icon: 'fa-star', color: '#f59e0b', text: 'Додавайте матеріали в закладки (⭐), щоб швидко знаходити їх у розділі «Закладки».' },
-        { icon: 'fa-table-list', text: 'Перемикайте вигляд між сіткою та списком кнопками у правому кутку панелі інструментів.' },
-        { icon: 'fa-graduation-cap', color: '#10b981', text: 'Матеріали з позначкою «Курс» прив\'язані до конкретного курсу — прогрес враховується автоматично.' },
-        { icon: 'fa-plus', color: '#8b5cf6', text: 'Кнопка «Додати» дозволяє завантажити новий матеріал для бази знань.', roles: ['staff'] },
-        { icon: 'fa-trash', color: '#ef4444', text: 'Кошик зберігає видалені матеріали — їх можна відновити протягом 30 днів.', roles: ['owner'] },
-    ]
-})}
-
 <div class="kb-search-bar">
     <div class="kb-search-wrap">
         <span class="kb-search-icon"><i class="fa-solid fa-magnifying-glass"></i></span>
         <input type="text" id="resource-search" placeholder="Пошук за назвою або описом..." value="${this._search}" oninput="ResourcesPage.onSearch(event)">
+    </div>
+    <div style="display:flex;align-items:center;gap:.5rem;flex-shrink:0">
+        ${AppState.isStaff() ? '<button class="btn btn-primary kb-add-btn" onclick="ResourcesPage.openForm()"><i class="fa-solid fa-plus"></i> Додати ресурс</button>' : ''}
+        ${AppState.isOwner() ? '<button class="btn btn-ghost btn-sm kb-add-btn" onclick="ResourcesPage._openTrash()" title="Кошик"><i class="fa-solid fa-trash"></i> Кошик</button>' : ''}
     </div>
 </div>
 
@@ -338,18 +327,21 @@ ${HelpTip.render('kb', {
             <button class="kb-view-btn${this._kbViewMode==='grid'?' active':''}" title="Сітка" onclick="ResourcesPage._kbSetView('grid',this)"><i class="fa-solid fa-grip"></i></button>
             <button class="kb-view-btn${this._kbViewMode==='list'?' active':''}" title="Список" onclick="ResourcesPage._kbSetView('list',this)"><i class="fa-solid fa-list"></i></button>
         </div>
+        ${HelpTip.render('kb', {
+            icon: 'fa-book-open',
+            gradient: '135deg,#2563eb,#6366f1',
+            title: 'Як користуватись Базою знань',
+            items: [
+                { icon: 'fa-magnifying-glass', text: 'Шукайте матеріали за назвою через рядок пошуку або фільтруйте за типом (PDF, відео, посилання, SCORM) та категорією.' },
+                { icon: 'fa-hand-pointer', color: '#6366f1', text: 'Натисніть на картку, щоб відкрити матеріал. Для PDF та відео — перегляд прямо в браузері.' },
+                { icon: 'fa-star', color: '#f59e0b', text: 'Додавайте матеріали в закладки (⭐), щоб швидко знаходити їх у розділі «Закладки».' },
+                { icon: 'fa-table-list', text: 'Перемикайте вигляд між сіткою та списком кнопками у правому кутку панелі інструментів.' },
+                { icon: 'fa-graduation-cap', color: '#10b981', text: 'Матеріали з позначкою «Курс» прив\'язані до конкретного курсу — прогрес враховується автоматично.' },
+                { icon: 'fa-plus', color: '#8b5cf6', text: 'Кнопка «Додати» дозволяє завантажити новий матеріал для бази знань.', roles: ['staff'] },
+                { icon: 'fa-trash', color: '#ef4444', text: 'Кошик зберігає видалені матеріали — їх можна відновити протягом 30 днів.', roles: ['owner'] },
+            ]
+        })}
     </div>
-</div>
-
-<div class="kb-filters-row">
-    <select id="resource-category" class="kb-filter-sel" onchange="ResourcesPage.applyFilters()">
-        <option value="">Всі категорії</option>
-    </select>
-    <select id="resource-course" class="kb-filter-sel" onchange="ResourcesPage.applyFilters()">
-        <option value="">Всі курси</option>
-    </select>
-    ${AppState.isStaff() ? '<button class="btn btn-primary kb-add-btn" onclick="ResourcesPage.openForm()"><i class="fa-solid fa-plus"></i> Додати ресурс</button>' : ''}
-    ${AppState.isOwner() ? '<button class="btn btn-ghost btn-sm kb-add-btn" onclick="ResourcesPage._openTrash()" title="Кошик" style="margin-left:.25rem"><i class="fa-solid fa-trash"></i> Кошик</button>' : ''}
 </div>
 
 <div id="resource-list"></div>

@@ -1247,42 +1247,47 @@ const HelpTip = {
         const visible = items.filter(it => this._roleMatch(it.roles));
         if (!visible.length) return '';
 
-        const prefs  = this._prefs(key);
-        const acked  = new Set(prefs.acked || []);
-        const open   = prefs.open !== false; // default open
-        const total  = visible.length;
-        const doneN  = visible.filter((_, i) => acked.has(i)).length;
+        const prefs   = this._prefs(key);
+        const acked   = new Set(prefs.acked || []);
+        const open    = prefs.open === true;
+        const total   = visible.length;
+        const doneN   = visible.filter((_, i) => acked.has(i)).length;
         const allDone = doneN === total;
 
         return `
-        <div class="ht-wrap${open && !allDone ? ' ht-open' : ''}" id="ht-${key}">
-            <div class="ht-banner" style="background:linear-gradient(270deg,${gradient.replace('135deg,','')});background-size:300% 300%;animation:ht-gradient 6s ease infinite;cursor:pointer" onclick="HelpTip._toggle('${key}')">
-                <div class="ht-banner-glow"></div>
-                <div class="ht-banner-left">
-                    <div class="ht-banner-ico"><i class="fa-solid ${icon}"></i></div>
-                    <div>
-                        <div class="ht-banner-label">Підказка розділу</div>
-                        <div class="ht-banner-title">${title}</div>
+        <div class="ht-wrap${open ? ' ht-open' : ''}${allDone ? ' ht-done' : ''}" id="ht-${key}">
+            <button class="ht-btn${allDone ? ' ht-btn-done' : ''}" onclick="HelpTip._toggle('${key}')" title="${title}">
+                ${allDone
+                    ? `<i class="fa-solid fa-circle-check"></i>`
+                    : `<span class="ht-btn-label">HELP</span>
+                       <span class="ht-btn-dot">${doneN > 0 ? doneN + '/' + total : ''}</span>`}
+            </button>
+            <div class="ht-panel" id="ht-panel-${key}">
+                <div class="ht-panel-head" style="background:linear-gradient(135deg,${gradient.replace('135deg,','')})">
+                    <div class="ht-panel-head-left">
+                        <div class="ht-banner-ico"><i class="fa-solid ${icon}"></i></div>
+                        <div>
+                            <div class="ht-banner-label">Підказка розділу</div>
+                            <div class="ht-banner-title">${title}</div>
+                        </div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:.5rem">
+                        ${allDone
+                            ? `<div class="ht-done-badge"><i class="fa-solid fa-circle-check"></i> Вивчено!</div>`
+                            : `<div class="ht-progress-wrap">
+                                   <div class="ht-progress-bar"><div class="ht-progress-fill" style="width:${Math.round(doneN/total*100)}%"></div></div>
+                                   <div class="ht-progress-label">${doneN} з ${total}</div>
+                               </div>`}
+                        <button class="ht-toggle" onclick="HelpTip._toggle('${key}')">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
                     </div>
                 </div>
-                <div class="ht-banner-right" onclick="event.stopPropagation()">
-                    ${allDone
-                        ? `<div class="ht-done-badge"><i class="fa-solid fa-circle-check"></i> Вивчено!</div>`
-                        : `<div class="ht-progress-wrap">
-                               <div class="ht-progress-bar"><div class="ht-progress-fill" style="width:${Math.round(doneN/total*100)}%"></div></div>
-                               <div class="ht-progress-label">${doneN} з ${total}</div>
-                           </div>`}
-                    <button class="ht-toggle" onclick="HelpTip._toggle('${key}')" title="${open ? 'Згорнути' : 'Розгорнути'}">
-                        <i class="fa-solid fa-chevron-up ht-chevron"></i>
-                    </button>
-                </div>
-            </div>
-            <div class="ht-body">
                 <div class="ht-scroll">
                     ${visible.map((it, i) => {
                         const done = acked.has(i);
                         return `
-                        <div class="ht-card${done ? ' ht-card-done' : ''}" id="ht-card-${key}-${i}" style="animation-delay:${i * 0.07}s">
+                        <div class="ht-card${done ? ' ht-card-done' : ''}" id="ht-card-${key}-${i}" style="animation-delay:${i * 0.06}s">
                             <div class="ht-card-top">
                                 <div class="ht-card-ico" style="background:${it.color||'#6366f1'}20;color:${it.color||'#6366f1'}">
                                     <i class="fa-solid ${it.icon}"></i>
@@ -1341,6 +1346,9 @@ const HelpTip = {
                 const pw = wrap.querySelector('.ht-progress-wrap');
                 if (pw) pw.outerHTML = '<div class="ht-done-badge"><i class="fa-solid fa-circle-check"></i> Вивчено!</div>';
                 wrap.classList.remove('ht-open');
+                wrap.classList.add('ht-done');
+                const btn = wrap.querySelector('.ht-btn');
+                if (btn) { btn.classList.add('ht-btn-done'); btn.innerHTML = '<i class="fa-solid fa-circle-check"></i>'; }
                 this._savePrefs(key, { open: false });
             }, 600);
         }

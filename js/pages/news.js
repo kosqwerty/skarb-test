@@ -143,7 +143,7 @@ const NewsPage = {
                     <span style="display:flex;align-items:center;gap:.35rem;font-size:.78rem;color:var(--text-muted)">
                         <i class="fa-regular fa-calendar"></i>${Fmt.date(news.published_at || news.created_at, { day:'numeric', month:'short' })}
                     </span>
-                    <div style="display:flex;align-items:center;gap:.3rem;flex-wrap:nowrap" onclick="event.stopPropagation()">
+                    <div style="display:flex;align-items:center;gap:.2rem;flex-wrap:nowrap" onclick="event.stopPropagation()">
                         <button class="kb-star res-star-btn${Bookmarks.isBookmarked('news/'+news.id) ? ' active' : ''}"
                             data-bm-route="news/${news.id}"
                             title="${Bookmarks.isBookmarked('news/'+news.id) ? 'Видалити з закладок' : 'Зберегти в закладки'}"

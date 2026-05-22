@@ -58,7 +58,19 @@ const ContactsPage = {
 <div class="ct-page">
 
     <div class="ct-header">
-        <h1 class="ct-title">👥 Контакти</h1>
+        <div style="display:flex;align-items:center;gap:.75rem">
+            <h1 class="ct-title">👥 Контакти</h1>
+            <div style="margin-left:auto">${HelpTip.render('contacts', {
+                icon: 'fa-address-book',
+                gradient: '135deg,#0ea5e9,#10b981',
+                title: 'Як користуватись розділом «Контакти»',
+                items: [
+                    { icon: 'fa-magnifying-glass', text: 'Шукайте співробітників за іменем, посадою, містом або телефоном через рядок пошуку.' },
+                    { icon: 'fa-cake-candles', color: '#f59e0b', text: 'Натисніть 🎂 на картці співробітника, щоб додати нагадування про день народження.' },
+                    { icon: 'fa-user-pen', color: '#8b5cf6', text: 'Клік на картку — відкриває повний профіль співробітника з детальною інформацією.', roles: ['staff'] },
+                ]
+            })}</div>
+        </div>
         <p class="ct-subtitle">Контактна інформація співробітників</p>
         <div class="ct-search-row">
             <div class="ct-search-wrap">
@@ -68,17 +80,6 @@ const ContactsPage = {
             <div id="ct-count" class="ct-count">${this._users.length} співробітників</div>
         </div>
     </div>
-
-    ${HelpTip.render('contacts', {
-        icon: 'fa-address-book',
-        gradient: '135deg,#0ea5e9,#10b981',
-        title: 'Як користуватись розділом «Контакти»',
-        items: [
-            { icon: 'fa-magnifying-glass', text: 'Шукайте співробітників за іменем, посадою, містом або телефоном через рядок пошуку.' },
-            { icon: 'fa-cake-candles', color: '#f59e0b', text: 'Натисніть 🎂 на картці співробітника, щоб додати нагадування про день народження.' },
-            { icon: 'fa-user-pen', color: '#8b5cf6', text: 'Клік на картку — відкриває повний профіль співробітника з детальною інформацією.', roles: ['staff'] },
-        ]
-    })}
 
     <div class="ct-grid" id="ct-grid">
         ${this._cardsHtml(this._users)}

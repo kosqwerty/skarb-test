@@ -1154,8 +1154,15 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
             }
 
             if (this._view === 'docs') list.className = 'resource-list-docs';
-            list.innerHTML = filtered.map(resource => this._renderResourceItem(resource)).join('');
-            this._renderPagination(this._view === 'docs' ? filtered.length : count);
+            if (this._view === 'docs') {
+                const start = this._page * this._pageSize;
+                const pageItems = filtered.slice(start, start + this._pageSize);
+                list.innerHTML = pageItems.map(resource => this._renderResourceItem(resource)).join('');
+                this._renderPagination(filtered.length);
+            } else {
+                list.innerHTML = filtered.map(resource => this._renderResourceItem(resource)).join('');
+                this._renderPagination(count);
+            }
         } catch (e) {
             list.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>${e.message}</h3></div>`;
             document.getElementById('resources-pagination').innerHTML = '';

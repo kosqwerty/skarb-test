@@ -78,9 +78,6 @@ const ResourcesPage = {
                         <div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:center">
                             <input type="text" id="resource-search" placeholder="Пошук..." value=""
                                    style="width:200px" onkeyup="ResourcesPage.onSearch(event)">
-                            <select id="resource-category" onchange="ResourcesPage.applyFilters()" style="width:auto">
-                                <option value="">Всі категорії</option>
-                            </select>
                             <select id="docs-sort-sel" onchange="ResourcesPage._docsSetSort(this.value)" style="width:auto">
                                 <option value="priority">🔴 Нові / оновлені першими</option>
                                 <option value="newest">↓ Дата додавання</option>
@@ -105,11 +102,13 @@ const ResourcesPage = {
                 })}
                     </div>
                 </div>
-                ${isManager ? `
-                <div style="display:flex;gap:.5rem;margin-bottom:1.25rem;border-bottom:1px solid var(--border);padding-bottom:.75rem">
-                    <button id="docs-tab-list" class="btn btn-primary btn-sm" onclick="ResourcesPage.switchTab('list',this)">📋 Документи</button>
-                    <button id="docs-tab-status" class="btn btn-ghost btn-sm" onclick="ResourcesPage.switchTab('status',this)">📊 Статус</button>
-                </div>` : ''}
+                <div style="display:flex;gap:.5rem;margin-bottom:1.25rem;border-bottom:1px solid var(--border);padding-bottom:.75rem;flex-wrap:wrap;align-items:center">
+                    <button id="docs-tab-list" class="btn btn-primary btn-sm" onclick="ResourcesPage.switchTab('list',this)">📋 Всі</button>
+                    <div id="docs-cat-chips" style="display:flex;gap:.4rem;flex-wrap:wrap"></div>
+                    <button id="docs-tab-branch" class="btn btn-ghost btn-sm" onclick="ResourcesPage.switchTab('branch',this)">⚖️ Куточок споживача</button>
+                    <button id="docs-tab-red-folder" class="btn btn-ghost btn-sm" onclick="ResourcesPage.switchTab('red-folder',this)" style="color:#ef4444;border-color:rgba(239,68,68,.3)">📁 Червона папка</button>
+                    ${isManager ? '<button id="docs-tab-status" class="btn btn-ghost btn-sm" onclick="ResourcesPage.switchTab(\'status\',this)" style="margin-left:auto">📊 Статус</button>' : ''}
+                </div>
                 <div id="docs-tab-content">
                     <div id="resource-list" class="resource-list-docs"></div>
                     <div id="resources-pagination" style="display:flex;justify-content:center;gap:.5rem;margin-top:1.5rem"></div>
@@ -387,17 +386,44 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
     switchTab(tab, el) {
         this._activeTab = tab;
         document.querySelectorAll('button[id^="docs-tab-"]').forEach(btn => {
-            btn.className = btn.id === `docs-tab-${tab}` ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm';
+            const isActive = btn.id === `docs-tab-${tab}`;
+            const isRed = btn.id === 'docs-tab-red-folder';
+            btn.className = isActive ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm';
+            if (isRed && isActive) {
+                btn.style.background = 'linear-gradient(135deg,#ef4444,#b91c1c)';
+                btn.style.color = '#fff';
+                btn.style.borderColor = 'transparent';
+            } else if (isRed) {
+                btn.style.background = '';
+                btn.style.color = '#ef4444';
+                btn.style.borderColor = 'rgba(239,68,68,.3)';
+            } else {
+                btn.style.background = '';
+                btn.style.color = '';
+                btn.style.borderColor = '';
+            }
         });
         const content = document.getElementById('docs-tab-content');
         if (!content) return;
         clearInterval(this._statusRefreshTimer);
+
+        // reset category chips on any tab switch
+        this._category = '';
+        document.querySelectorAll('.docs-cat-chip').forEach(b => { b.classList.remove('btn-primary'); b.classList.add('btn-ghost'); });
 
         if (tab === 'list') {
             content.innerHTML = `
                 <div id="resource-list" class="resource-list-docs"></div>
                 <div id="resources-pagination" style="display:flex;justify-content:center;gap:.5rem;margin-top:1.5rem"></div>`;
             this.load();
+        } else if (tab === 'branch') {
+            content.innerHTML = `
+                ${AppState.isAdmin() ? '<div style="margin-bottom:.75rem"><button class="btn btn-primary btn-sm" onclick="BranchDocsPage._blockModal()"><i class="fa-solid fa-plus"></i> Додати блок</button></div>' : ''}
+                <div id="bd-tab-area" style="width:1000px"></div>`;
+            BranchDocsPage.renderInTab(document.getElementById('bd-tab-area'));
+        } else if (tab === 'red-folder') {
+            content.innerHTML = `<div id="rf-tab-area" style="width:1000px"></div>`;
+            RedFolderPage.renderInTab(document.getElementById('rf-tab-area'));
         } else if (tab === 'status') {
             this._statusCache = null;
             this._renderStatusTab(content);
@@ -759,17 +785,47 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
     },
 
     _renderFilterOptions() {
-        const categorySelect = document.getElementById('resource-category');
         const courseSelect = document.getElementById('resource-course');
-
-        if (categorySelect) {
-            categorySelect.innerHTML = `<option value="">Всі категорії</option>` +
-                this._categories.map(c => `<option value="${c}">${c}</option>`).join('');
-        }
         if (courseSelect) {
             courseSelect.innerHTML = `<option value="">Всі курси</option>` +
                 this._courses.map(c => `<option value="${c.id}">${c.title}</option>`).join('');
         }
+
+        // docs-cat-chips are built dynamically in load() from actual documents
+    },
+
+    _setCatFilter(cat, btn) {
+        this._category = this._category === cat ? '' : cat;
+        // if not on list tab — switch first, then apply filter
+        if (this._activeTab !== 'list') {
+            const savedCat = this._category;
+            const savedBtn = btn;
+            this.switchTab('list', document.getElementById('docs-tab-list'));
+            // restore category (switchTab reset it to '')
+            this._category = savedCat;
+            this._page = 0;
+            // re-apply chip + "Всі" button visual state
+            if (savedCat) {
+                document.querySelectorAll('.docs-cat-chip').forEach(b => {
+                    if (b.textContent.trim() === savedCat) { b.classList.add('btn-primary'); b.classList.remove('btn-ghost'); }
+                });
+                const tabAll = document.getElementById('docs-tab-list');
+                if (tabAll) { tabAll.classList.remove('btn-primary'); tabAll.classList.add('btn-ghost'); }
+            }
+            this.load();
+            return;
+        }
+        // reset all chips
+        document.querySelectorAll('.docs-cat-chip').forEach(b => { b.classList.remove('btn-primary'); b.classList.add('btn-ghost'); });
+        const tabAll = document.getElementById('docs-tab-list');
+        if (this._category) {
+            btn.classList.add('btn-primary'); btn.classList.remove('btn-ghost');
+            if (tabAll) { tabAll.classList.remove('btn-primary'); tabAll.classList.add('btn-ghost'); }
+        } else {
+            if (tabAll) { tabAll.classList.add('btn-primary'); tabAll.classList.remove('btn-ghost'); }
+        }
+        this._page = 0;
+        this.load();
     },
 
     // ── Docs sort ────────────────────────────────────────────────────
@@ -989,8 +1045,7 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
     },
 
     applyFilters() {
-        this._category = Dom.val('resource-category');
-        this._courseId = Dom.val('resource-course');
+        this._courseId = Dom.val('resource-course') || undefined;
         this._page = 0;
         this.load();
     },
@@ -1003,15 +1058,16 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
         }
         try {
             const isKb = this._view === 'kb';
+            const isDocs = this._view === 'docs';
             const { data, count } = await API.resources.getAll({
                 courseId: this._courseId || undefined,
                 search: this._search || undefined,
                 category: this._category || undefined,
-                page: isKb ? 0 : this._page,
-                pageSize: isKb ? 500 : this._pageSize,
+                page: (isKb || isDocs) ? 0 : this._page,
+                pageSize: (isKb || isDocs) ? 500 : this._pageSize,
                 includeLessonResources: false,
                 studentOnly: isKb && !AppState.isStaff(),
-                docsOnly: this._view === 'docs'
+                docsOnly: isDocs
             });
 
             // Frontend access filter: staff and managers in docs view see all
@@ -1079,12 +1135,24 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
             }
 
             if (this._view === 'docs') {
+                // rebuild category chips from actual visible docs (only when unfiltered)
+                if (!this._category) {
+                    const cats = [...new Set(filtered.map(r => r.category).filter(c => c && c.toLowerCase() !== 'general'))].sort();
+                    const catChips = document.getElementById('docs-cat-chips');
+                    if (catChips) {
+                        catChips.innerHTML = cats.map(c => `
+                            <button class="btn btn-ghost btn-sm docs-cat-chip"
+                                    onclick="ResourcesPage._setCatFilter(${JSON.stringify(c).replace(/"/g,'&quot;')},this)">
+                                ${Fmt.esc(c)}
+                            </button>`).join('');
+                    }
+                }
                 filtered = this._sortDocs(filtered);
             }
 
             if (this._view === 'docs') list.className = 'resource-list-docs';
             list.innerHTML = filtered.map(resource => this._renderResourceItem(resource)).join('');
-            this._renderPagination(count);
+            this._renderPagination(this._view === 'docs' ? filtered.length : count);
         } catch (e) {
             list.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>${e.message}</h3></div>`;
             document.getElementById('resources-pagination').innerHTML = '';

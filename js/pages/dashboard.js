@@ -231,7 +231,7 @@ const DashboardPage = {
         const monthStart = `${_mn.getFullYear()}-${_pad(_mn.getMonth()+1)}-01`;
         const monthEnd   = _fmtLocal(new Date(_mn.getFullYear(), _mn.getMonth() + 1, 0));
 
-        const [enrollments, newsRes, birthdays, recentNotifs, calEvents] = await Promise.all([
+        const [enrollments, newsRes, birthdays, recentNotifs, calEvents, scheduleEntries] = await Promise.all([
             API.enrollments.getMyEnrollments().catch(() => []),
             API.news.getAll({ published: true, pageSize: 5 }).catch(() => ({ data: [] })),
             API.birthdays.getToday().catch(() => []),
@@ -242,6 +242,13 @@ const DashboardPage = {
                 .gte('date', monthStart)
                 .lte('date', monthEnd)
                 .order('date').order('time', { nullsFirst: true })
+                .then(r => r.data || [])
+                .catch(() => []),
+            supabase.from('schedule_entries')
+                .select('date,shift_type,notes,location_id,schedule_locations(name)')
+                .eq('user_id', AppState.user.id)
+                .gte('date', monthStart)
+                .lte('date', monthEnd)
                 .then(r => r.data || [])
                 .catch(() => []),
         ]);
@@ -256,7 +263,7 @@ const DashboardPage = {
 
         this._renderWelcome(enrollments, testsCount, surveysCount);
         this._renderRecentlyViewed();
-        this._renderCalWidget(calEvents, today);
+        this._renderCalWidget(calEvents, today, scheduleEntries);
         this._renderImportantEvents(calEvents, today);
         this._renderAlerts(unackedDocs, recentNotifs);
         this._renderBirthdays(birthdays);
@@ -373,12 +380,14 @@ const DashboardPage = {
         });
     },
 
-    _renderCalWidget(calEvents, today) {
+    _renderCalWidget(calEvents, today, scheduleEntries = []) {
         const now = new Date();
         this._calViewYear   = now.getFullYear();
         this._calViewMonth  = now.getMonth();
         this._calViewEvents = calEvents;
         this._calViewToday  = today;
+        this._calViewShifts = {};
+        scheduleEntries.forEach(e => { this._calViewShifts[e.date] = e; });
         this._drawCalWidget();
     },
 
@@ -390,12 +399,21 @@ const DashboardPage = {
         const _fl = d => `${d.getFullYear()}-${_p2(d.getMonth()+1)}-${_p2(d.getDate())}`;
         const ms = `${this._calViewYear}-${_p2(this._calViewMonth+1)}-01`;
         const me = _fl(new Date(this._calViewYear, this._calViewMonth + 1, 0));
-        const { data } = await supabase.from('personal_cal_events')
-            .select('id,title,date,time,end_time,color,is_important,is_done,acked_date,repeat_type,remind_before_days')
-            .eq('user_id', AppState.user.id)
-            .gte('date', ms).lte('date', me)
-            .order('date').order('time', { nullsFirst: true });
+        const [{ data }, shiftRes] = await Promise.all([
+            supabase.from('personal_cal_events')
+                .select('id,title,date,time,end_time,color,is_important,is_done,acked_date,repeat_type,remind_before_days')
+                .eq('user_id', AppState.user.id)
+                .gte('date', ms).lte('date', me)
+                .order('date').order('time', { nullsFirst: true }),
+            supabase.from('schedule_entries')
+                .select('date,shift_type,notes,location_id,schedule_locations(name)')
+                .eq('user_id', AppState.user.id)
+                .gte('date', ms).lte('date', me)
+                .then(r => r.data || []).catch(() => [])
+        ]);
         this._calViewEvents = data || [];
+        this._calViewShifts = {};
+        (Array.isArray(shiftRes) ? shiftRes : []).forEach(e => { this._calViewShifts[e.date] = e; });
         this._drawCalWidget();
     },
 
@@ -404,7 +422,7 @@ const DashboardPage = {
         if (!el) return;
         const _prevOpen = { today: document.getElementById('db-cup-today-body')?.classList.contains('open') ?? true, future: document.getElementById('db-cup-future-body')?.classList.contains('open') ?? true };
 
-        const { _calViewYear: year, _calViewMonth: month, _calViewEvents: calEvents, _calViewToday: today } = this;
+        const { _calViewYear: year, _calViewMonth: month, _calViewEvents: calEvents, _calViewToday: today, _calViewShifts: shifts = {} } = this;
         const now = new Date();
 
         // Build event map by date
@@ -440,17 +458,30 @@ const DashboardPage = {
         const monthLabel = new Date(year, month, 1).toLocaleDateString('uk-UA', { month: 'long', year: 'numeric' });
         const isCurrentMonth = year === now.getFullYear() && month === now.getMonth();
 
+        const _shiftMeta = {
+            work:     { color: '#10b981', label: 'Зміна' },
+            day_off:  { color: '#8b5cf6', label: 'Підміна' },
+            vacation: { color: '#f59e0b', label: 'Відпустка' },
+            sick:     { color: '#ef4444', label: 'Лікарняний' },
+        };
         const gridHtml = cells.map(c => {
             const evs = c.other ? [] : (evByDate[c.date] || []);
+            const shift = !c.other ? shifts[c.date] : null;
             const isToday = c.date === today;
+            const hasEv = !c.other && (evs.length || shift);
             const cls = ['db-cday',
                 isToday ? 'db-today' : '',
-                !c.other && evs.length && !isToday ? 'db-has-ev' : '',
+                hasEv && !isToday ? 'db-has-ev' : '',
                 c.other ? 'db-othm' : ''
             ].filter(Boolean).join(' ');
-            const tip = evs.map(e => Fmt.esc(e.title)).join(', ');
+            const tips = [...evs.map(e => Fmt.esc(e.title))];
+            if (shift && _shiftMeta[shift.shift_type]) tips.push(_shiftMeta[shift.shift_type].label);
+            const tipAttr = tips.length ? ` title="${tips.join(', ')}"` : '';
             const dayOnclick = c.other ? `Router.go('my-calendar')` : `DashboardPage._calDayClick('${c.date}')`;
-            return `<div class="${cls}" onclick="${dayOnclick}"${tip ? ` title="${tip}"` : ''}>${c.day}</div>`;
+            const shiftDot = shift && _shiftMeta[shift.shift_type]
+                ? `<span style="position:absolute;bottom:2px;left:50%;transform:translateX(-50%);width:5px;height:5px;border-radius:50%;background:${_shiftMeta[shift.shift_type].color}"></span>`
+                : '';
+            return `<div class="${cls}" style="position:relative" onclick="${dayOnclick}"${tipAttr}>${c.day}${shiftDot}</div>`;
         }).join('');
 
         const fmtBadge = dateStr => {
@@ -467,6 +498,16 @@ const DashboardPage = {
             return `<span class="db-cup-chip" style="background:${hex22};color:${color}"><span class="db-cup-chip-dot" style="background:${color}"></span>Весь день</span>`;
         };
 
+        // Shift chip helper
+        const shiftChipHtml = shift => {
+            const sm = _shiftMeta[shift.shift_type];
+            if (!sm) return '';
+            const loc = shift.schedule_locations?.name ? ` · ${Fmt.esc(shift.schedule_locations.name)}` : '';
+            return `<span class="db-cup-chip" style="background:${sm.color}22;color:${sm.color}"><span class="db-cup-chip-dot" style="background:${sm.color}"></span>${sm.label}${loc}</span>`;
+        };
+
+        const todayShift = isCurrentMonth ? shifts[today] : null;
+
         // Split: today vs future
         const todayEvs  = isCurrentMonth
             ? calEvents.filter(ev => ev.date === today).sort((a, b) => (a.is_done ? 1 : 0) - (b.is_done ? 1 : 0) || (a.time || '').localeCompare(b.time || ''))
@@ -475,6 +516,12 @@ const DashboardPage = {
             .filter(ev => ev.date > today)
             .sort((a, b) => a.date.localeCompare(b.date) || (a.time || '').localeCompare(b.time || ''))
             .slice(0, 8);
+        // Future shifts (up to 8 upcoming, excluding today)
+        const futureShifts = Object.entries(shifts)
+            .filter(([d]) => d > today)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .slice(0, 8)
+            .map(([, s]) => s);
 
         const todayItemHtml = ev => `
             <div class="db-cup-item${ev.is_done ? ' db-cup-done' : ''}" id="db-cal-ev-${ev.id}" onclick="DashboardPage._calToggleDone('${ev.id}',this.querySelector('.db-cup-check'))" style="cursor:pointer">
@@ -502,6 +549,31 @@ const DashboardPage = {
             </div>`;
         };
 
+        const futureShiftItemHtml = s => {
+            const b = fmtBadge(s.date);
+            return `
+            <div class="db-cup-item">
+                <div class="db-cup-badge">
+                    <span class="db-cup-bday">${b.day}</span>
+                    <span class="db-cup-bmon">${b.mon}</span>
+                </div>
+                <div class="db-cup-body">
+                    <div class="db-cup-name">Мій графік</div>
+                    ${shiftChipHtml(s)}
+                </div>
+            </div>`;
+        };
+
+        const todayShiftHtml = todayShift
+            ? `<div class="db-cup-item">
+                <div style="width:36px;height:36px;border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0;background:${(_shiftMeta[todayShift.shift_type]?.color||'#6366f1')}22;color:${_shiftMeta[todayShift.shift_type]?.color||'#6366f1'}"><i class="fa-solid fa-briefcase"></i></div>
+                <div class="db-cup-body" style="flex:1;min-width:0">
+                    <div class="db-cup-name">Мій графік</div>
+                    ${shiftChipHtml(todayShift)}
+                </div>
+               </div>` : '';
+
+        const todayHasContent = todayEvs.length || todayShift;
         const todaySection = isCurrentMonth ? `
             <div class="db-cup-acc-hdr" onclick="DashboardPage._toggleAcc('db-cup-today-body')">
                 <span>Сьогодні</span>
@@ -509,13 +581,20 @@ const DashboardPage = {
             </div>
             <div class="db-cup-acc-body" id="db-cup-today-body">
                 <div class="db-cup-list" id="db-cup-today">
+                    ${todayShiftHtml}
                     ${todayEvs.length
                         ? todayEvs.map(todayItemHtml).join('')
-                        : `<div class="db-cup-empty"><i class="fa-regular fa-calendar-check"></i> Вільний день</div>`}
+                        : (!todayShift ? `<div class="db-cup-empty"><i class="fa-regular fa-calendar-check"></i> Вільний день</div>` : '')}
                 </div>
             </div>` : '';
 
-        const futureSection = futureEvs.length ? `
+        // Merge future events + shifts, sorted by date, deduplicate by date preferring both
+        const allFutureItems = [
+            ...futureEvs.map(e => ({ _type: 'ev', _date: e.date, ev: e })),
+            ...futureShifts.map(s => ({ _type: 'sh', _date: s.date, sh: s }))
+        ].sort((a, b) => a._date.localeCompare(b._date)).slice(0, 10);
+
+        const futureSection = allFutureItems.length ? `
             ${isCurrentMonth ? '<div style="height:1px;background:var(--border);margin:.25rem .9rem"></div>' : ''}
             <div class="db-cup-acc-hdr" onclick="DashboardPage._toggleAcc('db-cup-future-body')">
                 <span>Майбутні події</span>
@@ -523,7 +602,7 @@ const DashboardPage = {
             </div>
             <div class="db-cup-acc-body" id="db-cup-future-body">
                 <div class="db-cup-list">
-                    ${futureEvs.map(futureItemHtml).join('')}
+                    ${allFutureItems.map(it => it._type === 'ev' ? futureItemHtml(it.ev) : futureShiftItemHtml(it.sh)).join('')}
                 </div>
             </div>` : '';
 
@@ -548,7 +627,7 @@ const DashboardPage = {
                 <div class="db-cup-wrap">
                     ${todaySection}
                     ${futureSection}
-                    ${!todayEvs.length && !futureEvs.length ? `<div class="db-cup-empty" style="padding:1.25rem"><i class="fa-regular fa-calendar-check"></i> Подій немає</div>` : ''}
+                    ${!todayHasContent && !allFutureItems.length ? `<div class="db-cup-empty" style="padding:1.25rem"><i class="fa-regular fa-calendar-check"></i> Подій немає</div>` : ''}
                 </div>
             </div>`;
 
@@ -571,15 +650,29 @@ const DashboardPage = {
     },
 
     async _getUnackedDocs() {
+        const seeAll = AppState.isAdmin() || AppState.isManager();
         const { data } = await supabase.from('resources')
-            .select('id, title, deadline_days, doc_version')
+            .select('id, title, deadline_days, doc_version, resource_dovirenosti(dovirenost_id)')
             .eq('is_tracked_download', true)
             .is('deleted_at', null)
             .limit(50);
         if (!data?.length) return [];
-        const ackMap = await API.documentDownloads.getMyLatest(data.map(d => d.id));
+
+        let filtered = data;
+        if (!seeAll) {
+            const myDovs = await API.dovirenosti.getForProfile(AppState.user.id).catch(() => []);
+            const myDovIds = new Set(myDovs.map(d => d.id));
+            filtered = data.filter(d => {
+                const linked = d.resource_dovirenosti || [];
+                if (!linked.length) return true; // no restriction — everyone sees it
+                return linked.some(r => myDovIds.has(r.dovirenost_id));
+            });
+        }
+
+        if (!filtered.length) return [];
+        const ackMap = await API.documentDownloads.getMyLatest(filtered.map(d => d.id));
         // Unacked = never downloaded OR downloaded version is older than current
-        return data.filter(d => {
+        return filtered.filter(d => {
             const ack = ackMap[d.id];
             if (!ack) return true;
             return (ack.version || 1) < (d.doc_version || 1);

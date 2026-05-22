@@ -221,8 +221,7 @@ const UI = {
             ...common,
             { icon: '<i class="fa-solid fa-folder-open"   style="color:#C9A227"></i>',  label: 'База знань',        route: 'knowledge-base' },
             { icon: '<i class="fa-solid fa-file-lines"    style="color:#f87171"></i>',  label: 'Документи',         route: 'documents', badgeId: 'nav-doc-badge' },
-            { icon: '<i class="fa-solid fa-scale-balanced" style="color:#818cf8"></i>', label: 'Куточок споживача', route: 'branch-docs' },
-            { icon: '<i class="fa-solid fa-wand-magic-sparkles" style="background:linear-gradient(135deg,#818cf8,#c084fc);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-size:1rem"></i>', label: 'Меню порталу', route: 'collections' }
+{ icon: '<i class="fa-solid fa-wand-magic-sparkles" style="background:linear-gradient(135deg,#818cf8,#c084fc);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-size:1rem"></i>', label: 'Меню порталу', route: 'collections' }
         ];
         const ntfItem      = { icon: '<i class="fa-solid fa-bell"         style="color:#C9A227"></i>', label: 'Сповіщення', route: 'notifications', badgeId: 'nav-ntf-badge' };
         const contactsItem = { icon: '<i class="fa-solid fa-address-book" style="color:#059669"></i>', label: 'Контакти',   route: 'contacts' };
@@ -338,15 +337,29 @@ const UI = {
     async loadDocBadge() {
         if (!AppState.user?.id) return;
         try {
+            const seeAll = AppState.isAdmin() || AppState.isManager();
             const { data: docs } = await supabase
                 .from('resources')
-                .select('id, doc_version')
+                .select('id, doc_version, resource_dovirenosti(dovirenost_id)')
                 .eq('is_tracked_download', true)
                 .is('deleted_at', null)
                 .is('lesson_id', null);
             if (!docs?.length) return;
-            const ackMap = await API.documentDownloads.getMyLatest(docs.map(d => d.id));
-            const unread = docs.filter(d => {
+
+            let filtered = docs;
+            if (!seeAll) {
+                const myDovs = await API.dovirenosti.getForProfile(AppState.user.id).catch(() => []);
+                const myDovIds = new Set(myDovs.map(d => d.id));
+                filtered = docs.filter(d => {
+                    const linked = d.resource_dovirenosti || [];
+                    if (!linked.length) return true;
+                    return linked.some(r => myDovIds.has(r.dovirenost_id));
+                });
+            }
+
+            if (!filtered.length) return;
+            const ackMap = await API.documentDownloads.getMyLatest(filtered.map(d => d.id));
+            const unread = filtered.filter(d => {
                 const dl = ackMap[d.id];
                 return !dl || (dl.version || 1) < (d.doc_version || 1);
             }).length;

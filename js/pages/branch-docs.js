@@ -6,19 +6,11 @@ const BranchDocsPage = {
 
     _blocks: [],  // loaded from DB
 
-    async init(container) {
-        UI.setBreadcrumb([{ label: 'Куточок споживача' }]);
-
-        const canManage = AppState.isAdmin();
-
-        let userDovIds = [];
-        if (!canManage) {
-            const dovs = await API.dovirenosti.getForProfile(AppState.user.id).catch(() => []);
-            userDovIds = dovs.map(d => d.id);
-        }
-
-        container.innerHTML = `
-        <style>
+    _injectStyles() {
+        if (document.getElementById('bd-styles')) return;
+        const s = document.createElement('style');
+        s.id = 'bd-styles';
+        s.textContent = `
             .bd-wrap { max-width: 960px; margin: 0 auto; }
             .bd-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: .75rem; }
             .bd-title { font-size: 1.25rem; font-weight: 800; }
@@ -49,7 +41,53 @@ const BranchDocsPage = {
             .bd-no-docs { text-align: center; padding: 3rem 1rem; color: var(--text-muted); }
             .bd-inp { width:100%;padding:.55rem .8rem;border-radius:var(--radius-md);border:1px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.88rem;font-family:inherit;outline:none;box-sizing:border-box }
             .bd-inp:focus { border-color: var(--primary); }
-        </style>
+        `;
+        document.head.appendChild(s);
+    },
+
+    async renderInTab(area) {
+        this._injectStyles();
+        const canManage = AppState.isAdmin();
+        const seeAll = AppState.isAdmin() || AppState.isManager();
+        let userDovIds = [];
+        if (!canManage) {
+            const dovs = await API.dovirenosti.getForProfile(AppState.user.id).catch(() => []);
+            userDovIds = dovs.map(d => d.id);
+        }
+        area.innerHTML = `<div id="bd-content" style="padding:.25rem 0"><div class="bd-no-docs"><i class="fa-solid fa-spinner fa-spin"></i> Завантаження...</div></div>`;
+        try {
+            const [blocks, docs, myDovs] = await Promise.all([
+                API.branchDocBlocks.getAll(),
+                API.resources.getBranchDocs(null),
+                seeAll ? Promise.resolve(null) : API.dovirenosti.getForProfile(AppState.user.id).catch(() => [])
+            ]);
+            this._blocks = blocks;
+            const myDovIds = myDovs ? new Set(myDovs.map(d => d.id)) : null;
+            const visibleDocs = seeAll ? docs : docs.filter(d => {
+                if (!d.dovirenost_id) return true;
+                return myDovIds && myDovIds.has(d.dovirenost_id);
+            });
+            this._render(visibleDocs, canManage);
+        } catch(e) {
+            const el = document.getElementById('bd-content');
+            if (el) el.innerHTML = `<div class="bd-no-docs"><i class="fa-solid fa-triangle-exclamation"></i> ${Fmt.esc(e.message)}</div>`;
+        }
+    },
+
+    async init(container) {
+        UI.setBreadcrumb([{ label: 'Куточок споживача' }]);
+
+        const canManage = AppState.isAdmin();
+        const seeAll = AppState.isAdmin() || AppState.isManager();
+
+        let userDovIds = [];
+        if (!canManage) {
+            const dovs = await API.dovirenosti.getForProfile(AppState.user.id).catch(() => []);
+            userDovIds = dovs.map(d => d.id);
+        }
+
+        this._injectStyles();
+        container.innerHTML = `
         <div class="bd-wrap">
             <div class="bd-header">
                 <div>
@@ -66,12 +104,18 @@ const BranchDocsPage = {
 
         try {
             Loader.show();
-            const [blocks, docs] = await Promise.all([
+            const [blocks, docs, myDovs] = await Promise.all([
                 API.branchDocBlocks.getAll(),
-                API.resources.getBranchDocs(null)
+                API.resources.getBranchDocs(null),
+                seeAll ? Promise.resolve(null) : API.dovirenosti.getForProfile(AppState.user.id).catch(() => [])
             ]);
             this._blocks = blocks;
-            this._render(docs, canManage);
+            const myDovIds = myDovs ? new Set(myDovs.map(d => d.id)) : null;
+            const visibleDocs = seeAll ? docs : docs.filter(d => {
+                if (!d.dovirenost_id) return true;
+                return myDovIds && myDovIds.has(d.dovirenost_id);
+            });
+            this._render(visibleDocs, canManage);
         } catch(e) {
             document.getElementById('bd-content').innerHTML = `<div class="bd-no-docs"><i class="fa-solid fa-triangle-exclamation"></i> ${Fmt.esc(e.message)}</div>`;
         } finally {
@@ -94,24 +138,29 @@ const BranchDocsPage = {
                 <td class="bd-num">${b.number}</td>
                 <td class="bd-block-title">
                     ${Fmt.esc(b.title)}
-                    ${b.dept ? `<div class="bd-dept"><i class="fa-regular fa-building" style="margin-right:.3rem"></i>${Fmt.esc(b.dept)}</div>` : ''}
                     ${canManage ? `
                     <div class="bd-block-actions">
                         <button class="bd-action-btn" onclick="BranchDocsPage._blockModal('${b.id}')"><i class="fa-solid fa-pen"></i> Редагувати</button>
                         <button class="bd-action-btn danger" onclick="BranchDocsPage._deleteBlock('${b.id}')"><i class="fa-solid fa-trash"></i> Видалити блок</button>
                     </div>` : ''}
                 </td>
-                <td class="bd-docs">
+                <td class="bd-docs" style="width:220px">
                     <div class="bd-doc-list">
                         ${blockDocs.length ? blockDocs.map(d => `
                             <div class="bd-doc-item">
                                 <div class="bd-doc-main">
-                                    ${d.dovirenosti?.name ? `<button class="bd-tov-badge" data-path="${Fmt.esc(d.storage_path||'')}" onclick="BranchDocsPage._openDoc(this.dataset.path)">${Fmt.esc(d.dovirenosti.name)}</button>` : ''}
+                                    ${d.dovirenosti?.name ? `<button class="bd-tov-badge" data-path="${Fmt.esc(d.storage_path||'')}" onclick="BranchDocsPage._openDoc(this.dataset.path)"><i class="fa-solid fa-file-pdf" style="margin-right:.3rem;font-size:.72rem"></i>${Fmt.esc(d.dovirenosti.name)}</button>` : ''}
                                 </div>
                                 ${canManage ? `<button class="bd-action-btn danger" onclick="BranchDocsPage._deleteDoc('${d.id}')" title="Видалити файл"><i class="fa-solid fa-trash"></i></button>` : ''}
                             </div>`).join('') : `<span class="bd-empty-doc">Документ не завантажено</span>`}
                         ${canManage ? `<button class="bd-action-btn" onclick="BranchDocsPage._uploadModal(${b.number},${JSON.stringify(b.title).replace(/"/g,'&quot;')})"><i class="fa-solid fa-plus"></i> Завантажити</button>` : ''}
                     </div>
+                </td>
+                <td class="bd-block-title" style="width:200px;color:var(--text-secondary)">
+                    ${b.dept ? `<span>
+                        ${b.icon && b.icon !== 'fa-circle' ? `<i class="fa-solid ${Fmt.esc(b.icon)}" style="margin-right:.35rem;color:${this._iconOptions.find(o=>o.icon===b.icon)?.color||'var(--text-muted)'}"></i>` : ''}
+                        ${Fmt.esc(b.dept)}
+                    </span>` : `<span class="bd-empty-doc">—</span>`}
                 </td>
             </tr>`;
         }).join('');
@@ -121,23 +170,52 @@ const BranchDocsPage = {
                 <thead>
                     <tr>
                         <th>№</th>
-                        <th>Назва блоку</th>
-                        <th>Документи</th>
+                        <th>Назва документу</th>
+                        <th style="width:220px">Документи</th>
+                        <th style="width:200px">Відповідальний</th>
                     </tr>
                 </thead>
-                <tbody>${rows || `<tr><td colspan="3" class="bd-no-docs">Блоки не налаштовано</td></tr>`}</tbody>
+                <tbody>${rows || `<tr><td colspan="4" class="bd-no-docs">Блоки не налаштовано</td></tr>`}</tbody>
             </table>`;
     },
 
     // ── Block CRUD ────────────────────────────────────────────────────
 
+    _iconOptions: [
+        { icon: 'fa-scale-balanced', label: 'Юристи',         color: '#6366f1' },
+        { icon: 'fa-laptop-code',    label: 'Тех. підтримка',  color: '#0ea5e9' },
+        { icon: 'fa-building',       label: 'Адміністрація',   color: '#64748b' },
+        { icon: 'fa-file-contract',  label: 'Договори',        color: '#f59e0b' },
+        { icon: 'fa-shield-halved',  label: 'Безпека',         color: '#10b981' },
+        { icon: 'fa-users',          label: 'HR / Персонал',   color: '#8b5cf6' },
+        { icon: 'fa-circle',         label: 'Без іконки',      color: '#94a3b8' },
+    ],
+
     async _blockModal(id) {
         const b = id ? this._blocks.find(x => x.id === id) : null;
         const maxNum = this._blocks.reduce((m, x) => Math.max(m, x.number), 0);
+        const curIcon = b?.icon || '';
+
+        const iconPicker = this._iconOptions.map(o => `
+            <button type="button" class="bd-icon-opt${curIcon === o.icon ? ' bd-icon-opt-active' : ''}"
+                    data-icon="${o.icon}" title="${o.label}"
+                    onclick="BranchDocsPage._pickIcon(this)"
+                    style="--ic:${o.color}">
+                <i class="fa-solid ${o.icon}" style="color:${o.color}"></i>
+                <span>${o.label}</span>
+            </button>`).join('');
+
         Modal.open({
             title: b ? 'Редагувати блок' : 'Додати блок',
             size: 'lg',
             body: `
+            <style>
+                .bd-icon-row{display:flex;flex-wrap:wrap;gap:.4rem}
+                .bd-icon-opt{display:inline-flex;align-items:center;gap:.4rem;padding:.3rem .65rem;border-radius:var(--radius-md);border:1.5px solid var(--border);background:var(--bg-raised);cursor:pointer;font-size:.75rem;font-family:inherit;color:var(--text-secondary);transition:all .15s}
+                .bd-icon-opt:hover{border-color:var(--ic);color:var(--text-primary)}
+                .bd-icon-opt-active{border-color:var(--ic)!important;background:color-mix(in srgb,var(--ic) 10%,transparent);color:var(--text-primary)!important}
+            </style>
+            <input type="hidden" id="bd-bl-icon" value="${curIcon}">
             <div style="display:flex;flex-direction:column;gap:1rem">
                 <div style="display:grid;grid-template-columns:80px 1fr;gap:.75rem">
                     <div>
@@ -150,6 +228,10 @@ const BranchDocsPage = {
                     </div>
                 </div>
                 <div>
+                    <label style="display:block;font-size:.78rem;font-weight:600;color:var(--text-secondary);margin-bottom:.35rem">Іконка відповідального</label>
+                    <div class="bd-icon-row">${iconPicker}</div>
+                </div>
+                <div>
                     <label style="display:block;font-size:.78rem;font-weight:600;color:var(--text-secondary);margin-bottom:.35rem">Назва блоку <span style="color:var(--danger)">*</span></label>
                     <textarea id="bd-bl-title" class="bd-inp" rows="3" placeholder="Назва блоку відповідно до законодавства...">${Fmt.esc(b?.title || '')}</textarea>
                 </div>
@@ -159,17 +241,24 @@ const BranchDocsPage = {
         });
     },
 
+    _pickIcon(btn) {
+        document.querySelectorAll('.bd-icon-opt').forEach(b => b.classList.remove('bd-icon-opt-active'));
+        btn.classList.add('bd-icon-opt-active');
+        document.getElementById('bd-bl-icon').value = btn.dataset.icon;
+    },
+
     async _saveBlock(id) {
         const number = parseInt(document.getElementById('bd-bl-num')?.value);
         const title  = document.getElementById('bd-bl-title')?.value.trim();
         const dept   = document.getElementById('bd-bl-dept')?.value.trim() || null;
+        const icon   = document.getElementById('bd-bl-icon')?.value || null;
         if (!title || !number) { Toast.warning('Заповніть обов\'язкові поля'); return; }
         try {
             Loader.show();
             if (id) {
-                await API.branchDocBlocks.update(id, { number, title, dept, order_index: number });
+                await API.branchDocBlocks.update(id, { number, title, dept, icon, order_index: number });
             } else {
-                await API.branchDocBlocks.create({ number, title, dept, order_index: number });
+                await API.branchDocBlocks.create({ number, title, dept, icon, order_index: number });
             }
             Modal.close();
             Toast.success(id ? 'Блок оновлено' : 'Блок додано');
@@ -260,7 +349,8 @@ const BranchDocsPage = {
         if (!file)  { Toast.warning('Оберіть файл'); return; }
         try {
             Loader.show();
-            const path = `branch-docs/${Date.now()}_${file.name.replace(/\s+/g,'_')}`;
+            const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+            const path = `branch-docs/${Date.now()}_${safeName}`;
             const { error: upErr } = await supabase.storage.from('lesson-resources').upload(path, file);
             if (upErr) throw upErr;
             await API.resources.create({ title, type: 'document', storage_path: path, display_block: blockNum, dovirenost_id });

@@ -416,6 +416,8 @@ const API = {
                         labels:access_group_labels(label)),
                     resource_dovirenosti(dovirenost_id, dovirenosti(id,name))`, { count: 'exact' });
             q = q.is('deleted_at', null);
+            q = q.is('display_block', null);
+            q = q.is('red_folder_item_id', null);
             if (!includeLessonResources) q = q.is('lesson_id', null);
             if (courseId) q = q.eq('course_id', courseId);
             if (category) q = q.eq('category', category);
@@ -533,6 +535,15 @@ const API = {
                 txt: 'text/plain', csv: 'text/csv', zip: 'application/zip', rar: 'application/vnd.rar'
             };
             return map[ext] || 'application/octet-stream';
+        },
+
+        async getRedFolderDocs() {
+            const { data, error } = await supabase.from('resources')
+                .select('id, title, red_folder_item_id, type, storage_path, dovirenost_id')
+                .not('red_folder_item_id', 'is', null)
+                .order('created_at');
+            if (error) throw error;
+            return data || [];
         },
 
         async getBranchDocs(dovirenostId) {
@@ -1661,6 +1672,31 @@ const API = {
         },
         async remove(id) {
             const { error } = await supabase.from('branch_doc_blocks').delete().eq('id', id);
+            if (error) throw error;
+        }
+    },
+
+    // ── Red Folder Items ──────────────────────────────────────────────
+    redFolderItems: {
+        async getAll() {
+            const { data, error } = await supabase.from('red_folder_items')
+                .select('*').order('number');
+            if (error) throw error;
+            return data || [];
+        },
+        async create(fields) {
+            const { data, error } = await supabase.from('red_folder_items')
+                .insert(fields).select().single();
+            if (error) throw error;
+            return data;
+        },
+        async update(id, fields) {
+            const { error } = await supabase.from('red_folder_items')
+                .update(fields).eq('id', id);
+            if (error) throw error;
+        },
+        async remove(id) {
+            const { error } = await supabase.from('red_folder_items').delete().eq('id', id);
             if (error) throw error;
         }
     },

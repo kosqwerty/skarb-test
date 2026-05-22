@@ -94,11 +94,16 @@ const SomePage = {
 
 All Supabase calls live here, grouped by domain. Always throws on error so callers can try/catch.
 
-Full namespace list: `API.profiles`, `API.courses`, `API.enrollments`, `API.lessons`, `API.resources`, `API.scorm`, `API.tests`, `API.questions`, `API.testImages`, `API.notifications`, `API.attempts`, `API.progress`, `API.pages`, `API.pageAttachments`, `API.news`, `API.directories`, `API.dovirenosti`, `API.documentDownloads`, `API.birthdays`, `API.accessGroups`, `API.analytics`, `API.system`, `API.surveys`.
+Full namespace list: `API.profiles`, `API.courses`, `API.enrollments`, `API.lessons`, `API.resources`, `API.scorm`, `API.tests`, `API.questions`, `API.testImages`, `API.notifications`, `API.attempts`, `API.progress`, `API.pages`, `API.pageAttachments`, `API.news`, `API.directories`, `API.dovirenosti`, `API.documentDownloads`, `API.birthdays`, `API.accessGroups`, `API.analytics`, `API.system`, `API.surveys`, `API.redFolderItems`.
 
 ### Database migrations
 
-`sql/migration_v*.sql` — incremental, numbered. The current schema is the result of applying all migrations in order. When adding a new column/table, create `migration_v{N+1}.sql` and run it in the Supabase SQL Editor. **Latest is v63** (notifications: added `message`, `is_read`, `link`, `created_by` columns; dropped `notifications_type_check` constraint; enabled realtime publication).
+`sql/migration_v*.sql` — incremental, numbered. The current schema is the result of applying all migrations in order. When adding a new column/table, create `migration_v{N+1}.sql` and run it in the Supabase SQL Editor. **Latest is v74** (`resources.red_folder_item_id UUID` — links docs to red folder items).
+
+Key recent migrations:
+- v63: notifications — added `message`, `is_read`, `link`, `created_by`; dropped `notifications_type_check`; enabled realtime
+- v73: created `red_folder_items` table (id, number, title, documents, responsible, icon, timestamps); RLS policies
+- v74: `ALTER TABLE resources ADD COLUMN IF NOT EXISTS red_folder_item_id UUID REFERENCES red_folder_items(id) ON DELETE SET NULL`
 
 When writing a migration, always include `IF NOT EXISTS` / `IF EXISTS` guards and end with RLS + policies.
 
@@ -119,6 +124,8 @@ When writing a migration, always include `IF NOT EXISTS` / `IF EXISTS` guards an
 | `js/pages/expert-path.js` | Expert learning paths — tabs: шляхи / курси / тести / опитування |
 | `js/pages/surveys.js` | Surveys module — entry: `SurveysPage.renderInTab(area)`; embedded in expert-path tab |
 | `js/pages/analytics.js` | Usage analytics dashboard |
+| `js/pages/branch-docs.js` | Куточок споживача — tab embedded in documents (`ResourcesPage`), entry: `BranchDocsPage.renderInTab(area)` |
+| `js/pages/red-folder.js` | Червона папка — tab embedded in documents, entry: `RedFolderPage.renderInTab(area)` |
 | `css/main.css` | Single stylesheet, CSS variables for light/dark theming (`--primary`, `--bg-surface`, `--border`, etc.) |
 
 ### Pagination
@@ -148,7 +155,9 @@ All PKs are UUID. All tables have `created_at TIMESTAMPTZ DEFAULT NOW()`. Tables
 | `courses` | `title`, `teacher_id`, `category`, `level`, `is_published`, `is_featured`, `tags TEXT[]` | |
 | `enrollments` | `user_id`, `course_id`, `progress_percentage`, `completed_at` | UNIQUE(user_id, course_id) |
 | `lessons` | `course_id`, `title`, `order_index`, `is_published`, `is_free_preview` | |
-| `resources` | `lesson_id`, `course_id`, `title`, `type` (pdf/video/link/scorm/file/image/document), `storage_path`, `url`, `requires_ack`, `deadline_days`, `is_deleted` | Used for both KB and documents |
+| `resources` | `lesson_id`, `course_id`, `title`, `type` (pdf/video/link/scorm/file/image/document), `storage_path`, `url`, `requires_ack`, `deadline_days`, `is_deleted`, `display_block` (branch-docs block key), `dovirenost_id` (direct FK for branch-docs/red-folder uploads), `red_folder_item_id` (FK → red_folder_items) | Used for KB, documents, branch-docs, and red-folder |
+| `red_folder_items` | `id`, `number`, `title`, `documents`, `responsible`, `icon` | Items in Червона папка; resources linked via `red_folder_item_id` |
+| `resource_dovirenosti` | `resource_id`, `dovirenost_id` | Many-to-many for regular docs (documents view); branch-docs and red-folder use direct `dovirenost_id` on resources instead |
 | `tests` | `course_id`, `lesson_id`, `title`, `passing_score`, `max_attempts`, `time_limit_minutes`, `randomize_questions`, `is_published`, `allow_skip` | |
 | `questions` | `test_id`, `question_text`, `question_type` (single/multiple/true_false), `points`, `order_index` | |
 | `answers` | `question_id`, `answer_text`, `is_correct`, `order_index`, `image_url`, `image_align` | `answer_text` stores Quill HTML |
@@ -172,7 +181,8 @@ All PKs are UUID. All tables have `created_at TIMESTAMPTZ DEFAULT NOW()`. Tables
 |-------|-------------|-------|
 | `dashboard` | `DashboardPage` | |
 | `knowledge-base` | `ResourcesPage` | `view: 'kb'`; default for user/manager |
-| `documents` | `ResourcesPage` | `view: 'docs'` |
+| `documents` | `ResourcesPage` | `view: 'docs'`; tabs include Куточок споживача (`branch-docs`) and Червона папка (`red-folder`) |
+| `branch-docs` | `BranchDocsPage` | Accessible directly but **not in sidebar** — only tab in Документи |
 | `resource/:id` | `ResourceViewPage` | |
 | `courses` | `CoursesPage` | |
 | `courses/:id` | `CourseViewPage` | |
@@ -300,6 +310,8 @@ Nav items visible per role:
 | user | Навчання, Особисте (+ Планування hidden) |
 
 Note: `smm` sees the `admin` route labelled **"Контент"** — same page, different label.
+
+`contentItems` (shared across all roles) includes: Головна, Skill Up, Новини, База знань, Документи (with badge), Меню порталу. **Куточок споживача is intentionally NOT in the sidebar** — it's accessible only as a tab inside the Документи page.
 
 ## Storage URLs
 
@@ -495,6 +507,55 @@ const _fmtLocal = d => `${d.getFullYear()}-${_pad(d.getMonth()+1)}-${_pad(d.getD
 
 ### Notification insert (tests-manager.js)
 Supabase JS v2 `.insert()` never throws — always returns `{data, error}`. Check `r.error` explicitly after `Promise.all`. Type `'test_assigned'` is valid (constraint dropped in v63).
+
+### Schedule entries in dashboard calendar
+`_renderCalWidget(calEvents, today, scheduleEntries)` stores shifts in `this._calViewShifts = { date → entry }`. `_drawCalWidget()` renders a colored dot on grid cells and shift cards in today/future sections. `_calNav(dir)` fetches both `personal_cal_events` and `schedule_entries` in parallel for the new month. Shift color map: `work=#10b981`, `day_off=#8b5cf6`, `vacation=#f59e0b`, `sick=#ef4444`.
+
+### Unacked docs badge — dovirenost filtering
+Both `DashboardPage._getUnackedDocs()` and `UI.loadDocBadge()` filter tracked docs by the user's dovirenosti for non-admin/non-manager users. Pattern:
+```js
+const seeAll = AppState.isAdmin() || AppState.isManager();
+// fetch docs with resource_dovirenosti(dovirenost_id)
+// if (!seeAll): get myDovs via API.dovirenosti.getForProfile(), filter docs
+// docs with no resource_dovirenosti entries are visible to all
+```
+
+## branch-docs.js and red-folder.js specifics
+
+Both modules are tabs inside the Документи page (`ResourcesPage`). Entry point: `BranchDocsPage.renderInTab(area)` / `RedFolderPage.renderInTab(area)`.
+
+### Dovirenost filtering
+- `canManage = AppState.isAdmin()` — only admins can add/edit/delete items
+- `seeAll = AppState.isAdmin() || AppState.isManager()` — managers see all docs
+- Regular users: fetch `API.dovirenosti.getForProfile(userId)` → build `myDovIds` Set → filter docs where `!d.dovirenost_id || myDovIds.has(d.dovirenost_id)`
+- Branch-docs and red-folder use `dovirenost_id` column **directly on the resource** (not `resource_dovirenosti` join table)
+
+### File upload — safe filename
+Always sanitize filename before upload: `file.name.replace(/[^a-zA-Z0-9._-]/g, '_')`. Raw Cyrillic filenames cause Supabase Storage 400 errors.
+
+### Loader.show/hide in renderInTab
+**Never call `Loader.show()` / `Loader.hide()` inside `renderInTab()`** — it creates a full-screen overlay blocking tab clicks. Use a local inline spinner instead.
+
+### API.resources.getAll() exclusions
+`getAll()` excludes branch-docs and red-folder resources automatically:
+- `.is('display_block', null)` — excludes branch-docs
+- `.is('red_folder_item_id', null)` — excludes red-folder docs
+
+### resources.js docs view — pagination
+Docs view loads `pageSize: 500, page: 0` to get all docs at once, then filters frontend-side by dovirenost. Pagination count uses `filtered.length` (not the DB `count`) to avoid mismatch after frontend filtering. Category chips are built from the full loaded list, not the current page.
+
+### RedFolderPage state
+| Field | Purpose |
+|-------|---------|
+| `_items` | All red_folder_items rows |
+| `_docs` | All red-folder resources (filtered by dovirenost) |
+| `_iconOptions` | 7 icon options (same set as branch-docs) |
+
+### API.redFolderItems
+`getAll()`, `create(fields)`, `update(id, fields)`, `remove(id)` — CRUD for `red_folder_items` table.
+
+### API.resources.getRedFolderDocs()
+Returns resources where `red_folder_item_id IS NOT NULL`. Selects `id, title, red_folder_item_id, type, storage_path, dovirenost_id`.
 
 ## surveys.js specifics
 

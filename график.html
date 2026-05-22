@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Графік курсу | Інтенсив 4 дні</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: #f6f8fc;
+            color: #0b1c2e;
+            line-height: 1.4;
+        }
+
+        .container {
+            max-width: 1280px;
+            margin: 0 auto;
+            padding: 2rem 1.5rem 4rem;
+        }
+
+        /* Hero секція */
+        .hero {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        .badge {
+            display: inline-block;
+            background: #eef2ff;
+            color: #1e40af;
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 0.25rem 0.9rem;
+            border-radius: 40px;
+            letter-spacing: 0.3px;
+            margin-bottom: 1rem;
+        }
+
+        h1 {
+            font-size: 3rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            background: linear-gradient(135deg, #0f2b3d 0%, #1e4a6e 100%);
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+            margin-bottom: 0.75rem;
+        }
+
+        .hero-sub {
+            font-size: 1.2rem;
+            color: #4a5b6e;
+            max-width: 550px;
+            margin: 0 auto;
+        }
+
+        /* Таби днів (навігація над акордеоном) */
+        .days-tabs {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 0.5rem;
+            margin: 2rem 0 1.8rem;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 0.75rem;
+        }
+
+        .tab-btn {
+            background: transparent;
+            border: none;
+            padding: 0.6rem 1.6rem;
+            font-size: 1rem;
+            font-weight: 600;
+            border-radius: 40px;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: #5b6e8c;
+            font-family: inherit;
+        }
+
+        .tab-btn:hover {
+            background: #eef2ff;
+            color: #1e3a8a;
+        }
+
+        .tab-btn.active {
+            background: #1e3a8a;
+            color: white;
+            box-shadow: 0 6px 14px rgba(30, 58, 138, 0.2);
+        }
+
+        /* Акордеон (сучасний) */
+        .accordion {
+            background: white;
+            border-radius: 32px;
+            box-shadow: 0 20px 35px -12px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.02);
+            overflow: hidden;
+            margin-bottom: 3rem;
+        }
+
+        .accordion-item {
+            border-bottom: 1px solid #edf2f7;
+            transition: all 0.2s;
+        }
+
+        .accordion-item:last-child {
+            border-bottom: none;
+        }
+
+        .accordion-header {
+            width: 100%;
+            background: white;
+            padding: 1.25rem 1.8rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            border: none;
+            font-family: inherit;
+            font-size: 1.25rem;
+            font-weight: 700;
+            transition: background 0.2s;
+            text-align: left;
+        }
+
+        .accordion-header:hover {
+            background: #fafcff;
+        }
+
+        .day-title-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .day-num {
+            background: #eef2ff;
+            color: #1e3a8a;
+            padding: 0.2rem 0.8rem;
+            border-radius: 40px;
+            font-size: 0.85rem;
+        }
+
+        .day-name {
+            font-weight: 700;
+        }
+
+        .day-time {
+            font-size: 0.8rem;
+            font-weight: 400;
+            color: #5b6e8c;
+            background: #f1f5f9;
+            padding: 0.2rem 0.7rem;
+            border-radius: 30px;
+        }
+
+        .accordion-icon {
+            font-size: 1.5rem;
+            transition: transform 0.3s;
+            color: #7c8ba0;
+        }
+
+        .accordion-item.open .accordion-icon {
+            transform: rotate(180deg);
+        }
+
+        .accordion-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.4s cubic-bezier(0.2, 0.9, 0.4, 1.1);
+            padding: 0 1.8rem;
+        }
+
+        .accordion-item.open .accordion-content {
+            max-height: 500px;
+            padding: 0 1.8rem 1.8rem 1.8rem;
+        }
+
+        .topics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin: 1rem 0 1rem;
+        }
+
+        .topic-card {
+            background: #f8fafd;
+            padding: 0.8rem 1rem;
+            border-radius: 20px;
+            border-left: 3px solid;
+            transition: 0.1s;
+        }
+
+        .topic-card strong {
+            display: block;
+            font-size: 0.9rem;
+            margin-bottom: 0.3rem;
+        }
+
+        .topic-card p {
+            font-size: 0.8rem;
+            color: #3a546d;
+        }
+
+        .day-footer {
+            margin-top: 1rem;
+            font-size: 0.85rem;
+            color: #1e3a8a;
+            background: #eef2ff;
+            display: inline-block;
+            padding: 0.3rem 1rem;
+            border-radius: 30px;
+        }
+
+        /* Сітка "Ваш результат" */
+        .results {
+            background: white;
+            border-radius: 40px;
+            padding: 2rem 2rem;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.03);
+            margin-top: 2rem;
+        }
+
+        .results h3 {
+            font-size: 1.6rem;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 2rem;
+            background: linear-gradient(135deg, #1e293b, #2d4a6e);
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+        }
+
+        .stats-grid {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            flex: 1;
+            min-width: 140px;
+            text-align: center;
+            background: #f9fbfe;
+            padding: 1.2rem;
+            border-radius: 28px;
+        }
+
+        .stat-number {
+            font-size: 2.2rem;
+            font-weight: 800;
+            color: #0f2b3d;
+        }
+
+        .stat-label {
+            font-size: 0.85rem;
+            color: #5a6f88;
+            margin-top: 0.3rem;
+        }
+
+        .outcome-list {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 1.2rem;
+            border-top: 1px solid #edf2f7;
+            padding-top: 1.8rem;
+        }
+
+        .outcome-item {
+            background: #f1f5f9;
+            border-radius: 60px;
+            padding: 0.5rem 1.2rem;
+            font-weight: 500;
+            font-size: 0.9rem;
+            color: #1f3a5f;
+        }
+
+        .cert-line {
+            text-align: center;
+            margin-top: 1.8rem;
+            font-weight: 600;
+            color: #1e4a76;
+            background: #eef2ff;
+            padding: 0.7rem;
+            border-radius: 60px;
+            width: fit-content;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        @media (max-width: 700px) {
+            .container {
+                padding: 1rem;
+            }
+            h1 {
+                font-size: 2rem;
+            }
+            .accordion-header {
+                padding: 1rem;
+                flex-wrap: wrap;
+            }
+            .topics-grid {
+                grid-template-columns: 1fr;
+            }
+            .stats-grid {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="hero">
+        <div class="badge">🔥 Інтенсив 4 дні</div>
+        <h1>Графік курсу • 4 дні</h1>
+        <div class="hero-sub">Практичний інтенсив із сучасними технологіями</div>
+    </div>
+
+    <!-- Таби (навігація по днях) -->
+    <div class="days-tabs">
+        <button class="tab-btn active" data-day="0">ДЕНЬ 1</button>
+        <button class="tab-btn" data-day="1">ДЕНЬ 2</button>
+        <button class="tab-btn" data-day="2">ДЕНЬ 3</button>
+        <button class="tab-btn" data-day="3">ДЕНЬ 4</button>
+    </div>
+
+    <!-- Акордеон -->
+    <div class="accordion" id="accordion">
+        <div class="accordion-item" data-day="0">
+            <button class="accordion-header">
+                <div class="day-title-left">
+                    <span class="day-num">ДЕНЬ 1</span>
+                    <span class="day-name">Основи оцінки смартфонів та комп'ютери</span>
+                    <span class="day-time">10:00 – 17:00</span>
+                </div>
+                <span class="accordion-icon">▼</span>
+            </button>
+            <div class="accordion-content">
+                <div class="topics-grid">
+                    <div class="topic-card" style="border-left-color: #3b82f6;"><strong>🔍 Анатомія пристрою</strong><p>Будова, компоненти, вузли</p></div>
+                    <div class="topic-card" style="border-left-color: #3b82f6;"><strong>📱 Діагностика дисплея</strong><p>Перевірка матриці, сенсора</p></div>
+                    <div class="topic-card" style="border-left-color: #3b82f6;"><strong>🔋 Перевірка батареї</strong><p>Знос, калібрування, безпека</p></div>
+                    <div class="topic-card" style="border-left-color: #3b82f6;"><strong>⚠️ Типові дефекти</strong><p>Механічні / рідинні пошкодження</p></div>
+                </div>
+                <div class="day-footer">🎯 Результат: діагностика "з нуля"</div>
+            </div>
+        </div>
+
+        <div class="accordion-item" data-day="1">
+            <button class="accordion-header">
+                <div class="day-title-left">
+                    <span class="day-num">ДЕНЬ 2</span>
+                    <span class="day-name">Ноутбуки та комп'ютери • Діагностика заліза</span>
+                    <span class="day-time">10:00 – 17:00</span>
+                </div>
+                <span class="accordion-icon">▼</span>
+            </button>
+            <div class="accordion-content">
+                <div class="topics-grid">
+                    <div class="topic-card" style="border-left-color: #10b981;"><strong>🛠️ Діагностика заліза</strong><p>CPU, GPU, термодатчики</p></div>
+                    <div class="topic-card" style="border-left-color: #10b981;"><strong>⚡ SSD / RAM тестування</strong><p>Помилки, продуктивність</p></div>
+                    <div class="topic-card" style="border-left-color: #10b981;"><strong>🖥️ BIOS та прошивки</strong><p>Оновлення, скидання, конфігурація</p></div>
+                    <div class="topic-card" style="border-left-color: #10b981;"><strong>📈 Оптимізація роботи</strong><p>ОС, драйвери, стрес-тести</p></div>
+                </div>
+                <div class="day-footer">⚙️ Практичний стенд: 5 ноутбуків</div>
+            </div>
+        </div>
+
+        <div class="accordion-item" data-day="2">
+            <button class="accordion-header">
+                <div class="day-title-left">
+                    <span class="day-num">ДЕНЬ 3</span>
+                    <span class="day-name">Інструменти та ремонт</span>
+                    <span class="day-time">10:00 – 17:00</span>
+                </div>
+                <span class="accordion-icon">▼</span>
+            </button>
+            <div class="accordion-content">
+                <div class="topics-grid">
+                    <div class="topic-card" style="border-left-color: #f59e0b;"><strong>🧰 Професійний інструмент</strong><p>Мультиметри, паяльні станції</p></div>
+                    <div class="topic-card" style="border-left-color: #f59e0b;"><strong>🔧 Розбірка / збірка</strong><p>Акуратність, кріплення, шлейфи</p></div>
+                    <div class="topic-card" style="border-left-color: #f59e0b;"><strong>🩺 Ремонтні техніки</strong><p>Заміна компонентів, пайка BGA</p></div>
+                    <div class="topic-card" style="border-left-color: #f59e0b;"><strong>💼 Практичні кейси</strong><p>Реальні поломки від сервісів</p></div>
+                </div>
+                <div class="day-footer">🛠️ Майстер-клас: ремонт материнської плати</div>
+            </div>
+        </div>
+
+        <div class="accordion-item" data-day="3">
+            <button class="accordion-header">
+                <div class="day-title-left">
+                    <span class="day-num">ДЕНЬ 4</span>
+                    <span class="day-name">Фінальний іспит та сертифікація</span>
+                    <span class="day-time">10:00 – 15:00</span>
+                </div>
+                <span class="accordion-icon">▼</span>
+            </button>
+            <div class="accordion-content">
+                <div class="topics-grid">
+                    <div class="topic-card" style="border-left-color: #ef4444;"><strong>📚 Повторення матеріалу</strong><p>Мозковий штурм, відкриті питання</p></div>
+                    <div class="topic-card" style="border-left-color: #ef4444;"><strong>✍️ Практичний тест</strong><p>Діагностика реального пристрою</p></div>
+                    <div class="topic-card" style="border-left-color: #ef4444;"><strong>🎯 Індивідуальна оцінка</strong><p>Розбір помилок, поради</p></div>
+                    <div class="topic-card" style="border-left-color: #ef4444;"><strong>🏅 Сертифікація</strong><p>Вручення документів + фідбек</p></div>
+                </div>
+                <div class="day-footer">🎓 Завершення о 15:00, нетворкінг</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Блок ВАШ РЕЗУЛЬТАТ -->
+    <div class="results">
+        <h3>✨ Ваш результат</h3>
+        <div class="stats-grid">
+            <div class="stat-card"><div class="stat-number">4 дні</div><div class="stat-label">інтенсиву</div></div>
+            <div class="stat-card"><div class="stat-number">28 год</div><div class="stat-label">практики</div></div>
+            <div class="stat-card"><div class="stat-number">Живі</div><div class="stat-label">демонстрації</div></div>
+            <div class="stat-card"><div class="stat-number">Підтримка</div><div class="stat-label">викладачів</div></div>
+        </div>
+        <div class="outcome-list">
+            <span class="outcome-item">🔧 Глибокі знання</span>
+            <span class="outcome-item">💡 Практичні навички</span>
+            <span class="outcome-item">📜 Сертифікат по завершенню</span>
+            <span class="outcome-item">🚀 Готовність до роботи</span>
+        </div>
+        <div class="cert-line">
+            🎖️ Офіційний сертифікат + портфоліо виконаних робіт
+        </div>
+    </div>
+</div>
+
+<script>
+    // Логіка табів та акордеону
+    const tabs = document.querySelectorAll('.tab-btn');
+    const items = document.querySelectorAll('.accordion-item');
+    
+    // Функція відкрити конкретний день
+    function openDay(index) {
+        items.forEach((item, i) => {
+            if (i === index) {
+                item.classList.add('open');
+            } else {
+                item.classList.remove('open');
+            }
+        });
+        // Оновити активний таб
+        tabs.forEach((tab, idx) => {
+            if (idx === index) {
+                tab.classList.add('active');
+            } else {
+                tab.classList.remove('active');
+            }
+        });
+    }
+    
+    // Обробка кліків по табах
+    tabs.forEach((tab, idx) => {
+        tab.addEventListener('click', () => {
+            openDay(idx);
+        });
+    });
+    
+    // Обробка кліків по заголовках акордеону (щоб можна було закривати/відкривати)
+    items.forEach((item, index) => {
+        const header = item.querySelector('.accordion-header');
+        header.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const currentlyOpen = item.classList.contains('open');
+            if (!currentlyOpen) {
+                openDay(index);
+            } else {
+                // Якщо хочемо дозволити закрити — закриваємо поточний
+                item.classList.remove('open');
+                // Таб не робимо активним, якщо закрили
+                tabs[index].classList.remove('active');
+            }
+        });
+    });
+    
+    // Відкрити перший день за замовчуванням
+    openDay(0);
+</script>
+</body>
+</html>

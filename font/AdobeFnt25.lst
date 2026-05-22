@@ -4,8 +4,8 @@
 %BeginFont
 Handler:DirectoryHandler
 FontType:Invalid
-OutlineFileName:C:\Users\neoli\OneDrive\Desktop\lms\Font\.DS_Store
-FileModTime:1776276037
+OutlineFileName:D:\lms\Font\.DS_Store
+FileModTime:1778483719
 %EndFont
 
 %BeginFont
@@ -18,7 +18,7 @@ FullName:Fixel Display Black
 MenuName:Fixel Display Black
 StyleBits:0
 WritingScript:Roman
-OutlineFileName:C:\Users\neoli\OneDrive\Desktop\lms\Font\FixelDisplay-Black.otf
+OutlineFileName:D:\lms\Font\FixelDisplay-Black.otf
 DataFormat:sfntData
 UsesStandardEncoding:yes
 isCFF:yes
@@ -26,7 +26,7 @@ hasSVG:no
 hasCOLR:no
 VariableFontType:NonVariableFont
 FileLength:141140
-FileModTime:1776276039
+FileModTime:1778483719
 WeightClass:900
 WidthClass:5
 AngleClass:0
@@ -38,8 +38,8 @@ NameArray:0,Win,16,Fixel Display
 %BeginFont
 Handler:DirectoryHandler
 FontType:Invalid
-OutlineFileName:C:\Users\neoli\OneDrive\Desktop\lms\Font\FixelDisplay-Black.woff2
-FileModTime:1776276039
+OutlineFileName:D:\lms\Font\FixelDisplay-Black.woff2
+FileModTime:1778483719
 %EndFont
 
 %BeginFont
@@ -52,7 +52,7 @@ FullName:Fixel Display 20240404 Black Italic
 MenuName:Fixel Display 20240404 Black
 StyleBits:1
 WritingScript:Roman
-OutlineFileName:C:\Users\neoli\OneDrive\Desktop\lms\Font\FixelDisplay-BlackItalic.otf
+OutlineFileName:D:\lms\Font\FixelDisplay-BlackItalic.otf
 DataFormat:sfntData
 UsesStandardEncoding:yes
 isCFF:yes
@@ -60,7 +60,7 @@ hasSVG:no
 hasCOLR:no
 VariableFontType:NonVariableFont
 FileLength:122796
-FileModTime:1776276037
+FileModTime:1778483719
 WeightClass:900
 WidthClass:5
 AngleClass:1
@@ -71,8 +71,8 @@ NameArray:0,Win,16,Fixel Display 20240404
 %BeginFont
 Handler:DirectoryHandler
 FontType:Invalid
-OutlineFileName:C:\Users\neoli\OneDrive\Desktop\lms\Font\FixelDisplay-BlackItalic.woff2
-FileModTime:1776276037
+OutlineFileName:D:\lms\Font\FixelDisplay-BlackItalic.woff2
+FileModTime:1778483719
 %EndFont
 
 %BeginFont
@@ -85,7 +85,7 @@ FullName:Fixel Display Bold
 MenuName:Fixel Display Bold
 StyleBits:2
 WritingScript:Roman
-OutlineFileName:C:\Users\neoli\OneDrive\Desktop\lms\Font\FixelDisplay-Bold.otf
+OutlineFileName:D:\lms\Font\FixelDisplay-Bold.otf
 DataFormat:sfntData
 UsesStandardEncoding:yes
 isCFF:yes
@@ -93,7 +93,7 @@ hasSVG:no
 hasCOLR:no
 VariableFontType:NonVariableFont
 FileLength:143348
-FileModTime:1776276039
+FileModTime:1778483719
 WeightClass:700
 WidthClass:5
 AngleClass:0
@@ -105,8 +105,8 @@ NameArray:0,Win,16,Fixel Display
 %BeginFont
 Handler:DirectoryHandler
 FontType:Invalid
-OutlineFileName:C:\Users\neoli\OneDrive\Desktop\lms\Font\FixelDisplay-Bold.woff2
-FileModTime:1776276039
+OutlineFileName:D:\lms\Font\FixelDisplay-Bold.woff2
+FileModTime:1778483719
 %EndFont
 
 %BeginFont
@@ -119,7 +119,7 @@ FullName:Fixel Display 20240404 Bold Italic
 MenuName:Fixel Display 20240404
 StyleBits:3
 WritingScript:Roman
-OutlineFileName:C:\Users\neoli\OneDrive\Desktop\lms\Font\FixelDisplay-BoldItalic.otf
+OutlineFileName:D:\lms\Font\FixelDisplay-BoldItalic.otf
 DataFormat:sfntData
 UsesStandardEncoding:yes
 isCFF:yes
@@ -127,7 +127,7 @@ hasSVG:no
 hasCOLR:no
 VariableFontType:NonVariableFont
 FileLength:124292
-FileModTime:1776276037
+FileModTime:1778483719
 WeightClass:700
 WidthClass:5
 AngleClass:1
@@ -138,8 +138,8 @@ NameArray:0,Win,16,Fixel Display 20240404
 %BeginFont
 Handler:DirectoryHandler
 FontType:Invalid
-OutlineFileName:C:\Users\neoli\OneDrive\Desktop\lms\Font\FixelDisplay-BoldItalic.woff2
-FileModTime:1776276037
+OutlineFileName:D:\lms\Font\FixelDisplay-BoldItalic.woff2
+FileModTime:1778483719
 %EndFont
 
 %BeginFont
@@ -152,7 +152,7 @@ FullName:Fixel Display ExtraBold
 MenuName:Fixel Display ExtraBold
 StyleBits:0
 WritingScript:Roman
-OutlineFileName:C:\Users\neoli\OneDrive\Desktop\lms\Font\FixelDisplay-ExtraBold.otf
+OutlineFileName:D:\lms\Font\FixelDisplay-ExtraBold.otf
 DataFormat:sfntData
 UsesStandardEncoding:yes
 isCFF:yes
@@ -160,7 +160,7 @@ hasSVG:no
 hasCOLR:no
 VariableFontType:NonVariableFont
 FileLength:143648
-FileModTime:1776276039
+FileModTime:1778483719
 WeightClass:800
 WidthClass:5
 AngleClass:0
@@ -172,8 +172,8 @@ NameArray:0,Win,16,Fixel Display
 %BeginFont
 Handler:DirectoryHandler
 FontType:Invalid
-OutlineFileName:C:\Users\neoli\OneDrive\Desktop\lms\Font\FixelDisplay-ExtraBold.woff2
-FileModTime:1776276039
+OutlineFileName:D:\lms\Font\FixelDisplay-ExtraBold.woff2
+FileModTime:1778483719
 %EndFont
 
 %BeginFont
@@ -186,7 +186,7 @@ FullName:Fixel Display 20240404 ExtraBold Italic
 MenuName:Fixel Display 20240404 ExBold
 StyleBits:1
 WritingScript:Roman
-OutlineFileName:C:\Users\neoli\OneDrive\Desktop\lms\Font\FixelDisplay-ExtraBoldItalic.otf
+OutlineFileName:D:\lms\Font\FixelDisplay-ExtraBoldItalic.otf
 DataFormat:sfntData
 UsesStandardEncoding:yes
 isCFF:yes
@@ -194,7 +194,7 @@ hasSVG:no
 hasCOLR:no
 VariableFontType:NonVariableFont
 FileLength:123976
-FileModTime:1776276037
+FileModTime:1778483719
 WeightClass:800
 WidthClass:5
 AngleClass:1
@@ -205,8 +205,8 @@ NameArray:0,Win,16,Fixel Display 20240404
 %BeginFont
 Handler:DirectoryHandler
 FontType:Invalid
-OutlineFileName:C:\Users\neoli\OneDrive\Desktop\lms\Font\FixelDisplay-ExtraBoldItalic.woff2
-FileModTime:1776276037
+OutlineFileName:D:\lms\Font\FixelDisplay-ExtraBoldItalic.woff2
+FileModTime:1778483719
 %EndFont
 
 %BeginFont
@@ -219,7 +219,7 @@ FullName:Fixel Display ExtraLight
 MenuName:Fixel Display ExtraLight
 StyleBits:0
 WritingScript:Roman
-OutlineFileName:C:\Users\neoli\OneDrive\Desktop\lms\Font\FixelDisplay-ExtraLight.otf
+OutlineFileName:D:\lms\Font\FixelDisplay-ExtraLight.otf
 DataFormat:sfntData
 UsesStandardEncoding:yes
 isCFF:yes
@@ -227,7 +227,7 @@ hasSVG:no
 hasCOLR:no
 VariableFontType:NonVariableFont
 FileLength:132652
-FileModTime:1776276037
+FileModTime:1778483719
 WeightClass:200
 WidthClass:5
 AngleClass:0
@@ -239,8 +239,8 @@ NameArray:0,Win,16,Fixel Display
 %BeginFont
 Handler:DirectoryHandler
 FontType:Invalid
-OutlineFileName:C:\Users\neoli\OneDrive\Desktop\lms\Font\FixelDisplay-ExtraLight.woff2
-FileModTime:1776276037
+OutlineFileName:D:\lms\Font\FixelDisplay-ExtraLight.woff2
+FileModTime:1778483719
 %EndFont
 
 %BeginFont
@@ -253,7 +253,7 @@ FullName:Fixel Display 20240404 ExtraLight Italic
 MenuName:Fixel Display 20240404 ExLight
 StyleBits:1
 WritingScript:Roman
-OutlineFileName:C:\Users\neoli\OneDrive\Desktop\lms\Font\FixelDisplay-ExtraLightItalic.otf
+OutlineFileName:D:\lms\Font\FixelDisplay-ExtraLightItalic.otf
 DataFormat:sfntData
 UsesStandardEncoding:yes
 isCFF:yes
@@ -261,7 +261,7 @@ hasSVG:no
 hasCOLR:no
 VariableFontType:NonVariableFont
 FileLength:119704
-FileModTime:1776276037
+FileModTime:1778483719
 WeightClass:200
 WidthClass:5
 AngleClass:1
@@ -272,8 +272,8 @@ NameArray:0,Win,16,Fixel Display 20240404
 %BeginFont
 Handler:DirectoryHandler
 FontType:Invalid
-OutlineFileName:C:\Users\neoli\OneDrive\Desktop\lms\Font\FixelDisplay-ExtraLightItalic.woff2
-FileModTime:1776276037
+OutlineFileName:D:\lms\Font\FixelDisplay-ExtraLightItalic.woff2
+FileModTime:1778483719
 %EndFont
 
 %BeginFont
@@ -286,7 +286,7 @@ FullName:Fixel Display Light
 MenuName:Fixel Display Light
 StyleBits:0
 WritingScript:Roman
-OutlineFileName:C:\Users\neoli\OneDrive\Desktop\lms\Font\FixelDisplay-Light.otf
+OutlineFileName:D:\lms\Font\FixelDisplay-Light.otf
 DataFormat:sfntData
 UsesStandardEncoding:yes
 isCFF:yes
@@ -294,7 +294,7 @@ hasSVG:no
 hasCOLR:no
 VariableFontType:NonVariableFont
 FileLength:134548
-FileModTime:1776276039
+FileModTime:1778483719
 WeightClass:300
 WidthClass:5
 AngleClass:0
@@ -306,8 +306,8 @@ NameArray:0,Win,16,Fixel Display
 %BeginFont
 Handler:DirectoryHandler
 FontType:Invalid
-OutlineFileName:C:\Users\neoli\OneDrive\Desktop\lms\Font\FixelDisplay-Light.woff2
-FileModTime:1776276039
+OutlineFileName:D:\lms\Font\FixelDisplay-Light.woff2
+FileModTime:1778483719
 %EndFont
 
 %BeginFont
@@ -320,7 +320,7 @@ FullName:Fixel Display 20240404 Light Italic
 MenuName:Fixel Display 20240404 Light
 StyleBits:1
 WritingScript:Roman
-OutlineFileName:C:\Users\neoli\OneDrive\Desktop\lms\Font\FixelDisplay-LightItalic.otf
+OutlineFileName:D:\lms\Font\FixelDisplay-LightItalic.otf
 DataFormat:sfntData
 UsesStandardEncoding:yes
 isCFF:yes
@@ -328,7 +328,7 @@ hasSVG:no
 hasCOLR:no
 VariableFontType:NonVariableFont
 FileLength:119532
-FileModTime:1776276037
+FileModTime:1778483719
 WeightClass:300
 WidthClass:5
 AngleClass:1
@@ -339,8 +339,8 @@ NameArray:0,Win,16,Fixel Display 20240404
 %BeginFont
 Handler:DirectoryHandler
 FontType:Invalid
-OutlineFileName:C:\Users\neoli\OneDrive\Desktop\lms\Font\FixelDisplay-LightItalic.woff2
-FileModTime:1776276037
+OutlineFileName:D:\lms\Font\FixelDisplay-LightItalic.woff2
+FileModTime:1778483719
 %EndFont
 
 %BeginFont
@@ -353,7 +353,7 @@ FullName:Fixel Display Medium
 MenuName:Fixel Display Medium
 StyleBits:0
 WritingScript:Roman
-OutlineFileName:C:\Users\neoli\OneDrive\Desktop\lms\Font\FixelDisplay-Medium.otf
+OutlineFileName:D:\lms\Font\FixelDisplay-Medium.otf
 DataFormat:sfntData
 UsesStandardEncoding:yes
 isCFF:yes
@@ -361,7 +361,7 @@ hasSVG:no
 hasCOLR:no
 VariableFontType:NonVariableFont
 FileLength:138092
-FileModTime:1776276037
+FileModTime:1778483719
 WeightClass:500
 WidthClass:5
 AngleClass:0
@@ -373,8 +373,8 @@ NameArray:0,Win,16,Fixel Display
 %BeginFont
 Handler:DirectoryHandler
 FontType:Invalid
-OutlineFileName:C:\Users\neoli\OneDrive\Desktop\lms\Font\FixelDisplay-Medium.woff2
-FileModTime:1776276037
+OutlineFileName:D:\lms\Font\FixelDisplay-Medium.woff2
+FileModTime:1778483719
 %EndFont
 
 %BeginFont
@@ -387,7 +387,7 @@ FullName:Fixel Display 20240404 Medium Italic
 MenuName:Fixel Display 20240404 Medium
 StyleBits:1
 WritingScript:Roman
-OutlineFileName:C:\Users\neoli\OneDrive\Desktop\lms\Font\FixelDisplay-MediumItalic.otf
+OutlineFileName:D:\lms\Font\FixelDisplay-MediumItalic.otf
 DataFormat:sfntData
 UsesStandardEncoding:yes
 isCFF:yes
@@ -395,7 +395,7 @@ hasSVG:no
 hasCOLR:no
 VariableFontType:NonVariableFont
 FileLength:123744
-FileModTime:1776276037
+FileModTime:1778483719
 WeightClass:500
 WidthClass:5
 AngleClass:1
@@ -406,8 +406,8 @@ NameArray:0,Win,16,Fixel Display 20240404
 %BeginFont
 Handler:DirectoryHandler
 FontType:Invalid
-OutlineFileName:C:\Users\neoli\OneDrive\Desktop\lms\Font\FixelDisplay-MediumItalic.woff2
-FileModTime:1776276037
+OutlineFileName:D:\lms\Font\FixelDisplay-MediumItalic.woff2
+FileModTime:1778483719
 %EndFont
 
 %BeginFont
@@ -420,7 +420,7 @@ FullName:Fixel Display Regular
 MenuName:Fixel Display Regular
 StyleBits:0
 WritingScript:Roman
-OutlineFileName:C:\Users\neoli\OneDrive\Desktop\lms\Font\FixelDisplay-Regular.otf
+OutlineFileName:D:\lms\Font\FixelDisplay-Regular.otf
 DataFormat:sfntData
 UsesStandardEncoding:yes
 isCFF:yes
@@ -428,7 +428,7 @@ hasSVG:no
 hasCOLR:no
 VariableFontType:NonVariableFont
 FileLength:129988
-FileModTime:1776276037
+FileModTime:1778483719
 WeightClass:400
 WidthClass:5
 AngleClass:0
@@ -440,8 +440,8 @@ NameArray:0,Win,16,Fixel Display
 %BeginFont
 Handler:DirectoryHandler
 FontType:Invalid
-OutlineFileName:C:\Users\neoli\OneDrive\Desktop\lms\Font\FixelDisplay-Regular.woff2
-FileModTime:1776276037
+OutlineFileName:D:\lms\Font\FixelDisplay-Regular.woff2
+FileModTime:1778483719
 %EndFont
 
 %BeginFont
@@ -454,7 +454,7 @@ FullName:Fixel Display 20240404 Regular Italic
 MenuName:Fixel Display 20240404
 StyleBits:1
 WritingScript:Roman
-OutlineFileName:C:\Users\neoli\OneDrive\Desktop\lms\Font\FixelDisplay-RegularItalic.otf
+OutlineFileName:D:\lms\Font\FixelDisplay-RegularItalic.otf
 DataFormat:sfntData
 UsesStandardEncoding:yes
 isCFF:yes
@@ -462,7 +462,7 @@ hasSVG:no
 hasCOLR:no
 VariableFontType:NonVariableFont
 FileLength:117656
-FileModTime:1776276037
+FileModTime:1778483719
 WeightClass:400
 WidthClass:5
 AngleClass:1
@@ -473,8 +473,8 @@ NameArray:0,Win,16,Fixel Display 20240404
 %BeginFont
 Handler:DirectoryHandler
 FontType:Invalid
-OutlineFileName:C:\Users\neoli\OneDrive\Desktop\lms\Font\FixelDisplay-RegularItalic.woff2
-FileModTime:1776276037
+OutlineFileName:D:\lms\Font\FixelDisplay-RegularItalic.woff2
+FileModTime:1778483719
 %EndFont
 
 %BeginFont
@@ -487,7 +487,7 @@ FullName:Fixel Display SemiBold
 MenuName:Fixel Display SemiBold
 StyleBits:0
 WritingScript:Roman
-OutlineFileName:C:\Users\neoli\OneDrive\Desktop\lms\Font\FixelDisplay-SemiBold.otf
+OutlineFileName:D:\lms\Font\FixelDisplay-SemiBold.otf
 DataFormat:sfntData
 UsesStandardEncoding:yes
 isCFF:yes
@@ -495,7 +495,7 @@ hasSVG:no
 hasCOLR:no
 VariableFontType:NonVariableFont
 FileLength:141772
-FileModTime:1776276037
+FileModTime:1778483719
 WeightClass:600
 WidthClass:5
 AngleClass:0
@@ -507,8 +507,8 @@ NameArray:0,Win,16,Fixel Display
 %BeginFont
 Handler:DirectoryHandler
 FontType:Invalid
-OutlineFileName:C:\Users\neoli\OneDrive\Desktop\lms\Font\FixelDisplay-SemiBold.woff2
-FileModTime:1776276037
+OutlineFileName:D:\lms\Font\FixelDisplay-SemiBold.woff2
+FileModTime:1778483719
 %EndFont
 
 %BeginFont
@@ -521,7 +521,7 @@ FullName:Fixel Display 20240404 SemiBold Italic
 MenuName:Fixel Display 20240404 SemiBold
 StyleBits:1
 WritingScript:Roman
-OutlineFileName:C:\Users\neoli\OneDrive\Desktop\lms\Font\FixelDisplay-SemiBoldItalic.otf
+OutlineFileName:D:\lms\Font\FixelDisplay-SemiBoldItalic.otf
 DataFormat:sfntData
 UsesStandardEncoding:yes
 isCFF:yes
@@ -529,7 +529,7 @@ hasSVG:no
 hasCOLR:no
 VariableFontType:NonVariableFont
 FileLength:124180
-FileModTime:1776276037
+FileModTime:1778483719
 WeightClass:600
 WidthClass:5
 AngleClass:1
@@ -540,8 +540,8 @@ NameArray:0,Win,16,Fixel Display 20240404
 %BeginFont
 Handler:DirectoryHandler
 FontType:Invalid
-OutlineFileName:C:\Users\neoli\OneDrive\Desktop\lms\Font\FixelDisplay-SemiBoldItalic.woff2
-FileModTime:1776276037
+OutlineFileName:D:\lms\Font\FixelDisplay-SemiBoldItalic.woff2
+FileModTime:1778483719
 %EndFont
 
 %BeginFont
@@ -554,7 +554,7 @@ FullName:Fixel Display Thin
 MenuName:Fixel Display Thin
 StyleBits:0
 WritingScript:Roman
-OutlineFileName:C:\Users\neoli\OneDrive\Desktop\lms\Font\FixelDisplay-Thin.otf
+OutlineFileName:D:\lms\Font\FixelDisplay-Thin.otf
 DataFormat:sfntData
 UsesStandardEncoding:yes
 isCFF:yes
@@ -562,7 +562,7 @@ hasSVG:no
 hasCOLR:no
 VariableFontType:NonVariableFont
 FileLength:128392
-FileModTime:1776276037
+FileModTime:1778483719
 WeightClass:100
 WidthClass:5
 AngleClass:0
@@ -574,8 +574,8 @@ NameArray:0,Win,16,Fixel Display
 %BeginFont
 Handler:DirectoryHandler
 FontType:Invalid
-OutlineFileName:C:\Users\neoli\OneDrive\Desktop\lms\Font\FixelDisplay-Thin.woff2
-FileModTime:1776276037
+OutlineFileName:D:\lms\Font\FixelDisplay-Thin.woff2
+FileModTime:1778483719
 %EndFont
 
 %BeginFont
@@ -588,7 +588,7 @@ FullName:Fixel Display 20240404 Thin Italic
 MenuName:Fixel Display 20240404 Thin
 StyleBits:1
 WritingScript:Roman
-OutlineFileName:C:\Users\neoli\OneDrive\Desktop\lms\Font\FixelDisplay-ThinItalic.otf
+OutlineFileName:D:\lms\Font\FixelDisplay-ThinItalic.otf
 DataFormat:sfntData
 UsesStandardEncoding:yes
 isCFF:yes
@@ -596,7 +596,7 @@ hasSVG:no
 hasCOLR:no
 VariableFontType:NonVariableFont
 FileLength:115680
-FileModTime:1776276037
+FileModTime:1778483719
 WeightClass:100
 WidthClass:5
 AngleClass:1
@@ -607,7 +607,7 @@ NameArray:0,Win,16,Fixel Display 20240404
 %BeginFont
 Handler:DirectoryHandler
 FontType:Invalid
-OutlineFileName:C:\Users\neoli\OneDrive\Desktop\lms\Font\FixelDisplay-ThinItalic.woff2
-FileModTime:1776276037
+OutlineFileName:D:\lms\Font\FixelDisplay-ThinItalic.woff2
+FileModTime:1778483719
 %EndFont
 

@@ -1,3 +1,6 @@
 .history/
 node_modules/
 .vercel
+.env
+screenshots/
+presentation.pdf

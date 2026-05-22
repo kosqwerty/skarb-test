@@ -117,7 +117,7 @@ const DashboardPage = {
             .db-news-hero-body{position:absolute;bottom:0;left:0;right:0;padding:.75rem .9rem;z-index:1}
             .db-news-hero-badge{display:inline-block;background:#f59e0b;color:#000;font-size:.6rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;padding:.1rem .45rem;border-radius:3px;margin-bottom:.35rem}
             .db-news-hero-title{font-size:.88rem;font-weight:700;color:#fff;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-            .db-news-hero-date{font-size:.68rem;color:rgba(255,255,255,.5);margin-top:.3rem}
+            .db-news-hero-date{font-size:.68rem;color:rgba(255,255,255,.5);margin-top:.3rem;text-align:right}
             .db-news-rows{flex:1;overflow-y:auto;display:flex;flex-direction:column;scrollbar-width:thin}
             .db-news-row{display:flex;align-items:center;gap:.65rem;padding:.55rem .9rem;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s}
             .db-news-row:hover{background:var(--bg-raised)}
@@ -1240,7 +1240,7 @@ const DashboardPage = {
                     </div>
                 </div>
                 <div class="db-news-rows">
-                    ${rest.slice(0, 4).map(n => `
+                    ${rest.slice(0, 3).map(n => `
                         <div class="db-news-row" onclick="DashboardPage._openNewsModal('${n.id}')">
                             <div class="db-news-row-dot"></div>
                             <span class="db-news-row-title">${Fmt.esc(n.title)}</span>

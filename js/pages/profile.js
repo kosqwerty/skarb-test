@@ -9,6 +9,20 @@ const ProfilePage = {
     _pendingAvatar: null, // { file } | { delete: true } | null
     _onBack: null,        // callback: what to do after save or cancel
 
+    _tenureStr(dateStr) {
+        if (!dateStr) return '';
+        const from  = new Date(dateStr);
+        const today = new Date();
+        let years  = today.getFullYear() - from.getFullYear();
+        let months = today.getMonth()    - from.getMonth();
+        if (months < 0) { years--; months += 12; }
+        const parts = [];
+        if (years > 0)  parts.push(`${years} ${years === 1 ? 'рік' : years < 5 ? 'роки' : 'років'}`);
+        if (months > 0) parts.push(`${months} міс.`);
+        if (!parts.length) parts.push('менше місяця');
+        return parts.join(' ');
+    },
+
     // ── Entry points ─────────────────────────────────────────────
 
     // Called by AdminPage when editing any user
@@ -109,7 +123,15 @@ const ProfilePage = {
                         </div>
                     </label>
                     <div class="input-row-2col">
-                        <label class="input-label"><span>Дата народження</span><input id="pe-birthdate" type="date" value="${user.birth_date || ''}" onpaste="Fmt.parseDatePaste(event,this)"></label>
+                        <label class="input-label">
+                            <span>Дата народження</span>
+                            <input id="pe-birthdate" type="date" value="${user.birth_date || ''}" onpaste="Fmt.parseDatePaste(event,this)">
+                            <select id="pe-bd-privacy" style="margin-top:.35rem;font-size:.78rem;padding:.3rem .5rem;border-radius:var(--radius-md);border:1px solid var(--border);background:var(--bg-raised);color:var(--text-secondary);cursor:pointer">
+                                <option value="full"    ${(user.birth_date_privacy||'full')==='full'    ? 'selected' : ''}>👁 Показувати повністю</option>
+                                <option value="no_year" ${(user.birth_date_privacy||'full')==='no_year' ? 'selected' : ''}>🙈 Приховати рік</option>
+                                <option value="hidden"  ${(user.birth_date_privacy||'full')==='hidden'  ? 'selected' : ''}>🔒 Приховати повністю</option>
+                            </select>
+                        </label>
                         <label class="input-label"><span>Телефон</span><input id="pe-phone" type="tel" value="${user.phone || ''}"></label>
                     </div>
                 </div>
@@ -154,7 +176,7 @@ const ProfilePage = {
                         <span>Роль</span>
                         <div class="custom-select-wrapper">
                             <select id="pe-role" ${user.role === 'owner' ? 'disabled title="Змінюйте через передачу прав"' : ''}>
-                                ${(AppState.isOwner() ? ['owner','admin','smm','teacher','manager','user'] : ['admin','smm','teacher','manager','user'])
+                                ${(AppState.isOwner() ? ['owner','ceo','admin','smm','teacher','manager','user'] : ['ceo','admin','smm','teacher','manager','user'])
                                     .map(r => `<option value="${r}" ${user.role===r?'selected':''}>${Fmt.role(r)}</option>`).join('')}
                             </select>
                         </div>
@@ -192,6 +214,18 @@ const ProfilePage = {
                     ` : `
                     <label class="input-label"><span>Підрозділ</span><input type="text" value="${user.subdivision || ''}" readonly style="opacity:.6;cursor:not-allowed"></label>
                     <label class="input-label"><span>Посада</span><input type="text" value="${user.job_position || ''}" readonly style="opacity:.6;cursor:not-allowed"></label>
+                    ${(user.hired_at || user.position_since) ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-top:.25rem">
+                        ${user.hired_at ? `<div style="padding:.55rem .75rem;background:var(--bg-raised);border:1.5px solid var(--border);border-radius:16px">
+                            <div style="font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.2rem">В компанії з</div>
+                            <div style="font-size:.9rem;font-weight:500">${Fmt.date(user.hired_at)}</div>
+                            <div style="font-size:.75rem;color:var(--text-muted);margin-top:.1rem">${ProfilePage._tenureStr(user.hired_at)}</div>
+                        </div>` : '<div></div>'}
+                        ${user.position_since ? `<div style="padding:.55rem .75rem;background:var(--bg-raised);border:1.5px solid var(--border);border-radius:16px">
+                            <div style="font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.2rem">На посаді з</div>
+                            <div style="font-size:.9rem;font-weight:500">${Fmt.date(user.position_since)}</div>
+                            <div style="font-size:.75rem;color:var(--text-muted);margin-top:.1rem">${ProfilePage._tenureStr(user.position_since)}</div>
+                        </div>` : '<div></div>'}
+                    </div>` : ''}
                     `}
                     <label class="input-label"><span>Про себе</span><textarea id="pe-bio" style="padding:10px 14px;background:var(--bg-raised);border:1.5px solid var(--border);border-radius:16px;font-size:.95rem;color:var(--text-primary);font-family:inherit;outline:none;resize:vertical;min-height:80px">${user.bio || ''}</textarea></label>
                 </div>
@@ -324,7 +358,8 @@ const ProfilePage = {
                 first_name:  Dom.val('pe-first-name').trim() || null,
                 patronymic:  Dom.val('pe-patronymic').trim() || null,
                 gender:      Dom.val('pe-gender')  || null,
-                birth_date:  Dom.val('pe-birthdate') || null,
+                birth_date:          Dom.val('pe-birthdate') || null,
+                birth_date_privacy:  Dom.val('pe-bd-privacy') || 'full',
                 phone:       Dom.val('pe-phone').trim() || null,
                 city:        Dom.val('pe-city') || null,
                 bio:         Dom.val('pe-bio').trim() || null,

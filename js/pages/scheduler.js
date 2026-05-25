@@ -336,10 +336,10 @@ const SchedulerPage = {
             <h1 class="sch-title">🔔 Планувальник сповіщень</h1>
             <p class="sch-subtitle">Керування розсилками та повідомленнями</p>
         </div>
-        <button class="sch-btn-primary" onclick="SchedulerPage._renderForm(document.getElementById('page-content'), null)">
+        ${AppState.canMutate() ? `<button class="sch-btn-primary" onclick="SchedulerPage._renderForm(document.getElementById('page-content'), null)">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
             Нове сповіщення
-        </button>
+        </button>` : ''}
     </div>
 
     <!-- Stats -->
@@ -514,13 +514,13 @@ const SchedulerPage = {
                 <td>
                     <div class="sch-actions">
                         <button class="sch-act-btn" onclick="SchedulerPage._preview('${t.id}')" title="Передперегляд"><i class="fa-solid fa-eye"></i></button>
-                        ${t.status !== 'sent' ? `
+                        ${t.status !== 'sent' && AppState.canMutate() ? `
                         <button class="sch-act-btn" onclick="SchedulerPage._openEdit('${t.id}')" title="Редагувати"><i class="fa-solid fa-pen"></i></button>
                         <button class="sch-act-btn success" onclick="SchedulerPage._sendNow('${t.id}')" title="Відправити зараз">📤</button>
                         ` : ''}
                         ${t.status === 'sent' ? `<button class="sch-act-btn" onclick="SchedulerPage._viewUnread('${t.id}')" title="Хто не прочитав">📊</button>` : ''}
                         ${isOwner ? `<button class="sch-act-btn" onclick="SchedulerPage._viewLog('${t.id}')" title="Лог відправки">📋</button>` : ''}
-                        <button class="sch-act-btn danger" onclick="SchedulerPage._deleteTask('${t.id}')" title="Видалити"><i class="fa-solid fa-trash"></i></button>
+                        ${AppState.canMutate() ? `<button class="sch-act-btn danger" onclick="SchedulerPage._deleteTask('${t.id}')" title="Видалити"><i class="fa-solid fa-trash"></i></button>` : ''}
                     </div>
                 </td>
             </tr>`;

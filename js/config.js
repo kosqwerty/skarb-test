@@ -73,8 +73,10 @@ const AppState = {
     isSmm()     { return this.profile?.role === 'smm'; },
     isTeacher() { return this.profile?.role === 'teacher'; },
     isManager() { return this.profile?.role === 'manager'; },
+    isCeo()     { return this.profile?.role === 'ceo'; },
     canSchedule(){ return ['owner','admin','manager'].includes(this.profile?.role); },
-    isStaff()   { return ['owner','admin','smm','teacher'].includes(this.profile?.role); },
+    isStaff()   { return ['owner','admin','smm','teacher','ceo'].includes(this.profile?.role); },
+    canMutate() { return this.profile?.role !== 'ceo'; },
 
     isImpersonating() { return !!this._realProfile; },
 

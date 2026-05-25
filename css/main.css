@@ -551,10 +551,10 @@ h4 { font-size: 1.125rem; font-weight: 500; }
     cursor: pointer; user-select: none; white-space: nowrap;
 }
 .ms-filter-label:hover { color: var(--text-primary); }
-.sort-btns { display: inline-flex; flex-direction: column; gap: 0; margin-left: auto; flex-shrink: 0; }
+.sort-btns { display: inline-flex; flex-direction: column; gap: 0; flex-shrink: 0; }
 .sort-arrow {
     display: block; background: none; border: none; padding: 0;
-    font-size: .45rem; line-height: 1.1; cursor: pointer;
+    font-size: .65rem; line-height: 1.1; cursor: pointer;
     color: var(--border-light); transition: color .15s;
 }
 .sort-arrow:hover { color: var(--text-secondary); }
@@ -826,10 +826,12 @@ select option { background: var(--bg-raised); }
 .badge-warning { background: rgba(245,158,11,0.15); color: var(--warning); }
 .badge-info    { background: rgba(59,130,246,0.15); color: var(--info); }
 .badge-muted   { background: var(--bg-raised);      color: var(--text-muted); border: 1px solid var(--border); }
-.badge-admin   { background: rgba(16,185,129,0.15); color: #10b981; border: 1px solid rgba(16,185,129,0.25); width: 145px;}
+.badge-admin   { background: rgba(16,185,129,0.15); color: #10b981; border: 1px solid rgba(16,185,129,0.25); width: fit-content; }
 .light-theme .badge-admin { background: rgba(5,150,105,0.12); color: #059669; border-color: rgba(5,150,105,0.25); }
 .badge-manager { background: rgba(99,155,255,0.15); color: #60A5FA; border: 1px solid rgba(99,155,255,0.25); }
 .light-theme .badge-manager { background: rgba(124,58,237,0.12); color: #7c3aed; border-color: rgba(124,58,237,0.25); }
+.badge-ceo { background: rgba(167,139,250,.18); color: #a78bfa; border: 1px solid rgba(167,139,250,.35); }
+.light-theme .badge-ceo { background: rgba(124,58,237,.12); color: #7c3aed; border-color: rgba(124,58,237,.3); }
 
 /* Світла тема – коригуємо прозорість бейджів для кращого контрасту */
 .light-theme .badge-primary { background: rgba(252,179,22,0.15); color: #b87c00; }

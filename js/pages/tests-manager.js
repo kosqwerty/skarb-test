@@ -334,7 +334,7 @@ const TestsManagerPage = {
             <i class="fa-solid fa-magnifying-glass"></i>
             <input class="tm-search-inp" type="text" placeholder="Пошук тесту..." oninput="TestsManagerPage._filterTests(this.value)">
         </div>
-        <button class="tm-btn-new" onclick="TestsManagerPage.openCreateModal()"><i class="fa-solid fa-plus"></i> Новий тест</button>
+        ${AppState.canMutate() ? `<button class="tm-btn-new" onclick="TestsManagerPage.openCreateModal()"><i class="fa-solid fa-plus"></i> Новий тест</button>` : ''}
     </div>
 
     <div class="tm-grid" id="tm-grid">
@@ -343,7 +343,7 @@ const TestsManagerPage = {
                 <div class="tm-empty-ico"><i class="fa-solid fa-clipboard-list"></i></div>
                 <div class="tm-empty-head">Тестів ще немає</div>
                 <div class="tm-empty-txt">Створіть перший тест та призначте його співробітникам для перевірки знань</div>
-                <button class="tm-btn-new" onclick="TestsManagerPage.openCreateModal()"><i class="fa-solid fa-plus"></i> Створити перший тест</button>
+                ${AppState.canMutate() ? `<button class="tm-btn-new" onclick="TestsManagerPage.openCreateModal()"><i class="fa-solid fa-plus"></i> Створити перший тест</button>` : ''}
             </div>`}
     </div>
 </div>`;
@@ -368,12 +368,12 @@ const TestsManagerPage = {
         <div style="font-size:.75rem;color:var(--text-muted)">${Fmt.date(t.created_at)}</div>
     </div>
     <div class="tm-card-footer" onclick="event.stopPropagation()">
-        <button class="tm-btn-edit" onclick="TestsManagerPage.openEditor('${t.id}')"><i class="fa-solid fa-pen-to-square"></i> Редагувати</button>
-        <button class="tm-btn-settings" onclick="TestsManagerPage.openSettings('${t.id}')" title="Налаштувати"><i class="fa-solid fa-gears"></i></button>
-        <button class="tm-btn-assign" onclick="TestsManagerPage.openAssignModal('${t.id}')"><i class="fa-solid fa-users"></i></button>
+        ${AppState.canMutate() ? `<button class="tm-btn-edit" onclick="TestsManagerPage.openEditor('${t.id}')"><i class="fa-solid fa-pen-to-square"></i> Редагувати</button>` : ''}
+        ${AppState.canMutate() ? `<button class="tm-btn-settings" onclick="TestsManagerPage.openSettings('${t.id}')" title="Налаштувати"><i class="fa-solid fa-gears"></i></button>` : ''}
+        ${AppState.canMutate() ? `<button class="tm-btn-assign" onclick="TestsManagerPage.openAssignModal('${t.id}')"><i class="fa-solid fa-users"></i></button>` : ''}
         <button class="tm-btn-results" onclick="TestsManagerPage.openResultsModal('${t.id}')"><i class="fa-solid fa-chart-line"></i></button>
-        <button class="tm-btn-dupe" onclick="TestsManagerPage.duplicateTest('${t.id}')" title="Дублювати тест"><i class="fa-regular fa-copy"></i></button>
-        <button class="tm-btn-del" onclick="TestsManagerPage.deleteTest('${t.id}',${JSON.stringify(t.title||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-trash"></i></button>
+        ${AppState.canMutate() ? `<button class="tm-btn-dupe" onclick="TestsManagerPage.duplicateTest('${t.id}')" title="Дублювати тест"><i class="fa-regular fa-copy"></i></button>` : ''}
+        ${AppState.canMutate() ? `<button class="tm-btn-del" onclick="TestsManagerPage.deleteTest('${t.id}',${JSON.stringify(t.title||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-trash"></i></button>` : ''}
     </div>
 </div>`;
     },

@@ -26,8 +26,9 @@ const ResourcesPage = {
     _allDovirenosti: [],
     _myDovirenosti: [],
 
-    async init(container, { view = 'kb', tab = '' } = {}) {
+    async init(container, { view = 'kb', tab = '', cat = '' } = {}) {
         this._initTab = tab;
+        this._initCat = cat;
         this._page = 0;
         this._search = '';
         this._category = '';
@@ -86,7 +87,7 @@ const ResourcesPage = {
                                 <option value="status_asc">✅ Ознайомлені першими</option>
                             </select>
                         </div>
-                        ${AppState.isStaff() ? '<button class="btn btn-primary" onclick="ResourcesPage.openForm()"><i class="fa-solid fa-plus"></i> Додати</button>' : ''}
+                        ${AppState.isStaff() && AppState.canMutate() ? '<button class="btn btn-primary" onclick="ResourcesPage.openForm()"><i class="fa-solid fa-plus"></i> Додати</button>' : ''}
                             ${AppState.isOwner() ? '<button class="btn btn-ghost btn-sm" onclick="ResourcesPage._openTrash()" title="Кошик"><i class="fa-solid fa-trash"></i> Кошик</button>' : ''}
                         ${HelpTip.render('docs', {
                     icon: 'fa-file-lines',
@@ -117,8 +118,10 @@ const ResourcesPage = {
                 </div>`;
 
             await this._loadFilters();
+            // Якщо повертаємось з документа з активним чіпом — застосовуємо до load
+            if (this._initCat) this._category = this._initCat;
             await this.load(true);
-            // Відновлюємо вкладку якщо повернулись з документа (наприклад з реєстру)
+            // Відновлюємо вкладку якщо повернулись з документа
             if (this._initTab && this._initTab !== 'list') {
                 const tabBtn = document.getElementById(`docs-tab-${this._initTab}`);
                 if (tabBtn) this.switchTab(this._initTab, tabBtn);
@@ -313,7 +316,7 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
         <input type="text" id="resource-search" placeholder="Пошук за назвою або описом..." value="${this._search}" oninput="ResourcesPage.onSearch(event)">
     </div>
     <div style="display:flex;align-items:center;gap:.5rem;flex-shrink:0">
-        ${AppState.isStaff() ? '<button class="btn btn-primary kb-add-btn" onclick="ResourcesPage.openForm()"><i class="fa-solid fa-plus"></i> Додати ресурс</button>' : ''}
+        ${AppState.isStaff() && AppState.canMutate() ? '<button class="btn btn-primary kb-add-btn" onclick="ResourcesPage.openForm()"><i class="fa-solid fa-plus"></i> Додати ресурс</button>' : ''}
         ${AppState.isOwner() ? '<button class="btn btn-ghost btn-sm kb-add-btn" onclick="ResourcesPage._openTrash()" title="Кошик"><i class="fa-solid fa-trash"></i> Кошик</button>' : ''}
     </div>
 </div>
@@ -393,6 +396,11 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
     switchTab(tab, el) {
         if (this._activeTab === tab) return; // повторний клік — нічого не робимо
         this._activeTab = tab;
+        // Оновлюємо URL тихо — щоб history.back() повертав на правильну вкладку
+        if (this._view === 'docs') {
+            const newHash = tab === 'list' ? '#/documents' : `#/documents?tab=${tab}`;
+            history.replaceState(null, '', newHash);
+        }
         document.querySelectorAll('button[id^="docs-tab-"]').forEach(btn => {
             const isActive = btn.id === `docs-tab-${tab}`;
             const isRed = btn.id === 'docs-tab-red-folder';
@@ -837,6 +845,9 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
             if (tabAll) { tabAll.classList.add('btn-primary'); tabAll.classList.remove('btn-ghost'); }
         }
         this._page = 0;
+        // Оновлюємо URL щоб history.back() повернув з активним чіпом
+        const catParam = this._category ? `&cat=${encodeURIComponent(this._category)}` : '';
+        history.replaceState(null, '', `#/documents?tab=list${catParam}`);
         this.load();
     },
 
@@ -1008,7 +1019,7 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
         <div class="kb-card-actions">
             <button class="kb-btn-open" onclick="ResourcesPage.openViewer('${resource.id}')"><i class="fa-solid fa-eye"></i> Відкрити</button>
             ${resource.download_allowed ? `<button class="kb-btn-dl" title="Завантажити" onclick="ResourcesPage.downloadResource('${resource.id}')"><i class="fa-solid fa-download"></i></button>` : ''}
-            ${AppState.isStaff() ? `<button class="kb-btn-edit" title="Редагувати" onclick="ResourcesPage.openEdit('${resource.id}')"><i class="fa-solid fa-pen"></i></button><button class="kb-btn-del" title="Видалити" onclick="ResourcesPage.deleteResource('${resource.id}',${safeTitle})"><i class="fa-solid fa-trash"></i></button>` : ''}
+            ${AppState.isStaff() && AppState.canMutate() ? `<button class="kb-btn-edit" title="Редагувати" onclick="ResourcesPage.openEdit('${resource.id}')"><i class="fa-solid fa-pen"></i></button><button class="kb-btn-del" title="Видалити" onclick="ResourcesPage.deleteResource('${resource.id}',${safeTitle})"><i class="fa-solid fa-trash"></i></button>` : ''}
         </div>
         <button class="kb-star res-star-btn${isBm?' active':''}"
             data-bm-route="resource/${resource.id}"
@@ -1040,7 +1051,7 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
     <div class="kb-row-actions" onclick="event.stopPropagation()">
         <button class="kb-btn-open" onclick="ResourcesPage.openViewer('${resource.id}')"><i class="fa-solid fa-eye"></i> Відкрити</button>
         ${resource.download_allowed ? `<button class="kb-btn-dl" title="Завантажити" onclick="ResourcesPage.downloadResource('${resource.id}')"><i class="fa-solid fa-download"></i></button>` : ''}
-        ${AppState.isStaff() ? `<button class="kb-btn-edit" title="Редагувати" onclick="ResourcesPage.openEdit('${resource.id}')"><i class="fa-solid fa-pen"></i></button><button class="kb-btn-del" title="Видалити" onclick="ResourcesPage.deleteResource('${resource.id}',${safeTitle})"><i class="fa-solid fa-trash"></i></button>` : ''}
+        ${AppState.isStaff() && AppState.canMutate() ? `<button class="kb-btn-edit" title="Редагувати" onclick="ResourcesPage.openEdit('${resource.id}')"><i class="fa-solid fa-pen"></i></button><button class="kb-btn-del" title="Видалити" onclick="ResourcesPage.deleteResource('${resource.id}',${safeTitle})"><i class="fa-solid fa-trash"></i></button>` : ''}
         <button class="kb-star res-star-btn${isBm?' active':''}"
             data-bm-route="resource/${resource.id}"
             title="${isBm?'Видалити з закладок':'Зберегти в закладки'}"
@@ -1235,7 +1246,7 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
                     </div>
                     <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center" onclick="event.stopPropagation()">
                         <button class="btn btn-ghost btn-sm" onclick="ResourcesPage.openViewer('${resource.id}')"><i class="fa-solid fa-eye"></i> Відкрити</button>
-                        ${AppState.isStaff() ? `<button class="btn btn-ghost btn-sm" onclick="ResourcesPage.openEdit('${resource.id}')"><i class="fa-solid fa-pen"></i></button><button class="btn btn-ghost btn-sm res-del-btn" title="Видалити" onclick="ResourcesPage.deleteResource('${resource.id}',${JSON.stringify(resource.title||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-trash"></i></button>` : ''}
+                        ${AppState.isStaff() && AppState.canMutate() ? `<button class="btn btn-ghost btn-sm" onclick="ResourcesPage.openEdit('${resource.id}')"><i class="fa-solid fa-pen"></i></button><button class="btn btn-ghost btn-sm res-del-btn" title="Видалити" onclick="ResourcesPage.deleteResource('${resource.id}',${JSON.stringify(resource.title||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-trash"></i></button>` : ''}
                     </div>
                 </div>`;
         }
@@ -1310,7 +1321,13 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
             localStorage.setItem(`doc_opened_${id}`, new Date().toISOString());
         }
         const from = this._view === 'admin' ? 'resources' : this._view === 'docs' ? 'documents' : 'knowledge-base';
-        Router.go(`resource/${id}?from=${from}`);
+        let route = `resource/${id}?from=${from}`;
+        if (this._view === 'docs') {
+            const tab = this._activeTab || 'list';
+            if (tab !== 'list') route += `&tab=${tab}`;
+            if (this._category) route += `&cat=${encodeURIComponent(this._category)}`;
+        }
+        Router.go(route);
     },
 
     async _getResourceUrl(resource) {
@@ -1866,20 +1883,11 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
 
 const ResourceViewPage = {
 
-    _from: null,
-    _tab: null,
-
     _goBack() {
-        if (this._from === 'documents' && this._tab) {
-            Router.go(`documents?tab=${this._tab}`);
-        } else {
-            Router.back();
-        }
+        Router.back();
     },
 
-    async init(container, { id, from, tab } = {}) {
-        this._from = from || null;
-        this._tab  = tab  || null;
+    async init(container, { id, from } = {}) {
         if (!id) { Router.back(); return; }
 
         UI.setBreadcrumb([{ label: 'Перегляд ресурсу' }]);
@@ -2057,6 +2065,11 @@ const ResourceViewPage = {
 
         this._setupUnlockListeners(resource, from, dlStatus, isPdf, isVideo, isImage, isDoc);
         if (isDoc) this._startDocTimeout(url);
+        // Браузер може скролити до iframe автоматично — скидаємо після рендеру
+        requestAnimationFrame(() => {
+            document.documentElement.scrollTop = 0;
+            document.body.scrollTop = 0;
+        });
     },
 
     _buildActionFooter(resource, from, dlStatus, isPdf) {

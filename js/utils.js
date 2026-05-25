@@ -27,11 +27,13 @@ const Toast = {
 };
 
 const Modal = {
-    open({ title = '', body = '', footer = '', size = '', onClose } = {}) {
+    open({ title = '', body = '', footer = '', size = '', noHeader = false, onClose } = {}) {
+        const header = document.querySelector('.modal-header');
         document.getElementById('modal-title').innerHTML  = title;
         document.getElementById('modal-body').innerHTML   = body;
         document.getElementById('modal-footer').innerHTML = footer;
         document.getElementById('modal-box').className   = `modal-box ${size ? 'modal-' + size : ''}`;
+        if (header) header.style.display = noHeader ? 'none' : '';
         document.getElementById('modal-backdrop').classList.remove('hidden');
         document.getElementById('modal-container').classList.remove('hidden');
         this._onClose = onClose;
@@ -43,6 +45,8 @@ const Modal = {
         document.getElementById('modal-container').classList.add('hidden');
         document.getElementById('modal-body').innerHTML   = '';
         document.getElementById('modal-footer').innerHTML = '';
+        const header = document.querySelector('.modal-header');
+        if (header) header.style.display = '';
         document.removeEventListener('keydown', this._escHandler);
         if (this._onClose) this._onClose();
         this._onClose = null;
@@ -232,6 +236,13 @@ const UI = {
         const adminItem       = { icon: '<i class="fa-solid fa-gear"          style="color:#f87171"></i>', label: 'Адміністрування',   route: 'admin' };
         const contentAdmItem  = { icon: '<i class="fa-solid fa-gear"          style="color:#f87171"></i>', label: 'Контент',           route: 'admin' };
 
+        if (role === 'ceo') {
+            return [
+                { title: 'Навчання',    items: contentItems },
+                { title: 'Управління',  items: [ analyticsItem, schedulerItem, adminItem ] },
+                { title: 'Особисте',    items: [ contactsItem, bmItem ] }
+            ];
+        }
         if (role === 'owner' || role === 'admin') {
             return [
                 { title: 'Навчання',    items: contentItems },
@@ -282,7 +293,8 @@ const UI = {
             : initials;
 
         const isTopRole = profile?.role === 'owner' || profile?.role === 'admin';
-        const crownHtml = isTopRole ? '<i class="fa-solid fa-crown" style="color:#C9A227;font-size:.65rem"></i>' : '';
+        const crownHtml = isTopRole ? '<i class="fa-solid fa-crown" style="color:#C9A227;font-size:.65rem"></i>'
+                        : profile?.role === 'ceo' ? '<i class="fa-solid fa-crown" style="color:#a78bfa;font-size:.65rem"></i>' : '';
         const meta = profile?.city || '';
 
         const headerUser = document.getElementById('header-user');
@@ -417,14 +429,17 @@ const Fmt = {
         return `${size.toFixed(1)} ${units[i]}`;
     },
     role(r) {
-        return { owner: 'Admin', admin: 'Адміністратор', smm: 'SMM-менеджер', teacher: 'Викладач', manager: 'Керівник', user: 'Користувач', student: 'Користувач' }[r] || r || '—';
+        return { owner: 'Admin', ceo: 'CEO', admin: 'Адміністратор', smm: 'SMM-менеджер', teacher: 'Викладач', manager: 'Керівник', user: 'Користувач', student: 'Користувач' }[r] || r || '—';
     },
     roleBadge(r) {
         if (r === 'owner')   return `<span class="badge badge-warning">👑 Admin</span>`;
+        if (r === 'ceo')     return `<span class="badge badge-ceo">👑 CEO</span>`;
         if (r === 'admin')   return `<span class="badge badge-admin">👑 Адміністратор</span>`;
         if (r === 'smm')     return `<span class="badge badge-info">📰 SMM-менеджер</span>`;
         if (r === 'manager') return `<span class="badge badge-manager">👔 Керівник</span>`;
-        const cls = { teacher: 'badge-primary', user: 'badge-muted', student: 'badge-muted' }[r] || 'badge-muted';
+        if (r === 'user' || r === 'student')
+            return `<span class="badge" style="background:none;border:none;color:#d946ef;text-shadow:0 0 8px rgba(217,70,239,.4);padding-left:0;padding-right:0">💎 ${Fmt.role(r)}</span>`;
+        const cls = { teacher: 'badge-primary' }[r] || 'badge-muted';
         return `<span class="badge ${cls}">${Fmt.role(r)}</span>`;
     },
     level(l) {
@@ -963,7 +978,8 @@ const MultiSelect = (() => {
         const s = _st(id);
         const wrap = document.getElementById(`ms-wrap-${id}`);
         if (!wrap) return;
-        const list = wrap.querySelector('.ms-list');
+        const ddRoot = _portals[id] || wrap;
+        const list = ddRoot.querySelector('.ms-list');
         if (!list) return;
         if (s.filtered.length === 0) {
             list.innerHTML = `<div class="ms-empty">Нічого не знайдено</div>`;
@@ -989,29 +1005,35 @@ const MultiSelect = (() => {
         if (el) el.value = _st(id).selected.join('\x00');
     }
 
+    // Portal map: id → dd element currently in document.body
+    const _portals = {};
+
     function _open(id) {
         Object.keys(_s).forEach(k => { if (k !== id) _close(k); });
         const wrap = document.getElementById(`ms-wrap-${id}`);
         if (!wrap) return;
         wrap.classList.add('open');
 
-        // Позиціонуємо дропдаун через fixed щоб таблиця не обрізала
-        const dd   = wrap.querySelector('.ms-dropdown');
+        // Portal pattern: переносимо дропдаун в body щоб уникнути
+        // overflow/transform containing-block проблем у вкладених таблицях
+        const dd   = _portals[id] || wrap.querySelector('.ms-dropdown');
         const ctrl = wrap.querySelector('.ms-control');
         if (dd && ctrl) {
             const r = ctrl.getBoundingClientRect();
-            dd.style.position = 'fixed';
-            dd.style.top      = (r.bottom + 3) + 'px';
-            dd.style.left     = r.left + 'px';
+            // Перенести в body якщо ще не там
+            if (dd.parentElement !== document.body) {
+                document.body.appendChild(dd);
+                _portals[id] = dd;
+            }
             const ddWidth = Math.max(r.width, 280);
-            dd.style.width    = ddWidth + 'px';
-            dd.style.right    = 'auto';
+            let left = r.left;
             // Якщо виходить за правий край вікна — зсуваємо вліво
-            const overflowRight = r.left + ddWidth - window.innerWidth;
-            if (overflowRight > 0) dd.style.left = (r.left - overflowRight - 8) + 'px';
+            const overflowRight = left + ddWidth - window.innerWidth;
+            if (overflowRight > 0) left = left - overflowRight - 8;
+            dd.style.cssText = `display:block;position:fixed;top:${r.bottom + 3}px;left:${left}px;width:${ddWidth}px;right:auto;z-index:9999`;
         }
 
-        const inner = wrap.querySelector('.ms-search-inner');
+        const inner = dd ? dd.querySelector('.ms-search-inner') : null;
         if (inner) { inner.value = ''; inner.focus(); }
         const s = _st(id);
         s.filtered = [...s.options];
@@ -1023,8 +1045,13 @@ const MultiSelect = (() => {
         const wrap = document.getElementById(`ms-wrap-${id}`);
         if (!wrap) return;
         wrap.classList.remove('open');
-        const dd = wrap.querySelector('.ms-dropdown');
-        if (dd) { dd.style.position = ''; dd.style.top = ''; dd.style.left = ''; dd.style.width = ''; }
+        // Повертаємо dd із portal назад у wrap
+        const dd = _portals[id];
+        if (dd) {
+            dd.style.cssText = '';
+            wrap.appendChild(dd);
+            delete _portals[id];
+        }
         const inner = wrap.querySelector('.ms-search-inner');
         if (inner) inner.value = '';
         const s = _st(id);
@@ -1087,10 +1114,12 @@ const MultiSelect = (() => {
                 else _open(id);
                 return;
             }
-            // close if click outside
+            // close if click outside (враховуємо portal dd у body)
             Object.keys(_s).forEach(id => {
                 const wrap = document.getElementById(`ms-wrap-${id}`);
-                if (wrap && wrap.classList.contains('open') && !wrap.contains(e.target)) _close(id);
+                if (!wrap || !wrap.classList.contains('open')) return;
+                const dd = _portals[id];
+                if (!wrap.contains(e.target) && !(dd && dd.contains(e.target))) _close(id);
             });
         });
 

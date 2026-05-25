@@ -6,13 +6,13 @@ const AdminPage = {
     _tab: 'users',
 
     async init(container, params) {
-        if (!AppState.isAdmin() && !AppState.isSmm()) {
+        if (!AppState.isAdmin() && !AppState.isSmm() && !AppState.isCeo()) {
             Toast.error('Заборонено', 'Ця сторінка тільки для персоналу');
             Router.go('dashboard');
             return;
         }
 
-        const canManageUsers = AppState.isAdmin(); // owner + admin
+        const canManageUsers = AppState.isAdmin() || AppState.isCeo();
         UI.setBreadcrumb([{ label: AppState.isSmm() ? 'Контент' : 'Адміністрування' }]);
 
         container.innerHTML = `
@@ -165,45 +165,120 @@ const AdminPage = {
         if (!list) list = (await API.profiles.getAll({ pageSize: 200 })).data || [];
         this._usersAll = list;
         this._selectedUsers = new Set();
+        this._initColVisibility();
 
         el.innerHTML = `
-            <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem">
+            <style>
+                .uf-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-surface)}
+                .uf-table{border-collapse:collapse;table-layout:fixed}
+                .uf-th{padding:.55rem .75rem 0;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);background:var(--bg-raised);border-bottom:none;white-space:nowrap;user-select:none;cursor:pointer;transition:background var(--transition),color var(--transition)}
+                .uf-th-inner{display:flex;align-items:center;justify-content:space-between;gap:.3rem;width:100%}
+                .uf-th-inner .sort-btns{margin-left:auto}
+                .uf-th:hover{background:var(--bg-hover);color:var(--text-primary)}
+                .uf-th-nc{cursor:default}.uf-th-nc:hover{background:var(--bg-raised);color:var(--text-muted)}
+                .uf-th-pib{position:sticky;left:40px;z-index:3;background:var(--bg-raised);box-shadow:2px 0 5px rgba(0,0,0,.07)}
+                .uf-th-pib:hover{background:var(--bg-hover)}
+                .uf-th-cb{position:sticky;left:0;z-index:3;background:var(--bg-raised)}
+                .uf-fth{padding:.15rem .5rem .4rem;border-bottom:2px solid var(--border)}
+                .uf-finput{width:100%;height:28px;padding:.25rem .5rem;font-size:.78rem;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);outline:none;box-sizing:border-box}
+                .uf-finput:focus{border-color:var(--primary);box-shadow:0 0 0 2px rgba(var(--primary-rgb),.12)}
+                .uf-fselect{width:100%;height:28px;padding:.2rem .4rem;font-size:.78rem;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);outline:none;box-sizing:border-box}
+                .uf-fselect:focus{border-color:var(--primary)}
+                .uf-fth .ms-wrap .ms-control{height:28px;min-height:unset;padding:.2rem .4rem}
+                .uf-fth .ms-wrap{width:100%}
+                .uf-td{padding:.7rem .75rem;border-bottom:1px solid var(--border-light);font-size:.82rem;vertical-align:middle;overflow:hidden}
+                .uf-td-role .badge{background:none!important;border:none!important;padding-left:0;padding-right:0}
+                .uf-td-pib{position:sticky;left:40px;z-index:2;background:var(--bg-surface);box-shadow:2px 0 5px rgba(0,0,0,.07)}
+                .uf-td-cb{position:sticky;left:0;z-index:2;background:var(--bg-surface)}
+                .uf-tr:last-child .uf-td{border-bottom:none}
+                .uf-tr:hover .uf-td{background:var(--bg-hover)}
+                .uf-tr:hover .uf-td-pib,.uf-tr:hover .uf-td-cb{background:var(--bg-hover)}
+                .uf-tr-owner .uf-td,.uf-tr-owner .uf-td-pib,.uf-tr-owner .uf-td-cb{background:var(--bg-raised)}
+                .uf-tr-owner:hover .uf-td,.uf-tr-owner:hover .uf-td-pib,.uf-tr-owner:hover .uf-td-cb{background:var(--bg-hover)}
+                .uf-pib-inner{display:flex;align-items:center;gap:.55rem;cursor:pointer}
+                .uf-pib-name{font-weight:600;font-size:.83rem;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px;text-decoration-color:var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:185px}
+                .uf-pib-email{font-size:.71rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:185px}
+                .uf-avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--secondary));display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden}
+                .uf-act-col{display:flex;gap:.2rem;align-items:center;justify-content:center}
+            </style>
+
+            <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.85rem">
                 <button class="btn btn-ghost btn-sm" onclick="AdminPage._renderUsers(document.getElementById('admin-content'))" style="display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i> Назад</button>
                 <h3 style="margin:0">👥 Всі користувачі</h3>
             </div>
-            <div style="display:flex;gap:.75rem;margin-bottom:.75rem;flex-wrap:wrap;align-items:center;justify-content:space-between">
-                <div style="display:flex;gap:.75rem;flex-wrap:wrap">
-                    <button class="btn btn-primary" onclick="AdminPage.openCreateUser()"><i class="fa-solid fa-plus"></i> Створити користувача</button>
-                    <button class="btn btn-ghost"   onclick="AdminPage.importUsers()"><i class="fa-solid fa-upload"></i> Імпорт</button>
-                    <button class="btn btn-success"  onclick="AdminPage.exportUsers(${JSON.stringify(list).replace(/"/g,'&quot;')})"><i class="fa-solid fa-download"></i> Експорт</button>
+
+            <div style="display:flex;gap:.75rem;margin-bottom:.65rem;flex-wrap:wrap;align-items:center;justify-content:space-between">
+                <div style="display:flex;gap:.65rem;flex-wrap:wrap">
+                    ${AppState.canMutate() ? `<button class="btn btn-primary" onclick="AdminPage.openCreateUser()"><i class="fa-solid fa-plus"></i> Створити користувача</button>` : ''}
+                    ${AppState.canMutate() ? `<button class="btn btn-ghost" onclick="AdminPage.importUsers()"><i class="fa-solid fa-upload"></i> Імпорт</button>` : ''}
+                    <button class="btn btn-success" onclick="AdminPage.exportUsers(${JSON.stringify(list).replace(/"/g,'&quot;')})"><i class="fa-solid fa-download"></i> Експорт</button>
                 </div>
-                <div style="display:flex;align-items:center;gap:.75rem">
+                <div style="display:flex;align-items:center;gap:.65rem">
                     <span style="font-size:.8rem;color:var(--text-muted)">Показано <span id="users-shown">0</span> з <span id="users-total">${list.length}</span></span>
                     <span class="filter-badge" id="users-filter-badge" style="display:none"></span>
                     <button class="btn btn-ghost btn-sm" id="users-clear-btn" style="display:none" onclick="AdminPage._clearUserFilters()">✕ Очистити</button>
                     <span style="font-size:.8rem;color:var(--text-muted)">|</span>
                     <span style="font-size:.8rem;color:var(--text-muted)">По</span>
                     ${[10,50,100].map(n => `<span class="page-size-btn${this._pageSize===n?' active':''}" onclick="AdminPage._setPageSize(${n})">${n}</span>`).join('')}
+                    <span style="font-size:.8rem;color:var(--text-muted)">|</span>
+                    <div style="position:relative">
+                        <button class="btn btn-ghost btn-sm" onclick="AdminPage.toggleColDropdown()" title="Налаштування колонок" style="padding:.25rem .45rem">
+                            <i class="fa-solid fa-gear"></i>
+                        </button>
+                        <div id="uf-col-dropdown" style="display:none;position:absolute;right:0;top:calc(100% + 4px);z-index:999;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:0 8px 24px rgba(0,0,0,.15);padding:.5rem;min-width:170px">
+                            <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);padding:.2rem .4rem .4rem">Колонки</div>
+                            ${this._ALL_COLS.map(col => `
+                            <label style="display:flex;align-items:center;gap:.55rem;padding:.35rem .5rem;border-radius:var(--radius-md);cursor:pointer;transition:background .12s" onmouseenter="this.style.background='var(--bg-hover)'" onmouseleave="this.style.background=''">
+                                <input type="checkbox" id="ucol-cb-${col.key}" ${this._visibleCols.has(col.key) ? 'checked' : ''} onchange="AdminPage.toggleCol('${col.key}')" style="cursor:pointer">
+                                <span style="font-size:.82rem">${col.label}</span>
+                            </label>`).join('')}
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <div class="table-wrapper">
-                <table>
+            <div class="uf-table-wrap">
+                <table class="uf-table">
+                    <colgroup>
+                        <col style="width:40px">
+                        <col style="width:255px">
+                        <col id="ucol-job" style="width:160px">
+                        <col id="ucol-city" style="width:110px">
+                        <col id="ucol-subdivision" style="width:150px">
+                        <col id="ucol-role" style="width:155px">
+                        <col id="ucol-label" style="width:105px">
+                        <col id="ucol-date" style="width:90px">
+                        <col id="ucol-activity" style="width:90px">
+                        <col style="width:45px">
+                    </colgroup>
                     <thead>
-                        <tr class="filter-row">
-                            <th style="width:36px;padding:.5rem;text-align:center;vertical-align:bottom;padding-top:.75rem">
-                                <input type="checkbox" id="uf-select-all" title="Вибрати всіх видимих"
-                                       onchange="AdminPage._toggleAllVisible(this)">
+                        <!-- Рядок 1: назви колонок + сортування -->
+                        <tr>
+                            <th class="uf-th uf-th-cb uf-th-nc" style="text-align:center;border-bottom:none">
+                                <input type="checkbox" id="uf-select-all" title="Вибрати всіх видимих" onchange="AdminPage._toggleAllVisible(this)">
                             </th>
-                            <th style="width:220px"><div class="ms-filter-label" onclick="AdminPage._sortByLabel('name')">ПІБ ${AdminPage._sortBtn('name')}</div><input type="text" id="uf-name" placeholder="Пошук..." oninput="AdminPage._applyUserFilters()"></th>
-                            <th style="width:170px"><div class="ms-filter-label" onclick="AdminPage._sortByLabel('job')">Посада ${AdminPage._sortBtn('job')}</div>${MultiSelect.html('uf-job', 'Всі...')}</th>
-                            <th style="width:120px"><div class="ms-filter-label" onclick="AdminPage._sortByLabel('city')">Місто ${AdminPage._sortBtn('city')}</div>${MultiSelect.html('uf-city', 'Всі...')}</th>
-                            <th style="width:150px"><div class="ms-filter-label" onclick="AdminPage._sortByLabel('subdivision')">Підрозділ ${AdminPage._sortBtn('subdivision')}</div>${MultiSelect.html('uf-subdivision', 'Всі...')}</th>
-                            <th style="width:97px">
-                                <div class="ms-filter-label" onclick="AdminPage._sortByLabel('role')">Роль ${AdminPage._sortBtn('role')}</div>
-                                <select id="uf-role" onchange="AdminPage._applyUserFilters()">
-                                    <option value="">Всі</option>
+                            <th class="uf-th uf-th-pib" style="border-bottom:none" onclick="AdminPage._sortByLabel('name')"><div class="uf-th-inner">ПІБ ${AdminPage._sortBtn('name')}</div></th>
+                            <th class="uf-th uf-col-job" style="border-bottom:none" onclick="AdminPage._sortByLabel('job')"><div class="uf-th-inner">Посада ${AdminPage._sortBtn('job')}</div></th>
+                            <th class="uf-th uf-col-city" style="border-bottom:none" onclick="AdminPage._sortByLabel('city')"><div class="uf-th-inner">Місто ${AdminPage._sortBtn('city')}</div></th>
+                            <th class="uf-th uf-col-subdivision" style="border-bottom:none" onclick="AdminPage._sortByLabel('subdivision')"><div class="uf-th-inner">Підрозділ ${AdminPage._sortBtn('subdivision')}</div></th>
+                            <th class="uf-th uf-col-role" style="border-bottom:none" onclick="AdminPage._sortByLabel('role')"><div class="uf-th-inner">Роль ${AdminPage._sortBtn('role')}</div></th>
+                            <th class="uf-th uf-col-label" style="border-bottom:none" onclick="AdminPage._sortByLabel('label')"><div class="uf-th-inner">Мітка ${AdminPage._sortBtn('label')}</div></th>
+                            <th class="uf-th uf-col-date" style="border-bottom:none" onclick="AdminPage._sortByLabel('date')"><div class="uf-th-inner">Реєстрація ${AdminPage._sortBtn('date')}</div></th>
+                            <th class="uf-th uf-col-activity" style="border-bottom:none" onclick="AdminPage._sortByLabel('activity')"><div class="uf-th-inner">Активність ${AdminPage._sortBtn('activity')}</div></th>
+                            <th class="uf-th uf-th-nc" style="border-bottom:none;width:72px;min-width:72px;max-width:72px"></th>
+                        </tr>
+                        <!-- Рядок 2: фільтри -->
+                        <tr class="uf-filter-row">
+                            <th class="uf-th uf-th-cb uf-th-nc uf-fth"></th>
+                            <th class="uf-th uf-th-pib uf-fth"><input type="text" id="uf-name" class="uf-finput" placeholder="Пошук..." oninput="AdminPage._applyUserFilters()"></th>
+                            <th class="uf-th uf-fth uf-col-job">${MultiSelect.html('uf-job', 'Всі...')}</th>
+                            <th class="uf-th uf-fth uf-col-city">${MultiSelect.html('uf-city', 'Всі...')}</th>
+                            <th class="uf-th uf-fth uf-col-subdivision">${MultiSelect.html('uf-subdivision', 'Всі...')}</th>
+                            <th class="uf-th uf-fth uf-col-role">
+                                <select id="uf-role" class="uf-fselect" onchange="AdminPage._applyUserFilters()">
+                                    <option value="">Всі ролі</option>
                                     <option value="owner">👑 Admin</option>
+                                    <option value="ceo">👑 CEO</option>
                                     <option value="admin">👑 Адміністратор</option>
                                     <option value="manager">👑 Керівник</option>
                                     <option value="smm">📰 SMM</option>
@@ -211,10 +286,10 @@ const AdminPage = {
                                     <option value="user">Користувач</option>
                                 </select>
                             </th>
-                            <th style="width:110px"><div class="ms-filter-label" onclick="AdminPage._sortByLabel('label')">Мітка ${AdminPage._sortBtn('label')}</div>${MultiSelect.html('uf-label', 'Всі...')}</th>
-                            <th style="width:90px"><div class="ms-filter-label" onclick="AdminPage._sortByLabel('date')">Реєстрація ${AdminPage._sortBtn('date')}</div><input id="uf-date" type="text" placeholder="дд.мм.рррр" oninput="AdminPage._applyUserFilters()"></th>
-                            <th style="width:90px"><div class="ms-filter-label" onclick="AdminPage._sortByLabel('activity')">Активність ${AdminPage._sortBtn('activity')}</div><input id="uf-activity" type="text" placeholder="дд.мм.рррр" oninput="AdminPage._applyUserFilters()"></th>
-                            <th style="width:50px;vertical-align:bottom;padding-top:.7rem;text-align:center">
+                            <th class="uf-th uf-fth uf-col-label">${MultiSelect.html('uf-label', 'Всі...')}</th>
+                            <th class="uf-th uf-fth uf-col-date"><input id="uf-date" type="text" class="uf-finput" placeholder="дд.мм.рр" oninput="AdminPage._applyUserFilters()"></th>
+                            <th class="uf-th uf-fth uf-col-activity"><input id="uf-activity" type="text" class="uf-finput" placeholder="дд.мм.рр" oninput="AdminPage._applyUserFilters()"></th>
+                            <th class="uf-th uf-th-nc uf-fth" style="text-align:center;width:72px;min-width:72px;max-width:72px">
                                 <button class="btn-reset-filters" onclick="AdminPage._clearUserFilters()" title="Скинути всі фільтри"><img src="icons/filter.png" alt="Скинути фільтри"></button>
                             </th>
                         </tr>
@@ -230,12 +305,11 @@ const AdminPage = {
             <div class="bulk-bar" id="bulk-bar" style="display:none">
                 <span class="bulk-info">Вибрано: <span id="bulk-count">0</span></span>
                 <div class="bulk-sep"></div>
-                <button class="btn btn-ghost btn-sm" onclick="AdminPage._bulkBlock()">🔒 Заблокувати</button>
-                <button class="btn btn-ghost btn-sm" onclick="AdminPage._bulkUnblock()">🔓 Розблокувати</button>
-                <button class="btn btn-ghost btn-sm" onclick="AdminPage._bulkChangeRole()">🎭 Змінити роль</button>
+                ${AppState.canMutate() ? `<button class="btn btn-ghost btn-sm" onclick="AdminPage._bulkBlock()">🔒 Заблокувати</button>` : ''}
+                ${AppState.canMutate() ? `<button class="btn btn-ghost btn-sm" onclick="AdminPage._bulkUnblock()">🔓 Розблокувати</button>` : ''}
+                ${AppState.canMutate() ? `<button class="btn btn-ghost btn-sm" onclick="AdminPage._bulkChangeRole()">🎭 Змінити роль</button>` : ''}
                 <button class="btn btn-ghost btn-sm" onclick="AdminPage._bulkExport()">📊 Експорт вибраних</button>
-                <div class="bulk-sep"></div>
-                <button class="btn btn-danger btn-sm" onclick="AdminPage._bulkDelete()">​<i class="fa-solid fa-trash"></i> Видалити</button>
+                ${AppState.canMutate() ? `<div class="bulk-sep"></div><button class="btn btn-danger btn-sm" onclick="AdminPage._bulkDelete()"><i class="fa-solid fa-trash"></i> Видалити</button>` : ''}
                 <div class="bulk-sep"></div>
                 <button class="btn btn-ghost btn-sm" onclick="AdminPage._clearSelection()">✕ Скасувати вибір</button>
             </div>`;
@@ -253,70 +327,152 @@ const AdminPage = {
         });
 
         this._restoreUserFilters();
+        this._applyColVisibility();
     },
 
     _userRow(u) {
-        const isOwnerRow  = u.role === 'owner';
-        const isSelf      = u.id === AppState.user?.id;
-        const canEdit     = !isOwnerRow || AppState.isOwner();
-        const canHide     = (AppState.isAdmin()) && !isSelf && !isOwnerRow;
-
-        const esc = s => (s || '').toLowerCase().replace(/"/g, '');
+        const isOwnerRow = u.role === 'owner';
+        const isSelf     = u.id === AppState.user?.id;
+        const canEdit    = AppState.canMutate() && (!isOwnerRow || AppState.isOwner());
+        const canHide    = AppState.canMutate() && AppState.isAdmin() && !isSelf && !isOwnerRow;
+        const esc        = s => (s || '').toLowerCase().replace(/"/g, '');
+        const trCls      = isOwnerRow ? 'uf-tr uf-tr-owner' : 'uf-tr';
 
         return `
-            <tr id="urow-${u.id}"
+            <tr id="urow-${u.id}" class="${trCls}"
                 data-name="${esc(u.full_name)}"
                 data-job="${esc(u.job_position)}"
                 data-city="${esc(u.city)}"
                 data-subdivision="${esc(u.subdivision)}"
                 data-role="${u.role || ''}"
                 data-label="${esc(u.label)}"
-                data-date="${Fmt.dateShort(u.created_at).toLowerCase()}"
-                data-activity="${u.last_sign_in_at ? Fmt.dateShort(u.last_sign_in_at).toLowerCase() : ''}"
-                data-status="${u.is_active !== false ? 'active' : 'blocked'}"
-                ${isOwnerRow ? 'style="background:var(--bg-raised)"' : ''}>
-                <td style="padding:.875rem .5rem;width:36px">
-                    <div class="user-cb-wrap">
-                        <input type="checkbox" class="user-cb" data-uid="${u.id}"
-                               ${isOwnerRow ? 'disabled title="Власника не можна вибрати"' : ''}
-                               onchange="AdminPage._onUserCheckbox(this)">
-                    </div>
+                data-date="${Fmt.datetime(u.created_at).toLowerCase()}"
+                data-activity="${u.last_sign_in_at ? Fmt.datetime(u.last_sign_in_at).toLowerCase() : ''}"
+                data-status="${u.is_active !== false ? 'active' : 'blocked'}">
+                <td class="uf-td uf-td-cb" style="text-align:center;padding:.7rem .4rem">
+                    <input type="checkbox" class="user-cb" data-uid="${u.id}"
+                           ${isOwnerRow ? 'disabled title="Власника не можна вибрати"' : ''}
+                           onchange="AdminPage._onUserCheckbox(this)">
                 </td>
-                <td>
-                    <div style="display:flex;align-items:center;gap:.6rem;cursor:pointer;min-width:160px"
-                         onclick="AdminPage.viewProfile(AdminPage._usersAll.find(x=>x.id==='${u.id}'))" title="Переглянути профіль">
-                        <div style="width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--secondary));display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden">
+                <td class="uf-td uf-td-pib">
+                    <div class="uf-pib-inner" onclick="AdminPage.viewProfile(AdminPage._usersAll.find(x=>x.id==='${u.id}'))" title="Переглянути профіль">
+                        <div class="uf-avatar">
                             ${u.avatar_url ? `<img src="${u.avatar_url}" style="width:100%;height:100%;object-fit:cover">` : Fmt.initials(u.full_name)}
                         </div>
-                        <div>
-                            <div style="font-weight:600;font-size:.82rem;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px;text-decoration-color:var(--border-light);white-space:nowrap">
-                                ${Fmt.esc(u.full_name) || '—'}
-                                ${u.is_hidden ? '<span style="font-size:.6rem;padding:1px 5px;background:rgba(156,163,175,.15);color:var(--text-muted);border-radius:4px;margin-left:4px;font-weight:500">🙈 прихований</span>' : ''}
+                        <div style="min-width:0">
+                            <div class="uf-pib-name" style="display:flex;align-items:center;gap:.3rem">
+                                <span style="overflow:hidden;text-overflow:ellipsis">${Fmt.esc(u.full_name) || '—'}</span>
+                                ${this._onlineDot(u, 7)}
+                                ${u.is_hidden ? '<span style="font-size:.6rem;padding:1px 4px;background:rgba(156,163,175,.15);color:var(--text-muted);border-radius:4px">🙈</span>' : ''}
                             </div>
-                            <div style="font-size:.72rem;color:var(--text-muted)">${Fmt.esc(u.email)}</div>
+                            <div class="uf-pib-email">${Fmt.esc(u.email)}</div>
                         </div>
                     </div>
                 </td>
-                <td style="font-size:.8rem">${Fmt.esc(u.job_position) || '<span style="color:var(--text-muted)">—</span>'}</td>
-                <td style="font-size:.8rem;white-space:nowrap">${Fmt.esc(u.city) || '<span style="color:var(--text-muted)">—</span>'}</td>
-                <td style="font-size:.8rem">${Fmt.esc(u.subdivision) || '<span style="color:var(--text-muted)">—</span>'}</td>
-                <td>${Fmt.roleBadge(u.role)}</td>
-                <td>${u.label === 'intern' ? `<span class="badge badge-success" style="font-size:.65rem">🌱 Стажер</span>` : u.label === 'mentor' ? `<span class="badge badge-warning" style="font-size:.65rem">⭐ Наставник</span>` : '<span style="color:var(--text-muted);font-size:.8rem">—</span>'}</td>
-                <td style="color:var(--text-muted);font-size:.78rem;white-space:nowrap">${Fmt.dateShort(u.created_at)}</td>
-                <td style="font-size:.78rem;white-space:nowrap">${u.last_sign_in_at
-                    ? `<span style="color:var(--text-secondary)">${Fmt.dateShort(u.last_sign_in_at)}</span>`
-                    : '<span style="color:var(--text-muted)">—</span>'}</td>
-               
-                <td>
-                    <div style="display:flex;flex-direction:column;gap:.25rem;align-items:flex-start">
-                        ${canEdit ? `<button class="btn btn-ghost btn-sm" style="width:100%;justify-content:flex-start;gap:.4rem" onclick="AdminPage.openEditUser(AdminPage._usersAll.find(x=>x.id==='${u.id}'))"><i class="fa-solid fa-pen"></i></button>` : ''}
-                        ${canHide ? `
-                            <button class="btn btn-ghost btn-sm" style="width:100%;justify-content:flex-start;gap:.4rem" onclick="AdminPage.toggleHidden('${u.id}',${!!u.is_hidden})" title="${u.is_hidden ? 'Показати в контактах' : 'Приховати з контактів'}">
-                                ${u.is_hidden ? '👁' : '🙈'}
-                            </button>` : ''}
+                <td class="uf-td uf-col-job" style="word-break:break-word">${Fmt.esc(u.job_position) || '<span style="color:var(--text-muted)">—</span>'}</td>
+                <td class="uf-td uf-col-city" style="word-break:break-word">${Fmt.esc(u.city) || '<span style="color:var(--text-muted)">—</span>'}</td>
+                <td class="uf-td uf-col-subdivision" style="word-break:break-word">${Fmt.esc(u.subdivision) || '<span style="color:var(--text-muted)">—</span>'}</td>
+                <td class="uf-td uf-td-role uf-col-role" style="overflow:hidden;max-width:0">${Fmt.roleBadge(u.role)}</td>
+                <td class="uf-td uf-col-label">${u.label === 'intern' ? '<span class="badge badge-success" style="font-size:.65rem">🌱 Стажер</span>' : u.label === 'mentor' ? '<span class="badge badge-warning" style="font-size:.65rem">⭐ Наставник</span>' : '<span style="color:var(--text-muted)">—</span>'}</td>
+                <td class="uf-td uf-col-date" style="color:var(--text-muted);font-size:.78rem;min-width:72px">${Fmt.datetime(u.created_at).replace(' ','<br>')}</td>
+                <td class="uf-td uf-col-activity" style="font-size:.78rem;min-width:72px">${u.last_sign_in_at ? `<span style="color:var(--text-secondary)">${Fmt.datetime(u.last_sign_in_at).replace(' ','<br>')}</span>` : '<span style="color:var(--text-muted)">—</span>'}</td>
+                <td class="uf-td" style="padding:.4rem .35rem;width:72px;min-width:72px;max-width:72px">
+                    <div class="uf-act-col">
+                        ${canEdit ? `<button class="btn btn-ghost btn-sm" style="padding:.3rem .45rem" onclick="AdminPage.openEditUser(AdminPage._usersAll.find(x=>x.id==='${u.id}'))" title="Редагувати"><i class="fa-solid fa-pen"></i></button>` : ''}
+                        ${canHide ? `<button class="btn btn-ghost btn-sm" style="padding:.3rem .45rem" onclick="AdminPage.toggleHidden('${u.id}',${!!u.is_hidden})" title="${u.is_hidden ? 'Показати в контактах' : 'Приховати з контактів'}">${u.is_hidden ? '👁' : '🙈'}</button>` : ''}
                     </div>
                 </td>
             </tr>`;
+    },
+
+    // ── Видимість колонок ────────────────────────────────────────────
+    _ALL_COLS: [
+        { key: 'job',         label: 'Посада' },
+        { key: 'city',        label: 'Місто' },
+        { key: 'subdivision', label: 'Підрозділ' },
+        { key: 'role',        label: 'Роль' },
+        { key: 'label',       label: 'Мітка' },
+        { key: 'date',        label: 'Реєстрація' },
+        { key: 'activity',    label: 'Активність' },
+    ],
+
+    _initColVisibility() {
+        try {
+            const saved = JSON.parse(localStorage.getItem('uf_cols') || 'null');
+            this._visibleCols = new Set(saved || this._ALL_COLS.map(c => c.key));
+        } catch(_) {
+            this._visibleCols = new Set(this._ALL_COLS.map(c => c.key));
+        }
+    },
+
+    _saveColVisibility() {
+        localStorage.setItem('uf_cols', JSON.stringify([...this._visibleCols]));
+    },
+
+    _applyColVisibility() {
+        this._ALL_COLS.forEach(col => {
+            const vis = this._visibleCols.has(col.key);
+            document.querySelectorAll(`.uf-col-${col.key}`).forEach(el => {
+                el.style.display = vis ? '' : 'none';
+            });
+            const colEl = document.getElementById(`ucol-${col.key}`);
+            if (colEl) colEl.style.display = vis ? '' : 'none';
+        });
+    },
+
+    toggleCol(key) {
+        if (this._visibleCols.has(key)) {
+            this._visibleCols.delete(key);
+        } else {
+            this._visibleCols.add(key);
+        }
+        this._saveColVisibility();
+        this._applyColVisibility();
+        // оновлюємо чекбокси в dropdown
+        const cb = document.getElementById(`ucol-cb-${key}`);
+        if (cb) cb.checked = this._visibleCols.has(key);
+    },
+
+    toggleColDropdown() {
+        const dd = document.getElementById('uf-col-dropdown');
+        if (!dd) return;
+        const isOpen = dd.style.display !== 'none';
+        dd.style.display = isOpen ? 'none' : 'block';
+        if (!isOpen) {
+            // закриваємо при кліку поза dropdown
+            setTimeout(() => {
+                const close = e => { if (!dd.contains(e.target)) { dd.style.display = 'none'; document.removeEventListener('click', close); } };
+                document.addEventListener('click', close);
+            }, 0);
+        }
+    },
+
+    _tenureStr(dateStr) {
+        if (!dateStr) return '';
+        const from  = new Date(dateStr);
+        const today = new Date();
+        let years  = today.getFullYear() - from.getFullYear();
+        let months = today.getMonth()    - from.getMonth();
+        if (months < 0) { years--; months += 12; }
+        const parts = [];
+        if (years > 0)  parts.push(`${years} ${years === 1 ? 'рік' : years < 5 ? 'роки' : 'років'}`);
+        if (months > 0) parts.push(`${months} міс.`);
+        if (!parts.length) parts.push('менше місяця');
+        return parts.join(' ');
+    },
+
+    _isOnline(u) {
+        if (!u.last_seen_at) return false;
+        return (Date.now() - new Date(u.last_seen_at).getTime()) < 3 * 60 * 1000; // 3 хв
+    },
+
+    _onlineDot(u, size = 10) {
+        const on = this._isOnline(u);
+        return `<span title="${on ? 'Онлайн' : (u.last_seen_at ? 'Був ' + Fmt.datetime(u.last_seen_at) : 'Офлайн')}"
+            style="display:inline-block;width:${size}px;height:${size}px;border-radius:50%;
+            background:${on ? '#10b981' : '#6b7280'};
+            box-shadow:${on ? '0 0 0 2px rgba(16,185,129,.25)' : 'none'};
+            flex-shrink:0;vertical-align:middle"></span>`;
     },
 
     async viewProfile(u) {
@@ -346,50 +502,106 @@ const AdminPage = {
             bdReminder = data;
         }
 
+        const chip = (label, val) => val ? `<div class="up-chip"><span class="up-chip-l">${label}</span><span class="up-chip-v">${val}</span></div>` : '';
+        const isActive = u.is_active !== false;
+        const heroGrad = u.gender === 'female' ? '#ec4899,#8b5cf6'
+                       : u.gender === 'male'   ? '#3b82f6,#6366f1'
+                       :                         '#10b981,#0ea5e9';
+
         Modal.open({
-            title: 'Профіль користувача',
-            size: 'md',
+            title: '',
+            noHeader: true,
+            size: 'lg',
             body: `
-                <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.25rem">
-                    <div style="width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--secondary));display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden">
-                        ${avatar}
-                    </div>
-                    <div>
-                        <div style="font-size:1.1rem;font-weight:700;margin-bottom:.3rem">${Fmt.esc(u.full_name) || '—'}</div>
-                        <div style="display:flex;gap:.4rem;flex-wrap:wrap">
-                            ${Fmt.roleBadge(u.role)}
-                            ${u.label === 'intern' ? `<span class="badge badge-success" style="font-size:.65rem">🌱 Стажер</span>` : u.label === 'mentor' ? `<span class="badge badge-warning" style="font-size:.65rem">⭐ Наставник</span>` : ''}
-                            <span class="badge ${u.is_active !== false ? 'badge-success' : 'badge-muted'}">${u.is_active !== false ? 'Активний' : 'Заблокований'}</span>
+            <style>
+                .up-wrap{margin:-1.25rem -1.5rem -1rem;display:flex;flex-direction:column;border-radius:var(--radius-xl);max-height:80vh;overflow:hidden}
+                .up-hero{padding:1.75rem 1.75rem 1.25rem;display:flex;align-items:flex-end;gap:1.25rem;position:relative;overflow:hidden}
+                .up-hero::before{content:'';position:absolute;inset:0;background:url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")}
+                .up-ava{width:80px;height:80px;border-radius:50%;border:3px solid rgba(255,255,255,.5);background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:1.8rem;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.2)}
+                .up-ava img{width:100%;height:100%;object-fit:cover}
+                .up-hero-info{flex:1;min-width:0;padding-bottom:.2rem}
+                .up-name{font-size:1.25rem;font-weight:800;color:#fff;line-height:1.2;margin-bottom:.5rem;text-shadow:0 1px 4px rgba(0,0,0,.15)}
+                .up-badges{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center}
+                .up-status{display:inline-flex;align-items:center;gap:.3rem;padding:3px 10px;border-radius:20px;font-size:.7rem;font-weight:700;backdrop-filter:blur(8px)}
+                .up-status-on{background:rgba(16,185,129,.25);color:#6ee7b7;border:1px solid rgba(16,185,129,.4)}
+                .up-status-off{background:rgba(239,68,68,.2);color:#fca5a5;border:1px solid rgba(239,68,68,.35)}
+                .up-role-badge{display:inline-flex;align-items:center;gap:.3rem;padding:3px 10px;border-radius:20px;font-size:.7rem;font-weight:700;background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.3);backdrop-filter:blur(8px)}
+                .up-body{padding:1.25rem 1.75rem;background:var(--bg-surface);overflow-y:auto;flex:1}
+                .up-grid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem .75rem}
+                .up-chip{display:flex;flex-direction:column;padding:.55rem .75rem;background:var(--bg-raised);border-radius:var(--radius-md);border:1px solid var(--border);min-width:0}
+                .up-chip-l{font-size:.67rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.15rem}
+                .up-chip-v{font-size:.85rem;color:var(--text-primary);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+                .up-chip-full{grid-column:1/-1}
+                .up-section{margin-top:.85rem;padding-top:.85rem;border-top:1px solid var(--border)}
+                .up-section-title{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:.5rem}
+                .up-footer{display:flex;gap:.5rem;align-items:center;padding:1rem 1.75rem;background:var(--bg-raised);border-top:1px solid var(--border);flex-wrap:wrap;flex-shrink:0}
+                .up-footer-right{margin-left:auto;display:flex;gap:.5rem;flex-wrap:wrap}
+            </style>
+            <div class="up-wrap">
+                <div class="up-hero" style="background:linear-gradient(135deg,${heroGrad})">
+                    <div class="up-ava">${avatar}</div>
+                    <div class="up-hero-info">
+                        <div class="up-name" style="display:flex;align-items:center;gap:.5rem">
+                            <span>${Fmt.esc(u.full_name) || '—'}</span>
+                            ${this._onlineDot(u, 11)}
+                        </div>
+                        <div class="up-badges">
+                            <span class="up-role-badge">${Fmt.role(u.role)}</span>
+                            ${u.label === 'intern' ? `<span class="up-role-badge">🌱 Стажер</span>` : u.label === 'mentor' ? `<span class="up-role-badge">⭐ Наставник</span>` : ''}
+                            <span class="up-status ${isActive ? 'up-status-on' : 'up-status-off'}">
+                                <i class="fa-solid fa-circle" style="font-size:.45rem"></i>
+                                ${isActive ? 'Активний' : 'Заблокований'}
+                            </span>
                         </div>
                     </div>
                 </div>
-                <div style="border-top:1px solid var(--border)">
-                    ${row('✉️', 'Email',      Fmt.esc(u.email))}
-                    ${row('🔑', 'Логін',      Fmt.esc(u.login) || '—')}
-                    ${row('📞', 'Телефон',    Fmt.esc(u.phone))}
-                    ${row('👤', 'Стать',      genderMap[u.gender])}
-                    ${row('🎂', 'Дата нар.',  u.birth_date ? Fmt.dateShort(u.birth_date) : null)}
-                    ${row('💼', 'Посада',     Fmt.esc(u.job_position))}
-                    ${row('🏢', 'Підрозділ',  Fmt.esc(u.subdivision))}
-                    ${row('📍', 'Місто',      Fmt.esc(u.city))}
-                    ${row('📅', 'Реєстрація', Fmt.datetime(u.created_at))}
+                <div class="up-body">
+                    <div class="up-grid">
+                        ${chip('Email', Fmt.esc(u.email))}
+                        ${chip('Логін', Fmt.esc(u.login))}
+                        ${chip('Телефон', Fmt.esc(u.phone))}
+                        ${chip('Стать', genderMap[u.gender])}
+                        ${chip('Дата нар.', u.birth_date ? Fmt.dateShort(u.birth_date) : null)}
+                        ${chip('Місто', Fmt.esc(u.city))}
+                        ${chip('Посада', Fmt.esc(u.job_position))}
+                        ${chip('Підрозділ', Fmt.esc(u.subdivision))}
+                        ${u.hired_at ? chip('В компанії з', `${Fmt.date(u.hired_at)} <span style="font-size:.75rem;color:var(--text-muted)">${this._tenureStr(u.hired_at)}</span>`) : ''}
+                        ${u.position_since ? chip('На посаді з', `${Fmt.date(u.position_since)} <span style="font-size:.75rem;color:var(--text-muted)">${this._tenureStr(u.position_since)}</span>`) : ''}
+                        ${chip('Реєстрація', Fmt.datetime(u.created_at))}
+                        ${u.last_sign_in_at ? chip('Остання активність', Fmt.datetime(u.last_sign_in_at)) : ''}
+                    </div>
                     ${u.bio ? `
-                    <div style="padding:.6rem 0">
-                        <div style="color:var(--text-muted);font-size:.78rem;margin-bottom:.3rem">Про себе</div>
-                        <div style="font-size:.875rem;color:var(--text-secondary);line-height:1.5">${Fmt.esc(u.bio)}</div>
+                    <div class="up-section">
+                        <div class="up-section-title">Про себе</div>
+                        <div style="font-size:.875rem;color:var(--text-secondary);line-height:1.6">${Fmt.esc(u.bio)}</div>
                     </div>` : ''}
+                    ${canSetBdReminder ? `<div class="up-section">${this._birthdayReminderBlock(u, bdReminder)}</div>` : ''}
                 </div>
-                ${canSetBdReminder ? this._birthdayReminderBlock(u, bdReminder) : ''}`,
-            footer: `
-                <button class="btn btn-secondary" onclick="Modal.close()">Закрити</button>
-                ${AppState.isAdmin() && u.id !== AppState.user?.id && u.role !== 'owner' ? `
-                    <button class="btn btn-ghost" style="color:${u.is_active !== false ? 'var(--danger)' : 'var(--success)'}"
-                        onclick="Modal.close();AdminPage.toggleBlock('${u.id}',${u.is_active !== false})">
-                        ${u.is_active !== false ? '🔒 Заблокувати' : '🔓 Розблокувати'}
-                    </button>` : ''}
-                ${AppState.isAdmin() && u.id !== AppState.user?.id ? `<button class="btn btn-ghost" onclick="Modal.close();AppState.impersonate(AdminPage._usersAll.find(x=>x.id==='${u.id}'))" title="Переглянути інтерфейс від імені цього користувача"><i class="fa-solid fa-eye"></i> Переглянути як</button>` : ''}
-                ${(u.role !== 'owner' || AppState.isOwner()) ? `<button class="btn btn-primary" onclick="Modal.close();AdminPage.openEditUser(AdminPage._usersAll.find(x=>x.id==='${u.id}'))"><i class="fa-solid fa-pen"></i> Редагувати</button>` : ''}
-            `
+                <div class="up-footer">
+                    <button class="btn btn-secondary" onclick="Modal.close()"><i class="fa-solid fa-xmark"></i> Закрити</button>
+                    <div class="up-footer-right">
+                        ${AppState.canMutate() && AppState.isAdmin() && u.id !== AppState.user?.id && u.role !== 'owner' ? `
+                            <button class="btn btn-ghost" style="color:${isActive ? 'var(--danger)' : 'var(--success)'}"
+                                onclick="Modal.close();AdminPage.toggleBlock('${u.id}',${isActive})">
+                                <i class="fa-solid fa-${isActive ? 'lock' : 'lock-open'}"></i> ${isActive ? 'Заблокувати' : 'Розблокувати'}
+                            </button>` : ''}
+                        ${AppState.canMutate() && AppState.isAdmin() && u.id !== AppState.user?.id && isActive ? `
+                            <button class="btn btn-ghost" style="color:#f59e0b"
+                                onclick="Modal.close();AdminPage._forceLogoutUser('${u.id}',${JSON.stringify(u.full_name||'').replace(/"/g,'&quot;')})">
+                                <i class="fa-solid fa-right-from-bracket"></i> Завершити сесію
+                            </button>` : ''}
+                        ${(AppState.isAdmin() || AppState.isCeo()) && u.id !== AppState.user?.id ? `
+                            <button class="btn btn-ghost" onclick="Modal.close();AppState.impersonate(AdminPage._usersAll.find(x=>x.id==='${u.id}'))" title="Переглянути як цей користувач">
+                                <i class="fa-solid fa-eye"></i> Переглянути як
+                            </button>` : ''}
+                        ${AppState.canMutate() && (u.role !== 'owner' || AppState.isOwner()) ? `
+                            <button class="btn btn-primary" onclick="Modal.close();AdminPage.openEditUser(AdminPage._usersAll.find(x=>x.id==='${u.id}'))">
+                                <i class="fa-solid fa-pen"></i> Редагувати
+                            </button>` : ''}
+                    </div>
+                </div>
+            </div>`,
+            footer: ''
         });
     },
 
@@ -410,7 +622,7 @@ const AdminPage = {
         }).join('');
 
         return `
-        <div style="margin-top:14px;padding:14px 16px;background:var(--bg-raised);border-radius:16px;border:1px solid var(--border)">
+        <div style="padding:14px 16px;background:var(--bg-raised);border-radius:16px;border:1px solid var(--border)">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
                 <span style="font-size:1.4rem">🎂</span>
                 <div>
@@ -507,6 +719,22 @@ const AdminPage = {
         } catch(e) {
             Toast.error('Помилка', e.message);
         } finally { Loader.hide(); }
+    },
+
+    async _forceLogoutUser(userId, name) {
+        const ok = await Modal.confirm({
+            title: 'Завершити сесію',
+            message: `Завершити активну сесію користувача <b>${Fmt.esc(name)}</b>? Він буде негайно виведений із системи.`,
+            confirmText: 'Завершити',
+            danger: true
+        });
+        if (!ok) return;
+        try {
+            await API.profiles.forceLogout(userId);
+            Toast.success('Сесію завершено', `Користувача ${name} виведено із системи`);
+        } catch(e) {
+            Toast.error('Помилка', e.message);
+        }
     },
 
     async toggleBlock(userId, isActive) {
@@ -707,6 +935,7 @@ const AdminPage = {
                                 <option value="smm">📱 SMM-менеджер</option>
                                 <option value="manager">👔 Керівник</option>
                                 <option value="admin">⚡ Адміністратор</option>
+                                <option value="ceo">👑 CEO</option>
                             </select>
                         </div>
                     </label>
@@ -1360,8 +1589,8 @@ const AdminPage = {
 
         return this._usersAll.filter(u => {
             const uStatus = u.is_active !== false ? 'active' : 'blocked';
-            const uDate   = Fmt.dateShort(u.created_at).toLowerCase();
-            const uAct    = u.last_sign_in_at ? Fmt.dateShort(u.last_sign_in_at).toLowerCase() : '';
+            const uDate   = Fmt.datetime(u.created_at).toLowerCase();
+            const uAct    = u.last_sign_in_at ? Fmt.datetime(u.last_sign_in_at).toLowerCase() : '';
             return (
                 (nameLC.length === 0 || nameLC.includes(esc(u.full_name)))    &&
                 (jobLC.length  === 0 || jobLC.includes(esc(u.job_position)))  &&
@@ -1834,7 +2063,7 @@ const AdminPage = {
         el.innerHTML = `
             <div style="display:flex;gap:1rem;margin-bottom:1rem">
                 <input type="text" placeholder="Пошук..." style="flex:1" onkeyup="AdminPage._filterTable('courses-tbody', event)">
-                <button class="btn btn-primary" onclick="AdminPage._openCourseForm()">+ Створити курс</button>
+                ${AppState.canMutate() ? `<button class="btn btn-primary" onclick="AdminPage._openCourseForm()">+ Створити курс</button>` : ''}
             </div>
             <div class="table-wrapper">
                 <table>
@@ -1852,8 +2081,8 @@ const AdminPage = {
                                 <td>
                                     <div style="display:flex;gap:.4rem">
                                         <button class="btn btn-ghost btn-sm" onclick="Router.go('courses/${c.id}?from=expert-path')" title="Переглянути в Skill Up"><i class="fa-solid fa-eye"></i></button>
-                                        <button class="btn btn-ghost btn-sm" onclick="AdminPage._loadCourseForm('${c.id}')"><i class="fa-solid fa-pen"></i></button>
-                                        <button class="btn btn-danger btn-sm" onclick="AdminPage._deleteCourse('${c.id}',${JSON.stringify(c.title||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-trash"></i></button>
+                                        ${AppState.canMutate() ? `<button class="btn btn-ghost btn-sm" onclick="AdminPage._loadCourseForm('${c.id}')"><i class="fa-solid fa-pen"></i></button>` : ''}
+                                        ${AppState.canMutate() ? `<button class="btn btn-danger btn-sm" onclick="AdminPage._deleteCourse('${c.id}',${JSON.stringify(c.title||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-trash"></i></button>` : ''}
                                     </div>
                                 </td>
                             </tr>`).join('')}
@@ -2728,7 +2957,7 @@ const AdminPage = {
         el.innerHTML = `
             <div style="display:flex;gap:1rem;margin-bottom:1rem">
                 <input type="text" placeholder="Пошук новин..." style="flex:1" onkeyup="AdminPage._filterTable('news-tbody', event)">
-                <button class="btn btn-primary" onclick="NewsPage.openCreate()">+ Створити новину</button>
+                ${AppState.canMutate() ? `<button class="btn btn-primary" onclick="NewsPage.openCreate()">+ Створити новину</button>` : ''}
             </div>
             <div class="table-wrapper">
                 <table>
@@ -2744,8 +2973,8 @@ const AdminPage = {
                                 <td>
                                     <div style="display:flex;gap:.4rem">
                                         <button class="btn btn-ghost btn-sm" onclick="Router.go('news/${n.id}')"><i class="fa-solid fa-eye"></i></button>
-                                        <button class="btn btn-ghost btn-sm" onclick="NewsPage.openEdit('${n.id}')"><i class="fa-solid fa-pen"></i></button>
-                                        <button class="btn btn-danger btn-sm" onclick="NewsPage.deleteNews('${n.id}',${JSON.stringify(n.title||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-trash"></i></button>
+                                        ${AppState.canMutate() ? `<button class="btn btn-ghost btn-sm" onclick="NewsPage.openEdit('${n.id}')"><i class="fa-solid fa-pen"></i></button>` : ''}
+                                        ${AppState.canMutate() ? `<button class="btn btn-danger btn-sm" onclick="NewsPage.deleteNews('${n.id}',${JSON.stringify(n.title||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-trash"></i></button>` : ''}
                                     </div>
                                 </td>
                             </tr>`).join('')}
@@ -2798,10 +3027,11 @@ const AdminPage = {
 
     // ── Довідники ─────────────────────────────────────────────────
     async _renderDirectories(el) {
-        const [cities, positions, subdivisions] = await Promise.all([
+        const [cities, positions, subdivisions, dovirenosti] = await Promise.all([
             API.directories.getAll('cities').catch(() => null),
             API.directories.getAll('positions').catch(() => null),
-            API.directories.getAll('subdivisions').catch(() => null)
+            API.directories.getAll('subdivisions').catch(() => null),
+            API.dovirenosti.getAll().catch(() => null),
         ]);
 
         if (cities === null || positions === null || subdivisions === null) {
@@ -2826,6 +3056,7 @@ const AdminPage = {
                 ${this._dirCard('Міста', '🏙️', 'cities', cities)}
                 ${this._dirCard('Посади', '💼', 'positions', positions)}
                 ${this._dirCard('Підрозділи', '🏢', 'subdivisions', subdivisions)}
+                ${this._dirCard('Довіреності', '📜', 'dovirenosti', dovirenosti || [])}
             </div>`;
     },
 

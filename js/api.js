@@ -36,6 +36,15 @@ const API = {
             return this.update(id, { role });
         },
 
+        async forceLogout(id) {
+            const { error } = await supabase.from('profiles').update({ force_logout: true }).eq('id', id);
+            if (error) throw error;
+        },
+
+        async clearForceLogout(id) {
+            await supabase.from('profiles').update({ force_logout: false }).eq('id', id);
+        },
+
         async updateUiPrefs(prefs) {
             const id = AppState.user?.id;
             if (!id) return;
@@ -1752,6 +1761,55 @@ const API = {
         },
         async remove(id) {
             const { error } = await supabase.from('registry_docs').delete().eq('id', id);
+            if (error) throw error;
+        },
+    },
+
+    registrySections: {
+        async getAll() {
+            const { data, error } = await supabase.from('registry_sections')
+                .select('*').order('order_index').order('created_at');
+            if (error) throw error;
+            return data || [];
+        },
+        async create(fields) {
+            const { data, error } = await supabase.from('registry_sections')
+                .insert(fields).select().single();
+            if (error) throw error;
+            return data;
+        },
+        async update(id, fields) {
+            const { error } = await supabase.from('registry_sections')
+                .update(fields).eq('id', id);
+            if (error) throw error;
+        },
+        async remove(id) {
+            const { error } = await supabase.from('registry_sections').delete().eq('id', id);
+            if (error) throw error;
+        },
+        async reorder(ids) {
+            await Promise.all(ids.map((id, i) =>
+                supabase.from('registry_sections').update({ order_index: i }).eq('id', id)
+            ));
+        },
+    },
+
+    registrySectionDocs: {
+        async getAll() {
+            const { data, error } = await supabase.from('registry_section_docs')
+                .select('*, resource:resources(id,title,type,storage_path,url,description)')
+                .order('order_index').order('created_at');
+            if (error) throw error;
+            return data || [];
+        },
+        async add(fields) {
+            const { data, error } = await supabase.from('registry_section_docs')
+                .insert(fields).select().single();
+            if (error) throw error;
+            return data;
+        },
+        async remove(id) {
+            const { error } = await supabase.from('registry_section_docs').delete().eq('id', id);
             if (error) throw error;
         },
     },

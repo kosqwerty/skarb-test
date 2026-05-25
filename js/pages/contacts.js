@@ -27,7 +27,7 @@ const ContactsPage = {
             const [{ data: users, error }, { data: reminders }] = await Promise.all([
                 supabase
                     .from('profiles')
-                    .select('id,full_name,phone,job_position,subdivision,city,role,avatar_url,birth_date,is_hidden,is_active,manager_id,hired_at,position_since,gender,label')
+                    .select('id,full_name,phone,job_position,subdivision,city,role,avatar_url,birth_date,birth_date_privacy,is_hidden,is_active,manager_id,hired_at,position_since,gender,label')
                     .eq('is_hidden', false)
                     .eq('is_active', true)
                     .order('full_name', { ascending: true }),
@@ -155,6 +155,7 @@ const ContactsPage = {
     _roleCorner(role) {
         const map = {
             owner:   { icon: 'fa-crown',           color: '#f59e0b' },
+            ceo:     { icon: 'fa-crown',           color: '#a78bfa' },
             admin:   { icon: 'fa-shield-halved',    color: '#6366f1' },
             smm:     { icon: 'fa-bullhorn',         color: '#ec4899' },
             teacher: { icon: 'fa-graduation-cap',   color: '#10b981' },
@@ -170,6 +171,7 @@ const ContactsPage = {
     },
 
     _roleBannerBadge(role) {
+        if (role === 'ceo') return '';
         const map = {
             owner:   '👑 Admin',
             admin:   '👑 Адміністратор',
@@ -208,20 +210,42 @@ const ContactsPage = {
         };
     },
 
+    // Повертає рядок "X р. Y міс." від дати до сьогодні
+    _tenure(dateStr) {
+        if (!dateStr) return '';
+        const from  = new Date(dateStr);
+        const today = new Date();
+        let years  = today.getFullYear() - from.getFullYear();
+        let months = today.getMonth()    - from.getMonth();
+        if (months < 0) { years--; months += 12; }
+        const parts = [];
+        if (years > 0)  parts.push(`${years} ${years === 1 ? 'рік' : years < 5 ? 'роки' : 'років'}`);
+        if (months > 0) parts.push(`${months} ${months === 1 ? 'міс.' : 'міс.'}`);
+        if (!parts.length) parts.push('менше місяця');
+        return parts.join(' ');
+    },
+
+    // Повертає {visible, bdStr, fullStr, daysUntil} з урахуванням privacy
+    _bdInfo(u) {
+        const priv = u.birth_date_privacy || 'full';
+        if (!u.birth_date || priv === 'hidden') return { visible: false };
+        const bd    = new Date(u.birth_date);
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        let upcoming = new Date(today.getFullYear(), bd.getMonth(), bd.getDate());
+        if (upcoming <= today) upcoming.setFullYear(today.getFullYear() + 1);
+        const daysUntil = Math.round((upcoming - today) / 86400000);
+        const bdStr  = upcoming.toLocaleDateString('uk-UA', { day: '2-digit', month: 'long' }); // без року
+        const fullStr = priv === 'no_year' ? bdStr
+            : bd.toLocaleDateString('uk-UA', { day: '2-digit', month: 'long', year: 'numeric' });
+        return { visible: true, bdStr, fullStr, daysUntil };
+    },
+
     _cardHtml(u) {
         const reminder  = this._reminders[u.id];
-        const hasBd     = !!u.birth_date;
+        const bdInfo    = this._bdInfo(u);
+        const hasBd     = bdInfo.visible;
+        const { bdStr = '', daysUntil = null } = bdInfo;
         const theme     = this._genderTheme(u.gender);
-        let bdStr = '', daysUntil = null;
-
-        if (hasBd) {
-            const bd    = new Date(u.birth_date);
-            const today = new Date(); today.setHours(0, 0, 0, 0);
-            let upcoming = new Date(today.getFullYear(), bd.getMonth(), bd.getDate());
-            if (upcoming <= today) upcoming.setFullYear(today.getFullYear() + 1);
-            daysUntil = Math.round((upcoming - today) / 86400000);
-            bdStr = upcoming.toLocaleDateString('uk-UA', { day: '2-digit', month: 'long' });
-        }
 
         const loc = [u.city, u.subdivision].filter(Boolean).join(' · ');
         const managerName = u.manager_id ? (this._nameMap[u.manager_id] || null) : null;
@@ -299,15 +323,8 @@ const ContactsPage = {
         const managerName = u.manager_id ? (this._nameMap[u.manager_id] || null) : null;
         const loc = [u.city, u.subdivision].filter(Boolean).join(' · ');
 
-        let bdStr = '', daysUntil = null;
-        if (u.birth_date) {
-            const bd = new Date(u.birth_date);
-            const today = new Date(); today.setHours(0,0,0,0);
-            let upcoming = new Date(today.getFullYear(), bd.getMonth(), bd.getDate());
-            if (upcoming <= today) upcoming.setFullYear(today.getFullYear() + 1);
-            daysUntil = Math.round((upcoming - today) / 86400000);
-            bdStr = upcoming.toLocaleDateString('uk-UA', { day:'2-digit', month:'long' });
-        }
+        const bdInfo = this._bdInfo(u);
+        const { visible: hasBdDetail, fullStr: bdStr = '', daysUntil = null } = bdInfo;
 
         const row = (icon, label, val) => val
             ? `<div class="ctp-row"><div class="ctp-row-ico">${icon}</div><div><div class="ctp-row-label">${label}</div><div class="ctp-row-val">${val}</div></div></div>`
@@ -330,7 +347,7 @@ const ContactsPage = {
         </div>
         <div class="ctp-hero-info">
             <div class="ctp-name">${Fmt.esc(u.full_name || '—')}</div>
-            <div style="margin-top:.35rem">${Fmt.roleBadge(u.role)}</div>
+            ${u.role !== 'ceo' ? `<div style="margin-top:.35rem">${Fmt.roleBadge(u.role)}</div>` : ''}
             ${u.job_position ? `<div class="ctp-position">${Fmt.esc(u.job_position)}</div>` : ''}
         </div>
     </div>
@@ -339,13 +356,13 @@ const ContactsPage = {
         ${u.phone ? `${row('📞', 'Телефон', Fmt.esc(u.phone))}` : ''}
         ${row('🏙️', 'Локація', Fmt.esc(loc))}
         ${row('👤', 'Керівник', managerName ? Fmt.esc(managerName) : null)}
-        ${row('📅', 'В компанії з', u.hired_at ? Fmt.date(u.hired_at) : null)}
-        ${row('🗓️', 'На посаді з', u.position_since ? Fmt.date(u.position_since) : null)}
-        ${u.birth_date ? `${row('🎂', 'День народження', `${bdStr}${daysUntil <= 30 ? `<span class="ct-bd-soon" style="margin-left:.5rem">через ${daysUntil} дн.</span>` : ''}`)}` : ''}
+        ${row('📅', 'В компанії з', u.hired_at ? `${Fmt.date(u.hired_at)} <span style="font-size:.78rem;color:var(--text-muted);margin-left:.35rem">${this._tenure(u.hired_at)}</span>` : null)}
+        ${row('🗓️', 'На посаді з', u.position_since ? `${Fmt.date(u.position_since)} <span style="font-size:.78rem;color:var(--text-muted);margin-left:.35rem">${this._tenure(u.position_since)}</span>` : null)}
+        ${hasBdDetail ? `${row('🎂', 'День народження', `${bdStr}${daysUntil <= 30 ? `<span class="ct-bd-soon" style="margin-left:.5rem">через ${daysUntil} дн.</span>` : ''}`)}` : ''}
         ${AppState.isStaff() && u.email ? `${row('✉️', 'Email', `<a href="mailto:${u.email}" onclick="event.stopPropagation()" style="color:var(--primary);text-decoration:none">${Fmt.esc(u.email)}</a>`)}` : ''}
     </div>
 
-    ${u.birth_date ? `
+    ${hasBdDetail ? `
     <div class="ctp-footer">
         <button class="ct-bd-btn${reminder ? ' active' : ''}" style="width:auto;padding:.4rem .9rem;gap:.4rem;font-size:.8rem;display:flex;align-items:center"
             onclick="event.stopPropagation();ContactsPage._openBdModal('${u.id}',${JSON.stringify(u.full_name||'').replace(/"/g,'&quot;')},'${u.birth_date}')">

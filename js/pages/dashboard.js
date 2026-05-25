@@ -99,11 +99,25 @@ const DashboardPage = {
             .db-course-body{padding:.75rem}
             .db-course-name{font-size:.82rem;font-weight:600;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:.5rem}
 
-            .db-main-grid{display:grid;grid-template-columns:1fr 1fr 1fr 390px;gap:0.85rem;margin-bottom:1.5rem;align-items:start}
-            .db-main-grid>*{display:flex;flex-direction:column}
-            @media(max-width:1300px){.db-main-grid{grid-template-columns:1fr 1fr;}}
-            @media(max-width:700px){.db-main-grid{grid-template-columns:1fr}}
-            .db-news-w{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden;height:400px;display:flex;flex-direction:column;position:relative}
+            .db-main-grid{display:grid;grid-template-columns:1fr 1fr 1fr minmax(280px,340px);gap:0.85rem;margin-bottom:1.5rem;align-items:start}
+            .db-main-grid>*{display:flex;flex-direction:column;min-width:0}
+            .db-cal-col{grid-column:4;grid-row:1/3;display:flex;flex-direction:column;gap:.85rem;min-width:0}
+            .db-recent-row{grid-column:1/4;grid-row:2}
+            @media(max-width:1350px){
+                .db-main-grid{grid-template-columns:1fr 1fr minmax(260px,320px)}
+                #db-news-widget{grid-column:1/3}
+                .db-cal-col{grid-column:3;grid-row:1/3}
+                .db-recent-row{grid-column:1/3;grid-row:3}
+            }
+            @media(max-width:900px){
+                .db-main-grid{grid-template-columns:1fr 1fr}
+                #db-alerts-docs,#db-alerts-notif,#db-news-widget{grid-column:auto}
+                #db-news-widget{grid-column:1/3}
+                .db-cal-col{grid-column:1/3;grid-row:auto}
+                .db-recent-row{grid-column:1/3;grid-row:auto}
+            }
+            @media(max-width:700px){.db-main-grid{grid-template-columns:1fr} .db-cal-col,.db-recent-row,#db-news-widget{grid-column:1;grid-row:auto}}
+            .db-news-w{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden;height:clamp(320px,30vh,420px);display:flex;flex-direction:column;position:relative}
             .db-news-w::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:#f59e0b;z-index:1}
             .db-news-w-head{padding:.75rem 1rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
             .db-news-w-head-left{display:flex;align-items:center;gap:.55rem}
@@ -126,7 +140,7 @@ const DashboardPage = {
             .db-news-row-title{font-size:.8rem;font-weight:500;color:var(--text-primary);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
             .db-news-row-date{font-size:.65rem;color:var(--text-muted);flex-shrink:0}
             .db-news-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:.4rem;color:var(--text-muted);font-size:.82rem}
-            .db-alc-w{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden;height:400px;display:flex;flex-direction:column;position:relative}
+            .db-alc-w{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden;height:clamp(320px,30vh,420px);display:flex;flex-direction:column;position:relative}
             .db-alc-w::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--alc-accent,var(--primary));z-index:1}
             .db-alc-head{padding:.75rem 1rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;background:var(--bg-surface)}
             .db-alc-head-left{display:flex;align-items:center;gap:.55rem}
@@ -213,11 +227,11 @@ const DashboardPage = {
             <div id="db-alerts-docs"></div>
             <div id="db-alerts-notif"></div>
             <div id="db-news-widget"></div>
-            <div style="grid-column:4;grid-row:1/3;display:flex;flex-direction:column;gap:.85rem;min-width:0">
+            <div class="db-cal-col">
                 <div id="db-cal-widget"></div>
                 <div id="db-important"></div>
             </div>
-            <div id="db-recent-courses" style="grid-column:1/4;grid-row:2"></div>
+            <div id="db-recent-courses" class="db-recent-row"></div>
         </div>
 
         `;
@@ -328,7 +342,7 @@ const DashboardPage = {
 
         el.innerHTML = `
         <style>
-            .dbrc-wrap{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden;position:relative;display:flex;flex-direction:column;height:20px}
+            .dbrc-wrap{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden;position:relative;display:flex;flex-direction:column;min-height:160px}
             .dbrc-wrap::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:#6366f1;z-index:1}
             .dbrc-head{display:flex;align-items:center;justify-content:space-between;padding:.75rem 1rem;border-bottom:1px solid var(--border);background:var(--bg-surface)}
             .dbrc-head-left{display:flex;align-items:center;gap:.55rem}
@@ -339,7 +353,7 @@ const DashboardPage = {
             .dbrc-arrow:hover{border-color:#6366f1;color:#6366f1}
             .dbrc-scroll{display:flex;align-items:stretch;gap:.75rem;overflow-x:auto;padding:.75rem 1rem;scrollbar-width:none;background:var(--bg-raised);flex:1}
             .dbrc-scroll::-webkit-scrollbar{display:none}
-            .dbrc-card{flex:0 0 350px;border-radius:var(--radius-lg);overflow:hidden;cursor:pointer;border:1px solid var(--border);transition:transform .18s,box-shadow .18s,border-color .18s;flex-shrink:0;background:var(--bg-surface);display:flex;flex-direction:column}
+            .dbrc-card{flex:0 0 clamp(200px,22vw,300px);border-radius:var(--radius-lg);overflow:hidden;cursor:pointer;border:1px solid var(--border);transition:transform .18s,box-shadow .18s,border-color .18s;flex-shrink:0;background:var(--bg-surface);display:flex;flex-direction:column}
             .dbrc-card:hover{transform:translateY(-3px);box-shadow:0 8px 24px rgba(0,0,0,.14);border-color:#6366f1}
             .dbrc-thumb{flex:1;min-height:100px;position:relative;background-size:contain;background-position:center;background-repeat:no-repeat;overflow:hidden;width:100%}
             .dbrc-thumb-grad{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.82) 0%,rgba(0,0,0,.1) 55%,transparent 100%)}
@@ -367,17 +381,18 @@ const DashboardPage = {
             <div class="dbrc-scroll" id="dbrc-scroll">${cards}</div>
         </div>`;
 
-        requestAnimationFrame(() => {
+        // Grow "recently viewed" to fill remaining viewport height
+        const _sizeRcWrap = () => {
             const wrap = el.querySelector('.dbrc-wrap');
             if (!wrap) return;
-            const pageContent = document.querySelector('.page-content');
-            if (!pageContent) return;
-            const pb  = parseFloat(getComputedStyle(pageContent).paddingBottom) || 16;
-            const pcTop = pageContent.getBoundingClientRect().top;
+            const pageContent = document.querySelector('.page-content, .main-content, main') || document.documentElement;
+            const pb = parseFloat(getComputedStyle(pageContent).paddingBottom) || 24;
             const wrapTop = wrap.getBoundingClientRect().top;
-            const h = pageContent.clientHeight - (wrapTop - pcTop) - pb;
-            if (h > 100) wrap.style.height = h + 'px';
-        });
+            const viewH = window.innerHeight;
+            const h = viewH - wrapTop - pb - 16;
+            if (h > 140) wrap.style.height = h + 'px';
+        };
+        requestAnimationFrame(() => { _sizeRcWrap(); setTimeout(_sizeRcWrap, 200); });
     },
 
     _renderCalWidget(calEvents, today, scheduleEntries = []) {

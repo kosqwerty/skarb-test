@@ -26,7 +26,8 @@ const ResourcesPage = {
     _allDovirenosti: [],
     _myDovirenosti: [],
 
-    async init(container, { view = 'kb' } = {}) {
+    async init(container, { view = 'kb', tab = '' } = {}) {
+        this._initTab = tab;
         this._page = 0;
         this._search = '';
         this._category = '';
@@ -107,6 +108,7 @@ const ResourcesPage = {
                     <div id="docs-cat-chips" style="display:flex;gap:.4rem;flex-wrap:wrap"></div>
                     <button id="docs-tab-branch" class="btn btn-ghost btn-sm" onclick="ResourcesPage.switchTab('branch',this)">⚖️ Куточок споживача</button>
                     <button id="docs-tab-red-folder" class="btn btn-ghost btn-sm" onclick="ResourcesPage.switchTab('red-folder',this)" style="color:#ef4444;border-color:rgba(239,68,68,.3)">📁 Червона папка</button>
+                    <button id="docs-tab-registry" class="btn btn-ghost btn-sm" onclick="ResourcesPage.switchTab('registry',this)">📋 Реєстри</button>
                     ${isManager ? '<button id="docs-tab-status" class="btn btn-ghost btn-sm" onclick="ResourcesPage.switchTab(\'status\',this)" style="margin-left:auto">📊 Статус</button>' : ''}
                 </div>
                 <div id="docs-tab-content">
@@ -116,6 +118,11 @@ const ResourcesPage = {
 
             await this._loadFilters();
             await this.load(true);
+            // Відновлюємо вкладку якщо повернулись з документа (наприклад з реєстру)
+            if (this._initTab && this._initTab !== 'list') {
+                const tabBtn = document.getElementById(`docs-tab-${this._initTab}`);
+                if (tabBtn) this.switchTab(this._initTab, tabBtn);
+            }
             return;
         }
 
@@ -384,6 +391,7 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
     },
 
     switchTab(tab, el) {
+        if (this._activeTab === tab) return; // повторний клік — нічого не робимо
         this._activeTab = tab;
         document.querySelectorAll('button[id^="docs-tab-"]').forEach(btn => {
             const isActive = btn.id === `docs-tab-${tab}`;
@@ -424,6 +432,9 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
         } else if (tab === 'red-folder') {
             content.innerHTML = `<div id="rf-tab-area" style="width:1000px"></div>`;
             RedFolderPage.renderInTab(document.getElementById('rf-tab-area'));
+        } else if (tab === 'registry') {
+            content.innerHTML = `<div id="rg-tab-area"></div>`;
+            RegistryPage.renderInTab(document.getElementById('rg-tab-area'));
         } else if (tab === 'status') {
             this._statusCache = null;
             this._renderStatusTab(content);
@@ -795,7 +806,8 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
     },
 
     _setCatFilter(cat, btn) {
-        this._category = this._category === cat ? '' : cat;
+        if (this._category === cat) return; // повторний клік — нічого не робимо
+        this._category = cat;
         // if not on list tab — switch first, then apply filter
         if (this._activeTab !== 'list') {
             const savedCat = this._category;
@@ -1854,7 +1866,20 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
 
 const ResourceViewPage = {
 
-    async init(container, { id, from } = {}) {
+    _from: null,
+    _tab: null,
+
+    _goBack() {
+        if (this._from === 'documents' && this._tab) {
+            Router.go(`documents?tab=${this._tab}`);
+        } else {
+            Router.back();
+        }
+    },
+
+    async init(container, { id, from, tab } = {}) {
+        this._from = from || null;
+        this._tab  = tab  || null;
         if (!id) { Router.back(); return; }
 
         UI.setBreadcrumb([{ label: 'Перегляд ресурсу' }]);
@@ -1982,7 +2007,7 @@ const ResourceViewPage = {
 
                 <!-- Header -->
                 <div style="display:flex;align-items:flex-start;gap:1rem;flex-wrap:wrap">
-                    <button class="btn btn-ghost btn-sm" onclick="Router.back()" style="flex-shrink:0;margin-top:.2rem;display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i> Назад</button>
+                    <button class="btn btn-ghost btn-sm" onclick="ResourceViewPage._goBack()" style="flex-shrink:0;margin-top:.2rem;display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i> Назад</button>
                     <div style="flex:1;min-width:0">
                         <div style="display:flex;align-items:center;gap:10px;margin-bottom:.4rem">
                             <h1 style="margin:0;font-size:1.4rem;font-weight:700;line-height:1.3">${Fmt.esc(resource.title)}</h1>

@@ -1705,6 +1705,57 @@ const API = {
         }
     },
 
+    // ── Registry ──────────────────────────────────────────────────────
+    registryItems: {
+        async getAll() {
+            const { data, error } = await supabase.from('registry_items')
+                .select('*').order('order_index').order('created_at');
+            if (error) throw error;
+            return data || [];
+        },
+        async create(fields) {
+            const { data, error } = await supabase.from('registry_items')
+                .insert(fields).select().single();
+            if (error) throw error;
+            return data;
+        },
+        async update(id, fields) {
+            const { error } = await supabase.from('registry_items')
+                .update(fields).eq('id', id);
+            if (error) throw error;
+        },
+        async remove(id) {
+            const { error } = await supabase.from('registry_items').delete().eq('id', id);
+            if (error) throw error;
+        },
+        async reorder(ids) {
+            // ids — масив UUID в потрібному порядку
+            await Promise.all(ids.map((id, i) =>
+                supabase.from('registry_items').update({ order_index: i }).eq('id', id)
+            ));
+        },
+    },
+
+    registryDocs: {
+        async getAll() {
+            const { data, error } = await supabase.from('registry_docs')
+                .select('*, resource:resources(id,title,type,storage_path,url,description)')
+                .order('order_index').order('created_at');
+            if (error) throw error;
+            return data || [];
+        },
+        async add(fields) {
+            const { data, error } = await supabase.from('registry_docs')
+                .insert(fields).select().single();
+            if (error) throw error;
+            return data;
+        },
+        async remove(id) {
+            const { error } = await supabase.from('registry_docs').delete().eq('id', id);
+            if (error) throw error;
+        },
+    },
+
     // ── Surveys ───────────────────────────────────────────────────────
     surveys: {
         async getAll({ published } = {}) {

@@ -24,7 +24,7 @@ const NewsPage = {
                 <div class="page-actions" style="display:flex;align-items:center;gap:.75rem">
                     <input type="text" id="news-search" placeholder="Пошук..." style="width:200px"
                            onkeyup="NewsPage.onSearch(event)">
-                    ${AppState.isStaff() ? `<button class="btn btn-primary" onclick="NewsPage.openCreate()"><i class="fa-solid fa-plus"></i> Додати новину</button>` : ''}
+                    ${AppState.isStaff() && AppState.canMutate() ? `<button class="btn btn-primary" onclick="NewsPage.openCreate()"><i class="fa-solid fa-plus"></i> Додати новину</button>` : ''}
                 </div>
             </div>
 
@@ -67,7 +67,7 @@ const NewsPage = {
                     <div class="empty-state" style="grid-column:1/-1">
                         <div class="empty-icon">📰</div>
                         <h3>Скоро буде новина</h3>
-                        ${AppState.isStaff() ? `<button class="btn btn-primary" onclick="NewsPage.openCreate()">Додати першуш новину</button>` : ''}
+                        ${AppState.isStaff() && AppState.canMutate() ? `<button class="btn btn-primary" onclick="NewsPage.openCreate()">Додати першуш новину</button>` : ''}
                     </div>`;
                 return;
             }
@@ -129,7 +129,7 @@ const NewsPage = {
                         <div style="position:absolute;inset:0;background-image:url('${thumb}');background-size:contain;background-repeat:no-repeat;background-position:${news.thumbnail_position || 'center'} center;z-index:1"></div>
                     ` : `<div style="height:100%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,rgba(99,102,241,.08),rgba(139,92,246,.08));font-size:3rem">📰</div>`}
                     ${!news.is_published ? '<span class="badge badge-muted" style="position:absolute;top:.5rem;left:.5rem;z-index:2">Чернетка</span>' : ''}
-                    ${AppState.isStaff() ? `
+                    ${AppState.isStaff() && AppState.canMutate() ? `
                         <div class="news-card-actions" onclick="event.stopPropagation()">
                             <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();NewsPage.openEdit('${news.id}')" title="Редагувати"><i class="fa-solid fa-pen"></i></button>
                             <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();NewsPage.deleteNews('${news.id}',${JSON.stringify(news.title||'').replace(/"/g,'&quot;')})" title="Видалити"><i class="fa-solid fa-trash"></i></button>
@@ -184,6 +184,7 @@ const NewsPage = {
                     .limit(3);
 
             UI.setBreadcrumb([{ label: 'Новини', route: 'news' }, { label: news.title }]);
+            ActivityTracker.track('news_view', { entity_type: 'news', entity_id: news.id, entity_title: news.title, page: `news/${news.id}` });
 
             container.innerHTML = `
                 <style>
@@ -251,7 +252,7 @@ const NewsPage = {
                                 <i class="fa-solid fa-angle-left"></i> Назад
                             </button>
                         </div>
-                        ${AppState.isStaff() ? `
+                        ${AppState.isStaff() && AppState.canMutate() ? `
                         <div style="position:absolute;top:1rem;right:1rem;display:flex;gap:.5rem;z-index:3">
                             <button class="btn btn-secondary btn-sm" onclick="NewsPage.openEdit('${news.id}')" style="backdrop-filter:blur(6px);background:rgba(0,0,0,.35);border-color:rgba(255,255,255,.2);color:#fff"><i class="fa-solid fa-pen"></i> Редагувати</button>
                             <button class="btn btn-danger btn-sm" onclick="NewsPage.deleteNews('${news.id}',${JSON.stringify(news.title||'').replace(/"/g,'&quot;')})" style="backdrop-filter:blur(6px)"><i class="fa-solid fa-trash"></i></button>
@@ -858,6 +859,7 @@ const NewsPage = {
             }
 
             AuditLog.write(id ? 'news_update' : 'news_create', 'news', title);
+            ActivityTracker.track(id ? 'news_edit' : 'news_create', { entity_type: 'news', entity_title: title });
             Toast.success('Успішно!', `Новина "${title}" ${id ? 'оновлена' : 'додана'}`);
             const container = document.getElementById('page-content');
             if (container) { history.replaceState(null, '', '#/news'); await NewsPage.init(container, {}); }
@@ -879,6 +881,7 @@ const NewsPage = {
         try {
             await API.news.delete(id);
             AuditLog.write('news_delete', 'news', title);
+            ActivityTracker.track('news_delete', { entity_type: 'news', entity_id: id, entity_title: title });
             Toast.success('Новина видалина');
             Router.go('news');
         } catch(e) { Toast.error('Помилка', e.message); }

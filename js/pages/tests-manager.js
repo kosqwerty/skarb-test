@@ -567,6 +567,7 @@ const TestsManagerPage = {
                 await API.tests.update(test.id, { cover_image: coverUrl || null });
                 test.cover_image = coverUrl || null;
             }
+            ActivityTracker.track(testId ? 'test_edit' : 'test_create', { entity_type: 'test', entity_id: test.id, entity_title: test.title });
             Toast.success(testId ? 'Збережено' : 'Тест створено');
             await this.openEditor(test.id);
         } catch(e) { Toast.error('Помилка', e.message); }
@@ -1942,6 +1943,7 @@ ${this._opts.map((o,i) => `
         Loader.show();
         try {
             await API.tests.delete(id);
+            ActivityTracker.track('test_delete', { entity_type: 'test', entity_id: id, entity_title: title });
             Toast.success('Тест видалено');
             await this._renderList(TestsManagerPage._container);
         } catch(e) { Toast.error('Помилка', e.message); }

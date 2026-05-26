@@ -166,6 +166,11 @@
                         <button class="su-popup-item" id="su-theme-btn" onclick="Theme.toggle();UI._updateThemeLabel()">
                             <i class="fa-solid fa-sun"></i><span>Світла тема</span>
                         </button>
+                        <div id="su-preview-section" class="hidden">
+                            <div class="su-popup-divider"></div>
+                            <div style="padding:.3rem .9rem .15rem;font-size:.7rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Перегляд ролі</div>
+                            <div id="su-preview-btns" style="display:flex;flex-direction:column;gap:2px;padding:.15rem .4rem"></div>
+                        </div>
                         <div class="su-popup-divider"></div>
                         <button class="su-popup-item su-popup-danger" onclick="Auth.logout()">
                             <i class="fa-solid fa-right-from-bracket"></i><span>Вийти</span>
@@ -245,10 +250,9 @@
 <script src="js/pages/profile.js"></script>
 <script src="js/pages/scheduler.js"></script>
 <script src="js/pages/notifications.js"></script>
-<script src="js/pages/contacts.js"></script>
-<script src="js/pages/bookmarks.js"></script>
 <script src="js/pages/label-access.js"></script>
-<script src="js/pages/schedule-graph.js"></script>
+<script src="js/pages/contacts.js"></script>
+<script src="js/pages/bookmarks.js"></script><script src="js/pages/schedule-graph.js"></script>
 <script src="js/pages/my-calendar.js"></script>
 <script src="js/pages/branch-docs.js"></script>
 <script src="js/pages/red-folder.js"></script>

@@ -35,6 +35,7 @@ const LessonViewPage = {
                 return;
             }
 
+            ActivityTracker.track('lesson_open', { entity_type: 'lesson', entity_id: lesson.id, entity_title: lesson.title, page: `lessons/${lesson.id}` });
             const progress   = await API.progress.getByLesson(lessonId).catch(() => null);
             lesson.resources?.sort((a,b) => a.order_index - b.order_index);
 
@@ -72,7 +73,7 @@ const LessonViewPage = {
                                 <span class="text-muted text-sm">Урок ${idx + 1} з ${allLessons.length}</span>
                                 <h2>${lesson.title}</h2>
                             </div>
-                            ${AppState.isStaff() ? `
+                            ${AppState.isStaff() && AppState.canMutate() ? `
                                 <div style="display:flex;gap:.5rem">
                                     <button class="btn btn-ghost btn-sm" onclick="CourseViewPage.openEditLesson('${lesson.id}')"><i class="fa-solid fa-pen"></i></button>
                                     <button class="btn btn-secondary btn-sm" onclick="LessonViewPage.openAddResource('${lesson.id}')">+ Матеріал</button>
@@ -152,7 +153,7 @@ const LessonViewPage = {
                             <div class="resource-meta">${r.type.toUpperCase()} ${r.file_size ? '• ' + Fmt.fileSize(r.file_size) : ''}</div>
                         </div>
                         <button class="btn btn-ghost btn-sm" style="flex-shrink:0"><i class="fa-solid fa-eye"></i> Відкрити</button>
-                        ${AppState.isStaff() ? `<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();LessonViewPage.deleteResource('${r.id}')" style="flex-shrink:0"><i class="fa-solid fa-trash"></i></button>` : ''}
+                        ${AppState.isStaff() && AppState.canMutate() ? `<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();LessonViewPage.deleteResource('${r.id}')" style="flex-shrink:0"><i class="fa-solid fa-trash"></i></button>` : ''}
                     </div>`).join('')}
             </div>`;
     },

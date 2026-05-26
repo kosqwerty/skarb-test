@@ -33,6 +33,7 @@ const CourseViewPage = {
             this._courseTeachers = courseTeachers;
             UI.setBreadcrumb([{ label: backLabel, route: backRoute }, { label: course.title }]);
             RecentlyViewed.track({ type: 'course', id: course.id, title: course.title, thumbnail: course.thumbnail_url || null, route: `courses/${course.id}`, color: '#6366f1', icon: 'fa-book-open' });
+            ActivityTracker.track('course_open', { entity_type: 'course', entity_id: course.id, entity_title: course.title, page: `courses/${course.id}` });
             this._render(container, course, this._enrolled);
         } catch(e) {
             container.innerHTML = `
@@ -201,7 +202,7 @@ const CourseViewPage = {
                     <button class="btn btn-ghost btn-sm" onclick="Router.go('analytics?course=${course.id}')"><i class="fa-solid fa-chart-bar"></i> Аналітика</button>
                     <button class="btn btn-ghost btn-sm" onclick="CourseViewPage.manageEnrollments('${course.id}')"><i class="fa-solid fa-users"></i> Стажери</button>
                     ${AppState.isAdmin() ? `<button class="btn btn-ghost btn-sm" onclick="CourseViewPage._openRunModal('${course.id}')"><i class="fa-solid fa-rotate"></i> Нова група</button>` : ''}
-                    <button class="btn btn-ghost btn-sm" onclick="Router.go('admin?tab=courses&edit=${course.id}')"><i class="fa-solid fa-gear"></i> Налаштування</button>
+                    ${AppState.canMutate() ? `<button class="btn btn-ghost btn-sm" onclick="Router.go('admin?tab=courses&edit=${course.id}')"><i class="fa-solid fa-gear"></i> Налаштування</button>` : ''}
                 </div>` : ''}
                 <div class="cv-hero-wrap${AppState.isStaff() ? ' cv-hero-no-top-radius' : ''}${enrolled ? ' enrolled' : ''}">
                     <div class="cv-hero">
@@ -228,7 +229,7 @@ const CourseViewPage = {
                             <div class="cv-hero-img-bg" style="background-image:url('${thumbUrl}')"></div>
                             <div class="cv-hero-img-main" style="background-image:url('${thumbUrl}')"></div>
                         ` : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.1);font-size:5rem"><i class="fa-regular fa-image"></i></div>`}
-                        ${AppState.isStaff() ? `
+                        ${AppState.isStaff() && AppState.canMutate() ? `
                         <div class="cv-thumb-upload-wrap">
                             <label class="cv-thumb-upload">
                                 <input type="file" accept="image/*" style="display:none" onchange="CourseViewPage._uploadThumb('${course.id}', this)">
@@ -243,7 +244,7 @@ const CourseViewPage = {
                         <button class="cv-info-tab-btn active" style="position:relative" onclick="CourseViewPage._switchInfoTab('about')">
                             <span class="cv-tab-icon">📖</span>
                             <span class="cv-tab-label">Про курс</span>
-                            ${AppState.isStaff() ? `<span onclick="event.stopPropagation();CourseViewPage._editCourseInfo('${course.id}')" style="position:absolute;top:6px;right:6px;display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;color:var(--text-muted);border:1px solid var(--border);background:var(--bg-raised);transition:all .15s" onmouseenter="this.style.borderColor='var(--primary)';this.style.color='var(--primary)'" onmouseleave="this.style.borderColor='var(--border)';this.style.color='var(--text-muted)'"><i class="fa-solid fa-pen-to-square" style="font-size:.65rem"></i></span>` : ''}
+                            ${AppState.isStaff() && AppState.canMutate() ? `<span onclick="event.stopPropagation();CourseViewPage._editCourseInfo('${course.id}')" style="position:absolute;top:6px;right:6px;display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;color:var(--text-muted);border:1px solid var(--border);background:var(--bg-raised);transition:all .15s" onmouseenter="this.style.borderColor='var(--primary)';this.style.color='var(--primary)'" onmouseleave="this.style.borderColor='var(--border)';this.style.color='var(--text-muted)'"><i class="fa-solid fa-pen-to-square" style="font-size:.65rem"></i></span>` : ''}
                         </button>
                         <button class="cv-info-tab-btn" onclick="CourseViewPage._switchInfoTab('teachers')">
                             <span class="cv-tab-icon">🎓</span>
@@ -258,7 +259,7 @@ const CourseViewPage = {
                         <button class="cv-info-tab-btn" onclick="CourseViewPage._switchInfoTab('meet')" style="position:relative">
                             <span class="cv-tab-icon">🎥</span>
                             <span class="cv-tab-label">Онлайн лекція</span>
-                            ${AppState.isStaff() ? `<span onclick="event.stopPropagation();CourseViewPage._editMeetUrl('${course.id}')" style="position:absolute;top:6px;right:6px;display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;color:var(--text-muted);border:1px solid var(--border);background:var(--bg-raised);transition:all .15s" onmouseenter="this.style.borderColor='var(--primary)';this.style.color='var(--primary)'" onmouseleave="this.style.borderColor='var(--border)';this.style.color='var(--text-muted)'"><i class="fa-solid fa-pen-to-square" style="font-size:.65rem"></i></span>` : ''}
+                            ${AppState.isStaff() && AppState.canMutate() ? `<span onclick="event.stopPropagation();CourseViewPage._editMeetUrl('${course.id}')" style="position:absolute;top:6px;right:6px;display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;color:var(--text-muted);border:1px solid var(--border);background:var(--bg-raised);transition:all .15s" onmouseenter="this.style.borderColor='var(--primary)';this.style.color='var(--primary)'" onmouseleave="this.style.borderColor='var(--border)';this.style.color='var(--text-muted)'"><i class="fa-solid fa-pen-to-square" style="font-size:.65rem"></i></span>` : ''}
                         </button>` : ''}
                     </div>
                     <div id="cv-info-tab-about" class="cv-info-tab-pane">${this._renderCourseInfoBody(course)}</div>
@@ -396,7 +397,7 @@ const CourseViewPage = {
                         ${pos ? `<div style="font-size:.75rem;color:var(--text-muted)">${pos}</div>` : ''}
                         ${lbl}
                     </div>
-                    ${(isMine && isStaff) || AppState.isAdmin() ? `
+                    ${((isMine && isStaff) || AppState.isAdmin()) && AppState.canMutate() ? `
                         <button class="btn btn-ghost btn-sm" title="Редагувати мітку"
                             onclick="CourseViewPage._editMyLabel('${t.id}','${courseId}')">
                             <i class="fa-solid fa-pen" style="font-size:.75rem"></i>
@@ -408,7 +409,7 @@ const CourseViewPage = {
                 </div>`;
         }).join('');
 
-        const joinBtn = isStaff && !myEntry ? `
+        const joinBtn = isStaff && !myEntry && AppState.canMutate() ? `
             <button class="btn btn-secondary btn-sm" onclick="CourseViewPage._joinAsteacher('${courseId}')">
                 <i class="fa-solid fa-chalkboard-user"></i> Я веду цей курс
             </button>` : '';
@@ -566,7 +567,7 @@ const CourseViewPage = {
         const requirements = info.requirements || [];
         const forWhom      = info.for_whom     || '';
         const hasContent   = goals.length || outcomes.length || requirements.length || forWhom;
-        const canEdit      = AppState.isStaff();
+        const canEdit      = AppState.isStaff() && AppState.canMutate();
         if (!hasContent && !canEdit) return '';
 
         const listBlock = (icon, color, title, items) => !items.length ? '' : `
@@ -867,7 +868,7 @@ const CourseViewPage = {
             d.tests?.length ? d.tests.map(t => t.id) : (d.test_id ? [d.test_id] : [])
         ).filter(Boolean))];
         const attemptsMap = {};
-        if (testIds.length && !AppState.isImpersonating()) {
+        if (testIds.length) {
             await Promise.all(testIds.map(async id => {
                 try {
                     const list = await API.attempts.getByTest(id);
@@ -878,7 +879,7 @@ const CourseViewPage = {
             }));
         }
         const courseId = this._course?.id || '';
-        el.innerHTML = (AppState.isStaff() ? `
+        el.innerHTML = (AppState.isStaff() && AppState.canMutate() ? `
             <div style="display:flex;justify-content:flex-end;margin-bottom:.75rem">
                 <button class="btn btn-ghost btn-sm" onclick="CourseViewPage._editSchedule('${courseId}')">
                     <i class="fa-solid fa-pen-to-square"></i> Редагувати
@@ -1346,7 +1347,7 @@ const CourseViewPage = {
                         </div>
                         <div style="display:flex;align-items:center;gap:.4rem">
                             ${!t.is_published ? '<span class="badge badge-muted">Чернетка</span>' : '<i class="fa-solid fa-chevron-right" style="color:var(--text-muted);font-size:.8rem"></i>'}
-                            ${AppState.isStaff() ? `
+                            ${AppState.isStaff() && AppState.canMutate() ? `
                                 <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();TestsPage.openEdit('${t.id}')"><i class="fa-solid fa-pen"></i></button>
                                 <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();TestsPage.deleteTest('${t.id}',${JSON.stringify(t.title||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-trash"></i></button>
                             ` : ''}

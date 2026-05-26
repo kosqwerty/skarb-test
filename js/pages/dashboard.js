@@ -99,31 +99,24 @@ const DashboardPage = {
             .db-course-body{padding:.75rem}
             .db-course-name{font-size:.82rem;font-weight:600;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:.5rem}
 
-            .db-main-grid{display:grid;grid-template-columns:1fr 1fr 1fr minmax(min(280px,22vw),320px);gap:clamp(.5rem,.75vw,.85rem);margin-bottom:1.5rem;align-items:start}
-            .db-main-grid>*{display:flex;flex-direction:column;min-width:0}
-            .db-cal-col{grid-column:4;grid-row:1/3;display:flex;flex-direction:column;gap:.75rem;min-width:0}
-            .db-recent-row{grid-column:1/4;grid-row:2}
-            @media(max-width:1400px){
-                .db-main-grid{grid-template-columns:1fr 1fr 1fr minmax(min(260px,21vw),300px)}
-            }
+            .db-main-grid{display:grid;grid-template-columns:1fr minmax(min(280px,22vw),320px);grid-template-rows:auto 1fr;gap:clamp(.5rem,.75vw,.85rem);margin-bottom:1.5rem;align-items:start}
+            .db-content-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:clamp(.5rem,.75vw,.85rem);align-items:start;min-width:0}
+            .db-content-cols>*{min-width:0}
+            .db-cal-col{grid-column:2;grid-row:1/3;display:flex;flex-direction:column;gap:.75rem;min-width:0}
+            .db-recent-row{grid-column:1;grid-row:2}
             @media(max-width:1200px){
-                .db-main-grid{grid-template-columns:1fr 1fr minmax(min(250px,24vw),300px)}
-                #db-news-widget{grid-column:1/3}
-                .db-cal-col{grid-column:3;grid-row:1/3}
-                .db-recent-row{grid-column:1/3;grid-row:3}
+                .db-main-grid{grid-template-columns:1fr minmax(min(250px,24vw),300px)}
             }
             @media(max-width:1000px){
-                .db-main-grid{grid-template-columns:1fr 1fr}
-                #db-alerts-docs,#db-alerts-notif{grid-column:auto}
-                #db-news-widget{grid-column:1/3}
-                .db-cal-col{grid-column:1/3;grid-row:auto}
-                .db-recent-row{grid-column:1/3;grid-row:auto}
+                .db-main-grid{grid-template-columns:1fr;grid-template-rows:auto}
+                .db-cal-col{grid-column:1;grid-row:auto}
+                .db-recent-row{grid-column:1;grid-row:auto}
             }
             @media(max-width:700px){
                 .db-main-grid{grid-template-columns:1fr;gap:.6rem}
-                .db-cal-col,.db-recent-row,#db-news-widget{grid-column:1;grid-row:auto}
+                .db-content-cols{grid-template-columns:1fr}
             }
-            .db-news-w{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden;height:315px;display:flex;flex-direction:column;position:relative}
+            .db-news-w{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden;height:315px;display:flex;flex-direction:column;position:relative;max-width:570px;width:100%}
             .db-news-w::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:#f59e0b;z-index:1}
             .db-news-w-head{padding:.75rem 1rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
             .db-news-w-head-left{display:flex;align-items:center;gap:.55rem}
@@ -228,11 +221,13 @@ const DashboardPage = {
         <!-- ── Birthdays ── -->
         <div id="db-birthdays"></div>
 
-        <!-- ── Main grid: docs | notif | news | calendar / carousel ── -->
+        <!-- ── Main grid: [docs | notif | news] | calendar / carousel ── -->
         <div class="db-main-grid">
-            <div id="db-alerts-docs"></div>
-            <div id="db-alerts-notif"></div>
-            <div id="db-news-widget"></div>
+            <div class="db-content-cols">
+                <div id="db-alerts-docs"></div>
+                <div id="db-alerts-notif"></div>
+                <div id="db-news-widget"></div>
+            </div>
             <div class="db-cal-col">
                 <div id="db-cal-widget"></div>
                 <div id="db-important"></div>
@@ -285,6 +280,7 @@ const DashboardPage = {
         this._renderRecentlyViewed();
         this._renderCalWidget(calEvents, today, scheduleEntries);
         this._renderImportantEvents(calEvents, today);
+        this._showDayPlanPopup(scheduleEntries, calEvents, today);
         this._renderAlerts(unackedDocs, recentNotifs);
         this._renderBirthdays(birthdays);
 
@@ -762,6 +758,89 @@ const DashboardPage = {
         if (el) { el.style.transition = 'opacity .3s'; el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }
     },
 
+    _showDayPlanPopup(scheduleEntries, calEvents, today) {
+        // Show once per day per user
+        const storageKey = `dayplan_shown_${AppState.user.id}_${today}`;
+        if (localStorage.getItem(storageKey)) return;
+
+        const _pad = n => String(n).padStart(2,'0');
+        const todayD = new Date();
+        const tomorrowD = new Date(todayD); tomorrowD.setDate(tomorrowD.getDate() + 1);
+        const tomorrow = `${tomorrowD.getFullYear()}-${_pad(tomorrowD.getMonth()+1)}-${_pad(tomorrowD.getDate())}`;
+
+        const shiftMeta = { work:{label:'Робоча зміна',color:'#10b981',icon:'fa-briefcase'}, day_off:{label:'Вихідний',color:'#8b5cf6',icon:'fa-couch'}, vacation:{label:'Відпустка',color:'#f59e0b',icon:'fa-umbrella-beach'}, sick:{label:'Лікарняний',color:'#ef4444',icon:'fa-house-medical'} };
+
+        const todayShift    = scheduleEntries.find(e => e.date === today);
+        const tomorrowShift = scheduleEntries.find(e => e.date === tomorrow);
+        const todayEvs      = calEvents.filter(e => e.date === today);
+        const tomorrowEvs   = calEvents.filter(e => e.date === tomorrow);
+
+        // Nothing to show
+        if (!todayShift && !tomorrowShift && !todayEvs.length && !tomorrowEvs.length) return;
+
+        const _shiftRow = (s) => {
+            if (!s) return '';
+            const m = shiftMeta[s.shift_type] || shiftMeta.work;
+            const loc = s.schedule_locations?.name ? ` · ${Fmt.esc(s.schedule_locations.name)}` : '';
+            return `<div class="dp-row">
+                <div class="dp-dot" style="background:${m.color}"></div>
+                <div class="dp-rtext">
+                    <span class="dp-rtitle">${m.label}${loc}</span>
+                    ${s.notes ? `<span class="dp-rsub">${Fmt.esc(s.notes)}</span>` : ''}
+                </div>
+            </div>`;
+        };
+        const _evRow = (ev) => {
+            const c = ev.color || '#6366f1';
+            const time = ev.time ? ` <span style="color:${c};font-size:.7rem;font-weight:600">${ev.time.slice(0,5)}</span>` : '';
+            return `<div class="dp-row">
+                <div class="dp-dot" style="background:${c}"></div>
+                <div class="dp-rtext">
+                    <span class="dp-rtitle">${Fmt.esc(ev.title)}${time}</span>
+                </div>
+            </div>`;
+        };
+
+        const ua = new Date().toLocaleDateString('uk-UA',{weekday:'long',day:'numeric',month:'long'});
+        const ub = tomorrowD.toLocaleDateString('uk-UA',{weekday:'long',day:'numeric',month:'long'});
+
+        const secToday = (todayShift || todayEvs.length) ? `
+            <div class="dp-day-hdr"><i class="fa-solid fa-sun"></i> Сьогодні · ${ua}</div>
+            <div class="dp-day-rows">
+                ${_shiftRow(todayShift)}
+                ${todayEvs.map(_evRow).join('')}
+            </div>` : '';
+
+        const secTomorrow = (tomorrowShift || tomorrowEvs.length) ? `
+            <div class="dp-day-hdr" style="margin-top:.75rem"><i class="fa-regular fa-moon"></i> Завтра · ${ub}</div>
+            <div class="dp-day-rows">
+                ${_shiftRow(tomorrowShift)}
+                ${tomorrowEvs.map(_evRow).join('')}
+            </div>` : '';
+
+        const body = `<style>
+            .dp-wrap{padding:.25rem 0}
+            .dp-day-hdr{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:.45rem;display:flex;align-items:center;gap:.4rem}
+            .dp-day-rows{display:flex;flex-direction:column;gap:.3rem}
+            .dp-row{display:flex;align-items:flex-start;gap:.65rem;padding:.35rem .5rem;border-radius:var(--radius-md);background:var(--bg-raised)}
+            .dp-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:.28rem}
+            .dp-rtext{display:flex;flex-direction:column;gap:.1rem;min-width:0}
+            .dp-rtitle{font-size:.85rem;font-weight:600;color:var(--text-primary)}
+            .dp-rsub{font-size:.72rem;color:var(--text-muted)}
+        </style>
+        <div class="dp-wrap">${secToday}${secTomorrow}</div>`;
+
+        setTimeout(() => {
+            Modal.open({
+                title: '📅 План на сьогодні і завтра',
+                body,
+                footer: `<button class="btn btn-primary" onclick="Modal.close()">Зрозуміло</button>`,
+                size: 'sm'
+            });
+            localStorage.setItem(storageKey, '1');
+        }, 600);
+    },
+
     _renderAlerts(unackedDocs, recentNotifs) {
         const docsEl  = document.getElementById('db-alerts-docs');
         const notifEl = document.getElementById('db-alerts-notif');
@@ -769,6 +848,8 @@ const DashboardPage = {
 
         if (docsEl) {
             const hasIssue = unackedDocs.length > 0;
+            if (!hasIssue) { docsEl.style.display = 'none'; }
+            else { docsEl.style.display = ''; }
             const accentDoc = hasIssue ? '#ef4444' : '#10b981';
             const iconBg    = hasIssue ? 'rgba(239,68,68,.12)' : 'rgba(16,185,129,.12)';
             const badgeHtml = hasIssue
@@ -807,6 +888,12 @@ const DashboardPage = {
         }
 
         if (notifEl) {
+            if (unreadCount === 0) {
+                notifEl.style.display = 'none';
+            } else {
+                notifEl.style.display = '';
+            }
+            if (unreadCount > 0) {
             const typeMap = t => {
                 if (!t) return { icon:'fa-bell', color:'#8b5cf6', bg:'rgba(139,92,246,.12)' };
                 if (t.includes('test'))   return { icon:'fa-clipboard-list',  color:'#f59e0b', bg:'rgba(245,158,11,.12)' };
@@ -865,7 +952,9 @@ const DashboardPage = {
                     </div>
                     <div class="db-alc-body">${body}</div>
                 </div>`;
+            } // end if unreadCount > 0
         }
+
     },
 
     async _calToggleDone(eventId, btn) {
@@ -949,23 +1038,29 @@ const DashboardPage = {
             el.style.transition = 'opacity .25s, transform .25s';
             el.style.opacity = '0';
             el.style.transform = 'translateX(12px)';
-            setTimeout(() => el.remove(), 250);
+            setTimeout(() => {
+                el.remove();
+                // if no more notif items left — hide whole widget
+                const container = document.getElementById('db-alc-notif');
+                if (container && !container.querySelector('.db-alc-nitem')) {
+                    this._hideNotifWidget();
+                }
+            }, 260);
         }
+    },
+
+    _hideNotifWidget() {
+        const notifEl = document.getElementById('db-alerts-notif');
+        if (!notifEl) return;
+        notifEl.style.transition = 'opacity .3s';
+        notifEl.style.opacity = '0';
+        setTimeout(() => { notifEl.style.display = 'none'; notifEl.style.opacity = ''; notifEl.style.transition = ''; }, 310);
     },
 
     async _dismissNotifAlert() {
         await API.notifications.markAllRead().catch(() => {});
-        const el = document.getElementById('db-alc-notif');
-        if (!el) return;
-        el.style.transition = 'opacity .25s';
-        el.style.opacity = '0';
-        setTimeout(() => {
-            el.outerHTML = `<div class="db-alc-empty">
-                <i class="fa-regular fa-bell-slash db-alc-empty-icon"></i>
-                <div class="db-alc-empty-title">Немає сповіщень</div>
-                <div class="db-alc-empty-sub">Усі сповіщення прочитані</div>
-            </div>`;
-        }, 250);
+        UI.loadNotificationCount();
+        this._hideNotifWidget();
     },
 
     _renderBirthdays(people) {

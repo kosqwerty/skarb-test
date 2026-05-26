@@ -22,6 +22,7 @@ const TestsPage = {
             const test = await API.tests.getById(testId);
             this._test = test;
             RecentlyViewed.track({ type: 'test', id: test.id, title: test.title, thumbnail: null, route: `tests/${test.id}`, color: '#f59e0b', icon: 'fa-file-pen' });
+            ActivityTracker.track('test_start', { entity_type: 'test', entity_id: test.id, entity_title: test.title, page: `tests/${test.id}` });
 
             if (this._from === 'expert-path') {
                 UI.setBreadcrumb([
@@ -608,6 +609,7 @@ const TestsPage = {
                 timeSpent, answers: result.answers
             });
             this._clearProgress();
+            ActivityTracker.track('test_complete', { entity_type: 'test', entity_id: this._test.id, entity_title: this._test.title, page: `tests/${this._test.id}`, details: { score: Math.round(result.percentage), passed: result.passed } });
             this._renderResult(result, timeSpent);
         } catch(e) { Toast.error('Помилка', e.message); }
         finally { Loader.hide(); }

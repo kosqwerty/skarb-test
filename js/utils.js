@@ -235,6 +235,7 @@ const UI = {
         const schedulerItemNs = { icon: '<i class="fa-solid fa-calendar-days" style="color:#60a5fa"></i>', label: 'Розділ планування', route: 'scheduler', noStar: true };
         const adminItem       = { icon: '<i class="fa-solid fa-gear"          style="color:#f87171"></i>', label: 'Адміністрування',   route: 'admin' };
         const contentAdmItem  = { icon: '<i class="fa-solid fa-gear"          style="color:#f87171"></i>', label: 'Контент',           route: 'admin' };
+        const myCalendarItem  = { icon: '<i class="fa-solid fa-calendar-check" style="color:#60a5fa"></i>', label: 'Мій календар',     route: 'my-calendar', noStar: true };
 
         if (role === 'ceo') {
             return [
@@ -253,7 +254,7 @@ const UI = {
         if (role === 'manager') {
             return [
                 { title: 'Навчання',   items: contentItems },
-                { title: 'Управління', items: [ schedulerItem ] },
+                { title: 'Управління', items: [ schedulerItem, myCalendarItem ] },
                 { title: 'Особисте',   items: [ contactsItem, bmItem ] }
             ];
         }
@@ -315,6 +316,7 @@ const UI = {
         if (!popup) return;
         const isOpen = popup.classList.contains('open');
         if (isOpen) { this.closeUserPopup(); return; }
+        this.initRolePreview();
         popup.classList.remove('hidden');
         requestAnimationFrame(() => popup.classList.add('open'));
         document.getElementById('su-chevron-icon')?.classList.add('su-rotated');
@@ -336,6 +338,57 @@ const UI = {
         document.getElementById('su-chevron-icon')?.classList.remove('su-rotated');
         setTimeout(() => popup.classList.add('hidden'), 180);
         document.removeEventListener('click', this._boundPopupHandler);
+    },
+
+    initRolePreview() {
+        // Показуємо секцію тільки для owner/admin
+        const realRole = AppState._realRole || AppState.profile?.role;
+        const canPreview = realRole === 'owner' || realRole === 'admin';
+        const section = document.getElementById('su-preview-section');
+        if (!section) return;
+        if (!canPreview) { section.classList.add('hidden'); return; }
+        section.classList.remove('hidden');
+
+        const ROLES = [
+            { role: 'admin',   label: 'Адмін',     icon: 'fa-user-shield' },
+            { role: 'smm',     label: 'SMM',        icon: 'fa-pen-nib' },
+            { role: 'teacher', label: 'Вчитель',    icon: 'fa-chalkboard-user' },
+            { role: 'manager', label: 'Менеджер',   icon: 'fa-briefcase' },
+            { role: 'ceo',     label: 'CEO',        icon: 'fa-crown' },
+            { role: 'user',    label: 'Користувач', icon: 'fa-user' },
+        ];
+
+        const current = AppState.profile?.role;
+        const container = document.getElementById('su-preview-btns');
+        if (!container) return;
+        container.innerHTML = ROLES.map(r => `
+            <button onclick="UI.closeUserPopup();AppState.previewAs('${r.role}')"
+                style="display:flex;align-items:center;gap:.6rem;padding:.4rem .5rem;border-radius:6px;
+                       border:none;background:${r.role===current?'var(--primary-muted, rgba(99,102,241,.12))':'transparent'};
+                       color:${r.role===current?'var(--primary)':'var(--text-secondary)'};
+                       font-size:.82rem;font-weight:${r.role===current?'600':'400'};
+                       cursor:pointer;text-align:left;width:100%;transition:background .15s"
+                onmouseenter="this.style.background='var(--bg-hover)'"
+                onmouseleave="this.style.background='${r.role===current?'var(--primary-muted, rgba(99,102,241,.12))':'transparent'}'">
+                <i class="fa-solid ${r.icon}" style="width:14px;text-align:center"></i>
+                <span>${r.label}</span>
+                ${r.role===current ? '<i class="fa-solid fa-check" style="margin-left:auto;font-size:.7rem"></i>' : ''}
+            </button>`).join('');
+
+        // Якщо зараз в режимі перегляду — показуємо кнопку "Повернутись"
+        if (AppState.isPreviewing()) {
+            container.insertAdjacentHTML('afterbegin', `
+                <button onclick="UI.closeUserPopup();AppState.stopPreview()"
+                    style="display:flex;align-items:center;gap:.6rem;padding:.4rem .5rem;border-radius:6px;
+                           border:1px solid var(--primary);background:transparent;
+                           color:var(--primary);font-size:.82rem;font-weight:600;
+                           cursor:pointer;text-align:left;width:100%;margin-bottom:4px;transition:background .15s"
+                    onmouseenter="this.style.background='var(--bg-hover)'"
+                    onmouseleave="this.style.background='transparent'">
+                    <i class="fa-solid fa-rotate-left" style="width:14px;text-align:center"></i>
+                    <span>Повернутись (${Fmt.role(realRole)})</span>
+                </button>`);
+        }
     },
 
     _updateThemeLabel() {
@@ -1236,27 +1289,61 @@ const AuditLog = {
 };
 
 
-// ── Impersonation Banner ──────────────────────────────────────────
-const ImpersonationBanner = {
-    show(profile) {
-        let el = document.getElementById('impersonation-banner');
+
+// ── Role Preview Banner ───────────────────────────────────────────
+const RolePreviewBanner = {
+    _ROLES: [
+        { role: 'admin',   label: 'Адмін',    icon: 'fa-user-shield' },
+        { role: 'smm',     label: 'SMM',       icon: 'fa-pen-nib' },
+        { role: 'teacher', label: 'Вчитель',   icon: 'fa-chalkboard-user' },
+        { role: 'manager', label: 'Менеджер',  icon: 'fa-briefcase' },
+        { role: 'ceo',     label: 'CEO',       icon: 'fa-crown' },
+        { role: 'user',    label: 'Користувач',icon: 'fa-user' },
+    ],
+
+    show(previewRole, realRole) {
+        let el = document.getElementById('role-preview-banner');
         if (!el) {
             el = document.createElement('div');
-            el.id = 'impersonation-banner';
+            el.id = 'role-preview-banner';
             document.body.appendChild(el);
         }
+        const roleLabel = this._ROLES.find(r => r.role === previewRole)?.label || previewRole;
+        const btns = this._ROLES
+            .filter(r => r.role !== realRole)
+            .map(r => `
+                <button onclick="AppState.previewAs('${r.role}')"
+                    style="padding:3px 10px;border-radius:6px;border:1.5px solid rgba(255,255,255,${r.role===previewRole?'1':'0.35'});
+                           background:${r.role===previewRole?'rgba(255,255,255,.25)':'transparent'};
+                           color:#fff;font-size:.75rem;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap"
+                    onmouseenter="this.style.background='rgba(255,255,255,.2)'"
+                    onmouseleave="this.style.background='${r.role===previewRole?'rgba(255,255,255,.25)':'transparent'}'">
+                    <i class="fa-solid ${r.icon}"></i> ${r.label}
+                </button>`).join('');
         el.innerHTML = `
-            <span style="display:inline-flex;align-items:center;gap:.5rem">
-                <span style="font-size:1rem">👁</span>
-                <span>Ви переглядаєте як <strong>${Fmt.esc(profile.full_name || profile.email || '?')}</strong></span>
-                <span style="font-size:.78rem;opacity:.75">${profile.role ? '· ' + Fmt.role(profile.role) : ''}${profile.job_position ? ' · ' + Fmt.esc(profile.job_position) : ''}${profile.city ? ' · ' + Fmt.esc(profile.city) : ''}</span>
+            <span style="display:inline-flex;align-items:center;gap:.4rem;font-size:.85rem">
+                <i class="fa-solid fa-eye"></i>
+                <span>Режим перегляду:</span>
+                <strong>${roleLabel}</strong>
             </span>
-            <button onclick="AppState.stopImpersonating()" style="margin-left:1rem;padding:5px 14px;border-radius:8px;border:1.5px solid rgba(255,255,255,.5);background:transparent;color:#fff;font-size:.8rem;font-weight:600;cursor:pointer;transition:background .15s" onmouseenter="this.style.background='rgba(255,255,255,.15)'" onmouseleave="this.style.background='transparent'">✕ Вийти</button>`;
-        el.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:9999;background:linear-gradient(90deg,#7c3aed,#4f46e5);color:#fff;padding:10px 20px;display:flex;align-items:center;justify-content:center;gap:.75rem;font-size:.875rem;box-shadow:0 -2px 16px rgba(0,0,0,.2);';
-        document.body.style.paddingBottom = '48px';
+            <div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap">${btns}</div>
+            <button onclick="AppState.stopPreview()"
+                style="padding:4px 12px;border-radius:6px;border:1.5px solid rgba(255,255,255,.5);
+                       background:transparent;color:#fff;font-size:.78rem;font-weight:600;cursor:pointer;
+                       white-space:nowrap;transition:background .15s;margin-left:.25rem"
+                onmouseenter="this.style.background='rgba(255,255,255,.15)'"
+                onmouseleave="this.style.background='transparent'">
+                ✕ Вийти
+            </button>`;
+        el.style.cssText = `position:fixed;bottom:0;left:0;right:0;z-index:9999;
+            background:linear-gradient(90deg,#0f766e,#0d9488);color:#fff;
+            padding:8px 20px;display:flex;align-items:center;justify-content:center;
+            gap:.75rem;flex-wrap:wrap;font-size:.875rem;box-shadow:0 -2px 16px rgba(0,0,0,.2);`;
+        document.body.style.paddingBottom = '50px';
     },
+
     hide() {
-        const el = document.getElementById('impersonation-banner');
+        const el = document.getElementById('role-preview-banner');
         if (el) el.remove();
         document.body.style.paddingBottom = '';
     }

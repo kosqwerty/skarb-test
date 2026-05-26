@@ -116,6 +116,7 @@ const Auth = {
         if (!confirmed) return;
 
         UI.closeUserPopup();
+        try { API.activityLog.log('logout'); } catch(_) {}
         try { await supabase.auth.signOut(); } catch(_) {}
         AppState.user    = null;
         AppState.profile = null;
@@ -144,6 +145,7 @@ const Auth = {
     _blockChannel:    null,
     _blockedByAdmin:  false,
     _kickedByAdmin:   false,
+    _signingOut:      false,
 
     // Realtime-підписка: лише виставляє прапор і викликає signOut.
     // Весь UI-перехід — в onAuthStateChange(SIGNED_OUT), щоб не було подвійного виклику.
@@ -161,14 +163,31 @@ const Auth = {
                 table:  'profiles',
                 filter: `id=eq.${AppState.user.id}`
             }, async payload => {
-                if (payload.new?.is_active === false) {
+                // Realtime може не передавати значення колонок при RLS —
+                // зчитуємо свіжий профіль щоб перевірити реальний стан
+                if (this._signingOut) return;
+                const uid = AppState.user?.id;
+                if (!uid) return;
+                let fresh = null;
+                try {
+                    const { data } = await supabase
+                        .from('profiles')
+                        .select('is_active, force_logout')
+                        .eq('id', uid)
+                        .maybeSingle();
+                    fresh = data;
+                } catch(_) {}
+
+                const row = fresh || payload.new;
+                if (row?.is_active === false) {
+                    this._signingOut = true;
                     this._blockedByAdmin = true;
                     try { await supabase.auth.signOut(); } catch(_) {}
+                    return;
                 }
-                if (payload.new?.force_logout === true) {
+                if (row?.force_logout === true) {
+                    this._signingOut = true;
                     this._kickedByAdmin = true;
-                    // Скидаємо флаг одразу (щоб не спрацьовувало повторно)
-                    await supabase.from('profiles').update({ force_logout: false }).eq('id', AppState.user.id).catch(() => {});
                     try { await supabase.auth.signOut(); } catch(_) {}
                 }
             })
@@ -178,6 +197,9 @@ const Auth = {
     listen() {
         supabase.auth.onAuthStateChange((event, session) => {
             if (event === 'SIGNED_OUT') {
+                this._signingOut = false;
+                AppState._realRole = null;
+                RolePreviewBanner.hide();
                 InactivityWatcher.stop();
                 Heartbeat.stop();
                 if (this._blockChannel) {
@@ -191,6 +213,8 @@ const Auth = {
                 AppState.user    = null;
                 AppState.profile = null;
                 AppState.session = null;
+                location.hash    = '';
+                try { Modal.close(); } catch(_) {}
                 this._showAuth();
                 if (this._blockedByAdmin) {
                     this._blockedByAdmin = false;
@@ -208,18 +232,30 @@ const Auth = {
     },
 
     async _showApp() {
+        // Скидаємо force_logout якщо лишився з попередньої сесії —
+        // до старту Heartbeat, щоб він не прочитав true і не вибив знову
+        const uid = AppState.user?.id;
+        if (uid) {
+            try {
+                await supabase.from('profiles')
+                    .update({ force_logout: false })
+                    .eq('id', uid)
+                    .eq('force_logout', true);
+            } catch(_) {}
+        }
         document.getElementById('auth-screen').classList.add('hidden');
         document.getElementById('app-shell').classList.remove('hidden');
         this._subscribeBlockStatus();
         InactivityWatcher.start();
         await Heartbeat.start();
         App.start();
+        setTimeout(() => { try { API.activityLog.log('login'); } catch(_) {} }, 1000);
     }
 };
 
 // ── Heartbeat — оновлює last_seen_at кожні 2 хв ───────────────────
 const Heartbeat = {
-    _INTERVAL: 2 * 60 * 1000,   // 2 хвилини
+    _INTERVAL: 30 * 1000,        // 30 секунд
     _timer: null,
 
     async start() {
@@ -234,12 +270,30 @@ const Heartbeat = {
     },
 
     async _ping() {
+        if (Auth._signingOut) return;
         const id = AppState.user?.id;
         if (!id) return;
         try {
-            await supabase.from('profiles')
+            // Оновлюємо last_seen_at і одночасно зчитуємо поточний стан
+            const { data } = await supabase.from('profiles')
                 .update({ last_seen_at: new Date().toISOString() })
-                .eq('id', id);
+                .eq('id', id)
+                .select('is_active, force_logout')
+                .maybeSingle();
+            if (!data) return;
+            // Fallback для блокування (Realtime міг не спрацювати)
+            if (data.is_active === false) {
+                Auth._signingOut = true;
+                Auth._blockedByAdmin = true;
+                await supabase.auth.signOut();
+                return;
+            }
+            // Fallback для примусового виходу (Realtime міг не спрацювати)
+            if (data.force_logout === true) {
+                Auth._signingOut = true;
+                Auth._kickedByAdmin = true;
+                await supabase.auth.signOut();
+            }
         } catch(_) {}
     }
 };
@@ -248,39 +302,56 @@ const Heartbeat = {
 const InactivityWatcher = {
     _TIMEOUT:   60 * 60 * 1000,   // 1 година в мс
     _WARN:      5  * 60 * 1000,   // попередження за 5 хв до виходу
-    _timer:     null,
-    _warnTimer: null,
+    _CHECK:     30 * 1000,         // перевірка кожні 30 с (стійка до throttling і сну ПК)
+    _ticker:    null,
+    _lastActive: 0,
+    _warned:    false,
     _warnToast: null,
     _events:    ['mousemove','mousedown','keydown','touchstart','scroll','click'],
 
     start() {
         this.stop(); // запобігаємо подвійній підписці
+        this._lastActive = Date.now();
+        this._warned = false;
         this._events.forEach(e => document.addEventListener(e, this._onActivity, { passive: true }));
-        this._reset();
+        // Короткий інтервал замість одного довгого setTimeout —
+        // стійкий до фонових вкладок, сну ноутбука і browser throttling
+        this._ticker = setInterval(() => this._check(), this._CHECK);
     },
 
     stop() {
         this._events.forEach(e => document.removeEventListener(e, this._onActivity));
-        clearTimeout(this._timer);
-        clearTimeout(this._warnTimer);
-        this._timer = this._warnTimer = null;
-    },
-
-    _onActivity: null,   // заповнюється нижче
-
-    _reset() {
-        clearTimeout(this._timer);
-        clearTimeout(this._warnTimer);
-        // Прибираємо попереджувальний тост якщо він є
+        clearInterval(this._ticker);
+        this._ticker = null;
+        this._warned = false;
         if (this._warnToast) {
             const el = document.getElementById('inactivity-warn-toast');
             if (el) el.remove();
             this._warnToast = null;
         }
-        // Попередження за 5 хв
-        this._warnTimer = setTimeout(() => this._showWarning(), this._TIMEOUT - this._WARN);
-        // Вихід
-        this._timer = setTimeout(() => this._doLogout(), this._TIMEOUT);
+    },
+
+    _onActivity: null,   // заповнюється нижче
+
+    _reset() {
+        this._lastActive = Date.now();
+        // Якщо вже показали попередження — прибираємо його
+        if (this._warned) {
+            this._warned = false;
+            const el = document.getElementById('inactivity-warn-toast');
+            if (el) el.remove();
+            this._warnToast = null;
+        }
+    },
+
+    _check() {
+        const idle = Date.now() - this._lastActive;
+        if (idle >= this._TIMEOUT) {
+            this._doLogout();
+        } else if (idle >= this._TIMEOUT - this._WARN && !this._warned) {
+            this._warned = true;
+            this._showWarning();
+        }
     },
 
     _showWarning() {
@@ -321,6 +392,7 @@ const InactivityWatcher = {
         const el = document.getElementById('inactivity-warn-toast');
         if (el) el.remove();
         Toast.warning('Автовихід', 'Ви були неактивні більше 1 години');
+        try { API.activityLog.log('logout', { details: { reason: 'inactivity' } }); } catch(_) {}
         setTimeout(async () => {
             try { await supabase.auth.signOut(); } catch(_) {}
             AppState.user = null; AppState.profile = null; AppState.session = null;

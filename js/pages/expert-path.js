@@ -442,7 +442,7 @@ const ExpertPathPage = {
             { id: 'done',     label: `Завершені (${completed.length})`,   courses: completed.map(e => e.course).filter(Boolean) },
         ];
 
-        const canCreate = AppState.isStaff();
+        const canCreate = AppState.isStaff() && AppState.canMutate();
         area.innerHTML = `
             ${canCreate ? `<div style="display:flex;justify-content:flex-end;margin-bottom:.75rem">
                 <button class="btn btn-primary btn-sm" onclick="Router.go('admin?tab=courses')">

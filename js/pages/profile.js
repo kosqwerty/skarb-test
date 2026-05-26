@@ -47,11 +47,6 @@ const ProfilePage = {
         const canRole       = isAdminEdit;
         const canEmail      = true;
 
-        // Label permission: can edit only if your role rank >= rank of whoever set the label
-        const ROLE_RANK     = { user: 0, smm: 1, teacher: 1, manager: 2, admin: 3, owner: 4 };
-        const myRank        = ROLE_RANK[AppState.profile?.role] ?? 0;
-        const labelSetByRank = ROLE_RANK[user.label_set_by] ?? 0;
-        const canLabel      = (isAdminEdit || AppState.isStaff()) && myRank >= labelSetByRank;
 
         container.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
 
@@ -181,16 +176,6 @@ const ProfilePage = {
                             </select>
                         </div>
                     </label>` : ''}
-                    ${(isAdminEdit || AppState.isStaff()) ? (() => {
-                        const roleNames = { owner: 'Власника', admin: 'Адміна', manager: 'Менеджера', teacher: 'Викладача', smm: 'SMM' };
-                        const setByHint = user.label && user.label_set_by
-                            ? `<small class="field-hint">Встановлено: ${roleNames[user.label_set_by] || user.label_set_by}${canLabel ? '' : ' · Недостатньо прав для зміни'}</small>`
-                            : '';
-                        const labelOpts = ['','intern','mentor'];
-                        const labelLabels = { '': '— Без мітки —', intern: '🌱 Стажер', mentor: '⭐ Наставник' };
-                        const labelSel = `<div class="custom-select-wrapper"><select id="pe-label"${canLabel ? '' : ' disabled style="opacity:.5;cursor:not-allowed"'}>${labelOpts.map(v=>`<option value="${v}"${user.label===v?' selected':''}>${labelLabels[v]}</option>`).join('')}</select></div>`;
-                        return `<label class="input-label"><span>Мітка</span>${labelSel}${setByHint}</label>`;
-                    })() : ''}
                 </div>
             </div>
 
@@ -351,7 +336,7 @@ const ProfilePage = {
             // Build profile payload
             const canExtended = isAdminEdit || AppState.isStaff();
             const canRole     = isAdminEdit && AppState.isAdmin();
-            const canLabel    = isAdminEdit || AppState.isStaff();
+
 
             const payload = {
                 last_name:   Dom.val('pe-last-name').trim()  || null,
@@ -374,11 +359,6 @@ const ProfilePage = {
                 payload.position_since = Dom.val('pe-position-since') || null;
             }
             if (canRole)  payload.role  = Dom.val('pe-role');
-            if (canLabel) {
-                const newLabel = Dom.val('pe-label').trim() || null;
-                payload.label = newLabel;
-                payload.label_set_by = newLabel ? (AppState.profile?.role || null) : null;
-            }
             if (avatarUrl !== undefined) payload.avatar_url = avatarUrl;
 
             const updated = await API.profiles.update(userId, payload);
@@ -419,6 +399,7 @@ const ProfilePage = {
                 UI.renderNavigation(updated.role);
             }
 
+            ActivityTracker.track('user_edit', { entity_type: 'user', entity_id: userId, entity_title: updated.full_name || updated.email });
             Toast.success('Збережено');
             this._onBack?.();
         } catch(e) {

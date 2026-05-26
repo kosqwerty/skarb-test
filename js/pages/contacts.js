@@ -164,11 +164,6 @@ const ContactsPage = {
         return map[role] || null;
     },
 
-    _labelCorner(label) {
-        if (label === 'intern')  return { icon: 'fa-seedling', color: '#84cc16', title: 'Стажер' };
-        if (label === 'mentor')  return { icon: 'fa-star',     color: '#f97316', title: 'Наставник' };
-        return null;
-    },
 
     _roleBannerBadge(role) {
         if (role === 'ceo') return '';
@@ -184,12 +179,10 @@ const ContactsPage = {
         return `<span style="display:inline-block;padding:2px 9px;border-radius:20px;background:rgba(255,255,255,.22);color:#fff;font-size:.7rem;font-weight:600;backdrop-filter:blur(4px)">${label}</span>`;
     },
 
-    _avatarCorners(role, label) {
+    _avatarCorners(role) {
         const r = this._roleCorner(role);
-        const l = this._labelCorner(label);
         return `
-            ${r ? `<div class="ct-av-corner ct-av-corner-r" title="${r.icon.replace('fa-','')}" style="color:${r.color}"><i class="fa-solid ${r.icon}"></i></div>` : ''}
-            ${l ? `<div class="ct-av-corner ct-av-corner-l" title="${l.title}" style="color:${l.color}"><i class="fa-solid ${l.icon}"></i></div>` : ''}`;
+            ${r ? `<div class="ct-av-corner ct-av-corner-r" title="${r.icon.replace('fa-','')}" style="color:${r.color}"><i class="fa-solid ${r.icon}"></i></div>` : ''}`;
     },
 
     _genderTheme(gender) {
@@ -266,7 +259,7 @@ const ContactsPage = {
                 <div class="ct-avatar">
                     ${u.avatar_url ? `<img src="${u.avatar_url}" alt="">` : Fmt.initials(u.full_name)}
                 </div>
-                ${this._avatarCorners(u.role, u.label)}
+                ${this._avatarCorners(u.role)}
             </div>
             <div class="ct-banner-info">
                 <div class="ct-name">${Fmt.esc(u.full_name || '—')}</div>
@@ -343,7 +336,7 @@ const ContactsPage = {
             <div class="ctp-avatar">
                 ${u.avatar_url ? `<img src="${u.avatar_url}" alt="">` : `<span>${Fmt.initials(u.full_name)}</span>`}
             </div>
-            ${this._avatarCorners(u.role, u.label)}
+            ${this._avatarCorners(u.role)}
         </div>
         <div class="ctp-hero-info">
             <div class="ctp-name">${Fmt.esc(u.full_name || '—')}</div>

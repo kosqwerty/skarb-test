@@ -48,7 +48,7 @@ const CollectionsPage = {
                     <p>Власні HTML-сторінки з довільним стилем та посиланнями.</p>
                 </div>
                 <div class="page-actions">
-                    <button class="btn btn-primary" onclick="CollectionsPage.openEditor()">+ Нова сторінка</button>
+                    ${AppState.canMutate() ? `<button class="btn btn-primary" onclick="CollectionsPage.openEditor()">+ Нова сторінка</button>` : ''}
                 </div>
             </div>
             <div id="pages-list"></div>`;
@@ -95,7 +95,7 @@ const CollectionsPage = {
             ? `<span style="font-size:.7rem;padding:2px 8px;border-radius:20px;background:rgba(99,102,241,.15);color:var(--primary);border:1px solid rgba(99,102,241,.3)">🏠 Головна</span>`
             : '';
 
-        const adminBtns = AppState.isStaff() ? `
+        const adminBtns = AppState.isStaff() && AppState.canMutate() ? `
             <div style="display:flex;gap:.4rem" onclick="event.stopPropagation()">
                 ${!p.is_home && AppState.isOwner() ? `<button onclick="CollectionsPage.setHome('${p.id}')"
                         style="width:30px;height:30px;border-radius:50%;border:1.5px solid var(--border);background:var(--bg-raised);color:var(--text-secondary);font-size:.85rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:border-color var(--transition)"
@@ -195,7 +195,7 @@ const CollectionsPage = {
             this._navHandler = null;
         }
 
-        const editBtn = AppState.isStaff() ? `
+        const editBtn = AppState.isStaff() && AppState.canMutate() ? `
             <button onclick="CollectionsPage.openEditor('${page.id}')"
                     title="Редагувати"
                     style="flex-shrink:0;width:32px;height:32px;border-radius:50%;border:1.5px solid var(--border);background:var(--bg-raised);color:var(--text-secondary);font-size:.9rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background var(--transition),border-color var(--transition)"

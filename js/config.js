@@ -66,7 +66,7 @@ const AppState = {
     user:    null,   // current auth user (from supabase.auth)
     profile: null,   // current profile row
     session: null,
-    _realProfile: null, // saved when impersonating
+    _realRole: null, // saved real role during role preview
 
     isOwner()   { return this.profile?.role === 'owner'; },
     isAdmin()   { return this.profile?.role === 'admin' || this.profile?.role === 'owner'; },
@@ -76,26 +76,28 @@ const AppState = {
     isCeo()     { return this.profile?.role === 'ceo'; },
     canSchedule(){ return ['owner','admin','manager'].includes(this.profile?.role); },
     isStaff()   { return ['owner','admin','smm','teacher','ceo'].includes(this.profile?.role); },
-    canMutate() { return this.profile?.role !== 'ceo'; },
+    canMutate() { return this.profile?.role !== 'ceo' && !this._realRole; },
 
-    isImpersonating() { return !!this._realProfile; },
+    isPreviewing() { return !!this._realRole; },
 
-    impersonate(targetProfile) {
-        this._realProfile = this.profile;
-        this.profile = targetProfile;
-        ImpersonationBanner.show(targetProfile);
-        UI.renderNavigation(targetProfile.role);
-        UI.renderSidebarUser(targetProfile);
-        Router.go(location.hash.replace('#/', '') || 'knowledge-base');
+    previewAs(role) {
+        if (!this.profile) return;
+        if (!this._realRole) this._realRole = this.profile.role;
+        this.profile = { ...this.profile, role };
+        RolePreviewBanner.show(role, this._realRole);
+        UI.renderNavigation(role);
+        UI.renderSidebarUser(this.profile);
+        const defaultRoute = ['owner','admin','smm','teacher','ceo'].includes(role) ? 'dashboard' : 'knowledge-base';
+        Router.go(defaultRoute);
     },
 
-    stopImpersonating() {
-        const real = this._realProfile;
-        this.profile = real;
-        this._realProfile = null;
-        ImpersonationBanner.hide();
-        UI.renderNavigation(real.role);
-        UI.renderSidebarUser(real);
-        Router.go(location.hash.replace('#/', '') || 'dashboard');
+    stopPreview() {
+        if (!this._realRole) return;
+        this.profile = { ...this.profile, role: this._realRole };
+        this._realRole = null;
+        RolePreviewBanner.hide();
+        UI.renderNavigation(this.profile.role);
+        UI.renderSidebarUser(this.profile);
+        Router.go('dashboard');
     }
 };

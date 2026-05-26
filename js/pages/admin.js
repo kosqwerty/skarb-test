@@ -28,12 +28,10 @@ const AdminPage = {
                 <button class="tab" data-tab="courses" onclick="AdminPage.switchTab('courses', this)">📚 Курси</button>
                 <button class="tab" data-tab="tests" onclick="AdminPage.switchTab('tests', this)">📝 Тести</button>
                 <button class="tab" data-tab="news" onclick="AdminPage.switchTab('news', this)">📰 Новини</button>
-                <button class="tab" data-tab="enrollments" onclick="AdminPage.switchTab('enrollments', this)">🎓 Записи</button>
-                ${canManageUsers ? `<button class="tab" data-tab="access-groups" onclick="AdminPage.switchTab('access-groups', this)">🔐 Групи доступу</button>` : ''}
-                ${AppState.isOwner() ? `<button class="tab" data-tab="label-access" onclick="AdminPage.switchTab('label-access', this)"><i class="fa-solid fa-lock"></i> Обмеження доступу</button>` : ''}
+                ${canManageUsers ? `<button class="tab" data-tab="access-groups" onclick="AdminPage.switchTab('access-groups', this)">🔐 Доступ до ресурсів</button>` : ''}
                 ${AppState.isOwner() ? `<button class="tab" data-tab="trash" onclick="AdminPage.switchTab('trash', this)"><i class="fa-solid fa-trash"></i> Кошик</button>` : ''}
-                ${AppState.isOwner() ? `<button class="tab" data-tab="logs" onclick="AdminPage.switchTab('logs', this)">📋 Логи</button>` : ''}
                 ${canManageUsers ? `<button class="tab" data-tab="supersearch" onclick="AdminPage.switchTab('supersearch', this)"><i class="fa-solid fa-magnifying-glass-chart"></i> Супер пошук</button>` : ''}
+                ${AppState.isOwner() ? `<button class="tab" data-tab="activity" onclick="AdminPage.switchTab('activity', this)"><i class="fa-solid fa-clock-rotate-left"></i> Активність</button>` : ''}
             </div>
 
             <div id="admin-content"></div>`;
@@ -46,13 +44,26 @@ const AdminPage = {
     },
 
     async switchTab(tab, el) {
-        if ((tab === 'users' || tab === 'access-groups' || tab === 'label-access') && !AppState.isAdmin()) {
+        if (tab === 'activity' && !AppState.isOwner()) {
+            Toast.error('Заборонено', 'Тільки для власника системи');
+            return;
+        }
+        if ((tab === 'users' || tab === 'access-groups') && !AppState.isAdmin()) {
             Toast.error('Заборонено', 'Недостатньо прав');
             return;
         }
         this._tab = tab;
         document.querySelectorAll('.tabs .tab').forEach(t => t.classList.remove('active'));
-        el.classList.add('active');
+        if (el) el.classList.add('active');
+        const tabLabels = {
+            'users': 'Користувачі', 'courses': 'Курси', 'tests': 'Тести', 'news': 'Новини',
+            'access-groups': 'Доступ до ресурсів',
+            'trash': 'Кошик', 'logs': 'Логи', 'supersearch': 'Супер пошук', 'activity': 'Активність',
+        };
+        ActivityTracker.track('page_view', {
+            page: `admin|${tab}`,
+            entity_title: 'Адміністрування · ' + (tabLabels[tab] || tab),
+        });
         await this._loadTab();
     },
 
@@ -67,12 +78,10 @@ const AdminPage = {
                 case 'courses':     await this._renderCourses(el);     break;
                 case 'tests':       await this._renderTests(el);       break;
                 case 'news':        await this._renderNews(el);        break;
-                case 'enrollments': await this._renderEnrollments(el); break;
                 case 'access-groups': await AccessGroupsPage.renderTab(el);  break;
-                case 'label-access':  await LabelAccessPage.init(el);              break;
                 case 'trash':         await this._renderTrash(el);                  break;
-                case 'logs':          await this._renderLogs(el);                   break;
                 case 'supersearch':   await this._renderSuperSearch(el);            break;
+                case 'activity':      await this._renderActivity(el);               break;
             }
         } catch(e) {
             el.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>${e.message}</h3></div>`;
@@ -138,20 +147,56 @@ const AdminPage = {
 
     _renderUsers(el) {
         el.innerHTML = `
-            <div style="display:flex;flex-direction:column;gap:.75rem;padding:.5rem 0">
-                <a class="admin-section-link" href="#" onclick="event.preventDefault();AdminPage._renderUsersList(document.getElementById('admin-content'))">
-                    <span class="admin-section-icon">👥</span>
-                    <div>
-                        <div class="admin-section-title">Всі користувачі</div>
-                        <div class="admin-section-desc">Перегляд, додавання, редагування та імпорт користувачів</div>
+            <style>
+                .us-nav-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:1rem; padding:.25rem 0 }
+                .us-nav-btn {
+                    display:flex; align-items:center; gap:1rem;
+                    padding:1.1rem 1.25rem;
+                    background:var(--bg-surface);
+                    border:1.5px solid var(--border);
+                    border-radius:var(--radius-lg);
+                    cursor:pointer; text-decoration:none;
+                    transition:border-color .18s, box-shadow .18s, transform .15s;
+                    position:relative; overflow:hidden;
+                }
+                .us-nav-btn::before {
+                    content:''; position:absolute; inset:0;
+                    background:linear-gradient(135deg,rgba(var(--primary-rgb),.06),transparent 60%);
+                    opacity:0; transition:opacity .18s;
+                }
+                .us-nav-btn:hover { border-color:var(--primary); box-shadow:0 4px 18px rgba(var(--primary-rgb),.13); transform:translateY(-1px); }
+                .us-nav-btn:hover::before { opacity:1; }
+                .us-nav-icon {
+                    width:46px; height:46px; border-radius:12px; flex-shrink:0;
+                    display:flex; align-items:center; justify-content:center;
+                    font-size:1.35rem;
+                }
+                .us-nav-body { min-width:0 }
+                .us-nav-title { font-weight:700; font-size:.92rem; color:var(--text-primary); margin-bottom:.18rem }
+                .us-nav-desc  { font-size:.76rem; color:var(--text-muted); line-height:1.35 }
+                .us-nav-arrow { margin-left:auto; color:var(--text-muted); font-size:.75rem; flex-shrink:0; transition:transform .18s }
+                .us-nav-btn:hover .us-nav-arrow { transform:translateX(3px); color:var(--primary) }
+            </style>
+            <div class="us-nav-grid">
+                <a class="us-nav-btn" href="#" onclick="event.preventDefault();AdminPage._renderUsersList(document.getElementById('admin-content'))">
+                    <div class="us-nav-icon" style="background:linear-gradient(135deg,rgba(99,102,241,.15),rgba(139,92,246,.1))">
+                        <i class="fa-solid fa-users" style="color:#818cf8"></i>
                     </div>
+                    <div class="us-nav-body">
+                        <div class="us-nav-title">Всі користувачі</div>
+                        <div class="us-nav-desc">Перегляд, додавання,<br>редагування та імпорт</div>
+                    </div>
+                    <i class="fa-solid fa-chevron-right us-nav-arrow"></i>
                 </a>
-                <a class="admin-section-link" href="#" onclick="event.preventDefault();AdminPage._renderDirectories(document.getElementById('admin-content'))">
-                    <span class="admin-section-icon">📋</span>
-                    <div>
-                        <div class="admin-section-title">Довідник</div>
-                        <div class="admin-section-desc">Міста, посади, підрозділи</div>
+                <a class="us-nav-btn" href="#" onclick="event.preventDefault();AdminPage._renderDirectories(document.getElementById('admin-content'))">
+                    <div class="us-nav-icon" style="background:linear-gradient(135deg,rgba(245,158,11,.15),rgba(251,191,36,.1))">
+                        <i class="fa-solid fa-book-open" style="color:#f59e0b"></i>
                     </div>
+                    <div class="us-nav-body">
+                        <div class="us-nav-title">Довідник</div>
+                        <div class="us-nav-desc">Міста, посади,<br>підрозділи, довіреності</div>
+                    </div>
+                    <i class="fa-solid fa-chevron-right us-nav-arrow"></i>
                 </a>
             </div>`;
     },
@@ -196,8 +241,8 @@ const AdminPage = {
                 .uf-tr-owner .uf-td,.uf-tr-owner .uf-td-pib,.uf-tr-owner .uf-td-cb{background:var(--bg-raised)}
                 .uf-tr-owner:hover .uf-td,.uf-tr-owner:hover .uf-td-pib,.uf-tr-owner:hover .uf-td-cb{background:var(--bg-hover)}
                 .uf-pib-inner{display:flex;align-items:center;gap:.55rem;cursor:pointer}
-                .uf-pib-name{font-weight:600;font-size:.83rem;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px;text-decoration-color:var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:185px}
-                .uf-pib-email{font-size:.71rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:185px}
+                .uf-pib-name{font-weight:600;font-size:.83rem;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px;text-decoration-color:var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}
+                .uf-pib-email{font-size:.71rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}
                 .uf-avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--secondary));display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden}
                 .uf-act-col{display:flex;gap:.2rem;align-items:center;justify-content:center}
             </style>
@@ -246,7 +291,6 @@ const AdminPage = {
                         <col id="ucol-city" style="width:110px">
                         <col id="ucol-subdivision" style="width:150px">
                         <col id="ucol-role" style="width:155px">
-                        <col id="ucol-label" style="width:105px">
                         <col id="ucol-date" style="width:90px">
                         <col id="ucol-activity" style="width:90px">
                         <col style="width:45px">
@@ -262,7 +306,6 @@ const AdminPage = {
                             <th class="uf-th uf-col-city" style="border-bottom:none" onclick="AdminPage._sortByLabel('city')"><div class="uf-th-inner">Місто ${AdminPage._sortBtn('city')}</div></th>
                             <th class="uf-th uf-col-subdivision" style="border-bottom:none" onclick="AdminPage._sortByLabel('subdivision')"><div class="uf-th-inner">Підрозділ ${AdminPage._sortBtn('subdivision')}</div></th>
                             <th class="uf-th uf-col-role" style="border-bottom:none" onclick="AdminPage._sortByLabel('role')"><div class="uf-th-inner">Роль ${AdminPage._sortBtn('role')}</div></th>
-                            <th class="uf-th uf-col-label" style="border-bottom:none" onclick="AdminPage._sortByLabel('label')"><div class="uf-th-inner">Мітка ${AdminPage._sortBtn('label')}</div></th>
                             <th class="uf-th uf-col-date" style="border-bottom:none" onclick="AdminPage._sortByLabel('date')"><div class="uf-th-inner">Реєстрація ${AdminPage._sortBtn('date')}</div></th>
                             <th class="uf-th uf-col-activity" style="border-bottom:none" onclick="AdminPage._sortByLabel('activity')"><div class="uf-th-inner">Активність ${AdminPage._sortBtn('activity')}</div></th>
                             <th class="uf-th uf-th-nc" style="border-bottom:none;width:72px;min-width:72px;max-width:72px"></th>
@@ -286,7 +329,6 @@ const AdminPage = {
                                     <option value="user">Користувач</option>
                                 </select>
                             </th>
-                            <th class="uf-th uf-fth uf-col-label">${MultiSelect.html('uf-label', 'Всі...')}</th>
                             <th class="uf-th uf-fth uf-col-date"><input id="uf-date" type="text" class="uf-finput" placeholder="дд.мм.рр" oninput="AdminPage._applyUserFilters()"></th>
                             <th class="uf-th uf-fth uf-col-activity"><input id="uf-activity" type="text" class="uf-finput" placeholder="дд.мм.рр" oninput="AdminPage._applyUserFilters()"></th>
                             <th class="uf-th uf-th-nc uf-fth" style="text-align:center;width:72px;min-width:72px;max-width:72px">
@@ -319,10 +361,8 @@ const AdminPage = {
         MultiSelect.init('uf-job',         uniq('job_position'));
         MultiSelect.init('uf-city',        uniq('city'));
         MultiSelect.init('uf-subdivision', uniq('subdivision'));
-        MultiSelect.init('uf-label',       uniq('label'));
-
         // Реагуємо на зміни MultiSelect
-        ['uf-job','uf-city','uf-subdivision','uf-label'].forEach(id => {
+        ['uf-job','uf-city','uf-subdivision'].forEach(id => {
             document.getElementById(id)?.addEventListener('change', () => AdminPage._applyUserFilters());
         });
 
@@ -345,7 +385,6 @@ const AdminPage = {
                 data-city="${esc(u.city)}"
                 data-subdivision="${esc(u.subdivision)}"
                 data-role="${u.role || ''}"
-                data-label="${esc(u.label)}"
                 data-date="${Fmt.datetime(u.created_at).toLowerCase()}"
                 data-activity="${u.last_sign_in_at ? Fmt.datetime(u.last_sign_in_at).toLowerCase() : ''}"
                 data-status="${u.is_active !== false ? 'active' : 'blocked'}">
@@ -373,7 +412,6 @@ const AdminPage = {
                 <td class="uf-td uf-col-city" style="word-break:break-word">${Fmt.esc(u.city) || '<span style="color:var(--text-muted)">—</span>'}</td>
                 <td class="uf-td uf-col-subdivision" style="word-break:break-word">${Fmt.esc(u.subdivision) || '<span style="color:var(--text-muted)">—</span>'}</td>
                 <td class="uf-td uf-td-role uf-col-role" style="overflow:hidden;max-width:0">${Fmt.roleBadge(u.role)}</td>
-                <td class="uf-td uf-col-label">${u.label === 'intern' ? '<span class="badge badge-success" style="font-size:.65rem">🌱 Стажер</span>' : u.label === 'mentor' ? '<span class="badge badge-warning" style="font-size:.65rem">⭐ Наставник</span>' : '<span style="color:var(--text-muted)">—</span>'}</td>
                 <td class="uf-td uf-col-date" style="color:var(--text-muted);font-size:.78rem;min-width:72px">${Fmt.datetime(u.created_at).replace(' ','<br>')}</td>
                 <td class="uf-td uf-col-activity" style="font-size:.78rem;min-width:72px">${u.last_sign_in_at ? `<span style="color:var(--text-secondary)">${Fmt.datetime(u.last_sign_in_at).replace(' ','<br>')}</span>` : '<span style="color:var(--text-muted)">—</span>'}</td>
                 <td class="uf-td" style="padding:.4rem .35rem;width:72px;min-width:72px;max-width:72px">
@@ -391,7 +429,6 @@ const AdminPage = {
         { key: 'city',        label: 'Місто' },
         { key: 'subdivision', label: 'Підрозділ' },
         { key: 'role',        label: 'Роль' },
-        { key: 'label',       label: 'Мітка' },
         { key: 'date',        label: 'Реєстрація' },
         { key: 'activity',    label: 'Активність' },
     ],
@@ -475,6 +512,299 @@ const AdminPage = {
             flex-shrink:0;vertical-align:middle"></span>`;
     },
 
+    // ── Activity Log helpers ────────────────────────────────────────
+    _ualParseUA(ua) {
+        if (!ua) return { browser: '—', os: '—', icon: 'fa-globe' };
+        let browser = 'Інший', bIcon = 'fa-globe';
+        if (/Edg\//.test(ua))            { browser = 'Edge';    bIcon = 'fa-edge'; }
+        else if (/OPR\/|Opera/.test(ua)) { browser = 'Opera';   bIcon = 'fa-opera'; }
+        else if (/Chrome\//.test(ua))    { browser = 'Chrome';  bIcon = 'fa-chrome'; }
+        else if (/Firefox\//.test(ua))   { browser = 'Firefox'; bIcon = 'fa-firefox-browser'; }
+        else if (/Safari\//.test(ua))    { browser = 'Safari';  bIcon = 'fa-safari'; }
+        let os = '';
+        if (/Windows NT 10/.test(ua))        os = 'Windows 10/11';
+        else if (/Windows/.test(ua))         os = 'Windows';
+        else if (/Mac OS X/.test(ua))        os = 'macOS';
+        else if (/Android/.test(ua))         os = 'Android';
+        else if (/iPhone|iPad/.test(ua))     os = 'iOS';
+        else if (/Linux/.test(ua))           os = 'Linux';
+        return { browser, os, bIcon };
+    },
+
+    _ualActionMeta(a) {
+        return ({
+            login:          { icon: 'fa-right-to-bracket',    color: '#10b981', label: 'Вхід' },
+            logout:         { icon: 'fa-right-from-bracket',  color: '#94a3b8', label: 'Вихід' },
+            page_view:      { icon: 'fa-eye',                 color: '#6366f1', label: 'Сторінка' },
+            doc_view:       { icon: 'fa-file-lines',          color: '#f59e0b', label: 'Документ' },
+            news_view:      { icon: 'fa-newspaper',           color: '#f59e0b', label: 'Новина' },
+            file_download:  { icon: 'fa-download',            color: '#0ea5e9', label: 'Завантаження' },
+            course_open:    { icon: 'fa-graduation-cap',      color: '#8b5cf6', label: 'Курс переглянуто' },
+            lesson_open:    { icon: 'fa-play',                color: '#8b5cf6', label: 'Урок переглянуто' },
+            test_start:     { icon: 'fa-clipboard-question',  color: '#f97316', label: 'Тест розпочато' },
+            test_complete:  { icon: 'fa-clipboard-check',     color: '#10b981', label: 'Тест завершено' },
+            search:         { icon: 'fa-magnifying-glass',    color: '#64748b', label: 'Пошук' },
+            // Мутації
+            user_create:    { icon: 'fa-user-plus',           color: '#10b981', label: 'Користувача створено' },
+            user_edit:      { icon: 'fa-user-pen',            color: '#6366f1', label: 'Профіль змінено' },
+            user_block:     { icon: 'fa-user-lock',           color: '#ef4444', label: 'Заблоковано' },
+            user_unblock:   { icon: 'fa-user-check',          color: '#10b981', label: 'Розблоковано' },
+            user_delete:    { icon: 'fa-user-xmark',          color: '#ef4444', label: 'Користувача видалено' },
+            course_create:  { icon: 'fa-circle-plus',         color: '#10b981', label: 'Курс створено' },
+            course_edit:    { icon: 'fa-pen-to-square',       color: '#6366f1', label: 'Курс змінено' },
+            course_delete:  { icon: 'fa-trash',               color: '#ef4444', label: 'Курс видалено' },
+            news_create:    { icon: 'fa-newspaper',           color: '#10b981', label: 'Новину створено' },
+            news_edit:      { icon: 'fa-pen-to-square',       color: '#6366f1', label: 'Новину змінено' },
+            news_delete:    { icon: 'fa-trash',               color: '#ef4444', label: 'Новину видалено' },
+            test_create:    { icon: 'fa-circle-plus',         color: '#10b981', label: 'Тест створено' },
+            test_edit:      { icon: 'fa-pen-to-square',       color: '#6366f1', label: 'Тест змінено' },
+            test_delete:    { icon: 'fa-trash',               color: '#ef4444', label: 'Тест видалено' },
+        })[a] || { icon: 'fa-circle-dot', color: '#94a3b8', label: a };
+    },
+
+    // State for activity log pagination / filters
+    _ualState: null,
+
+    _ualInit(userId) {
+        this._ualState = {
+            userId,
+            page: 0,
+            limit: 30,
+            action: '',
+            dateFrom: '',
+            dateTo: '',
+            totalCount: 0,
+        };
+        // Inject styles once
+        if (!document.getElementById('ual-styles')) {
+            const s = document.createElement('style');
+            s.id = 'ual-styles';
+            s.textContent = `
+                .ual-wrap{display:flex;flex-direction:column;gap:0}
+                .ual-filters{display:flex;flex-wrap:wrap;gap:.4rem;padding:.5rem 0 .6rem;border-bottom:1px solid var(--border);margin-bottom:.5rem;align-items:center}
+                .ual-pill{padding:.28rem .65rem;border-radius:99px;border:1.5px solid var(--border);background:transparent;color:var(--text-secondary);font-size:.72rem;font-weight:600;cursor:pointer;font-family:inherit;transition:all .12s;white-space:nowrap}
+                .ual-pill:hover{border-color:var(--primary);color:var(--primary)}
+                .ual-pill.active{background:var(--primary);border-color:var(--primary);color:#fff}
+                .ual-date-row{display:flex;gap:.3rem;align-items:center;flex:1;min-width:180px}
+                .ual-date-input{border:1.5px solid var(--border);border-radius:var(--radius-md);background:var(--bg-raised);color:var(--text-primary);font-size:.72rem;padding:.25rem .45rem;font-family:inherit;min-width:0;flex:1;cursor:pointer}
+                .ual-date-input:focus{outline:none;border-color:var(--primary)}
+                .ual-clear-btn{background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:.72rem;padding:.2rem .3rem;border-radius:var(--radius-sm)}
+                .ual-clear-btn:hover{color:var(--danger)}
+                .ual-timeline{display:flex;flex-direction:column}
+                .ual-day-block{margin-bottom:.25rem}
+                .ual-day-header{display:flex;align-items:center;gap:.5rem;padding:.3rem 0 .25rem;cursor:pointer;user-select:none}
+                .ual-day-header:hover .ual-day-lbl{color:var(--text-primary)}
+                .ual-day-lbl{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);transition:color .12s}
+                .ual-day-cnt{font-size:.62rem;padding:1px 5px;border-radius:99px;background:var(--bg-raised);border:1px solid var(--border);color:var(--text-muted)}
+                .ual-day-chevron{font-size:.5rem;color:var(--text-muted);margin-left:auto;transition:transform .2s}
+                .ual-day-chevron.open{transform:rotate(180deg)}
+                .ual-day-rows{display:flex;flex-direction:column;padding-left:.2rem;border-left:2px solid var(--border);margin-left:.3rem}
+                .ual-row{display:flex;align-items:flex-start;gap:.55rem;padding:.35rem .4rem .35rem .6rem;border-radius:var(--radius-md);transition:background .1s;cursor:default;position:relative}
+                .ual-row:hover{background:var(--bg-raised)}
+                .ual-row-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:.3rem;margin-left:-5px;border:1.5px solid var(--bg-surface)}
+                .ual-row-body{flex:1;min-width:0}
+                .ual-row-top{display:flex;align-items:center;gap:.3rem;flex-wrap:nowrap}
+                .ual-row-icon{font-size:.68rem;flex-shrink:0}
+                .ual-row-action{font-size:.78rem;font-weight:600;color:var(--text-primary);white-space:nowrap}
+                .ual-row-title{font-size:.75rem;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1}
+                .ual-row-time{font-size:.68rem;color:var(--text-muted);white-space:nowrap;flex-shrink:0;margin-left:auto}
+                .ual-row-meta{font-size:.65rem;color:var(--text-muted);margin-top:.08rem;display:flex;align-items:center;gap:.25rem}
+                .ual-score{font-size:.65rem;padding:1px 5px;border-radius:99px;font-weight:700;flex-shrink:0}
+                .ual-pager{display:flex;align-items:center;justify-content:space-between;padding:.5rem 0 0;margin-top:.25rem;border-top:1px solid var(--border)}
+                .ual-pager-info{font-size:.72rem;color:var(--text-muted)}
+                .ual-pager-btns{display:flex;gap:.3rem}
+                .ual-pager-btn{padding:.25rem .6rem;border:1.5px solid var(--border);border-radius:var(--radius-md);background:var(--bg-raised);color:var(--text-secondary);font-size:.72rem;font-weight:600;cursor:pointer;font-family:inherit;transition:all .12s}
+                .ual-pager-btn:hover:not(:disabled){border-color:var(--primary);color:var(--primary)}
+                .ual-pager-btn:disabled{opacity:.35;cursor:default}
+                .ual-empty{text-align:center;color:var(--text-muted);font-size:.82rem;padding:1.5rem .5rem;display:flex;flex-direction:column;align-items:center;gap:.4rem}
+            `;
+            document.head.appendChild(s);
+        }
+    },
+
+    async _loadActivityLog(userId) {
+        this._ualInit(userId);
+        const wrap = document.getElementById('up-activity-area');
+        if (!wrap) return;
+
+        const ACTION_FILTERS = [
+            { key: '',              label: 'Всі' },
+            { key: 'login',         label: '🔑 Входи' },
+            { key: 'page_view',     label: '👁 Сторінки' },
+            { key: 'doc_view',      label: '📄 Документи' },
+            { key: 'news_view',     label: '📰 Новини' },
+            { key: 'file_download', label: '⬇ Завантаження' },
+            { key: 'course_open',   label: '🎓 Курси' },
+            { key: 'test_complete', label: '✅ Тести' },
+            { key: 'user_create',   label: '👤 Створення' },
+            { key: 'user_block',    label: '🔒 Блокування' },
+            { key: 'user_delete',   label: '🗑 Видалення' },
+        ];
+
+        wrap.innerHTML = `
+            <div class="ual-wrap">
+                <div class="ual-filters">
+                    ${ACTION_FILTERS.map(f => `
+                        <button class="ual-pill${f.key === '' ? ' active' : ''}"
+                            data-action="${f.key}"
+                            onclick="AdminPage._ualSetAction('${f.key}')">
+                            ${f.label}
+                        </button>`).join('')}
+                    <div class="ual-date-row">
+                        <input type="date" class="ual-date-input" id="ual-date-from" placeholder="від"
+                            onchange="AdminPage._ualSetDate()" title="Від дати">
+                        <span style="color:var(--text-muted);font-size:.7rem">—</span>
+                        <input type="date" class="ual-date-input" id="ual-date-to" placeholder="до"
+                            onchange="AdminPage._ualSetDate()" title="До дати">
+                        <button class="ual-clear-btn" onclick="AdminPage._ualClearDate()" title="Скинути дати">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                </div>
+                <div id="ual-timeline-area"></div>
+            </div>`;
+
+        await this._ualFetch();
+    },
+
+    _ualSetAction(action) {
+        if (!this._ualState) return;
+        this._ualState.action = action;
+        this._ualState.page   = 0;
+        document.querySelectorAll('.ual-pill').forEach(b => {
+            b.classList.toggle('active', b.dataset.action === action);
+        });
+        this._ualFetch();
+    },
+
+    _ualSetDate() {
+        if (!this._ualState) return;
+        this._ualState.dateFrom = document.getElementById('ual-date-from')?.value || '';
+        this._ualState.dateTo   = document.getElementById('ual-date-to')?.value   || '';
+        this._ualState.page = 0;
+        this._ualFetch();
+    },
+
+    _ualClearDate() {
+        if (!this._ualState) return;
+        const f = document.getElementById('ual-date-from');
+        const t = document.getElementById('ual-date-to');
+        if (f) f.value = '';
+        if (t) t.value = '';
+        this._ualState.dateFrom = '';
+        this._ualState.dateTo   = '';
+        this._ualState.page = 0;
+        this._ualFetch();
+    },
+
+    _ualSetPage(page) {
+        if (!this._ualState) return;
+        this._ualState.page = page;
+        this._ualFetch();
+    },
+
+    _ualToggleDay(dayId) {
+        const rows = document.getElementById('ual-rows-' + dayId);
+        const icon = document.getElementById('ual-chev-' + dayId);
+        if (!rows) return;
+        const open = rows.style.display !== 'none';
+        rows.style.display = open ? 'none' : '';
+        icon?.classList.toggle('open', !open);
+    },
+
+    async _ualFetch() {
+        const area = document.getElementById('ual-timeline-area');
+        if (!area || !this._ualState) return;
+        area.innerHTML = `<div style="display:flex;justify-content:center;padding:1rem"><div class="spinner" style="width:18px;height:18px"></div></div>`;
+
+        const { userId, page, limit, action, dateFrom, dateTo } = this._ualState;
+        try {
+            const { data: logs, count } = await API.activityLog.getForUser(userId, {
+                limit, offset: page * limit,
+                action: action || undefined,
+                dateFrom: dateFrom || undefined,
+                dateTo:   dateTo   || undefined,
+            });
+            this._ualState.totalCount = count;
+
+            if (!logs.length) {
+                area.innerHTML = `<div class="ual-empty"><i class="fa-regular fa-calendar-xmark" style="font-size:1.4rem;opacity:.4"></i>Немає записів за вибраними фільтрами</div>`;
+                return;
+            }
+
+            // Group by date
+            const groups = {};
+            logs.forEach(l => {
+                const d = l.created_at.slice(0, 10);
+                if (!groups[d]) groups[d] = [];
+                groups[d].push(l);
+            });
+
+            const totalPages = Math.ceil(count / limit);
+            const from = page * limit + 1;
+            const to   = Math.min(from + logs.length - 1, count);
+
+            const timelineHtml = Object.entries(groups).map(([date, items]) => {
+                const dayId   = date.replace(/-/g, '');
+                const dayLbl  = new Date(date + 'T12:00:00').toLocaleDateString('uk-UA', { weekday: 'short', day: 'numeric', month: 'long' });
+                const rowsHtml = items.map(l => {
+                    const { browser, os, bIcon } = this._ualParseUA(l.ua);
+                    const { icon, color, label: aLabel } = this._ualActionMeta(l.action);
+                    const title    = l.entity_title || (l.page && l.page !== l.action ? l.page : '');
+                    const timeStr  = l.created_at.slice(11, 16);
+                    const extra    = l.details?.reason === 'inactivity' ? ' · автовихід' : '';
+                    const scoreBg  = l.details?.passed ? 'rgba(16,185,129,.12)' : 'rgba(239,68,68,.12)';
+                    const scoreClr = l.details?.passed ? '#10b981' : '#ef4444';
+                    const scoreTag = l.action === 'test_complete' && l.details?.score != null
+                        ? `<span class="ual-score" style="background:${scoreBg};color:${scoreClr}">${l.details.score}%</span>` : '';
+                    return `<div class="ual-row">
+                        <div class="ual-row-dot" style="background:${color}"></div>
+                        <div class="ual-row-body">
+                            <div class="ual-row-top">
+                                <i class="fa-solid ${icon} ual-row-icon" style="color:${color}"></i>
+                                <span class="ual-row-action">${aLabel}${extra}</span>
+                                ${scoreTag}
+                                ${title ? `<span class="ual-row-title" title="${Fmt.esc(title)}">· ${Fmt.esc(title)}</span>` : ''}
+                                <span class="ual-row-time">${timeStr}</span>
+                            </div>
+                            <div class="ual-row-meta">
+                                <i class="fa-brands ${bIcon}" style="opacity:.55"></i>
+                                ${Fmt.esc(browser)}${os ? ` · ${Fmt.esc(os)}` : ''}
+                            </div>
+                        </div>
+                    </div>`;
+                }).join('');
+
+                return `<div class="ual-day-block">
+                    <div class="ual-day-header" onclick="AdminPage._ualToggleDay('${dayId}')">
+                        <span class="ual-day-lbl">${Fmt.esc(dayLbl)}</span>
+                        <span class="ual-day-cnt">${items.length}</span>
+                        <i class="fa-solid fa-chevron-down ual-day-chevron open" id="ual-chev-${dayId}"></i>
+                    </div>
+                    <div class="ual-day-rows" id="ual-rows-${dayId}">${rowsHtml}</div>
+                </div>`;
+            }).join('');
+
+            const pagerHtml = totalPages > 1 ? `
+                <div class="ual-pager">
+                    <span class="ual-pager-info">${from}–${to} з ${count}</span>
+                    <div class="ual-pager-btns">
+                        <button class="ual-pager-btn" onclick="AdminPage._ualSetPage(${page - 1})" ${page === 0 ? 'disabled' : ''}>
+                            <i class="fa-solid fa-chevron-left"></i>
+                        </button>
+                        <span style="font-size:.72rem;color:var(--text-muted);padding:.25rem .35rem">${page + 1} / ${totalPages}</span>
+                        <button class="ual-pager-btn" onclick="AdminPage._ualSetPage(${page + 1})" ${page >= totalPages - 1 ? 'disabled' : ''}>
+                            <i class="fa-solid fa-chevron-right"></i>
+                        </button>
+                    </div>
+                </div>` : '';
+
+            area.innerHTML = `<div class="ual-timeline">${timelineHtml}</div>${pagerHtml}`;
+        } catch(e) {
+            area.innerHTML = `<div class="ual-empty"><i class="fa-solid fa-triangle-exclamation" style="color:var(--danger)"></i>Помилка завантаження</div>`;
+        }
+    },
+
     async viewProfile(u) {
         const avatar = u.avatar_url
             ? `<img src="${u.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
@@ -547,7 +877,6 @@ const AdminPage = {
                         </div>
                         <div class="up-badges">
                             <span class="up-role-badge">${Fmt.role(u.role)}</span>
-                            ${u.label === 'intern' ? `<span class="up-role-badge">🌱 Стажер</span>` : u.label === 'mentor' ? `<span class="up-role-badge">⭐ Наставник</span>` : ''}
                             <span class="up-status ${isActive ? 'up-status-on' : 'up-status-off'}">
                                 <i class="fa-solid fa-circle" style="font-size:.45rem"></i>
                                 ${isActive ? 'Активний' : 'Заблокований'}
@@ -576,6 +905,12 @@ const AdminPage = {
                         <div style="font-size:.875rem;color:var(--text-secondary);line-height:1.6">${Fmt.esc(u.bio)}</div>
                     </div>` : ''}
                     ${canSetBdReminder ? `<div class="up-section">${this._birthdayReminderBlock(u, bdReminder)}</div>` : ''}
+                    ${AppState.isOwner() ? `<div class="up-section">
+                        <button class="btn btn-ghost btn-sm" style="width:100%;justify-content:center;gap:.4rem"
+                            onclick="Modal.close();AdminPage.switchTab('activity',document.querySelector('.tab[data-tab=activity]'));AdminPage._ualPreselect('${u.id}')">
+                            <i class="fa-solid fa-clock-rotate-left"></i> Переглянути активність
+                        </button>
+                    </div>` : ''}
                 </div>
                 <div class="up-footer">
                     <button class="btn btn-secondary" onclick="Modal.close()"><i class="fa-solid fa-xmark"></i> Закрити</button>
@@ -590,10 +925,6 @@ const AdminPage = {
                                 onclick="Modal.close();AdminPage._forceLogoutUser('${u.id}',${JSON.stringify(u.full_name||'').replace(/"/g,'&quot;')})">
                                 <i class="fa-solid fa-right-from-bracket"></i> Завершити сесію
                             </button>` : ''}
-                        ${(AppState.isAdmin() || AppState.isCeo()) && u.id !== AppState.user?.id ? `
-                            <button class="btn btn-ghost" onclick="Modal.close();AppState.impersonate(AdminPage._usersAll.find(x=>x.id==='${u.id}'))" title="Переглянути як цей користувач">
-                                <i class="fa-solid fa-eye"></i> Переглянути як
-                            </button>` : ''}
                         ${AppState.canMutate() && (u.role !== 'owner' || AppState.isOwner()) ? `
                             <button class="btn btn-primary" onclick="Modal.close();AdminPage.openEditUser(AdminPage._usersAll.find(x=>x.id==='${u.id}'))">
                                 <i class="fa-solid fa-pen"></i> Редагувати
@@ -603,6 +934,204 @@ const AdminPage = {
             </div>`,
             footer: ''
         });
+    },
+
+    // ── Активність — окрема вкладка ──────────────────────────────────
+    _ualPreselectId: null,
+
+    _ualPreselect(userId) {
+        this._ualPreselectId = userId;
+        // якщо вкладка вже відкрита — одразу підставити
+        const sel = document.getElementById('ual-user-select');
+        if (sel) { sel.value = userId; this._ualOnUserChange(); }
+    },
+
+    async _renderActivity(el) {
+        // Load users if not yet fetched (tab opened directly without visiting Користувачі)
+        if (!this._usersAll.length) {
+            el.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
+            try {
+                const { data, error } = await supabase.rpc('admin_get_users');
+                if (error) throw error;
+                this._usersAll = data || [];
+            } catch(e) { this._usersAll = []; }
+        }
+        const users = this._usersAll.slice().sort((a,b) => (a.full_name||'').localeCompare(b.full_name||'', 'uk'));
+
+        el.innerHTML = `
+        <style>
+            .act-wrap{display:flex;flex-direction:column;gap:1rem}
+            .act-picker{position:relative;max-width:400px}
+            .act-picker-input-wrap{display:flex;align-items:center;gap:.6rem;padding:.55rem .85rem;border:1.5px solid var(--border);border-radius:var(--radius-lg);background:var(--bg-raised);cursor:text;transition:border-color .15s}
+            .act-picker-input-wrap:focus-within{border-color:var(--primary);background:var(--bg-surface)}
+            .act-picker-ava{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--secondary));display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden}
+            .act-picker-ava img{width:100%;height:100%;object-fit:cover}
+            .act-picker-ava.empty{background:var(--bg-card);border:1.5px dashed var(--border)}
+            .act-picker-ava.empty::after{content:'👤';font-size:.8rem}
+            .act-picker-q{flex:1;border:none;background:transparent;color:var(--text-primary);font-size:.875rem;font-family:inherit;outline:none;min-width:0}
+            .act-picker-q::placeholder{color:var(--text-muted)}
+            .act-picker-clear{background:none;border:none;color:var(--text-muted);cursor:pointer;padding:.1rem .25rem;border-radius:4px;font-size:.8rem;flex-shrink:0;display:none}
+            .act-picker-clear:hover{color:var(--danger)}
+            .act-picker-dropdown{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--bg-surface);border:1.5px solid var(--border);border-radius:var(--radius-lg);box-shadow:0 8px 32px rgba(0,0,0,.18);z-index:999;max-height:280px;overflow-y:auto;display:none;scrollbar-width:thin}
+            .act-picker-dropdown.open{display:block}
+            .act-picker-item{display:flex;align-items:center;gap:.65rem;padding:.55rem .85rem;cursor:pointer;transition:background .1s;border-bottom:1px solid var(--border)}
+            .act-picker-item:last-child{border-bottom:none}
+            .act-picker-item:hover,.act-picker-item.focused{background:var(--bg-raised)}
+            .act-picker-item-ava{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--secondary));display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden}
+            .act-picker-item-ava img{width:100%;height:100%;object-fit:cover}
+            .act-picker-item-name{font-size:.85rem;font-weight:600;color:var(--text-primary);line-height:1.2}
+            .act-picker-item-sub{font-size:.7rem;color:var(--text-muted);margin-top:.1rem}
+            .act-picker-item-sub em{font-style:normal;color:var(--primary);font-weight:600}
+            .act-picker-empty{text-align:center;color:var(--text-muted);font-size:.82rem;padding:.85rem}
+            .act-main{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);padding:1rem 1.25rem}
+        </style>
+        <div class="act-wrap">
+            <div class="act-picker" id="act-picker">
+                <div class="act-picker-input-wrap" onclick="document.getElementById('act-picker-q').focus()">
+                    <div class="act-picker-ava empty" id="act-picker-ava"></div>
+                    <input id="act-picker-q" class="act-picker-q" type="text"
+                        placeholder="Пошук за ім'ям, посадою, містом..."
+                        autocomplete="off"
+                        oninput="AdminPage._ualPickerFilter(this.value)"
+                        onfocus="AdminPage._ualPickerOpen()"
+                        onkeydown="AdminPage._ualPickerKey(event)">
+                    <button class="act-picker-clear" id="act-picker-clear" onclick="AdminPage._ualPickerClear()" title="Скинути">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+                <div class="act-picker-dropdown" id="act-picker-dropdown"></div>
+            </div>
+            <div id="act-log-wrap" style="display:none" class="act-main">
+                <div id="up-activity-area"></div>
+            </div>
+            <div id="act-empty" style="text-align:center;color:var(--text-muted);padding:3rem;font-size:.9rem">
+                <i class="fa-solid fa-user-clock" style="font-size:2rem;opacity:.25;display:block;margin-bottom:.75rem"></i>
+                Оберіть користувача щоб переглянути його активність
+            </div>
+        </div>`;
+
+        // Close dropdown on outside click
+        setTimeout(() => {
+            document.addEventListener('click', this._ualPickerOutside, true);
+        }, 0);
+
+        // Preselect if came from profile modal
+        if (this._ualPreselectId) {
+            const u = this._usersAll.find(x => x.id === this._ualPreselectId);
+            if (u) this._ualPickerSelect(u);
+            this._ualPreselectId = null;
+        }
+    },
+
+    _ualPickerOutside(e) {
+        if (!e.target.closest('#act-picker')) {
+            document.getElementById('act-picker-dropdown')?.classList.remove('open');
+        }
+    },
+
+    _ualPickerOpen() {
+        this._ualPickerFilter(document.getElementById('act-picker-q')?.value || '');
+        document.getElementById('act-picker-dropdown')?.classList.add('open');
+    },
+
+    _ualPickerFilter(q) {
+        const dd = document.getElementById('act-picker-dropdown');
+        if (!dd) return;
+        dd.classList.add('open');
+        const ql = q.toLowerCase().trim();
+        const matches = ql
+            ? this._usersAll.filter(u => {
+                const hay = [u.full_name, u.email, u.job_position, u.city, u.subdivision].filter(Boolean).join(' ').toLowerCase();
+                return hay.includes(ql);
+            }).slice(0, 20)
+            : this._usersAll.slice(0, 30);
+
+        if (!matches.length) {
+            dd.innerHTML = `<div class="act-picker-empty">Нічого не знайдено</div>`;
+            return;
+        }
+
+        const hl = (str) => {
+            if (!ql || !str) return Fmt.esc(str || '');
+            // case-insensitive replace using regex, safe for Unicode
+            const escaped = Fmt.esc(str);
+            const escapedQ = ql.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            return escaped.replace(new RegExp(escapedQ, 'gi'),
+                m => `<mark style="background:#fde68a;color:#92400e;border-radius:2px;padding:0 1px">${m}</mark>`);
+        };
+
+        dd.innerHTML = matches.map((u, i) => {
+            const ava = u.avatar_url
+                ? `<img src="${u.avatar_url}">`
+                : Fmt.initials(u.full_name);
+            const sub = [u.job_position, u.city].filter(Boolean).map(s => hl(s)).join(' · ');
+            return `<div class="act-picker-item" data-idx="${i}" onmousedown="event.preventDefault()" onclick="AdminPage._ualPickerSelectId('${u.id}')">
+                <div class="act-picker-item-ava">${ava}</div>
+                <div style="min-width:0">
+                    <div class="act-picker-item-name">${hl(u.full_name || u.email)}</div>
+                    ${sub ? `<div class="act-picker-item-sub">${sub}</div>` : ''}
+                </div>
+                <div style="margin-left:auto;flex-shrink:0">${Fmt.roleBadge(u.role)}</div>
+            </div>`;
+        }).join('');
+    },
+
+    _ualPickerKey(e) {
+        const dd = document.getElementById('act-picker-dropdown');
+        if (!dd?.classList.contains('open')) return;
+        const items = dd.querySelectorAll('.act-picker-item');
+        if (!items.length) return;
+        const focused = dd.querySelector('.act-picker-item.focused');
+        let idx = focused ? parseInt(focused.dataset.idx) : -1;
+        if (e.key === 'ArrowDown') { e.preventDefault(); idx = Math.min(idx + 1, items.length - 1); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); idx = Math.max(idx - 1, 0); }
+        else if (e.key === 'Enter' && focused) { e.preventDefault(); focused.click(); return; }
+        else if (e.key === 'Escape') { dd.classList.remove('open'); return; }
+        else return;
+        items.forEach(it => it.classList.remove('focused'));
+        items[idx]?.classList.add('focused');
+        items[idx]?.scrollIntoView({ block: 'nearest' });
+    },
+
+    _ualPickerSelectId(userId) {
+        const u = this._usersAll.find(x => x.id === userId);
+        if (u) this._ualPickerSelect(u);
+    },
+
+    _ualPickerSelect(u) {
+        const q     = document.getElementById('act-picker-q');
+        const ava   = document.getElementById('act-picker-ava');
+        const clear = document.getElementById('act-picker-clear');
+        const dd    = document.getElementById('act-picker-dropdown');
+        const logWrap = document.getElementById('act-log-wrap');
+        const empty = document.getElementById('act-empty');
+
+        if (q) q.value = u.full_name || u.email;
+        if (ava) {
+            ava.className = 'act-picker-ava';
+            ava.innerHTML = u.avatar_url ? `<img src="${u.avatar_url}">` : Fmt.initials(u.full_name);
+        }
+        if (clear) clear.style.display = 'inline-flex';
+        if (dd) dd.classList.remove('open');
+        if (empty) empty.style.display = 'none';
+        if (logWrap) logWrap.style.display = '';
+
+        this._loadActivityLog(u.id);
+    },
+
+    _ualPickerClear() {
+        const q     = document.getElementById('act-picker-q');
+        const ava   = document.getElementById('act-picker-ava');
+        const clear = document.getElementById('act-picker-clear');
+        const logWrap = document.getElementById('act-log-wrap');
+        const empty = document.getElementById('act-empty');
+
+        if (q) { q.value = ''; q.focus(); }
+        if (ava) { ava.className = 'act-picker-ava empty'; ava.innerHTML = ''; }
+        if (clear) clear.style.display = 'none';
+        if (logWrap) logWrap.style.display = 'none';
+        if (empty) empty.style.display = '';
+        this._ualState = null;
     },
 
     _birthdayReminderBlock(u, reminder) {
@@ -731,6 +1260,21 @@ const AdminPage = {
         if (!ok) return;
         try {
             await API.profiles.forceLogout(userId);
+            // Обнуляємо last_seen_at — dot одразу стає сірим
+            // force_logout лишається true до повторного входу користувача
+            await supabase.from('profiles').update({ last_seen_at: null }).eq('id', userId);
+            // Оновлюємо dot прямо в DOM — не чекаємо перезавантаження таблиці
+            const row = document.getElementById(`urow-${userId}`);
+            if (row) {
+                row.querySelectorAll('span[style*="border-radius:50%"]').forEach(dot => {
+                    dot.style.background = '#6b7280';
+                    dot.style.boxShadow  = 'none';
+                    dot.title = 'Офлайн';
+                });
+            }
+            // Оновлюємо в локальному кеші
+            const cached = this._usersAll.find(u => u.id === userId);
+            if (cached) cached.last_seen_at = null;
             Toast.success('Сесію завершено', `Користувача ${name} виведено із системи`);
         } catch(e) {
             Toast.error('Помилка', e.message);
@@ -756,6 +1300,8 @@ const AdminPage = {
             });
             if (error) throw error;
             Toast.success(isActive ? 'Заблоковано — сесію анульовано' : 'Розблоковано');
+            const blockedUser = this._usersAll.find(x => x.id === userId);
+            ActivityTracker.track(isActive ? 'user_block' : 'user_unblock', { entity_type: 'user', entity_id: userId, entity_title: blockedUser?.full_name || userId });
             this._renderUsersList(document.getElementById('admin-content'));
         } catch(e) { Toast.error('Помилка', e.message); }
         finally { Loader.hide(); }
@@ -975,16 +1521,6 @@ const AdminPage = {
                         <label class="input-label"><span>Дата оформлення</span><input id="cu-hired-at" type="date" onpaste="Fmt.parseDatePaste(event,this)"></label>
                         <label class="input-label"><span>На посаді з</span><input id="cu-position-since" type="date" onpaste="Fmt.parseDatePaste(event,this)"></label>
                     </div>
-                    <label class="input-label">
-                        <span>Мітка</span>
-                        <div class="custom-select-wrapper">
-                            <select id="cu-label">
-                                <option value="">— Без мітки —</option>
-                                <option value="intern">🌱 Стажер</option>
-                                <option value="mentor">⭐ Наставник</option>
-                            </select>
-                        </div>
-                    </label>
                 </div>
             </div>
         </div>
@@ -1327,7 +1863,6 @@ const AdminPage = {
                 p_city:         Dom.val('cu-city')             || null,
                 p_job_position: Dom.val('cu-job-position')     || null,
                 p_subdivision:  Dom.val('cu-subdivision')      || null,
-                p_label:        Dom.val('cu-label').trim()     || null,
             });
             if (error) throw error;
             // Set fields not supported by admin_user_create RPC
@@ -1336,8 +1871,6 @@ const AdminPage = {
                 hired_at:       Dom.val('cu-hired-at')       || null,
                 position_since: Dom.val('cu-position-since') || null,
             };
-            const labelVal = Dom.val('cu-label').trim();
-            if (labelVal) extraFields.label_set_by = AppState.profile?.role;
             await supabase.from('profiles').update(extraFields).eq('id', userId);
 
             // Auto-assign tests by job_position
@@ -1363,6 +1896,7 @@ const AdminPage = {
 
             const fullName = [lastName, firstName, patronymic].filter(Boolean).join(' ');
             AuditLog.write('user_create', 'user', fullName, { role });
+            ActivityTracker.track('user_create', { entity_type: 'user', entity_id: userId, entity_title: fullName, details: { role } });
             Toast.success('Користувача створено');
             const adminEl = document.getElementById('admin-content');
             if (adminEl) await this._renderUsersList(adminEl);
@@ -1454,7 +1988,6 @@ const AdminPage = {
             city:        MultiSelect.getValues('uf-city'),
             subdivision: MultiSelect.getValues('uf-subdivision'),
             role:        v('uf-role'),
-            label:       MultiSelect.getValues('uf-label'),
             date:        v('uf-date'),
             activity:    v('uf-activity'),
             status:      v('uf-status'),
@@ -1463,7 +1996,6 @@ const AdminPage = {
         const jobLC  = f.job.map(x => x.toLowerCase());
         const cityLC = f.city.map(x => x.toLowerCase());
         const subLC  = f.subdivision.map(x => x.toLowerCase());
-        const lblLC  = f.label.map(x => x.toLowerCase());
 
         // Зберігаємо фільтри, зберігаючи існуючий _sort щоб не затирати його
         try {
@@ -1484,7 +2016,6 @@ const AdminPage = {
                 (cityLC.length === 0 || cityLC.includes(d.city))                          &&
                 (subLC.length  === 0 || subLC.includes(d.subdivision))                    &&
                 (!f.role   || d.role   === f.role)                                         &&
-                (lblLC.length  === 0 || lblLC.includes(d.label))                          &&
                 this._matchTokens(d.date,        f.date)                                  &&
                 this._matchTokens(d.activity,    f.activity)                              &&
                 (!f.status || d.status === f.status);
@@ -1509,7 +2040,7 @@ const AdminPage = {
         ['uf-date','uf-activity'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
         ['uf-role','uf-status'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
         const ufName = document.getElementById('uf-name'); if (ufName) ufName.value = '';
-        ['uf-job','uf-city','uf-subdivision','uf-label'].forEach(id => MultiSelect.clear(id));
+        ['uf-job','uf-city','uf-subdivision'].forEach(id => MultiSelect.clear(id));
         this._sortState = { field: null, dir: 1 };
         document.querySelectorAll('.sort-arrow').forEach(el => el.classList.remove('active'));
         localStorage.removeItem('lms_admin_user_filters');
@@ -1530,7 +2061,6 @@ const AdminPage = {
         if (Array.isArray(f.job)         && f.job.length)         MultiSelect.setValues('uf-job',         f.job);
         if (Array.isArray(f.city)        && f.city.length)        MultiSelect.setValues('uf-city',        f.city);
         if (Array.isArray(f.subdivision) && f.subdivision.length) MultiSelect.setValues('uf-subdivision', f.subdivision);
-        if (Array.isArray(f.label)       && f.label.length)       MultiSelect.setValues('uf-label',       f.label);
 
         // ── Відновлюємо сортування до застосування фільтрів ──
         if (f._sort?.field) {
@@ -1659,6 +2189,7 @@ const AdminPage = {
                     .then(() => supabase.rpc('admin_set_user_banned', { p_user_id: u.id, p_banned: true }))
             ));
             AuditLog.write('user_block', 'users', users.map(u => u.full_name).join(', '), { count: users.length });
+            ActivityTracker.track('user_block', { entity_title: `${users.length} користувачів`, details: { names: users.map(u => u.full_name) } });
             Toast.success(`Заблоковано: ${users.length} — сесії анульовано`);
             this._clearSelection();
             await this._renderUsersList(document.getElementById('admin-content'));
@@ -1675,6 +2206,7 @@ const AdminPage = {
                     .then(() => supabase.rpc('admin_set_user_banned', { p_user_id: u.id, p_banned: false }))
             ));
             AuditLog.write('user_unblock', 'users', users.map(u => u.full_name).join(', '), { count: users.length });
+            ActivityTracker.track('user_unblock', { entity_title: `${users.length} користувачів`, details: { names: users.map(u => u.full_name) } });
             Toast.success(`Розблоковано: ${users.length}`);
             this._clearSelection();
             await this._renderUsersList(document.getElementById('admin-content'));
@@ -1768,6 +2300,7 @@ const AdminPage = {
 
         if (done) {
             AuditLog.write('user_delete', 'users', toDelete.map(u => u.full_name).join(', '), { count: done });
+            ActivityTracker.track('user_delete', { entity_title: `${done} користувачів`, details: { names: toDelete.map(u => u.full_name) } });
             Toast.success('Видалено', `${done} користувач(ів) видалено`);
         }
         if (failed) Toast.error('Помилки', `${failed} не вдалося видалити`);
@@ -1785,7 +2318,7 @@ const AdminPage = {
     _importRows: [],
 
     _importCols: ['last_name','first_name','patronymic','login','email','password','role','gender','phone','birth_date','city','job_position','subdivision','label','dovirenosti'],
-    _importHeaders: ['Прізвище','Ім\u2019я','По батькові','Логін','Email','Пароль','Роль','Стать','Телефон','Дата нар.','Місто','Посада','Підрозділ','Мітка','Довіреність'],
+    _importHeaders: ['Прізвище','Ім\u2019я','По батькові','Логін','Email','Пароль','Роль','Стать','Телефон','Дата нар.','Місто','Посада','Підрозділ','Довіреність'],
 
     importUsers() {
         Modal.open({
@@ -1869,7 +2402,6 @@ const AdminPage = {
             'місто':'city','город':'city','city':'city',
             'посада':'job_position','должность':'job_position','job_position':'job_position','position':'job_position',
             'підрозділ':'subdivision','подразделение':'subdivision','subdivision':'subdivision',
-            'мітка':'label','метка':'label','label':'label',
             'довіреність':'dovirenosti','доверенность':'dovirenosti','dovirenosti':'dovirenosti'
         };
         const colMap = rawHeaders.map(h => colAlias[h] || null);
@@ -2047,7 +2579,6 @@ const AdminPage = {
             'Місто':            u.city || '',
             'Телефон':          u.phone || '',
             'Дата народження':  u.birth_date || '',
-            'Мітка':            u.label || '',
             'Дата реєстрації':  Fmt.datetime(u.created_at)
         })), 'users_export', 'Користувачі');
     },
@@ -2922,6 +3453,7 @@ const AdminPage = {
             if (this._courseThumbFile) await API.courses.uploadThumbnail(course.id, this._courseThumbFile);
             if (this._courseBadgeFile) await API.courses.uploadBadge(course.id, this._courseBadgeFile);
             AuditLog.write(id ? 'course_update' : 'course_create', 'course', title);
+            ActivityTracker.track(id ? 'course_edit' : 'course_create', { entity_type: 'course', entity_id: course.id, entity_title: title });
             Toast.success('Збережено!', `Курс "${title}" ${id ? 'оновлено' : 'створено'}`);
             await this._renderCourses(this._coursesEl);
         } catch(e) { Toast.error('Помилка', e.message); }
@@ -2939,6 +3471,7 @@ const AdminPage = {
         try {
             await API.courses.delete(id);
             AuditLog.write('course_delete', 'course', title);
+            ActivityTracker.track('course_delete', { entity_type: 'course', entity_id: id, entity_title: title });
             Toast.success('Видалено', `Курс "${title}" видалено`);
             await this._renderCourses(this._coursesEl);
         } catch(e) { Toast.error('Помилка', e.message); }
@@ -2983,47 +3516,6 @@ const AdminPage = {
             </div>`;
     },
 
-    // ── Записи ────────────────────────────────────────────────────
-    async _renderEnrollments(el) {
-        const enrollments = await API.enrollments.getAll().catch(() => []);
-
-        el.innerHTML = `
-            <div style="display:flex;gap:1rem;margin-bottom:1rem">
-                <input type="text" placeholder="Пошук..." style="flex:1" onkeyup="AdminPage._filterTable('enrollments-tbody', event)">
-                <button class="btn btn-success" onclick="AdminPage.exportEnrollments(${JSON.stringify(enrollments).replace(/"/g,'&quot;')})">📊 Експорт</button>
-            </div>
-            <div class="table-wrapper">
-                <table>
-                    <thead><tr><th>Стажер</th><th>Курс</th><th>Прогрес</th><th>Записаний</th><th>Завершив</th></tr></thead>
-                    <tbody id="enrollments-tbody">
-                        ${enrollments.map(e => `
-                            <tr>
-                                <td><strong>${e.user?.full_name || '—'}</strong><br><span style="font-size:.75rem;color:var(--text-muted)">${e.user?.email || ''}</span></td>
-                                <td>${e.course?.title || '—'}</td>
-                                <td>
-                                    <div style="display:flex;align-items:center;gap:.5rem;min-width:120px">
-                                        <div class="progress-bar" style="flex:1"><div class="progress-fill" style="width:${e.progress_percentage||0}%"></div></div>
-                                        <span style="font-size:.75rem">${e.progress_percentage||0}%</span>
-                                    </div>
-                                </td>
-                                <td style="color:var(--text-muted);font-size:.8rem">${Fmt.datetime(e.enrolled_at)}</td>
-                                <td>${e.completed_at ? `<span class="badge badge-success">✓ ${Fmt.dateShort(e.completed_at)}</span>` : '—'}</td>
-                            </tr>`).join('')}
-                    </tbody>
-                </table>
-            </div>`;
-    },
-
-    exportEnrollments(enrollments) {
-        Excel.export(enrollments.map(e => ({
-            'Стажер':   e.user?.full_name,
-            'Email':    e.user?.email,
-            'Курс':     e.course?.title,
-            'Прогрес':  (e.progress_percentage||0) + '%',
-            'Записаний':  Fmt.datetime(e.enrolled_at),
-            'Завершив': e.completed_at ? Fmt.datetime(e.completed_at) : 'Ні'
-        })), 'enrollments_export', 'Записи');
-    },
 
     // ── Довідники ─────────────────────────────────────────────────
     async _renderDirectories(el) {
@@ -3061,22 +3553,52 @@ const AdminPage = {
     },
 
     _dirCard(title, icon, table, items) {
-        return `
-            <div class="card">
-                <div class="card-header">
-                    <h3>${icon} ${title}</h3>
-                    <button class="btn btn-primary btn-sm" onclick="AdminPage.openAddDir('${table}','${title}')"><i class="fa-solid fa-plus"></i> Додати</button>
+        const rows = items.length ? items.map((i, idx) => `
+            <div class="dir-row" style="
+                display:flex;align-items:center;gap:.5rem;
+                padding:.45rem .75rem .45rem .9rem;
+                border-left:3px solid var(--primary);
+                background:var(--bg-surface);
+                border-radius:var(--radius-sm);
+                border:1px solid var(--border);
+                border-left-width:3px;border-left-color:var(--primary);
+                transition:background var(--transition),box-shadow var(--transition);
+                cursor:default"
+                onmouseenter="this.style.background='var(--bg-hover)';this.style.boxShadow='var(--shadow-sm)'"
+                onmouseleave="this.style.background='var(--bg-surface)';this.style.boxShadow='none'">
+                <i class="fa-solid fa-grip-vertical" style="color:var(--text-muted);font-size:.65rem;opacity:.4;flex-shrink:0"></i>
+                <span style="flex:1;font-size:.855rem;font-weight:500;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Fmt.esc(i.name)}</span>
+                <div class="dir-row-actions" style="display:flex;gap:.2rem;flex-shrink:0;opacity:0;transition:opacity .15s">
+                    <button class="btn btn-ghost btn-sm" style="padding:.2rem .4rem;height:26px" title="Редагувати"
+                        onclick="AdminPage.openEditDir('${table}','${i.id}',${JSON.stringify(i.name||'').replace(/"/g,'&quot;')})">
+                        <i class="fa-solid fa-pen" style="font-size:.7rem"></i>
+                    </button>
+                    <button class="btn btn-danger btn-sm" style="padding:.2rem .4rem;height:26px" title="Видалити"
+                        onclick="AdminPage.deleteDir('${table}','${i.id}',${JSON.stringify(i.name||'').replace(/"/g,'&quot;')})">
+                        <i class="fa-solid fa-trash" style="font-size:.7rem"></i>
+                    </button>
                 </div>
-                <div class="card-body" style="padding:0;max-height:350px;overflow-y:auto">
-                    ${items.length ? items.map(i => `
-                        <div style="display:flex;align-items:center;justify-content:space-between;padding:.625rem 1rem;border-bottom:1px solid var(--border)">
-                            <span style="font-size:.875rem">${i.name}</span>
-                            <div style="display:flex;gap:.3rem">
-                                <button class="btn btn-ghost btn-sm" onclick="AdminPage.openEditDir('${table}','${i.id}',${JSON.stringify(i.name||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-pen"></i></button>
-                                <button class="btn btn-danger btn-sm" onclick="AdminPage.deleteDir('${table}','${i.id}',${JSON.stringify(i.name||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-trash"></i></button>
-                            </div>
-                        </div>`).join('')
-                    : `<div style="padding:1.5rem;text-align:center;color:var(--text-muted);font-size:.85rem">Список порожній</div>`}
+            </div>`).join('')
+        : `<div style="padding:1.25rem;text-align:center;color:var(--text-muted);font-size:.82rem;border:1px dashed var(--border);border-radius:var(--radius-sm)">Список порожній</div>`;
+
+        return `
+            <style>
+                .dir-row:hover .dir-row-actions { opacity: 1 !important; }
+            </style>
+            <div style="background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden">
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:.75rem 1rem;border-bottom:1px solid var(--border);background:var(--bg-raised)">
+                    <div style="display:flex;align-items:center;gap:.5rem">
+                        <span style="font-size:1.1rem">${icon}</span>
+                        <span style="font-weight:700;font-size:.92rem">${title}</span>
+                        <span style="font-size:.72rem;padding:2px 7px;border-radius:20px;background:rgba(var(--primary-rgb),.12);color:var(--primary);font-weight:600">${items.length}</span>
+                    </div>
+                    <button class="btn btn-primary btn-sm" style="height:28px;padding:.2rem .7rem;font-size:.78rem"
+                        onclick="AdminPage.openAddDir('${table}','${title}')">
+                        <i class="fa-solid fa-plus"></i> Додати
+                    </button>
+                </div>
+                <div style="padding:.65rem;display:flex;flex-direction:column;gap:.35rem;max-height:320px;overflow-y:auto">
+                    ${rows}
                 </div>
             </div>`;
     },
@@ -3140,116 +3662,6 @@ const AdminPage = {
             await this._renderDirectories(document.getElementById('admin-content'));
         } catch(e) { Toast.error('Помилка', e.message); }
         finally { Loader.hide(); }
-    },
-
-    // ── Логи дій персоналу (тільки власник) ──────────────────────
-    async _renderLogs(el) {
-        if (!AppState.isOwner()) {
-            el.innerHTML = `<div class="empty-state"><div class="empty-icon">🔒</div><h3>Доступ лише для власника</h3></div>`;
-            return;
-        }
-        el.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
-
-        const { data: logs, error } = await supabase
-            .from('activity_logs')
-            .select('*')
-            .order('created_at', { ascending: false })
-            .limit(300);
-
-        if (error) {
-            el.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>${error.message}</h3></div>`;
-            return;
-        }
-
-        const actionLabel = {
-            user_create:        'Створив користувача',
-            user_delete:        'Видалив користувача',
-            user_block:         'Заблокував',
-            user_unblock:       'Розблокував',
-            role_change:        'Змінив роль',
-            ownership_transfer: 'Передав права власника',
-            course_create:      'Створив курс',
-            course_update:      'Оновив курс',
-            course_delete:      'Видалив курс',
-            news_create:        'Створив новину',
-            news_update:        'Оновив новину',
-            news_delete:        'Видалив новину',
-            test_create:        'Створив тест',
-            test_update:        'Оновив тест',
-            test_delete:        'Видалив тест',
-        };
-
-        const roleColors = { owner: '#f59e0b', admin: '#6366f1', smm: '#10b981' };
-        const roleLabels = { owner: 'Admin', admin: 'Адмін', smm: 'SMM' };
-
-        const uniqueRoles   = [...new Set(logs.map(l => l.actor_role).filter(Boolean))];
-        const uniqueActions = [...new Set(logs.map(l => l.action).filter(Boolean))];
-
-        el.innerHTML = `
-            <div style="display:flex;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap;align-items:center">
-                <select id="log-filter-role" onchange="AdminPage._filterLogs()" style="min-width:130px">
-                    <option value="">Всі ролі</option>
-                    ${uniqueRoles.map(r => `<option value="${r}">${roleLabels[r]||r}</option>`).join('')}
-                </select>
-                <select id="log-filter-action" onchange="AdminPage._filterLogs()" style="min-width:200px">
-                    <option value="">Всі дії</option>
-                    ${uniqueActions.map(a => `<option value="${a}">${actionLabel[a]||a}</option>`).join('')}
-                </select>
-                <input id="log-filter-search" type="text" placeholder="Пошук за ПІБ або об'єктом..."
-                       style="flex:1;min-width:200px" oninput="AdminPage._filterLogs()">
-                <span id="log-count" style="font-size:.8rem;color:var(--text-muted)"></span>
-            </div>
-            <div class="table-wrapper">
-                <table>
-                    <thead>
-                        <tr>
-                            <th style="width:150px">Час</th>
-                            <th>Хто</th>
-                            <th>Дія</th>
-                            <th>Об'єкт</th>
-                            <th>Деталі</th>
-                        </tr>
-                    </thead>
-                    <tbody id="logs-tbody">
-                        ${logs.map(l => {
-                            const color = roleColors[l.actor_role] || 'var(--text-muted)';
-                            const meta  = l.meta ? Object.entries(l.meta).map(([k,v]) => `<span style="color:var(--text-muted)">${k}:</span> ${v}`).join(' &nbsp;') : '';
-                            return `<tr data-role="${l.actor_role||''}" data-action="${l.action||''}" data-search="${(l.actor_name||'').toLowerCase()} ${(l.entity_name||'').toLowerCase()}">
-                                <td style="font-size:.78rem;color:var(--text-muted);white-space:nowrap">${Fmt.datetime(l.created_at)}</td>
-                                <td>
-                                    <div style="font-weight:600;font-size:.875rem">${l.actor_name||'—'}</div>
-                                    <span style="font-size:.72rem;font-weight:600;color:${color}">${roleLabels[l.actor_role]||l.actor_role||''}</span>
-                                </td>
-                                <td style="font-size:.875rem">${actionLabel[l.action]||l.action||'—'}</td>
-                                <td style="font-size:.875rem">
-                                    ${l.entity_type ? `<span style="font-size:.72rem;color:var(--text-muted)">${l.entity_type}</span><br>` : ''}
-                                    ${l.entity_name||'—'}
-                                </td>
-                                <td style="font-size:.78rem">${meta}</td>
-                            </tr>`;
-                        }).join('')}
-                    </tbody>
-                </table>
-            </div>`;
-
-        this._filterLogs();
-    },
-
-    _filterLogs() {
-        const role   = document.getElementById('log-filter-role')?.value   || '';
-        const action = document.getElementById('log-filter-action')?.value || '';
-        const search = (document.getElementById('log-filter-search')?.value || '').toLowerCase();
-        const rows   = [...document.querySelectorAll('#logs-tbody tr')];
-        let count = 0;
-        rows.forEach(r => {
-            const match = (!role   || r.dataset.role   === role)
-                       && (!action || r.dataset.action === action)
-                       && (!search || r.dataset.search.includes(search));
-            r.style.display = match ? '' : 'none';
-            if (match) count++;
-        });
-        const el = document.getElementById('log-count');
-        if (el) el.textContent = `Показано: ${count}`;
     },
 
     // ── Кошик (тільки власник) ────────────────────────────────────

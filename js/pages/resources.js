@@ -105,7 +105,7 @@ const ResourcesPage = {
                     </div>
                 </div>
                 <div style="display:flex;gap:.5rem;margin-bottom:1.25rem;border-bottom:1px solid var(--border);padding-bottom:.75rem;flex-wrap:wrap;align-items:center">
-                    <button id="docs-tab-list" class="btn btn-primary btn-sm" onclick="ResourcesPage.switchTab('list',this)">📋 Всі</button>
+                    <button id="docs-tab-list" class="btn btn-primary btn-sm" onclick="ResourcesPage.switchTabList(this)">📋 Всі</button>
                     <div id="docs-cat-chips" style="display:flex;gap:.4rem;flex-wrap:wrap"></div>
                     <button id="docs-tab-branch" class="btn btn-ghost btn-sm" onclick="ResourcesPage.switchTab('branch',this)">⚖️ Куточок споживача</button>
                     <button id="docs-tab-red-folder" class="btn btn-ghost btn-sm" onclick="ResourcesPage.switchTab('red-folder',this)" style="color:#ef4444;border-color:rgba(239,68,68,.3)">📁 Червона папка</button>
@@ -391,6 +391,19 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
   ${bar(data.storage_bytes, maxGb, '#60a5fa')}
 </div>`;
         } catch (_) {}
+    },
+
+    switchTabList(el) {
+        // Завжди скидаємо категорію і перезавантажуємо, навіть якщо вже на list
+        this._category = '';
+        document.querySelectorAll('.docs-cat-chip').forEach(b => { b.classList.remove('btn-primary'); b.classList.add('btn-ghost'); });
+        if (el) { el.classList.add('btn-primary'); el.classList.remove('btn-ghost'); }
+        if (this._activeTab === 'list') {
+            this._page = 0;
+            this.load();
+        } else {
+            this.switchTab('list', el);
+        }
     },
 
     switchTab(tab, el) {
@@ -1096,7 +1109,7 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
 
             // Frontend access filter: staff and managers in docs view see all
             let filtered = data;
-            const bypassFilter = AppState.isStaff() || (this._view === 'docs' && AppState.isManager());
+            const bypassFilter = !AppState.isPreviewing() && (AppState.isStaff() || (this._view === 'docs' && AppState.isManager()));
             if (!bypassFilter) {
                 filtered = data.filter(r => AccessGroupsPage.checkAccess(r.access_group));
             }
@@ -1120,10 +1133,12 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
                 });
             }
 
-            // Документи: тільки з обмеженнями (трековані АБО обмежена група доступу)
+            // Документи: тільки з обмеженнями (трековані АБО обмежена група АБО з довіреностями)
             if (this._view === 'docs') {
                 filtered = filtered.filter(r =>
-                    r.is_tracked_download || (r.access_group && !r.access_group.is_public)
+                    r.is_tracked_download ||
+                    (r.access_group && !r.access_group.is_public) ||
+                    (r.resource_dovirenosti && r.resource_dovirenosti.length > 0)
                 );
             }
 
@@ -1393,6 +1408,7 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
+            ActivityTracker.track('file_download', { entity_type: 'resource', entity_id: id, entity_title: resource.title });
         } catch (e) {
             Toast.error('Помилка', e.message);
         } finally {
@@ -1489,6 +1505,7 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
             }
 
             await API.documentDownloads.track(resource.id, { locationId, isOffShift, docVersion: resource.doc_version || 1 });
+            ActivityTracker.track('file_download', { entity_type: 'document', entity_id: resource.id, entity_title: resource.title });
 
             this._myDownloads[resource.id] = { at: new Date().toISOString(), version: resource.doc_version || 1 };
             UI.loadDocBadge();
@@ -1909,9 +1926,43 @@ const ResourceViewPage = {
                     </div>`;
                 return;
             }
+
+            // ── Перевірка доступу для не-staff (враховує preview-режим) ──
+            if (!AppState.isStaff()) {
+                // 1. Access group
+                if (!AccessGroupsPage.checkAccess(resource.access_group)) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-icon">🔒</div>
+                            <h3>Немає доступу</h3>
+                            <p style="color:var(--text-muted)">У вас немає прав для перегляду цього документа.</p>
+                            <button class="btn btn-primary" onclick="Router.back()" style="display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i> Назад</button>
+                        </div>`;
+                    return;
+                }
+                // 2. Dovirenosti (тільки для docs — ресурси курсів не перевіряємо)
+                const rdovs = resource.resource_dovirenosti || [];
+                if (rdovs.length > 0) {
+                    const myDovs = await API.dovirenosti.getForProfile(AppState.user.id).catch(() => []);
+                    const myIds  = new Set(myDovs.map(d => d.id));
+                    const hasAccess = rdovs.some(rd => myIds.has(rd.dovirenost_id));
+                    if (!hasAccess) {
+                        container.innerHTML = `
+                            <div class="empty-state">
+                                <div class="empty-icon">🔒</div>
+                                <h3>Немає доступу</h3>
+                                <p style="color:var(--text-muted)">Цей документ доступний лише для певних категорій співробітників.</p>
+                                <button class="btn btn-primary" onclick="Router.back()" style="display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i> Назад</button>
+                            </div>`;
+                        return;
+                    }
+                }
+            }
+
             const url      = await this._getUrl(resource);
             const isDoc = from === 'documents';
             RecentlyViewed.track({ type: isDoc ? 'document' : 'resource', id: resource.id, title: resource.title, thumbnail: null, route: `resource/${resource.id}${from ? '?from='+from : ''}`, color: isDoc ? '#ef4444' : '#3b82f6', icon: isDoc ? 'fa-file-lines' : 'fa-paperclip' });
+            ActivityTracker.track(isDoc ? 'doc_view' : 'doc_view', { entity_type: isDoc ? 'document' : 'resource', entity_id: resource.id, entity_title: resource.title, page: `resource/${resource.id}` });
             let dlStatus = null;
             if (from === 'documents') {
                 const map = await API.documentDownloads.getMyLatest([id]).catch(() => ({}));

@@ -37,8 +37,17 @@ const API = {
         },
 
         async forceLogout(id) {
-            const { error } = await supabase.from('profiles').update({ force_logout: true }).eq('id', id);
+            const { data, error } = await supabase
+                .from('profiles')
+                .update({ force_logout: true })
+                .eq('id', id)
+                .select('force_logout')
+                .single();
             if (error) throw error;
+            // RLS може мовчки заблокувати update — перевіряємо реальний результат
+            if (!data || data.force_logout !== true) {
+                throw new Error('Не вдалося змінити профіль — перевірте RLS (migration_v83.sql)');
+            }
         },
 
         async clearForceLogout(id) {
@@ -1948,6 +1957,51 @@ const API = {
                 .select('survey_id').eq('user_id', uid).in('survey_id', surveyIds);
             const respondedIds = new Set((responses || []).map(r => r.survey_id));
             return surveyIds.filter(id => !respondedIds.has(id)).length;
+        }
+    },
+
+    // ── Activity Log ────────────────────────────────────────────────
+    activityLog: {
+        async log(action, { entity_type, entity_id, entity_title, page, details } = {}) {
+            const uid = AppState.user?.id;
+            if (!uid) return;
+            const row = {
+                user_id: uid,
+                action,
+                entity_type:  entity_type  || null,
+                entity_id:    entity_id    || null,
+                entity_title: entity_title || null,
+                page:         page || (location.hash.slice(2) || 'dashboard'),
+                details:      details || {},
+                ua:           navigator.userAgent,
+            };
+            // fire-and-forget, never throw
+            supabase.from('activity_log').insert(row).then(() => {});
+        },
+
+        async getForUser(userId, { limit = 50, offset = 0, action, dateFrom, dateTo } = {}) {
+            let q = supabase
+                .from('activity_log')
+                .select('id,action,entity_type,entity_title,page,details,ua,created_at', { count: 'exact' })
+                .eq('user_id', userId)
+                .order('created_at', { ascending: false })
+                .range(offset, offset + limit - 1);
+            if (action)   q = q.eq('action', action);
+            if (dateFrom) q = q.gte('created_at', dateFrom + 'T00:00:00');
+            if (dateTo)   q = q.lte('created_at', dateTo   + 'T23:59:59');
+            const { data, error, count } = await q;
+            if (error) throw error;
+            return { data: data || [], count: count || 0 };
+        },
+
+        async getStats(userId) {
+            const { data } = await supabase
+                .from('activity_log')
+                .select('action,created_at,page')
+                .eq('user_id', userId)
+                .order('created_at', { ascending: false })
+                .limit(500);
+            return data || [];
         }
     }
 };

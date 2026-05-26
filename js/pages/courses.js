@@ -29,7 +29,7 @@ const CoursesPage = {
                             <option value="advanced">Просунутий</option>
                         </select>
                     </div>
-                    ${AppState.isStaff() ? `<button class="btn btn-primary" onclick="CoursesPage.openCreate()">+ Створити курс</button>` : ''}
+                    ${AppState.isStaff() && AppState.canMutate() ? `<button class="btn btn-primary" onclick="CoursesPage.openCreate()">+ Створити курс</button>` : ''}
                 </div>
             </div>
 
@@ -97,7 +97,7 @@ const CoursesPage = {
                         <div class="empty-icon">📚</div>
                         <h3>Курси не знайдено</h3>
                         <p>Спробуйте змінити критерії пошуку</p>
-                        ${AppState.isStaff() ? `<button class="btn btn-primary" onclick="CoursesPage.openCreate()">Створити перший курс</button>` : ''}
+                        ${AppState.isStaff() && AppState.canMutate() ? `<button class="btn btn-primary" onclick="CoursesPage.openCreate()">Створити перший курс</button>` : ''}
                     </div>`;
                 return;
             }
@@ -145,7 +145,7 @@ const CoursesPage = {
                             </div>
                         </div>` : `<div style="margin-top:.75rem"><span class="badge badge-primary">Записатися</span></div>`}
                 </div>
-                ${AppState.isStaff() ? `
+                ${AppState.isStaff() && AppState.canMutate() ? `
                     <div class="card-footer" onclick="event.stopPropagation()" style="display:flex;gap:.5rem">
                         <button class="btn btn-secondary btn-sm" onclick="CoursesPage.openEdit('${course.id}')"><i class="fa-solid fa-pen"></i> Редагувати</button>
                         <button class="btn btn-danger btn-sm" onclick="CoursesPage.deleteCourse('${course.id}',${JSON.stringify(course.title||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-trash"></i></button>

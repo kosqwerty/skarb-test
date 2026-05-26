@@ -155,9 +155,6 @@ const App = {
                 await BookmarksPage.init(container);
             },
 
-            'label-access': async () => {
-                Router.go('admin?tab=label-access');
-            },
 
             'schedule-graph': async ({ container, params }) => {
                 if (params?.view === 'employee') await ScheduleGraphEmployee.init(container);
@@ -187,6 +184,9 @@ const App = {
 
         // Start router
         Router.start();
+
+        // Start activity tracking (page views via hash change)
+        ActivityTracker.start();
 
         // Redirect to dashboard if no hash
         if (!location.hash || location.hash === '#' || location.hash === '#/') {
@@ -419,6 +419,69 @@ window.addEventListener('DOMContentLoaded', () => {
 window.addEventListener('resize', () => {
     if (window.innerWidth > 1024) UI.closeSidebar();
 });
+
+// ── Activity Tracker ──────────────────────────────────────────────
+const ActivityTracker = {
+    _pageNames: {
+        'dashboard': 'Головна', 'knowledge-base': 'База знань', 'documents': 'Документи',
+        'courses': 'Курси', 'news': 'Новини', 'analytics': 'Аналітика',
+        'admin': 'Адміністрування', 'scheduler': 'Планувальник', 'contacts': 'Контакти',
+        'profile': 'Мій профіль', 'bookmarks': 'Закладки', 'my-tests': 'Мої тести',
+        'my-calendar': 'Мій календар', 'notifications': 'Сповіщення',
+        'schedule-graph': 'Графік роботи', 'expert-path': 'Шлях навчання',
+        'results': 'Мої результати', 'branch-docs': 'Куточок споживача',
+    },
+    _adminTabNames: {
+        'users': 'Користувачі', 'courses': 'Курси', 'tests': 'Тести', 'news': 'Новини',
+        'access-groups': 'Доступ до ресурсів',
+        'trash': 'Кошик', 'logs': 'Логи', 'supersearch': 'Супер пошук', 'activity': 'Активність',
+    },
+    _lastKey: null,   // route+tab dedup key
+    _lastKeyTime: 0,
+    _DEDUP_MS: 3000,  // ігноруємо повторний page_view тієї самої сторінки протягом 3с
+
+    start() {
+        window.addEventListener('hashchange', () => this._onNav());
+        this._onNav();
+    },
+
+    _onNav() {
+        const hash   = location.hash.slice(2) || 'dashboard';
+        const [route, qs] = hash.split('?');
+        const params = Object.fromEntries(new URLSearchParams(qs || ''));
+        const base   = route.split('/')[0];
+        const id     = route.split('/')[1] || null;
+
+        // Build dedup key: include tab param so admin?tab=users ≠ admin?tab=courses
+        const key = route + (params.tab ? '|' + params.tab : '');
+        const now = Date.now();
+        if (key === this._lastKey && now - this._lastKeyTime < this._DEDUP_MS) return;
+        this._lastKey     = key;
+        this._lastKeyTime = now;
+
+        // These routes log their own specific event after loading — skip generic page_view
+        const _skipGeneric = ['resource', 'courses', 'lessons', 'tests', 'news'];
+        if (id && _skipGeneric.includes(base)) return;
+
+        // Human-readable title
+        let pageName = this._pageNames[base] || base;
+        if (base === 'admin' && params.tab) {
+            pageName = 'Адміністрування · ' + (this._adminTabNames[params.tab] || params.tab);
+        }
+
+        API.activityLog.log('page_view', {
+            page: key,
+            entity_type:  id ? base : null,
+            entity_id:    id && id.match(/^[0-9a-f-]{36}$/) ? id : null,
+            entity_title: pageName,
+        });
+    },
+
+    // Called from specific spots in page modules
+    track(action, opts = {}) {
+        API.activityLog.log(action, opts);
+    },
+};
 
 // ── День народження ────────────────────────────────────────────────
 const BirthdayModal = {

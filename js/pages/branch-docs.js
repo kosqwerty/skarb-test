@@ -47,8 +47,8 @@ const BranchDocsPage = {
 
     async renderInTab(area) {
         this._injectStyles();
-        const canManage = AppState.isAdmin();
-        const seeAll = AppState.isAdmin() || AppState.isManager();
+        const canManage = AppState.isAdmin() && !AppState.isPreviewing();
+        const seeAll = AppState.isAdmin() || AppState.isManager() || AppState.isSmm();
         let userDovIds = [];
         if (!canManage) {
             const dovs = await API.dovirenosti.getForProfile(AppState.user.id).catch(() => []);
@@ -77,8 +77,8 @@ const BranchDocsPage = {
     async init(container) {
         UI.setBreadcrumb([{ label: 'Куточок споживача' }]);
 
-        const canManage = AppState.isAdmin();
-        const seeAll = AppState.isAdmin() || AppState.isManager();
+        const canManage = AppState.isAdmin() && !AppState.isPreviewing();
+        const seeAll = AppState.isAdmin() || AppState.isManager() || AppState.isSmm();
 
         let userDovIds = [];
         if (!canManage) {

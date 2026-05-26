@@ -99,13 +99,13 @@ const DashboardPage = {
             .db-course-body{padding:.75rem}
             .db-course-name{font-size:.82rem;font-weight:600;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:.5rem}
 
-            .db-main-grid{display:grid;grid-template-columns:1fr minmax(min(280px,22vw),320px);grid-template-rows:auto 1fr;gap:clamp(.5rem,.75vw,.85rem);margin-bottom:1.5rem;align-items:start}
+            .db-main-grid{display:grid;grid-template-columns:1fr 300px;grid-template-rows:auto 1fr;gap:clamp(.5rem,.75vw,.85rem);margin-bottom:1.5rem;min-width:0;width:100%}
             .db-content-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:clamp(.5rem,.75vw,.85rem);align-items:start;min-width:0}
             .db-content-cols>*{min-width:0}
-            .db-cal-col{grid-column:2;grid-row:1/3;display:flex;flex-direction:column;gap:.75rem;min-width:0}
-            .db-recent-row{grid-column:1;grid-row:2}
+            .db-cal-col{grid-column:2;grid-row:1/3;display:flex;flex-direction:column;gap:.75rem;min-width:0;width:100%}
+            .db-recent-row{grid-column:1;grid-row:2;min-width:0}
             @media(max-width:1200px){
-                .db-main-grid{grid-template-columns:1fr minmax(min(250px,24vw),300px)}
+                .db-main-grid{grid-template-columns:1fr 260px}
             }
             @media(max-width:1000px){
                 .db-main-grid{grid-template-columns:1fr;grid-template-rows:auto}

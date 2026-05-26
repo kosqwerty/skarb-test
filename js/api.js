@@ -2003,5 +2003,54 @@ const API = {
                 .limit(500);
             return data || [];
         }
+    },
+
+    // ── User Sessions ──────────────────────────────────────────────────
+    userSessions: {
+        // Register / refresh current session
+        async upsert(token, userAgent) {
+            const { error } = await supabase.from('user_sessions')
+                .upsert({ session_token: token, user_id: (await supabase.auth.getUser()).data?.user?.id, user_agent: userAgent, last_seen_at: new Date().toISOString() },
+                    { onConflict: 'session_token' });
+            if (error) throw error;
+        },
+        // Heartbeat — update last_seen_at
+        async ping(token) {
+            await supabase.from('user_sessions')
+                .update({ last_seen_at: new Date().toISOString() })
+                .eq('session_token', token);
+        },
+        // Remove on logout
+        async remove(token) {
+            await supabase.from('user_sessions').delete().eq('session_token', token);
+        },
+        // Count active sessions for a user (admin)
+        async countActive(userId, thresholdMs = 3 * 60 * 1000) {
+            const since = new Date(Date.now() - thresholdMs).toISOString();
+            const { count } = await supabase.from('user_sessions')
+                .select('id', { count: 'exact', head: true })
+                .eq('user_id', userId)
+                .gte('last_seen_at', since);
+            return count || 0;
+        },
+        // Get active sessions list for a user (admin)
+        async getActive(userId, thresholdMs = 3 * 60 * 1000) {
+            const since = new Date(Date.now() - thresholdMs).toISOString();
+            const { data } = await supabase.from('user_sessions')
+                .select('id,session_token,user_agent,last_seen_at,created_at')
+                .eq('user_id', userId)
+                .gte('last_seen_at', since)
+                .order('last_seen_at', { ascending: false });
+            return data || [];
+        },
+        // Terminate all sessions for a user (admin force logout)
+        async removeAll(userId) {
+            await supabase.from('user_sessions').delete().eq('user_id', userId);
+        },
+        // Cleanup stale sessions (older than 10 min) — call periodically
+        async cleanup() {
+            const cutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+            await supabase.from('user_sessions').delete().lt('last_seen_at', cutoff);
+        }
     }
 };

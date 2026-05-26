@@ -822,15 +822,14 @@ const AdminPage = {
         // Load existing birthday reminder (only if target has birthday and is not self)
         let bdReminder = null;
         const canSetBdReminder = u.birth_date && u.id !== AppState.user?.id;
-        if (canSetBdReminder) {
-            const { data } = await supabase
-                .from('birthday_reminders')
-                .select('*')
-                .eq('created_by', AppState.user.id)
-                .eq('target_id', u.id)
-                .maybeSingle();
-            bdReminder = data;
-        }
+        const [bdReminderResult, activeSessions] = await Promise.all([
+            canSetBdReminder
+                ? supabase.from('birthday_reminders').select('*')
+                    .eq('created_by', AppState.user.id).eq('target_id', u.id).maybeSingle()
+                : Promise.resolve({ data: null }),
+            API.userSessions.getActive(u.id).catch(() => [])
+        ]);
+        bdReminder = bdReminderResult.data;
 
         const chip = (label, val) => val ? `<div class="up-chip"><span class="up-chip-l">${label}</span><span class="up-chip-v">${val}</span></div>` : '';
         const isActive = u.is_active !== false;
@@ -898,7 +897,36 @@ const AdminPage = {
                         ${u.position_since ? chip('На посаді з', `${Fmt.date(u.position_since)} <span style="font-size:.75rem;color:var(--text-muted)">${this._tenureStr(u.position_since)}</span>`) : ''}
                         ${chip('Реєстрація', Fmt.datetime(u.created_at))}
                         ${u.last_sign_in_at ? chip('Остання активність', Fmt.datetime(u.last_sign_in_at)) : ''}
+                        ${activeSessions.length > 0 ? `<div class="up-chip up-chip-sessions">
+                            <span class="up-chip-l">Відкриті сесії</span>
+                            <span class="up-chip-v" style="display:flex;align-items:center;gap:.4rem">
+                                <span style="display:inline-flex;align-items:center;justify-content:center;width:1.3rem;height:1.3rem;border-radius:50%;background:rgba(16,185,129,.15);color:#10b981;font-size:.75rem;font-weight:700">${activeSessions.length}</span>
+                                <span style="color:#10b981;font-size:.78rem">активн${activeSessions.length === 1 ? 'а' : activeSessions.length < 5 ? 'і' : 'их'}</span>
+                            </span>
+                        </div>` : chip('Відкриті сесії', '<span style="color:var(--text-muted)">немає</span>')}
                     </div>
+                    ${activeSessions.length > 0 ? `
+                    <div class="up-section">
+                        <div class="up-section-title"><i class="fa-solid fa-display" style="margin-right:.3rem"></i>Активні сесії (${activeSessions.length})</div>
+                        ${activeSessions.map(s => {
+                            const ua = s.user_agent || '';
+                            const isMobile = /Mobile|Android|iPhone|iPad/i.test(ua);
+                            const browser = ua.match(/Chrome\/[\d.]+/) ? 'Chrome'
+                                : ua.match(/Firefox\/[\d.]+/) ? 'Firefox'
+                                : ua.match(/Safari\/[\d.]+/) && !ua.includes('Chrome') ? 'Safari'
+                                : ua.match(/Edg\/[\d.]+/) ? 'Edge'
+                                : 'Браузер';
+                            const icon = isMobile ? 'fa-mobile-screen' : 'fa-desktop';
+                            const seenAgo = Math.round((Date.now() - new Date(s.last_seen_at).getTime()) / 1000);
+                            const seenStr = seenAgo < 60 ? `${seenAgo} с тому` : `${Math.round(seenAgo/60)} хв тому`;
+                            return `<div style="display:flex;align-items:center;gap:.6rem;padding:.4rem .5rem;border-radius:var(--radius-md);background:var(--bg-raised);margin-bottom:.35rem;border:1px solid var(--border)">
+                                <i class="fa-solid ${icon}" style="color:var(--primary);width:1rem;text-align:center;flex-shrink:0"></i>
+                                <span style="font-size:.82rem;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Fmt.esc(browser)}${isMobile ? ' · 📱' : ''}</span>
+                                <span style="font-size:.72rem;color:var(--text-muted);flex-shrink:0">${seenStr}</span>
+                                <span style="width:.55rem;height:.55rem;border-radius:50%;background:#10b981;flex-shrink:0" title="Онлайн"></span>
+                            </div>`;
+                        }).join('')}
+                    </div>` : ''}
                     ${u.bio ? `
                     <div class="up-section">
                         <div class="up-section-title">Про себе</div>
@@ -1260,9 +1288,11 @@ const AdminPage = {
         if (!ok) return;
         try {
             await API.profiles.forceLogout(userId);
-            // Обнуляємо last_seen_at — dot одразу стає сірим
-            // force_logout лишається true до повторного входу користувача
-            await supabase.from('profiles').update({ last_seen_at: null }).eq('id', userId);
+            // Обнуляємо last_seen_at і видаляємо всі сесії
+            await Promise.all([
+                supabase.from('profiles').update({ last_seen_at: null }).eq('id', userId),
+                API.userSessions.removeAll(userId).catch(() => {})
+            ]);
             // Оновлюємо dot прямо в DOM — не чекаємо перезавантаження таблиці
             const row = document.getElementById(`urow-${userId}`);
             if (row) {

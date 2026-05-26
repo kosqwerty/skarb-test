@@ -201,6 +201,7 @@ const Auth = {
                 AppState._realRole = null;
                 RolePreviewBanner.hide();
                 InactivityWatcher.stop();
+                Heartbeat.removeSession().catch(() => {});
                 Heartbeat.stop();
                 if (this._blockChannel) {
                     supabase.removeChannel(this._blockChannel);
@@ -257,6 +258,20 @@ const Auth = {
 const Heartbeat = {
     _INTERVAL: 30 * 1000,        // 30 секунд
     _timer: null,
+    _sessionToken: null,         // унікальний ключ цієї вкладки/сесії
+
+    _getToken() {
+        if (!this._sessionToken) {
+            // Береться з sessionStorage щоб кожна вкладка мала свій токен
+            let t = sessionStorage.getItem('_lms_stok');
+            if (!t) {
+                t = 'st_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2);
+                sessionStorage.setItem('_lms_stok', t);
+            }
+            this._sessionToken = t;
+        }
+        return this._sessionToken;
+    },
 
     async start() {
         this.stop();
@@ -280,6 +295,14 @@ const Heartbeat = {
                 .eq('id', id)
                 .select('is_active, force_logout')
                 .maybeSingle();
+
+            // Ping сесійного запису (fire-and-forget)
+            const token = this._getToken();
+            supabase.from('user_sessions')
+                .upsert({ session_token: token, user_id: id, user_agent: navigator.userAgent.slice(0, 200), last_seen_at: new Date().toISOString() },
+                    { onConflict: 'session_token' })
+                .then(() => {});
+
             if (!data) return;
             // Fallback для блокування (Realtime міг не спрацювати)
             if (data.is_active === false) {
@@ -295,6 +318,16 @@ const Heartbeat = {
                 await supabase.auth.signOut();
             }
         } catch(_) {}
+    },
+
+    async removeSession() {
+        const token = this._sessionToken;
+        if (!token) return;
+        try {
+            await supabase.from('user_sessions').delete().eq('session_token', token);
+        } catch(_) {}
+        sessionStorage.removeItem('_lms_stok');
+        this._sessionToken = null;
     }
 };
 

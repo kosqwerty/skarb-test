@@ -839,15 +839,20 @@ const DashboardPage = {
         </style>
         <div class="dp-wrap">${secToday}${secTomorrow}</div>`;
 
-        setTimeout(() => {
+        setTimeout(async () => {
+            // Не показуємо якщо вже відкрито нагадування з календаря
+            // showTodayReminder стартує за 300мс + async запити — чекаємо достатньо
+            if (window._calPopupShown) return;
+            window._dashPopupShown = true;
             Modal.open({
                 title: '📅 План на сьогодні і завтра',
                 body,
-                footer: `<button class="btn btn-primary" onclick="Modal.close()">Зрозуміло</button>`,
-                size: 'sm'
+                footer: `<button class="btn btn-primary" onclick="Modal.close();window._dashPopupShown=false;">Зрозуміло</button>`,
+                size: 'sm',
+                onClose: () => { window._dashPopupShown = false; }
             });
             localStorage.setItem(storageKey, '1');
-        }, 600);
+        }, 1500);
     },
 
     _renderAlerts(unackedDocs, recentNotifs) {

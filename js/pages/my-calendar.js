@@ -716,6 +716,10 @@ ${this._styles()}`;
             upcomingByDate[e.date].push(e);
         }
 
+        // Якщо вже відкрито інший popup (план дня) — чекаємо поки він закриється
+        if (window._dashPopupShown) return;
+        window._calPopupShown = true;
+
         const el = document.createElement('div');
         el.id = 'mc-reminder-modal';
         el.className = 'mc-overlay';
@@ -756,10 +760,11 @@ ${this._styles()}`;
 </div>`;
 
         document.body.appendChild(el);
-        el.querySelector('#mc-reminder-open').onclick    = () => { dismiss(); Router.go('my-calendar'); };
-        el.querySelector('#mc-reminder-dismiss').onclick = () => dismiss();
-        el.querySelector('#mc-reminder-close').onclick   = () => dismiss();
-        el.addEventListener('click', e => { if (e.target === el) dismiss(); });
+        const _close = () => { dismiss(); window._calPopupShown = false; };
+        el.querySelector('#mc-reminder-open').onclick    = () => { _close(); Router.go('my-calendar'); };
+        el.querySelector('#mc-reminder-dismiss').onclick = () => _close();
+        el.querySelector('#mc-reminder-close').onclick   = () => _close();
+        el.addEventListener('click', e => { if (e.target === el) _close(); });
     },
 
     // ── Styles ───────────────────────────────────────────────────

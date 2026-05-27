@@ -12,6 +12,13 @@ const NewsPage = {
             return;
         }
 
+        // Скидаємо бейдж новин — користувач зайшов на сторінку
+        localStorage.setItem('news_last_seen', new Date().toISOString());
+        const newsBadge = document.getElementById('news-bell-badge');
+        if (newsBadge) newsBadge.classList.add('hidden');
+        const newsBtn = document.getElementById('news-bell');
+        if (newsBtn) newsBtn.classList.remove('has-unread');
+
         UI.setBreadcrumb([{ label: 'Новини' }]);
         this._page = 0;
 
@@ -172,6 +179,13 @@ const NewsPage = {
 
     // ── Article View ──────────────────────────────────────────────
     async _viewArticle(container, id) {
+        // Скидаємо бейдж при відкритті будь-якої новини
+        localStorage.setItem('news_last_seen', new Date().toISOString());
+        const newsBadge = document.getElementById('news-bell-badge');
+        if (newsBadge) newsBadge.classList.add('hidden');
+        const newsBtn = document.getElementById('news-bell');
+        if (newsBtn) newsBtn.classList.remove('has-unread');
+
         container.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
 
         try {

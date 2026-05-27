@@ -1175,7 +1175,7 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
 
             if (this._view === 'docs') {
                 // always rebuild category chips from full unfiltered visible list
-                const cats = [...new Set(filtered.map(r => r.category).filter(c => c && c.toLowerCase() !== 'general'))].sort();
+                const cats = [...new Set(filtered.map(r => r.category).filter(c => c && c.toLowerCase() !== 'general' && c.toLowerCase() !== 'реєстри нпа' && c.toLowerCase() !== 'реєстри'))].sort();
                 const catChips = document.getElementById('docs-cat-chips');
                 if (catChips) {
                     catChips.innerHTML = cats.map(c => `

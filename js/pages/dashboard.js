@@ -139,13 +139,19 @@ const DashboardPage = {
             .db-news-row-title{font-size:.8rem;font-weight:500;color:var(--text-primary);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
             .db-news-row-date{font-size:.65rem;color:var(--text-muted);flex-shrink:0}
             .db-news-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:.4rem;color:var(--text-muted);font-size:.82rem}
-            .db-alc-w{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden;height:320px;width:450px;max-width:100%;display:flex;flex-direction:column;position:relative}
+            .db-alc-w{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden;height:320px;width:400px;max-width:100%;display:flex;flex-direction:column;position:relative}
             .db-alc-w::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--alc-accent,var(--primary));z-index:1}
-            .db-alc-head{padding:.75rem 1rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;background:var(--bg-surface)}
-            .db-alc-head-left{display:flex;align-items:center;gap:.55rem}
-            .db-alc-head-icon{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:.9rem;flex-shrink:0}
-            .db-alc-head-title{font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-primary)}
+            .db-alc-head{padding:.7rem 1rem .7rem 1rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;background:linear-gradient(120deg,color-mix(in srgb,var(--alc-accent,var(--primary)) 10%,var(--bg-surface)),var(--bg-surface));position:relative;overflow:hidden}
+            .db-alc-head::after{content:'';position:absolute;right:-18px;top:50%;transform:translateY(-50%);width:70px;height:70px;border-radius:50%;background:color-mix(in srgb,var(--alc-accent,var(--primary)) 7%,transparent);pointer-events:none}
+            .db-alc-head-left{display:flex;align-items:center;gap:.65rem}
+            .db-alc-head-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0;box-shadow:0 2px 8px color-mix(in srgb,var(--alc-accent,var(--primary)) 30%,transparent)}
+            .db-alc-head-info{display:flex;flex-direction:column;gap:.05rem}
+            .db-alc-head-title{font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-primary);line-height:1}
+            .db-alc-head-sub{font-size:.66rem;color:var(--text-muted);line-height:1}
+            .db-alc-head-right{display:flex;align-items:center;gap:.5rem}
             .db-alc-badge{font-size:.65rem;font-weight:800;padding:.15rem .5rem;border-radius:20px;line-height:1.4}
+            .db-alc-goto{width:26px;height:26px;border-radius:50%;border:1px solid var(--border);background:var(--bg-surface);color:var(--text-muted);display:flex;align-items:center;justify-content:center;font-size:.65rem;cursor:pointer;transition:all .15s;flex-shrink:0}
+            .db-alc-goto:hover{background:var(--alc-accent,var(--primary));border-color:var(--alc-accent,var(--primary));color:#fff}
             .db-alc-body{flex:1;overflow-y:auto;scrollbar-width:thin;display:flex;flex-direction:column}
             .db-alc-doc-item{display:flex;align-items:center;gap:.6rem;padding:.55rem 1rem;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s}
             .db-alc-doc-item:hover{background:var(--bg-raised)}
@@ -875,6 +881,9 @@ const DashboardPage = {
                     <div class="db-alc-empty-sub">Ви ознайомлені з усіма документами</div>
                    </div>`;
 
+            const docSubtitle = hasIssue
+                ? `${unackedDocs.length} потребу${unackedDocs.length === 1 ? 'є' : 'ють'} ознайомлення`
+                : 'Всі документи ознайомлені';
             docsEl.innerHTML = `
                 <div class="db-alc-w" style="--alc-accent:${accentDoc}">
                     <div class="db-alc-head">
@@ -882,9 +891,17 @@ const DashboardPage = {
                             <div class="db-alc-head-icon" style="background:${iconBg};color:${accentDoc}">
                                 <i class="fa-regular fa-file-lines"></i>
                             </div>
-                            <span class="db-alc-head-title">Документи</span>
+                            <div class="db-alc-head-info">
+                                <span class="db-alc-head-title">Документи</span>
+                                <span class="db-alc-head-sub">${docSubtitle}</span>
+                            </div>
                         </div>
-                        ${badgeHtml}
+                        <div class="db-alc-head-right">
+                            ${badgeHtml}
+                            <button class="db-alc-goto" onclick="Router.go('documents')" title="Перейти до документів">
+                                <i class="fa-solid fa-arrow-right"></i>
+                            </button>
+                        </div>
                     </div>
                     <div class="db-alc-body">${body}</div>
                 </div>`;

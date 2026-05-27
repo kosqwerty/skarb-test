@@ -100,8 +100,8 @@ const DashboardPage = {
             .db-course-name{font-size:.82rem;font-weight:600;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:.5rem}
 
             .db-main-grid{display:grid;grid-template-columns:1fr 300px;grid-template-rows:auto 1fr;gap:clamp(.5rem,.75vw,.85rem);margin-bottom:1.5rem;min-width:0;width:100%}
-            .db-content-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:clamp(.5rem,.75vw,.85rem);align-items:start;min-width:0}
-            .db-content-cols>*{min-width:0}
+            .db-content-cols{display:flex;flex-direction:row;flex-wrap:wrap;gap:clamp(.5rem,.75vw,.85rem);align-items:start;min-width:0}
+            .db-content-cols>*{flex:0 0 auto}
             .db-cal-col{grid-column:2;grid-row:1/3;display:flex;flex-direction:column;gap:.75rem;min-width:0;width:100%}
             .db-recent-row{grid-column:1;grid-row:2;min-width:0}
             @media(max-width:1200px){
@@ -896,9 +896,9 @@ const DashboardPage = {
                             <div class="db-alc-head-icon" style="background:${iconBg};color:${accentDoc}">
                                 <i class="fa-regular fa-file-lines"></i>
                             </div>
-                            <div class="db-alc-head-info">
+                            <div class="db-alc-head-info" style="gap:.25rem">
                                 <span class="db-alc-head-title">Документи</span>
-                                <span class="db-alc-head-sub">${docSubtitle}</span>
+                                ${hasIssue ? `<span class="db-alc-head-sub" style="margin-top:.15rem">${unackedDocs.length} потребу${unackedDocs.length === 1 ? 'є' : 'ють'} ознайомлення</span>` : ''}
                             </div>
                         </div>
                         <div class="db-alc-head-right">

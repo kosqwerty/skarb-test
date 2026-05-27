@@ -139,7 +139,7 @@ const DashboardPage = {
             .db-news-row-title{font-size:.8rem;font-weight:500;color:var(--text-primary);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
             .db-news-row-date{font-size:.65rem;color:var(--text-muted);flex-shrink:0}
             .db-news-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:.4rem;color:var(--text-muted);font-size:.82rem}
-            .db-alc-w{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden;height:clamp(320px,30vh,420px);display:flex;flex-direction:column;position:relative}
+            .db-alc-w{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden;height:320px;width:450px;max-width:100%;display:flex;flex-direction:column;position:relative}
             .db-alc-w::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--alc-accent,var(--primary));z-index:1}
             .db-alc-head{padding:.75rem 1rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;background:var(--bg-surface)}
             .db-alc-head-left{display:flex;align-items:center;gap:.55rem}

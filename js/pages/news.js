@@ -753,8 +753,13 @@ const NewsPage = {
     // Escape structural tags that would break innerHTML parsing (</html>, </body>, </head>)
     _safeHtml(html) {
         if (!html) return html;
-        return html.replace(/<\/?(html|body|head|meta|title|base|link|script|style)\b[^>]*>/gi,
+        // Remove dangerous full blocks (script, style with content)
+        let out = html.replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '');
+        out = out.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '');
+        // Strip dangerous bare tags (html/body/head/meta/title/base/link)
+        out = out.replace(/<\/?(html|body|head|meta|title|base|link)\b[^>]*>/gi,
             m => m.replace(/</g, '&lt;').replace(/>/g, '&gt;'));
+        return out;
     },
 
     _draggedImgUrl: null,

@@ -226,7 +226,6 @@ const DashboardPage = {
             <div class="db-content-cols">
                 <div id="db-alerts-docs"></div>
                 <div id="db-alerts-notif"></div>
-                <div id="db-news-widget"></div>
             </div>
             <div class="db-cal-col">
                 <div id="db-cal-widget"></div>
@@ -280,22 +279,26 @@ const DashboardPage = {
         this._renderRecentlyViewed();
         this._renderCalWidget(calEvents, today, scheduleEntries);
         this._renderImportantEvents(calEvents, today);
-        this._showDayPlanPopup(scheduleEntries, calEvents, today);
         this._renderAlerts(unackedDocs, recentNotifs);
         this._renderBirthdays(birthdays);
-
-        this._renderNewsWidget(newsRes.data || []);
 
         // Показати головну новину один раз за сесію (якщо не відхилено назавжди)
         const featured = (newsRes.data || []).find(n => n.is_featured || n.is_pinned);
         this._featuredNewsId = featured?.id || null;
-        if (featured) {
+        const hasFeaturedNews = !!(() => {
+            if (!featured) return false;
             const sessionKey = `db_featured_news_${featured.id}`;
             const dismissed = AppState.profile?.dismissed_news || [];
-            if (!sessionStorage.getItem(sessionKey) && !dismissed.includes(featured.id)) {
-                sessionStorage.setItem(sessionKey, '1');
-                setTimeout(() => this._openNewsModal(featured.id), 800);
-            }
+            return !sessionStorage.getItem(sessionKey) && !dismissed.includes(featured.id);
+        })();
+
+        if (hasFeaturedNews) {
+            const sessionKey = `db_featured_news_${featured.id}`;
+            sessionStorage.setItem(sessionKey, '1');
+            setTimeout(() => this._openNewsModal(featured.id), 800);
+        } else {
+            // План дня — тільки якщо немає featured news що відкривається
+            this._showDayPlanPopup(scheduleEntries, calEvents, today);
         }
     },
 

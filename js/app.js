@@ -57,6 +57,7 @@ const App = {
         // Load unread counts after sidebar is in DOM
         UI.loadNotificationCount();
         UI.loadDocBadge();
+        UI.loadNewsCount();
 
         // Load bookmarks async (updates nav stars when done)
         Bookmarks.load();

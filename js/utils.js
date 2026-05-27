@@ -214,6 +214,120 @@ const UI = {
         });
         if (bellBtn) bellBtn.classList.toggle('has-unread', count > 0);
     },
+
+    _newsPopupLatest: null,   // кешована остання новина
+
+    async loadNewsCount() {
+        if (!AppState.user?.id) return;
+        try {
+            const lastSeen = localStorage.getItem('news_last_seen') || '1970-01-01';
+            const { data } = await supabase
+                .from('news')
+                .select('id, title, excerpt, thumbnail_url, thumbnail_position, published_at, created_at')
+                .eq('is_published', true)
+                .order('created_at', { ascending: false })
+                .limit(20);
+
+            if (!data || !data.length) return;
+
+            // Зберігаємо останню для popup
+            this._newsPopupLatest = data[0];
+
+            // Рахуємо новіші за lastSeen
+            const newOnes = data.filter(n => (n.published_at || n.created_at) > lastSeen);
+            const count = newOnes.length;
+
+            const badge  = document.getElementById('news-bell-badge');
+            const newBtn = document.getElementById('news-bell');
+            if (badge) {
+                if (count > 0) { badge.textContent = count > 99 ? '99+' : count; badge.classList.remove('hidden'); }
+                else { badge.classList.add('hidden'); }
+            }
+            if (newBtn) newBtn.classList.toggle('has-unread', count > 0);
+        } catch(_) {}
+    },
+
+    toggleNewsPopup() {
+        const existing = document.getElementById('news-popup');
+        if (existing) { existing.remove(); return; }
+
+        const n = this._newsPopupLatest;
+        if (!n) { Router.go('news'); return; }
+
+        const url = n.thumbnail_url ? Fmt.safeUrl(n.thumbnail_url) : null;
+        const pos = n.thumbnail_position || 'center';
+        const date = Fmt.date(n.published_at || n.created_at);
+        const excerpt = n.excerpt || '';
+
+        const btn = document.getElementById('news-bell');
+        const btnRect = btn ? btn.getBoundingClientRect() : { bottom: 60, right: 60 };
+        const popupWidth = 380;
+        const leftPos = Math.max(8, btnRect.right - popupWidth);
+        const topPos  = btnRect.bottom + 8;
+
+        const popup = document.createElement('div');
+        popup.id = 'news-popup';
+        popup.style.cssText = `position:fixed;z-index:9999;top:${topPos}px;left:${leftPos}px;width:${popupWidth}px`;
+        popup.innerHTML = `
+            <style>
+            #news-popup{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);box-shadow:0 8px 32px rgba(0,0,0,.18);overflow:hidden;animation:np-in .18s ease}
+            @keyframes np-in{from{opacity:0;transform:translateY(-8px) scale(.97)}to{opacity:1;transform:none}}
+            .np-hero{height:140px;position:relative;overflow:hidden;background:#0f1f42;cursor:pointer}
+            .np-hero-bg{position:absolute;inset:-8px;background-size:cover;background-position:${pos};filter:blur(10px) brightness(.45);transform:scale(1.05)}
+            .np-hero-img{position:absolute;inset:0;background-size:cover;background-position:${pos}}
+            .np-hero-grad{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.65) 0%,transparent 60%)}
+            .np-hero-date{position:absolute;bottom:.6rem;right:.75rem;font-size:.65rem;color:rgba(255,255,255,.7);z-index:2}
+            .np-body{padding:.85rem 1rem .75rem}
+            .np-title{font-size:.9rem;font-weight:700;line-height:1.4;color:var(--text-primary);margin-bottom:.35rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;cursor:pointer}
+            .np-title:hover{color:var(--primary)}
+            .np-excerpt{font-size:.78rem;color:var(--text-secondary);line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:.65rem}
+            .np-footer{display:flex;gap:.5rem;justify-content:space-between;align-items:center}
+            .np-badge{font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#f59e0b;background:rgba(245,158,11,.1);padding:2px 8px;border-radius:20px;border:1px solid rgba(245,158,11,.25)}
+            </style>
+            <div class="np-hero" onclick="UI._openNewsFromPopup('${n.id}')">
+                ${url ? `<div class="np-hero-bg" style="background-image:url('${url}')"></div>
+                         <div class="np-hero-img" style="background-image:url('${url}')"></div>` : ''}
+                <div class="np-hero-grad"></div>
+                <div class="np-hero-date">${date}</div>
+            </div>
+            <div class="np-body">
+                <div class="np-title" onclick="UI._openNewsFromPopup('${n.id}')">${Fmt.esc(n.title)}</div>
+                ${excerpt ? `<div class="np-excerpt">${Fmt.esc(excerpt)}</div>` : ''}
+                <div class="np-footer">
+                    <span class="np-badge">Новини</span>
+                    <button class="btn btn-ghost btn-sm" onclick="UI._dismissNewsPopup();Router.go('news')" style="font-size:.72rem">
+                        Всі новини <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                </div>
+            </div>`;
+
+        document.body.appendChild(popup);
+
+        // Закрити при кліку поза popup
+        setTimeout(() => {
+            document.addEventListener('click', function _close(e) {
+                if (!popup.contains(e.target) && e.target.id !== 'news-bell') {
+                    popup.remove();
+                    document.removeEventListener('click', _close);
+                }
+            });
+        }, 50);
+    },
+
+    _openNewsFromPopup(id) {
+        this._dismissNewsPopup();
+        // Скидаємо бейдж
+        localStorage.setItem('news_last_seen', new Date().toISOString());
+        const badge = document.getElementById('news-bell-badge');
+        if (badge) badge.classList.add('hidden');
+        const btn = document.getElementById('news-bell');
+        if (btn) btn.classList.remove('has-unread');
+        Router.go(`news/${id}`);
+    },
+
+    _dismissNewsPopup() {
+        document.getElementById('news-popup')?.remove();
+    },
     _getNavItems(role) {
         const expertItem   = { icon: '<i class="fa-solid fa-ranking-star" style="color:#a78bfa"></i>', label: 'Skill Up', route: 'expert-path' };
         const common = [

@@ -12,10 +12,18 @@ const RecentlyViewed = {
         items.unshift({ type, id, title, thumbnail, route, color, icon, viewedAt: Date.now() });
         if (items.length > this._max) items = items.slice(0, this._max);
         try { localStorage.setItem(this._k(), JSON.stringify(items)); } catch {}
+        this._updateBadge(items.length);
     },
     get() {
         try { return JSON.parse(localStorage.getItem(this._k()) || '[]'); } catch { return []; }
-    }
+    },
+    _updateBadge(count) {
+        const badge = document.getElementById('history-bell-badge');
+        if (!badge) return;
+        if (count > 0) { badge.textContent = count > 99 ? '99+' : count; badge.classList.remove('hidden'); }
+        else badge.classList.add('hidden');
+    },
+    init() { this._updateBadge(this.get().length); }
 };
 
 const DashboardPage = {
@@ -237,7 +245,6 @@ const DashboardPage = {
                 <div id="db-cal-widget"></div>
                 <div id="db-important"></div>
             </div>
-            <div id="db-recent-courses" class="db-recent-row"></div>
         </div>
 
         `;
@@ -282,7 +289,6 @@ const DashboardPage = {
         ]);
 
         this._renderWelcome(enrollments, testsCount, surveysCount);
-        this._renderRecentlyViewed();
         this._renderCalWidget(calEvents, today, scheduleEntries);
         this._renderImportantEvents(calEvents, today);
         this._renderAlerts(unackedDocs, recentNotifs);
@@ -306,6 +312,163 @@ const DashboardPage = {
             // План дня — тільки якщо немає featured news що відкривається
             this._showDayPlanPopup(scheduleEntries, calEvents, today);
         }
+
+        // Тур для нових користувачів (запускаємо після рендеру)
+        setTimeout(() => this._startTour(), 1800);
+    },
+
+    _startTour() {
+        const steps = [
+            {
+                icon: '👋',
+                title: 'Ласкаво просимо до Скарбниці!',
+                text: 'Це ваша особиста сторінка — <strong>Головна</strong>. Давайте пройдемось по основних можливостях порталу. Це займе лише хвилину.',
+            },
+            {
+                target: ['#db-alerts-docs', '#db-content-cols'],
+                position: 'right',
+                icon: '📋',
+                title: 'Документи для ознайомлення',
+                text: 'Тут відображаються документи, з якими вам потрібно ознайомитись та підписати. Цифра показує кількість непрочитаних.',
+            },
+            {
+                target: ['#db-alerts-notif', '#db-alerts-docs', '#db-content-cols'],
+                position: 'right',
+                icon: '🔔',
+                title: 'Сповіщення',
+                text: 'Нові сповіщення від адміністрації, призначені тести та курси — все тут. Кнопка <em>«Прочитати всі»</em> миттєво очищає список.',
+            },
+            {
+                target: '.db-cal-col',
+                position: 'left',
+                icon: '📅',
+                title: 'Календар та важливі події',
+                text: 'Ваш особистий календар — <strong>натисніть на дату</strong> щоб додати подію або нагадування. Нижче відображаються <strong>важливі події сьогодні</strong> — термінові наради, дедлайни. При вході в портал з\'являється попап з планом дня.',
+            },
+            {
+                target: ['#db-birthdays', '#db-cal-widget'],
+                position: 'bottom',
+                icon: '🎂',
+                title: 'Дні народження колег',
+                text: 'Портал автоматично нагадує про <strong>дні народження</strong> колег. Коли у когось ДН — з\'являється яскравий банер з можливістю надіслати привітання прямо в системі.',
+            },
+            {
+                icon: '🎉',
+                title: 'Ваш день народження',
+                text: 'Якщо сьогодні <strong>ваш день народження</strong> — портал зустріне вас ось таким святковим вікном при вході!',
+                tipStyle: { top: '50%', bottom: 'auto', left: 'auto', right: '24px', transform: 'translateY(-50%)', width: '680px' },
+                noBackdrop: true,
+                onShow: () => {
+                    BirthdayModal._show({ ...AppState.profile, birth_date: new Date().toISOString().slice(0,10) });
+                    const tourRoot = document.getElementById('tour-root');
+                    if (tourRoot) tourRoot.style.zIndex = '10100';
+                },
+                onLeave: () => {
+                    // Закриваємо без анімації польоту — інакше лишається бейдж тортика в топбарі
+                    const modal = document.getElementById('birthday-modal');
+                    if (modal) { modal.style.transition = 'opacity .2s'; modal.style.opacity = '0'; setTimeout(() => { modal.remove(); document.getElementById('bd-topbar-cake')?.remove(); }, 220); }
+                    const tourRoot = document.getElementById('tour-root');
+                    if (tourRoot) tourRoot.style.zIndex = '99990';
+                },
+            },
+            {
+                target: '.nav-item[data-route="news"]',
+                position: 'right',
+                icon: '📰',
+                title: 'Новини компанії',
+                text: 'Розділ <strong>Новини</strong> доступний у бічному меню. А іконка 📣 у шапці показує лічильник нових новин — натисніть щоб побачити превью останньої без переходу в розділ.',
+            },
+            {
+                target: '#ntf-bell',
+                position: 'left',
+                icon: '🛎️',
+                title: 'Дзвоник сповіщень',
+                text: 'Оновлення в реальному часі — нові призначення, нагадування, повідомлення від адміністрації. Число оновлюється автоматично.',
+            },
+            {
+                target: '.sidebar-nav',
+                position: 'right',
+                icon: '🚀',
+                title: 'Ви готові!',
+                text: (() => {
+                    const r = AppState.profile?.role;
+                    const isStaff = ['owner','admin','smm','teacher'].includes(r);
+                    const isMgr   = r === 'manager';
+                    if (isStaff) return 'Досліджуйте портал через бокове меню: <strong>Skill Up</strong>, <strong>Новини</strong>, <strong>База знань</strong>, <strong>Документи</strong>, <strong>Меню порталу</strong>. В розділі <strong>Управління</strong> — аналітика, планування та адміністрування. Успіхів!';
+                    if (isMgr)   return 'Досліджуйте портал через бокове меню: <strong>Skill Up</strong>, <strong>Новини</strong>, <strong>База знань</strong>, <strong>Документи</strong>. В розділі <strong>Управління</strong> є <strong>Розділ планування</strong>. Успіхів!';
+                    return 'Досліджуйте портал через бокове меню. Успіхів!';
+                })(),
+            },
+        ];
+
+        if (localStorage.getItem('tour_done_dashboard')) return;
+        this._injectTourDemo();
+        TourManager.start('dashboard', steps, {
+            force: true, // прапорець вже перевірили вище
+            onDone: () => this._cleanupTourDemo(),
+        });
+    },
+
+    _injectTourDemo() {
+        const today = new Date().toISOString().slice(0, 10);
+
+        // Документи для ознайомлення
+        this._renderAlerts(
+            [
+                { id: 'demo-doc-1', title: 'Наказ №15 — Охорона праці 2026' },
+                { id: 'demo-doc-2', title: 'Інструкція з обслуговування клієнтів' },
+                { id: 'demo-doc-3', title: 'Положення про преміювання співробітників' },
+            ],
+            [
+                { id: 'demo-ntf-1', title: 'Призначено новий тест', message: 'Оцінка техніки безпеки', type: 'test_assigned', is_read: false, link: 'my-tests' },
+                { id: 'demo-ntf-2', title: 'Новий курс для вас', message: 'Клієнтський сервіс 2026', type: 'course_enrolled', is_read: false, link: 'courses' },
+                { id: 'demo-ntf-3', title: 'Нагадування', message: 'Перегляньте оновлені документи', type: 'doc_reminder', is_read: false, link: 'documents' },
+            ]
+        );
+
+        // Дні народження
+        this._renderBirthdays([
+            { id: 'b1', full_name: 'Іванченко Марія Петрівна', avatar_url: null, job_position: 'Менеджер', city: 'Київ' },
+            { id: 'b2', full_name: 'Коваль Олексій Вікторович', avatar_url: null, job_position: 'Касир', city: 'Львів' },
+        ]);
+
+        // Важливі події
+        this._renderImportantEvents([
+            { id: 'ie1', title: 'Термінова нарада', date: today, time: '10:00', is_important: true, acked_date: null, color: '#ef4444' },
+            { id: 'ie2', title: 'Дедлайн звіту Q2', date: today, time: '18:00', is_important: true, acked_date: null, color: '#f59e0b' },
+        ], today);
+
+        // Дзвоник сповіщень — показуємо бейдж
+        UI._setNotificationBadge(5);
+
+        // Іконка новин — показуємо бейдж і підставляємо демо-новину для popup
+        UI._newsPopupLatest = {
+            id: 'demo-news-1',
+            title: 'Оновлення умов преміювання на 2026 рік',
+            excerpt: 'Ознайомтесь з новими умовами нарахування премій та бонусів для всіх підрозділів.',
+            thumbnail_url: null,
+            thumbnail_position: 'center',
+            published_at: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+        };
+        const newsBadge = document.getElementById('news-bell-badge');
+        const newsBell  = document.getElementById('news-bell');
+        if (newsBadge) { newsBadge.textContent = '3'; newsBadge.classList.remove('hidden'); }
+        if (newsBell)  newsBell.classList.add('has-unread');
+
+        this._tourDemoActive = true;
+    },
+
+    _cleanupTourDemo() {
+        if (!this._tourDemoActive) return;
+        this._tourDemoActive = false;
+        UI._newsPopupLatest = null;
+        document.getElementById('news-popup')?.remove();
+        document.getElementById('birthday-modal')?.remove();
+        document.getElementById('bd-topbar-cake')?.remove();
+        // Перезапускаємо init щоб відновити реальні дані
+        const container = document.getElementById('page-content');
+        if (container) this.init(container);
     },
 
 

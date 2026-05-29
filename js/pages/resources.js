@@ -1787,6 +1787,17 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
 
             Modal.close();
             await Promise.all([this.load(), this._loadFilters()]);
+            if (AppState.isAdmin()) this._loadDbSize();
+            // If editing from resource view page (no list in DOM), refresh the viewer
+            if (!document.getElementById('resource-list')) {
+                const hash = window.location.hash;
+                const match = hash.match(/#\/resource\/([^?]+)/);
+                if (match) {
+                    const from = new URLSearchParams(hash.split('?')[1] || '').get('from') || '';
+                    const container = document.getElementById('page-content');
+                    if (container) await ResourceViewPage.init(container, { id: match[1], from });
+                }
+            }
         } catch (e) {
             Toast.error('Помилка', e.message);
         } finally {
@@ -1837,6 +1848,7 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
             Modal.close();
             Toast.success('Переміщено до кошика');
             await this.load();
+            if (AppState.isAdmin()) this._loadDbSize();
         } catch(e) {
             Toast.error('Помилка', e.message);
             if (btn) { btn.disabled = false; btn.textContent = 'Видалити'; }
@@ -1931,6 +1943,7 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
             Toast.success('Видалено', `${ids.length} файл(ів) видалено назавжди`);
             await this._openTrash();
             await this.load();
+            if (AppState.isAdmin()) this._loadDbSize();
         } catch(e) {
             Toast.error('Помилка', e.message);
             if (btn) { btn.disabled = false; btn.innerHTML = `<i class="fa-solid fa-trash"></i> Видалити вибрані`; }
@@ -1956,6 +1969,7 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
             Toast.success('Видалено назавжди');
             await this._openTrash();
             await this.load();
+            if (AppState.isAdmin()) this._loadDbSize();
         } catch(e) {
             Toast.error('Помилка', e.message);
         }

@@ -328,6 +328,92 @@ const UI = {
     _dismissNewsPopup() {
         document.getElementById('news-popup')?.remove();
     },
+
+    toggleHistoryPopup() {
+        const existing = document.getElementById('history-popup');
+        if (existing) { existing.remove(); return; }
+
+        const items = (() => {
+            try { return JSON.parse(localStorage.getItem('lms_rv_' + (AppState.user?.id || 'anon')) || '[]'); } catch { return []; }
+        })().slice(0, 20);
+
+        const btn = document.getElementById('history-bell');
+        const btnRect = btn ? btn.getBoundingClientRect() : { bottom: 60, right: 60 };
+        const popupWidth = 320;
+        const leftPos = Math.max(8, btnRect.right - popupWidth);
+        const topPos  = btnRect.bottom + 8;
+
+        const typeLabel = { course: 'Курс', news: 'Новина', document: 'Документ', test: 'Тест', survey: 'Опитування', resource: 'Матеріал' };
+        const ago = (ts) => {
+            const m = Math.floor((Date.now() - ts) / 60000);
+            if (m < 1) return 'щойно';
+            if (m < 60) return `${m} хв тому`;
+            const h = Math.floor(m / 60);
+            if (h < 24) return `${h} год тому`;
+            return `${Math.floor(h / 24)} дн тому`;
+        };
+
+        const listHtml = items.length ? items.map(item => `
+            <div class="hp-item" onclick="document.getElementById('history-popup')?.remove();Router.go(${JSON.stringify(item.route).replace(/"/g,'&quot;')})">
+                <div class="hp-icon" style="background:${item.color}22;color:${item.color}">
+                    <i class="fa-solid ${item.icon || 'fa-file'}"></i>
+                </div>
+                <div class="hp-info">
+                    <div class="hp-title">${Fmt.esc(item.title)}</div>
+                    <div class="hp-meta">
+                        <span class="hp-badge" style="color:${item.color}">${typeLabel[item.type] || item.type}</span>
+                        <span class="hp-ago">${ago(item.viewedAt)}</span>
+                    </div>
+                </div>
+            </div>`).join('')
+        : `<div style="padding:2rem 1rem;text-align:center;color:var(--text-muted);font-size:.85rem"><i class="fa-solid fa-clock-rotate-left" style="font-size:1.8rem;display:block;margin-bottom:.5rem;opacity:.3"></i>Список порожній</div>`;
+
+        const popup = document.createElement('div');
+        popup.id = 'history-popup';
+        popup.innerHTML = `
+<style>
+#history-popup{position:fixed;z-index:9100;width:${popupWidth}px;top:${topPos}px;left:${leftPos}px;background:var(--bg-surface);border:1.5px solid var(--border);border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.22);overflow:hidden;animation:hp-drop .15s ease}
+@keyframes hp-drop{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.hp-head{display:flex;align-items:center;gap:.5rem;padding:.7rem 1rem;border-bottom:1px solid var(--border);background:var(--bg-raised)}
+.hp-head-icon{width:28px;height:28px;border-radius:8px;background:rgba(99,102,241,.12);color:#6366f1;display:flex;align-items:center;justify-content:center;font-size:.8rem;flex-shrink:0}
+.hp-head-title{font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-primary);flex:1}
+.hp-clear{font-size:.72rem;color:var(--text-muted);cursor:pointer;padding:.15rem .4rem;border-radius:6px;border:none;background:none}
+.hp-clear:hover{color:#ef4444}
+.hp-list{max-height:420px;overflow-y:auto;scrollbar-width:thin}
+.hp-item{display:flex;align-items:center;gap:.7rem;padding:.6rem 1rem;cursor:pointer;transition:background .12s;border-bottom:1px solid var(--border)}
+.hp-item:last-child{border-bottom:none}
+.hp-item:hover{background:var(--bg-raised)}
+.hp-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.82rem;flex-shrink:0}
+.hp-info{flex:1;min-width:0}
+.hp-title{font-size:.83rem;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hp-meta{display:flex;align-items:center;gap:.4rem;margin-top:.1rem}
+.hp-badge{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.hp-ago{font-size:.68rem;color:var(--text-muted)}
+</style>
+<div class="hp-head">
+    <div class="hp-head-icon"><i class="fa-solid fa-clock-rotate-left"></i></div>
+    <span class="hp-head-title">Нещодавно переглянуті</span>
+    ${items.length ? `<button class="hp-clear" onclick="UI._clearHistory()">Очистити</button>` : ''}
+</div>
+<div class="hp-list">${listHtml}</div>`;
+
+        document.body.appendChild(popup);
+
+        const close = (e) => {
+            if (!popup.contains(e.target) && e.target.id !== 'history-bell') {
+                popup.remove();
+                document.removeEventListener('mousedown', close);
+            }
+        };
+        setTimeout(() => document.addEventListener('mousedown', close), 50);
+    },
+
+    _clearHistory() {
+        try { localStorage.removeItem('lms_rv_' + (AppState.user?.id || 'anon')); } catch {}
+        document.getElementById('history-popup')?.remove();
+        const badge = document.getElementById('history-bell-badge');
+        if (badge) badge.classList.add('hidden');
+    },
     _getNavItems(role) {
         const expertItem   = { icon: '<i class="fa-solid fa-ranking-star" style="color:#a78bfa"></i>', label: 'Skill Up', route: 'expert-path' };
         const common = [

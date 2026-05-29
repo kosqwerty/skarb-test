@@ -62,6 +62,21 @@ const API = {
             if (!error && AppState.profile) AppState.profile.ui_prefs = merged;
         },
 
+        async markTourDone(tourId) {
+            const id = AppState.user?.id;
+            if (!id) return;
+            const current = AppState.profile?.completed_tours || [];
+            if (current.includes(tourId)) return;
+            const updated = [...current, tourId];
+            const { error } = await supabase.from('profiles')
+                .update({ completed_tours: updated }).eq('id', id);
+            if (!error && AppState.profile) AppState.profile.completed_tours = updated;
+        },
+
+        isTourDone(tourId) {
+            return (AppState.profile?.completed_tours || []).includes(tourId);
+        },
+
         async getSubordinates(managerId) {
             const { data, error } = await supabase
                 .from('profiles')

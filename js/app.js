@@ -58,6 +58,7 @@ const App = {
         UI.loadNotificationCount();
         UI.loadDocBadge();
         UI.loadNewsCount();
+        RecentlyViewed.init();
 
         // Load bookmarks async (updates nav stars when done)
         Bookmarks.load();

@@ -1021,8 +1021,8 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
                 <span class="kb-badge kb-badge-type kb-badge-${tkey}">${this._kbTypeLabel(tkey)}</span>
             </div>
         </div>
-        <div class="kb-card-title">${Fmt.esc(resource.title)}</div>
-        ${desc ? `<div class="kb-card-desc">${desc}</div>` : ''}
+        <div class="kb-card-title">${this._highlight(resource.title, this._search)}</div>
+        ${desc ? `<div class="kb-card-desc">${this._highlight(resource.description, this._search)}</div>` : ''}
         <div class="kb-card-meta">
             ${resource.category ? `<span class="kb-badge kb-badge-cat">${Fmt.esc(resource.category)}</span>` : ''}
             ${resource.course?.title ? `<span class="kb-badge kb-badge-course">📚 ${Fmt.esc(resource.course.title)}</span>` : ''}
@@ -1053,7 +1053,7 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
 <div class="kb-row kb-t-${tkey}" onclick="ResourcesPage.openViewer('${resource.id}')">
     <div class="kb-row-icon">${this._kbTypeIcon(tkey)}</div>
     <div class="kb-row-info">
-        <div class="kb-row-title">${Fmt.esc(resource.title)}</div>
+        <div class="kb-row-title">${this._highlight(resource.title, this._search)}</div>
         <div class="kb-row-meta">
             <span class="kb-badge kb-badge-type kb-badge-${tkey}">${this._kbTypeLabel(tkey)}</span>
             ${resource.category ? `<span class="kb-badge kb-badge-cat">${Fmt.esc(resource.category)}</span>` : ''}
@@ -1071,6 +1071,14 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
             onclick="Bookmarks.toggleResource('${resource.id}',${safeTitle},${safeIcon},${safeCat})">${isBm ? '<i class="fa-solid fa-bookmark"></i>' : '<i class="fa-regular fa-bookmark"></i>'}</button>
     </div>
 </div>`;
+    },
+
+    _highlight(text, query) {
+        if (!query || !text) return Fmt.esc(text || '');
+        const escaped = Fmt.esc(text);
+        const escQ = Fmt.esc(query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return escaped.replace(new RegExp('(' + escQ + ')', 'gi'),
+            '<mark style="background:#fde047;color:#1e1e1e;border-radius:2px;padding:0 1px">$1</mark>');
     },
 
     onSearch(e) {
@@ -1248,8 +1256,8 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
                 <div class="resource-item ${docClass}" data-id="${resource.id}" onclick="ResourcesPage.openViewer('${resource.id}')" style="cursor:pointer">
                     <div class="resource-icon ${resource.type || 'file'}">${icon}</div>
                     <div class="resource-info">
-                        <div class="resource-title">${Fmt.esc(resource.title)}</div>
-                        ${resource.description ? `<div style="font-size:.8rem;color:var(--text-muted);margin-top:.15rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Fmt.esc(resource.description)}</div>` : ''}
+                        <div class="resource-title">${this._highlight(resource.title, this._search)}</div>
+                        ${resource.description ? `<div style="font-size:.8rem;color:var(--text-muted);margin-top:.15rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${this._highlight(resource.description, this._search)}</div>` : ''}
                         <div class="resource-meta">
                             ${resource.category ? `Категорія: ${Fmt.esc(resource.category)}` : ''}
                             <span style="font-size:.72rem;font-weight:600;background:var(--bg-base);border:1px solid var(--border);border-radius:4px;padding:1px 5px;margin-left:.3rem;color:var(--text-muted)">${this._fileLabel(resource)}</span>
@@ -1845,27 +1853,87 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
         try {
             const items = await API.resources.getTrash();
             const body = document.getElementById('modal-body');
+            const footer = document.querySelector('.modal-footer');
             if (!body) return;
             if (!items.length) {
                 body.innerHTML = `<div style="text-align:center;padding:2rem;color:var(--text-muted)"><div style="font-size:2.5rem;margin-bottom:.5rem"><i class="fa-solid fa-trash"></i></div>Кошик порожній</div>`;
                 return;
             }
             body.innerHTML = `
-                <div style="display:flex;flex-direction:column;gap:.5rem;max-height:440px;overflow-y:auto">
+                <style>
+                .trash-item{display:flex;align-items:center;gap:.75rem;padding:.6rem .75rem;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-raised);transition:background .1s}
+                .trash-item.selected{background:rgba(239,68,68,.06);border-color:rgba(239,68,68,.3)}
+                .trash-cb{width:16px;height:16px;cursor:pointer;accent-color:#ef4444;flex-shrink:0}
+                </style>
+                <div style="display:flex;align-items:center;gap:.75rem;padding:.4rem .75rem .75rem;border-bottom:1px solid var(--border);margin-bottom:.5rem">
+                    <input type="checkbox" class="trash-cb" id="trash-sel-all" onchange="ResourcesPage._trashToggleAll(this.checked)" title="Вибрати всі">
+                    <label for="trash-sel-all" style="font-size:.82rem;color:var(--text-muted);cursor:pointer;user-select:none">Вибрати всі</label>
+                    <span id="trash-sel-count" style="font-size:.78rem;color:#ef4444;font-weight:600;display:none"></span>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:.4rem;max-height:400px;overflow-y:auto" id="trash-list">
                     ${items.map(r => `
-                    <div style="display:flex;align-items:center;gap:.75rem;padding:.75rem;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-raised)">
-                        <div style="font-size:1.3rem;flex-shrink:0">${this._resourceIcon(r.type||r.file_type||'file')}</div>
+                    <div class="trash-item" id="trash-row-${r.id}">
+                        <input type="checkbox" class="trash-cb trash-item-cb" data-id="${r.id}" onchange="ResourcesPage._trashSelChange()" title="Вибрати">
+                        <div style="font-size:1.2rem;flex-shrink:0">${this._resourceIcon(r.type||r.file_type||'file')}</div>
                         <div style="flex:1;min-width:0">
-                            <div style="font-weight:600;font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.title}</div>
-                            <div style="font-size:.75rem;color:var(--text-muted)">Видалено ${Fmt.dateShort(r.deleted_at)}${r.deleter?.full_name ? ' · ' + r.deleter.full_name : ''}</div>
+                            <div style="font-weight:600;font-size:.88rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Fmt.esc(r.title)}</div>
+                            <div style="font-size:.73rem;color:var(--text-muted)">Видалено ${Fmt.dateShort(r.deleted_at)}${r.deleter?.full_name ? ' · ' + Fmt.esc(r.deleter.full_name) : ''}</div>
                         </div>
                         <button class="btn btn-ghost btn-sm" onclick="ResourcesPage._restoreResource('${r.id}')">↩ Відновити</button>
                         <button class="btn btn-sm" style="background:rgba(239,68,68,.1);color:#ef4444;border:1px solid rgba(239,68,68,.2)" onclick="ResourcesPage._hardDelete('${r.id}',${JSON.stringify(r.title||'').replace(/"/g,'&quot;')})">✕</button>
                     </div>`).join('')}
                 </div>`;
+            if (footer) footer.innerHTML = `
+                <button class="btn btn-danger" id="trash-del-sel-btn" style="display:none" onclick="ResourcesPage._hardDeleteSelected()"><i class="fa-solid fa-trash"></i> Видалити вибрані (<span id="trash-del-count">0</span>)</button>
+                <div style="flex:1"></div>
+                <button class="btn btn-ghost" onclick="Modal.close()">Закрити</button>`;
         } catch(e) {
             const body = document.getElementById('modal-body');
             if (body) body.innerHTML = `<div style="color:var(--danger);padding:1rem">${e.message}</div>`;
+        }
+    },
+
+    _trashSelChange() {
+        const cbs = document.querySelectorAll('.trash-item-cb');
+        const checked = [...cbs].filter(c => c.checked);
+        document.querySelectorAll('.trash-item').forEach(row => {
+            const cb = row.querySelector('.trash-item-cb');
+            row.classList.toggle('selected', cb?.checked || false);
+        });
+        const countEl = document.getElementById('trash-sel-count');
+        const delBtn = document.getElementById('trash-del-sel-btn');
+        const delCount = document.getElementById('trash-del-count');
+        const selAll = document.getElementById('trash-sel-all');
+        if (countEl) { countEl.style.display = checked.length ? '' : 'none'; countEl.textContent = `${checked.length} вибрано`; }
+        if (delBtn) delBtn.style.display = checked.length ? '' : 'none';
+        if (delCount) delCount.textContent = checked.length;
+        if (selAll) selAll.indeterminate = checked.length > 0 && checked.length < cbs.length;
+        if (selAll && checked.length === cbs.length && cbs.length > 0) selAll.checked = true;
+    },
+
+    _trashToggleAll(checked) {
+        document.querySelectorAll('.trash-item-cb').forEach(cb => { cb.checked = checked; });
+        this._trashSelChange();
+    },
+
+    async _hardDeleteSelected() {
+        const cbs = [...document.querySelectorAll('.trash-item-cb:checked')];
+        if (!cbs.length) return;
+        const ids = cbs.map(c => c.dataset.id);
+        if (!await Modal.confirm({ message: `Видалити ${ids.length} файл(ів) назавжди? Це незворотна дія.`, danger: true, confirmText: 'Видалити назавжди' })) return;
+        const btn = document.getElementById('trash-del-sel-btn');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Видалення...'; }
+        try {
+            await Promise.all(ids.map(id => {
+                API.notifications.deleteByLink(`resource/${id}`).catch(() => {});
+                return API.resources.delete(id);
+            }));
+            Toast.success('Видалено', `${ids.length} файл(ів) видалено назавжди`);
+            await this._openTrash();
+            await this.load();
+        } catch(e) {
+            Toast.error('Помилка', e.message);
+            if (btn) { btn.disabled = false; btn.innerHTML = `<i class="fa-solid fa-trash"></i> Видалити вибрані`; }
         }
     },
 

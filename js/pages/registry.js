@@ -55,7 +55,9 @@ const RegistryPage = {
         if (!items.length) {
             rows = `<tr><td colspan="3" class="rg-empty"><i class="fa-solid fa-folder-open" style="font-size:1.6rem;opacity:.3;display:block;margin-bottom:.5rem"></i>Тем ще немає</td></tr>`;
         } else {
-            for (const item of items) {
+            for (let ti = 0; ti < items.length; ti++) {
+                const item = items[ti];
+                const colorClass = `rg-tr-c${ti % 7}`;
                 const orders      = byItem[item.id]?.order       || [];
                 const dispositions = byItem[item.id]?.disposition || [];
                 const rowCount    = Math.max(orders.length, dispositions.length, 1);
@@ -84,22 +86,30 @@ const RegistryPage = {
                             </div>` : ''}
                         </td>` : '';
 
-                    const _docCell = (entry, num) => {
+                    const _docCell = (entry, num, list) => {
                         if (!entry) return `<td></td>`;
                         const desc = entry.resource?.description?.trim();
+                        const idx = list.indexOf(entry);
+                        const isFirst = idx === 0;
+                        const isLast  = idx === list.length - 1;
                         return `<td>
                             <div class="rg-doc-row">
                                 <span class="rg-doc-num">${num}.</span>
                                 <div style="flex:1;min-width:0">
                                     <span class="rg-doc-link" onclick="Router.go('resource/${entry.resource_id}?from=documents')">${Fmt.esc(entry.resource?.title || '—')}</span>
-                                    ${desc ? `<div style="font-size:.75rem;color:var(--text-muted);margin-top:.15rem;line-height:1.4;word-break:break-word;white-space:normal">${Fmt.esc(desc)}</div>` : ''}
+                                    ${desc ? `<div style="font-size:.82rem;color:var(--text-muted);margin-top:.15rem;line-height:1.4;word-break:break-word;white-space:normal">${Fmt.esc(desc)}</div>` : ''}
                                 </div>
-                                ${canManage ? `<button class="rg-doc-del" title="Видалити" onclick="RegistryPage._removeDoc('${entry.id}')"><i class="fa-solid fa-xmark"></i></button>` : ''}
+                                ${canManage ? `
+                                <div class="rg-doc-actions">
+                                    <button class="rg-ta-btn" title="Вгору" ${isFirst ? 'disabled' : ''} onclick="RegistryPage._moveDoc('${entry.id}','${entry.registry_item_id}','${entry.type}',-1)"><i class="fa-solid fa-arrow-up"></i></button>
+                                    <button class="rg-ta-btn" title="Вниз" ${isLast ? 'disabled' : ''} onclick="RegistryPage._moveDoc('${entry.id}','${entry.registry_item_id}','${entry.type}',1)"><i class="fa-solid fa-arrow-down"></i></button>
+                                    <button class="rg-doc-del" title="Видалити" onclick="RegistryPage._removeDoc('${entry.id}')"><i class="fa-solid fa-xmark"></i></button>
+                                </div>` : ''}
                             </div>
                         </td>`;
                     };
 
-                    rows += `<tr>${topicCell}${_docCell(ord, i+1)}${_docCell(disp, i+1)}</tr>`;
+                    rows += `<tr class="${colorClass}">${topicCell}${_docCell(ord, i+1, orders)}${_docCell(disp, i+1, dispositions)}</tr>`;
                 }
             }
         }
@@ -126,35 +136,46 @@ const RegistryPage = {
         <style>
             .rg-toolbar{display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem;flex-wrap:wrap}
             .rg-table-wrap{overflow-x:auto;border-radius:var(--radius-xl);border:1px solid var(--border);background:var(--bg-surface)}
-            .rg-table{width:100%;border-collapse:collapse;font-size:.85rem}
-            .rg-table th{padding:.65rem 1rem;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);border-bottom:2px solid var(--border);white-space:nowrap;background:var(--bg-raised)}
-            .rg-table th.rg-th-topic{width:28%;min-width:180px}
+            .rg-table{width:100%;border-collapse:collapse;font-size:.92rem}
+            .rg-table th{padding:.65rem 1rem;font-size:.76rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);border-bottom:2px solid var(--border);white-space:nowrap;background:var(--bg-raised)}
+            .rg-table th.rg-th-topic{width:17%;min-width:120px}
             .rg-table td{padding:.55rem 1rem;border-bottom:1px solid var(--border);vertical-align:top;line-height:1.45;word-break:break-word;overflow-wrap:break-word}
             .rg-table tr:last-child td{border-bottom:none}
-            .rg-table tr:hover td{background:var(--bg-raised)}
-            .rg-td-topic{font-weight:600;color:var(--text-primary);font-size:.82rem}
+            .rg-table tr:hover td{filter:brightness(.97)}
+            .rg-td-topic{font-weight:600;color:var(--text-primary);font-size:.92rem}
+            .rg-tr-c0 td{background:rgba(99,102,241,.06)}
+            .rg-tr-c1 td{background:rgba(16,185,129,.06)}
+            .rg-tr-c2 td{background:rgba(245,158,11,.06)}
+            .rg-tr-c3 td{background:rgba(239,68,68,.06)}
+            .rg-tr-c4 td{background:rgba(59,130,246,.06)}
+            .rg-tr-c5 td{background:rgba(168,85,247,.06)}
+            .rg-tr-c6 td{background:rgba(20,184,166,.06)}
+            .rg-table tr:hover td{background:var(--bg-raised)!important}
             .rg-td-topic-inner{display:flex;align-items:flex-start;gap:.4rem}
             .rg-topic-actions{display:flex;gap:.25rem;flex-shrink:0;opacity:0;transition:opacity .15s}
             .rg-table tr:hover .rg-topic-actions{opacity:1}
             .rg-ta-btn{width:22px;height:22px;border-radius:5px;border:1px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.65rem;transition:all .15s;font-family:inherit}
             .rg-ta-btn:hover{border-color:var(--primary);color:var(--primary)}
             .rg-ta-btn.danger:hover{border-color:#ef4444;color:#ef4444}
-            .rg-doc-link{display:inline;color:var(--primary);font-size:.82rem;font-weight:500;cursor:pointer;padding:.15rem 0;line-height:1.45;transition:opacity .15s;word-break:break-word;white-space:normal}
+            .rg-doc-link{display:inline;color:var(--primary);font-size:.92rem;font-weight:500;cursor:pointer;padding:.15rem 0;line-height:1.45;transition:opacity .15s;word-break:break-word;white-space:normal}
             .rg-doc-link:hover{opacity:.75;text-decoration:underline}
             .rg-doc-row{display:flex;align-items:flex-start;gap:.3rem;margin-bottom:.3rem}
             .rg-doc-row:last-child{margin-bottom:0}
-            .rg-doc-num{font-size:.68rem;color:var(--text-muted);flex-shrink:0;margin-top:.2rem;min-width:14px}
-            .rg-doc-del{width:18px;height:18px;border-radius:4px;border:none;background:transparent;color:var(--text-muted);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.6rem;opacity:0;transition:opacity .15s,color .15s;font-family:inherit}
-            .rg-doc-row:hover .rg-doc-del{opacity:1}
+            .rg-doc-num{font-size:.75rem;color:var(--text-muted);flex-shrink:0;margin-top:.2rem;min-width:14px}
+            .rg-doc-actions{display:flex;align-items:center;gap:2px;flex-shrink:0;opacity:0;transition:opacity .15s}
+            .rg-doc-row:hover .rg-doc-actions{opacity:1}
+            .rg-doc-del{width:18px;height:18px;border-radius:4px;border:none;background:transparent;color:var(--text-muted);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.6rem;transition:color .15s;font-family:inherit}
             .rg-doc-del:hover{color:#ef4444}
+            .rg-doc-actions .rg-ta-btn{width:18px;height:18px;font-size:.55rem}
+            .rg-doc-actions .rg-ta-btn:disabled{opacity:.25;cursor:default}
             .rg-add-doc{display:inline-flex;align-items:center;gap:.3rem;font-size:.75rem;color:var(--text-muted);cursor:pointer;padding:.2rem .4rem;border-radius:var(--radius-sm);border:1px dashed var(--border);margin-top:.3rem;transition:all .15s;background:transparent;font-family:inherit}
             .rg-add-doc:hover{border-color:var(--primary);color:var(--primary)}
             .rg-empty{text-align:center;padding:3rem 1rem;color:var(--text-muted);font-size:.9rem}
 
             /* ── Sections ──────────────────────────────────────── */
-            .rg-sections{display:flex;flex-direction:column;gap:.85rem;margin-top:1.5rem}
-            .rg-sec{border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden;background:var(--bg-surface)}
-            .rg-sec-head{display:flex;align-items:center;gap:.6rem;padding:.7rem 1rem;background:var(--bg-raised);cursor:pointer;user-select:none;border-bottom:1px solid transparent;transition:border-color .15s}
+            .rg-sections{display:flex;flex-direction:column;gap:.85rem;margin-top:1.5rem;max-width:1400px}
+            .rg-sec{border:1px solid var(--border);border-radius:var(--radius-xl);background:var(--bg-surface);overflow-x:hidden}
+            .rg-sec-head{display:flex;align-items:center;gap:.6rem;padding:.7rem 1rem;background:var(--bg-raised);cursor:pointer;user-select:none;border-bottom:1px solid transparent;transition:border-color .15s;border-radius:var(--radius-xl) var(--radius-xl) 0 0}
             .rg-sec.open .rg-sec-head{border-bottom-color:var(--border)}
             .rg-sec-chevron{font-size:.65rem;color:var(--text-muted);transition:transform .2s;flex-shrink:0}
             .rg-sec.open .rg-sec-chevron{transform:rotate(90deg)}
@@ -166,7 +187,8 @@ const RegistryPage = {
             .rg-sec-body{display:none;flex-direction:column}
             .rg-sec.open .rg-sec-body{display:flex}
             .rg-sec-toolbar{padding:.6rem 1rem;border-bottom:1px solid var(--border);background:var(--bg-surface)}
-            .rg-sec .rg-table-wrap{border:none;border-radius:0;border-top:none}
+            .rg-sec .rg-table-wrap{border:none;border-radius:0;border-top:none;margin-bottom:.75rem}
+            .rg-sec .rg-table tr:last-child td{border-bottom:none}
             .rg-sections-empty{text-align:center;padding:2rem 1rem;color:var(--text-muted);font-size:.85rem;border:1px dashed var(--border);border-radius:var(--radius-xl);margin-top:1.5rem}
             .rg-sec-dov-badge{font-size:.68rem;color:var(--text-muted);background:var(--bg-raised);border:1px solid var(--border);border-radius:20px;padding:.1rem .45rem;flex-shrink:0;white-space:nowrap}
         </style>`;
@@ -327,13 +349,31 @@ const RegistryPage = {
         }
     },
 
+    async _moveDoc(id, itemId, type, dir) {
+        const list = this._docs.filter(d => d.registry_item_id === itemId && d.type === type);
+        const idx  = list.findIndex(d => d.id === id);
+        const swapIdx = idx + dir;
+        if (swapIdx < 0 || swapIdx >= list.length) return;
+        // Swap in main _docs array
+        const a = this._docs.indexOf(list[idx]);
+        const b = this._docs.indexOf(list[swapIdx]);
+        [this._docs[a], this._docs[b]] = [this._docs[b], this._docs[a]];
+        this._rerender();
+        try {
+            const sameType = this._docs.filter(d => d.registry_item_id === itemId && d.type === type);
+            await API.registryDocs.reorder(sameType.map(d => d.id));
+        } catch (e) {
+            Toast.error('Помилка збереження порядку', e.message);
+        }
+    },
+
     // ── Додати документ до теми ──────────────────────────────────────
     async _addDoc(itemId, type) {
         let resources = [];
         try {
             Loader.show();
             const { data } = await supabase.from('resources')
-                .select('id, title, type')
+                .select('id, title, type, description')
                 .is('deleted_at', null)
                 .is('display_block', null)
                 .is('red_folder_item_id', null)
@@ -370,7 +410,7 @@ const RegistryPage = {
                 resource_id: resourceId,
                 order_index: sameType.length,
             });
-            doc.resource = { id: resourceId, title: this._docPickerSelected?.title || resourceId };
+            doc.resource = { id: resourceId, title: this._docPickerSelected?.title || resourceId, description: this._docPickerSelected?.description || null };
             this._docs.push(doc);
             Modal.close();
             Toast.success('Документ додано');
@@ -621,7 +661,8 @@ const RegistryPage = {
     },
 
     _pickDoc(id, title) {
-        this._docPickerSelected = { id, title };
+        const res = this._docPickerList?.find(r => r.id === id);
+        this._docPickerSelected = { id, title, description: res?.description || null };
         document.getElementById('rg-doc-sel').value = id;
         const chosen = document.getElementById('rg-doc-chosen');
         const chosenText = document.getElementById('rg-chosen-text');
@@ -634,6 +675,15 @@ const RegistryPage = {
 
     _rerender() {
         const area = document.getElementById('rg-tab-area');
-        if (area) this._render(area);
+        if (!area) return;
+        // Зберігаємо відкриті секції
+        const openSecs = new Set(
+            [...document.querySelectorAll('.rg-sec.open')].map(el => el.id)
+        );
+        this._render(area);
+        // Відновлюємо стан акордеону
+        openSecs.forEach(id => {
+            document.getElementById(id)?.classList.add('open');
+        });
     },
 };

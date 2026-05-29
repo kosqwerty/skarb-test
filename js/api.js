@@ -1772,6 +1772,11 @@ const API = {
             const { error } = await supabase.from('registry_docs').delete().eq('id', id);
             if (error) throw error;
         },
+        async reorder(ids) {
+            await Promise.all(ids.map((id, i) =>
+                supabase.from('registry_docs').update({ order_index: i }).eq('id', id)
+            ));
+        },
     },
 
     registrySections: {

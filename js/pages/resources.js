@@ -1583,8 +1583,11 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
     },
 
     async openForm(resource = null) {
-        if (!this._accessGroups?.length || !this._allDovirenosti?.length) {
-            await this._loadFilters().catch(() => {});
+        if (!this._accessGroups?.length) {
+            this._accessGroups = await API.accessGroups.getAll().catch(() => []);
+        }
+        if (!this._allDovirenosti?.length) {
+            this._allDovirenosti = await API.dovirenosti.getAll().catch(() => []);
         }
         const isEdit = !!resource;
         const fileHint = resource && resource.storage_path

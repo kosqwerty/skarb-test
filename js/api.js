@@ -828,12 +828,15 @@ const API = {
         async _resolveNotifyUserIds(resourceId, accessGroupId) {
             if (!resourceId) return [];
             // 1. Перевіряємо довіреності документа
-            const { data: resDovs } = await supabase.from('resource_dovirenosti').select('dovirenost_id').eq('resource_id', resourceId);
+            const { data: resDovs, error: resDovErr } = await supabase.from('resource_dovirenosti').select('dovirenost_id').eq('resource_id', resourceId);
+            console.log('[notify] resource_dovirenosti query:', { resourceId, resDovs, resDovErr });
             const dovIds = (resDovs || []).map(r => r.dovirenost_id);
             if (dovIds.length) {
                 const { data: profDovs } = await supabase.from('profile_dovirenosti').select('profile_id').in('dovirenost_id', dovIds);
+                console.log('[notify] profDovs (users with dovirenost):', profDovs);
                 return [...new Set((profDovs || []).map(r => r.profile_id))];
             }
+            console.log('[notify] no resource_dovirenosti found, falling to accessGroup/all. accessGroupId:', accessGroupId);
             // 2. Якщо є access_group — фільтруємо за її критеріями
             if (accessGroupId) {
                 const { data: ag } = await supabase.from('access_groups')

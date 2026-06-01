@@ -215,8 +215,7 @@ const RegistryPage = {
                             <i class="fa-solid fa-chevron-right rg-sec-chevron"></i>
                             <div class="rg-sec-icon"><i class="fa-solid fa-folder-open"></i></div>
                             <span class="rg-sec-title">${Fmt.esc(sec.title)}</span>
-                            ${dovName ? `<span class="rg-sec-dov-badge"><i class="fa-solid fa-tag" style="font-size:.6rem;margin-right:.2rem"></i>${Fmt.esc(dovName)}</span>` : ''}
-                            <span class="rg-sec-count">${secItems.length} тем</span>
+                            ${dovName ? `<span class="rg-sec-dov-badge"><i class="fa-solid fa-lock" style="font-size:.6rem;margin-right:.3rem"></i>Доступ тільки для: ${Fmt.esc(dovName)}</span>` : ''}
                             ${canManage ? `
                             <div class="rg-sec-actions" onclick="event.stopPropagation()">
                                 <button class="rg-ta-btn" title="Редагувати" onclick="RegistryPage._editSection('${sec.id}',${JSON.stringify(sec.title).replace(/"/g,'&quot;')},${JSON.stringify(sec.dovirenost_id||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-pen"></i></button>

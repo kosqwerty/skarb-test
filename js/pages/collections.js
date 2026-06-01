@@ -215,9 +215,9 @@ const CollectionsPage = {
                         ${editBtn}
                     </div>
                 </div>
-                <div id="page-rendered" style="width:fit-content;max-width:100%">
-                    <iframe id="page-iframe" style="width:100%;max-width:100%;border:none;display:block" scrolling="no"
-                            sandbox="allow-scripts allow-forms allow-popups allow-top-navigation-by-user-activation"></iframe>
+                <div id="page-rendered" style="width:100%">
+                    <iframe id="page-iframe" style="width:100%;border:none;display:block" scrolling="no"
+                            sandbox="allow-scripts allow-forms allow-popups allow-top-navigation-by-user-activation allow-same-origin"></iframe>
                 </div>
             </div>`;
 
@@ -231,7 +231,6 @@ const CollectionsPage = {
                 const iframe = document.getElementById('page-iframe');
                 if (!iframe) return;
                 if (e.data.height > 0) iframe.style.height = e.data.height + 'px';
-                if (e.data.width  > 0) iframe.style.width  = e.data.width  + 'px';
             }
         };
         window.addEventListener('message', this._navHandler);
@@ -258,6 +257,7 @@ const CollectionsPage = {
     },
 
     _renderIframe(iframe, html, css, interceptLinks = false) {
+        css = (css || '').replace(/'Fixel Display'/g, "'Play'");
         const iframeScript = `
 <script>
 (function() {
@@ -305,13 +305,10 @@ document.addEventListener('click', function(e) {
 });
 <\/script>` : '';
 
-        const doc = `<!DOCTYPE html><html><head><meta charset="UTF-8">${iframeScript}
+        const doc = `<!DOCTYPE html><html><head><meta charset="UTF-8"><base href="${location.origin}/"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Play:wght@400;700&display=swap" rel="stylesheet">${iframeScript}
 <style>
-  @font-face { font-family: 'Fixel Display'; src: url('/font/FixelDisplay-Regular.woff2') format('woff2'); font-weight: 400; }
-  @font-face { font-family: 'Fixel Display'; src: url('/font/FixelDisplay-Medium.woff2') format('woff2'); font-weight: 500; }
-  @font-face { font-family: 'Fixel Display'; src: url('/font/FixelDisplay-SemiBold.woff2') format('woff2'); font-weight: 600; }
-  @font-face { font-family: 'Fixel Display'; src: url('/font/FixelDisplay-Bold.woff2') format('woff2'); font-weight: 700; }
-  body { margin: 0; padding: 0; font-family: 'Fixel Display', sans-serif; }
+  body { margin: 0; padding: 0; font-family: 'Play', sans-serif; font-weight: 400; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+  b, strong { font-weight: 700; }
   img, video, canvas, picture, svg { max-width: 100%; }
   /* Re-invert media in dark mode so photos look natural under the iframe filter */
   html.lms-dark img, html.lms-dark video, html.lms-dark canvas, html.lms-dark picture {
@@ -328,7 +325,6 @@ document.addEventListener('click', function(e) {
                 const h = Math.max(d.body.offsetHeight, fromContent);
                 const w = Math.max(d.body.scrollWidth,  d.body.offsetWidth,  d.documentElement.scrollWidth,  d.documentElement.offsetWidth);
                 if (h > 0) iframe.style.height = h + 'px';
-                if (w > 0) iframe.style.width  = w + 'px';
             } catch (_) {}
         };
     },
@@ -475,7 +471,7 @@ document.addEventListener('click', function(e) {
                         style="width:32px;height:32px;border-radius:50%;border:1px solid var(--border);background:var(--bg-surface);color:var(--text-primary);cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center">✕</button>
             </div>
             <iframe id="preview-modal-iframe" style="flex:1;border:none;background:#fff"
-                    sandbox="allow-scripts allow-forms allow-popups allow-top-navigation-by-user-activation"></iframe>`;
+                    sandbox="allow-scripts allow-forms allow-popups allow-top-navigation-by-user-activation allow-same-origin"></iframe>`;
 
         backdrop.appendChild(box);
         backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.remove(); });
@@ -801,7 +797,7 @@ document.addEventListener('click', function(e) {
         return `body {
   max-width: 800px;
   margin: 0 auto;
-  font-family: 'Fixel Display', sans-serif;
+  font-family: 'Play', sans-serif;
   color: #1e293b;
   line-height: 1.7;
 }

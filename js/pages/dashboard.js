@@ -2,6 +2,54 @@
 // EduFlow LMS — Головна сторінка (Dashboard) — WOW redesign
 // ================================================================
 
+// ── Свята України ────────────────────────────────────────────────
+const UA_HOLIDAYS = {
+    '01-01': { name: 'Новий рік', emoji: '🎆', type: 'state', tag: 'Вихідний' },
+    '03-08': { name: 'Міжнародний жіночий день', emoji: '💐', type: 'state', tag: 'Вихідний' },
+    '04-12': { name: 'Великдень (Пасха) 2026', emoji: '🐣', type: 'state', tag: 'Вихідний' },
+    '05-01': { name: 'День праці', emoji: '⚒️', type: 'state', tag: 'Вихідний' },
+    '05-08': { name: "День пам'яті та перемоги над нацизмом", emoji: '🌻', type: 'state', tag: 'Вихідний' },
+    '06-04': { name: 'День захисту дітей', emoji: '👧', type: 'professional', tag: 'Міжнародне' },
+    '06-06': { name: 'День довкілля', emoji: '🌿', type: 'professional', tag: 'Професійне' },
+    '06-07': { name: 'День Святої Трійці (П\'ятидесятниця)', emoji: '🕊️', type: 'religious', tag: 'Релігійне' },
+    '06-12': { name: 'День боротьби з дитячою працею', emoji: '🌐', type: 'professional', tag: 'Міжнародне' },
+    '06-13': { name: "День пам'яті жертв депортації кримськотатарського народу", emoji: '🕯️', type: 'memorial', tag: "Пам'ятна дата" },
+    '06-27': { name: 'День медичного працівника', emoji: '🏥', type: 'professional', tag: 'Професійне' },
+    '06-28': { name: 'День Конституції України', emoji: '📜', type: 'state', tag: 'Вихідний' },
+    '07-01': { name: 'День архітектора України', emoji: '🏗️', type: 'professional', tag: 'Професійне' },
+    '07-08': { name: 'День родини', emoji: '💞', type: 'professional', tag: 'Міжнародне' },
+    '07-16': { name: 'День Декларації про суверенітет України', emoji: '🏛️', type: 'memorial', tag: "Пам'ятна дата" },
+    '07-19': { name: 'День металурга', emoji: '⚗️', type: 'professional', tag: 'Професійне' },
+    '07-26': { name: 'День Військово-морських сил', emoji: '⚓', type: 'professional', tag: 'Професійне' },
+    '07-31': { name: 'День рятувальника', emoji: '🌊', type: 'professional', tag: 'Професійне' },
+    '08-02': { name: 'День Повітряно-десантних військ', emoji: '🪂', type: 'professional', tag: 'Військово-проф.' },
+    '08-06': { name: 'Преображення Господнє (Яблучний Спас)', emoji: '✨', type: 'religious', tag: 'Релігійне' },
+    '08-23': { name: 'День Державного прапора України', emoji: '🏳️', type: 'state', tag: 'Державна дата' },
+    '08-24': { name: 'День незалежності України', emoji: '🌻', type: 'state', tag: 'Вихідний' },
+    '08-29': { name: 'День шахтаря', emoji: '⛏️', type: 'professional', tag: 'Професійне' },
+    '08-30': { name: 'День авіації України', emoji: '✈️', type: 'professional', tag: 'Професійне' },
+    '09-01': { name: 'День знань', emoji: '🎒', type: 'professional', tag: 'Загальноукраїнське' },
+    '09-06': { name: 'День Національної поліції', emoji: '👮', type: 'professional', tag: 'Професійне' },
+    '09-17': { name: 'День фермера (День аграрія)', emoji: '🌾', type: 'professional', tag: 'Професійне' },
+    '09-22': { name: 'День партизанської слави', emoji: '🌍', type: 'memorial', tag: "Пам'ятна дата" },
+    '09-27': { name: 'День вихователя та педагогів / День туризму', emoji: '👩‍🏫', type: 'professional', tag: 'Міжнародне' },
+    '09-28': { name: 'Міжнародний день ломбардів', emoji: '💎', type: 'professional', tag: 'Професійне' },
+    '10-01': { name: 'День захисників і захисниць України', emoji: '🛡️', type: 'state', tag: 'Вихідний' },
+    '10-05': { name: 'День вчителя', emoji: '🍎', type: 'professional', tag: 'Професійне' },
+    '10-11': { name: 'День місцевого самоврядування', emoji: '🏘️', type: 'professional', tag: 'Професійне' },
+    '10-14': { name: 'Покрова Пресвятої Богородиці', emoji: '🙏', type: 'religious', tag: 'Релігійне' },
+    '10-25': { name: 'Перехід на зимовий час / День ООН', emoji: '🌙', type: 'professional', tag: 'Загальноукраїнське' },
+    '11-09': { name: 'День народження Ломбарду «Скарбниця»', emoji: '💎', type: 'state', tag: '🏆 Наш день!' },
+    '11-06': { name: "День пам'яті жертв Голодомору", emoji: '🖤', type: 'memorial', tag: 'День жалоби' },
+    '11-19': { name: 'День прокуратури / Міжнародний день чоловіків', emoji: '⚖️', type: 'professional', tag: 'Міжнародне' },
+    '11-21': { name: 'День Гідності та Свободи', emoji: '🕊️', type: 'state', tag: 'Державна дата' },
+    '11-28': { name: "День пам'яті жертв Голодомору (4-та субота)", emoji: '🕯️', type: 'memorial', tag: 'День жалоби' },
+    '12-01': { name: 'День боротьби зі СНІДом / референдум 1991', emoji: '🎗️', type: 'professional', tag: 'Міжнародне' },
+    '12-06': { name: 'День Збройних сил України', emoji: '⚔️', type: 'state', tag: 'Державна дата' },
+    '12-10': { name: 'День прав людини', emoji: '🌏', type: 'professional', tag: 'Міжнародне' },
+    '12-25': { name: 'Різдво Христове', emoji: '⭐', type: 'state', tag: 'Вихідний' },
+};
+
 // ── Recently Viewed tracker (global, localStorage-based) ─────────
 const RecentlyViewed = {
     _max: 20,
@@ -244,6 +292,7 @@ const DashboardPage = {
             <div class="db-cal-col">
                 <div id="db-cal-widget"></div>
                 <div id="db-important"></div>
+                <div id="db-bday-chat"></div>
             </div>
         </div>
 
@@ -293,6 +342,7 @@ const DashboardPage = {
         this._renderImportantEvents(calEvents, today);
         this._renderAlerts(unackedDocs, recentNotifs);
         this._renderBirthdays(birthdays);
+        CompanyBirthdayModal._initDashboardChat();
 
         // Показати головну новину один раз за сесію (якщо не відхилено назавжди)
         const featured = (newsRes.data || []).find(n => n.is_featured || n.is_pinned);
@@ -578,6 +628,99 @@ const DashboardPage = {
         this._drawCalWidget();
     },
 
+    async _addHolidayToCalendar(dateStr, title, emoji, btn) {
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>'; }
+        const ok = await MyCalendarPage.addHolidayEvent(dateStr, title, emoji).catch(() => false);
+        if (btn) {
+            btn.innerHTML = ok
+                ? '<i class="fa-solid fa-check"></i> Додано'
+                : '<i class="fa-solid fa-bell"></i> Додати нагадування';
+            btn.disabled = !ok;
+            if (ok) { btn.style.background = 'rgba(16,185,129,.12)'; btn.style.color = '#10b981'; btn.style.borderColor = 'rgba(16,185,129,.3)'; }
+        }
+    },
+
+    _holidaysViewMonth: null,
+    _holidaysViewYear: null,
+
+    _showHolidays(monthOffset = 0) {
+        const monthNames = ['Січень','Лютий','Березень','Квітень','Травень','Червень','Липень','Серпень','Вересень','Жовтень','Листопад','Грудень'];
+        const typeColors = {
+            state:        { bg: 'rgba(0,91,187,.1)',   color: '#005BBB', border: 'rgba(0,91,187,.25)' },
+            religious:    { bg: 'rgba(155,89,182,.1)', color: '#7c3aed', border: 'rgba(155,89,182,.25)' },
+            memorial:     { bg: 'rgba(107,114,128,.1)',color: '#4b5563', border: 'rgba(107,114,128,.25)' },
+            professional: { bg: 'rgba(39,174,96,.1)',  color: '#15803d', border: 'rgba(39,174,96,.25)' },
+        };
+
+        // Ініціалізуємо або зсуваємо місяць
+        if (this._holidaysViewMonth === null) {
+            this._holidaysViewMonth = this._calViewMonth;
+            this._holidaysViewYear  = this._calViewYear;
+        }
+        this._holidaysViewMonth += monthOffset;
+        if (this._holidaysViewMonth < 0)  { this._holidaysViewMonth = 11; this._holidaysViewYear--; }
+        if (this._holidaysViewMonth > 11) { this._holidaysViewMonth = 0;  this._holidaysViewYear++; }
+
+        const month = this._holidaysViewMonth;
+        const year  = this._holidaysViewYear;
+        const mm    = String(month + 1).padStart(2, '0');
+        const pad2  = n => String(n).padStart(2, '0');
+
+        const monthHolidays = Object.entries(UA_HOLIDAYS)
+            .filter(([key]) => key.startsWith(mm + '-'))
+            .sort(([a], [b]) => a.localeCompare(b));
+
+        const items = monthHolidays.map(([key, h]) => {
+            const day       = parseInt(key.split('-')[1]);
+            const dateStr   = `${year}-${mm}-${pad2(day)}`;
+            const c         = typeColors[h.type] || typeColors.professional;
+            const safeTitle = JSON.stringify(h.name).replace(/"/g,'&quot;');
+            const safeEmoji = JSON.stringify(h.emoji).replace(/"/g,'&quot;');
+            return `
+            <div style="display:flex;align-items:center;gap:.85rem;padding:.65rem .85rem;border-radius:var(--radius-md);border:1px solid ${c.border};background:${c.bg};margin-bottom:.45rem">
+                <div style="width:44px;text-align:center;flex-shrink:0">
+                    <div style="font-size:1.4rem;font-weight:800;color:${c.color};line-height:1">${day}</div>
+                    <div style="font-size:.65rem;color:${c.color};opacity:.75;text-transform:uppercase;letter-spacing:.04em">${monthNames[month].slice(0,3)}</div>
+                </div>
+                <div style="font-size:1.3rem;flex-shrink:0">${h.emoji}</div>
+                <div style="flex:1;min-width:0">
+                    <div style="font-size:.875rem;font-weight:600;color:var(--text-primary);line-height:1.3">${h.name}</div>
+                    <span style="font-size:.68rem;font-weight:700;color:${c.color};background:${c.bg};border:1px solid ${c.border};border-radius:20px;padding:.1rem .5rem;margin-top:.25rem;display:inline-block;text-transform:uppercase;letter-spacing:.04em">${h.tag}</span>
+                </div>
+                <button onclick="DashboardPage._addHolidayToCalendar('${dateStr}',${safeTitle},${safeEmoji},this)"
+                    title="Додати нагадування в календар"
+                    style="flex-shrink:0;border:1.5px solid ${c.border};background:var(--bg-surface);color:${c.color};border-radius:8px;padding:.3rem .6rem;cursor:pointer;font-size:.72rem;font-weight:600;font-family:inherit;transition:all .15s;display:flex;align-items:center;gap:.3rem;white-space:nowrap"
+                    onmouseenter="this.style.background='${c.bg}'"
+                    onmouseleave="this.style.background='var(--bg-surface)'">
+                    <i class="fa-solid fa-bell" style="font-size:.68rem"></i> Додати нагадування
+                </button>
+            </div>`;
+        }).join('');
+
+        const listHtml = monthHolidays.length
+            ? `<div style="max-height:65vh;overflow-y:auto;padding:.1rem 0">${items}</div>`
+            : `<div style="text-align:center;padding:2.5rem;color:var(--text-muted)"><div style="font-size:2.5rem;margin-bottom:.5rem">🎉</div>Свят у цьому місяці немає</div>`;
+
+        const navHtml = `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:.5rem .25rem .75rem;border-bottom:1px solid var(--border);margin-bottom:.75rem">
+            <button class="btn btn-ghost btn-sm" onclick="DashboardPage._showHolidays(-1)">
+                <i class="fa-solid fa-chevron-left"></i> ${monthNames[(month + 11) % 12]}
+            </button>
+            <span style="font-size:.95rem;font-weight:700;color:var(--text-primary)">${monthNames[month]} ${year}</span>
+            <button class="btn btn-ghost btn-sm" onclick="DashboardPage._showHolidays(1)">
+                ${monthNames[(month + 1) % 12]} <i class="fa-solid fa-chevron-right"></i>
+            </button>
+        </div>`;
+
+        Modal.open({
+            title: `Свята України — ${monthNames[month]} ${year}`,
+            size: 'lg',
+            body: navHtml + listHtml,
+            footer: `<button class="btn btn-ghost" onclick="Modal.close();DashboardPage._holidaysViewMonth=null;">Закрити</button>`,
+            onClose: () => { this._holidaysViewMonth = null; }
+        });
+    },
+
     async _calNav(dir) {
         this._calViewMonth += dir;
         if (this._calViewMonth < 0)  { this._calViewMonth = 11; this._calViewYear--; }
@@ -804,6 +947,12 @@ const DashboardPage = {
                         <div class="db-cnav-arrows">
                             <button class="db-cnav-btn" onclick="DashboardPage._calNav(-1)" title="Попередній місяць"><i class="fa-solid fa-chevron-left"></i></button>
                             <button class="db-cnav-btn" onclick="DashboardPage._calNav(1)" title="Наступний місяць"><i class="fa-solid fa-chevron-right"></i></button>
+                            <button onclick="DashboardPage._showHolidays()" title="Свята України"
+                                style="display:inline-flex;align-items:center;gap:.35rem;padding:.28rem .75rem;border-radius:20px;border:none;cursor:pointer;font-size:.78rem;font-weight:700;background:linear-gradient(135deg,#005BBB,#0073e6);color:#fff;box-shadow:0 2px 8px rgba(0,91,187,.35);transition:all .15s;letter-spacing:.02em;font-family:inherit"
+                                onmouseenter="this.style.transform='translateY(-1px)';this.style.boxShadow='0 4px 14px rgba(0,91,187,.45)'"
+                                onmouseleave="this.style.transform='';this.style.boxShadow='0 2px 8px rgba(0,91,187,.35)'">
+                                🎉 <span>Свята</span>
+                            </button>
                         </div>
                     </div>
                     <div class="db-cgrid">

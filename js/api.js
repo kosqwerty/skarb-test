@@ -2040,6 +2040,27 @@ const API = {
     },
 
     // ── User Sessions ──────────────────────────────────────────────────
+    companyBdayMessages: {
+        async getByYear(year) {
+            const { data, error } = await supabase.from('company_bday_messages')
+                .select('id, message, created_at, year, user:profiles(id, full_name, avatar_url, job_position)')
+                .eq('year', year).order('created_at', { ascending: true });
+            if (error) throw error;
+            return data || [];
+        },
+        async add(message) {
+            const year = new Date().getFullYear();
+            const { data, error } = await supabase.from('company_bday_messages')
+                .insert({ user_id: AppState.user.id, message: message.trim(), year }).select('id').single();
+            if (error) throw error;
+            return data;
+        },
+        async remove(id) {
+            const { error } = await supabase.from('company_bday_messages').delete().eq('id', id);
+            if (error) throw error;
+        },
+    },
+
     userSessions: {
         // Register / refresh current session
         async upsert(token, userAgent) {

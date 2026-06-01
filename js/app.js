@@ -67,6 +67,8 @@ const App = {
         BirthdayModal.check(profile);
         // Річниця в компанії — показуємо раз на рік
         AnniversaryModal.check(profile);
+        // День народження Скарбниці — 9 листопада
+        CompanyBirthdayModal.check();
 
         // Define routes
         Router.define({
@@ -862,5 +864,436 @@ const AnniversaryModal = {
         const profile = { ...AppState.profile, hired_at: new Date(new Date().getFullYear() - years, new Date().getMonth(), new Date().getDate()).toISOString().slice(0,10) };
         document.getElementById('anniversary-modal')?.remove();
         this._show(profile, years);
+    }
+};
+
+// ================================================================
+// CompanyBirthdayModal — 9 листопада, день народження Скарбниці
+// ================================================================
+const CompanyBirthdayModal = {
+    FOUNDED: 1992,
+    FOUNDED_MONTH: 10, // 0-based = листопад
+    FOUNDED_DAY: 9,
+
+    check() {
+        const today = new Date();
+        if (today.getDate() !== this.FOUNDED_DAY || today.getMonth() !== this.FOUNDED_MONTH) return;
+        // Модалка — раз на день
+        const key = `company_bday_${today.getFullYear()}`;
+        if (!localStorage.getItem(key)) {
+            localStorage.setItem(key, '1');
+            setTimeout(() => this._show(), 1200);
+        }
+        // Бейдж у топбарі + дощ emoji — весь день
+        setTimeout(() => { this._showTopbarBadge(); this._startEmojiRain(); }, 800);
+    },
+
+    _topbarKey() {
+        const t = new Date();
+        return `company_bday_topbar_hidden_${t.getFullYear()}`;
+    },
+
+    _startEmojiRain() {
+        if (document.getElementById('cbd-emoji-rain')) return;
+        const rain = document.createElement('div');
+        rain.id = 'cbd-emoji-rain';
+        rain.style.cssText = 'position:fixed;top:0;left:0;right:0;height:150px;pointer-events:none;z-index:9998;overflow:hidden;mask-image:linear-gradient(to bottom,black 40%,transparent 100%);-webkit-mask-image:linear-gradient(to bottom,black 40%,transparent 100%)';
+
+        const emojis = ['💎','✨','⭐','🌟','💫','🏆','🎊','🎉'];
+        const count  = 12;
+
+        let styleEl = document.getElementById('cbd-rain-style');
+        if (!styleEl) {
+            styleEl = document.createElement('style');
+            styleEl.id = 'cbd-rain-style';
+            styleEl.textContent = `@keyframes cbd-rain-fall{0%{transform:translateY(-40px) rotate(0deg);opacity:1}70%{opacity:.6}100%{transform:translateY(160px) rotate(360deg);opacity:0}}`;
+            document.head.appendChild(styleEl);
+        }
+
+        const createDrop = () => {
+            const el = document.createElement('div');
+            el.style.cssText = `
+                position:absolute;
+                left:${Math.random()*100}%;
+                top:-60px;
+                font-size:${1 + Math.random() * 1.4}rem;
+                animation:cbd-rain-fall ${5 + Math.random()*6}s linear ${Math.random()*4}s infinite;
+                user-select:none;`;
+            el.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+            return el;
+        };
+
+        for (let i = 0; i < count; i++) rain.appendChild(createDrop());
+        document.body.appendChild(rain);
+    },
+
+    _stopEmojiRain() {
+        document.getElementById('cbd-emoji-rain')?.remove();
+    },
+
+    _showTopbarBadge() {
+        if (document.getElementById('cbd-topbar-badge')) return;
+        if (localStorage.getItem(this._topbarKey())) return;
+
+        if (!document.getElementById('cbd-topbar-style')) {
+            const s = document.createElement('style');
+            s.id = 'cbd-topbar-style';
+            s.textContent = `
+@keyframes cbd-sparkle{0%,100%{transform:scale(1) rotate(-3deg)}25%{transform:scale(1.15) rotate(3deg)}75%{transform:scale(0.95) rotate(-2deg)}}
+@keyframes cbd-glow{0%,100%{filter:drop-shadow(0 0 4px rgba(201,162,39,.6))}50%{filter:drop-shadow(0 0 12px rgba(255,215,0,.9))}}
+@keyframes cbd-badge-in{from{opacity:0;transform:scale(.3)}to{opacity:1;transform:scale(1)}}
+#cbd-topbar-badge{display:inline-flex;align-items:center;gap:.3rem;background:rgba(201,162,39,.1);
+    border:1px solid rgba(201,162,39,.35);border-radius:20px;padding:.2rem .65rem .2rem .45rem;
+    cursor:pointer;transition:background .15s;margin:0 4px}
+#cbd-topbar-badge:hover{background:rgba(201,162,39,.18)}
+#cbd-topbar-badge .cbd-gem{font-size:1rem}
+#cbd-topbar-badge .cbd-text{font-size:.72rem;font-weight:700;color:#C9A227;letter-spacing:.03em;white-space:nowrap}
+#cbd-topbar-badge .cbd-close{font-size:.65rem;color:rgba(201,162,39,.5);margin-left:.2rem;line-height:1;transition:color .15s}
+#cbd-topbar-badge:hover .cbd-close{color:#C9A227}`;
+            document.head.appendChild(s);
+        }
+
+        const rainHidden = !!localStorage.getItem(this._topbarKey());
+        const badge = document.createElement('div');
+        badge.id = 'cbd-topbar-badge';
+        badge.innerHTML = `
+            <span class="cbd-gem" style="cursor:pointer" title="Відкрити вікно свята" onclick="CompanyBirthdayModal.demo()">💎</span>
+            <span class="cbd-text">34 роки Скарбниці!</span>
+            <button id="cbd-rain-toggle" onclick="CompanyBirthdayModal._toggleRain()"
+                style="background:none;border:1.5px solid rgba(201,162,39,.45);border-radius:12px;padding:.3rem .75rem;cursor:pointer;font-size:.82rem;font-weight:700;color:#C9A227;font-family:inherit;transition:background .15s;white-space:nowrap;line-height:1"
+                onmouseenter="this.style.background='rgba(201,162,39,.15)'" onmouseleave="this.style.background='none'">
+                ${rainHidden ? 'Увімкнути ефекти' : 'Вимкнути ефекти'}
+            </button>`;
+
+        const ntfBell = document.getElementById('ntf-bell');
+        if (ntfBell) {
+            ntfBell.parentNode.insertBefore(badge, ntfBell);
+        } else {
+            document.querySelector('.sidebar-bottom')?.appendChild(badge);
+        }
+    },
+
+    _toggleRain() {
+        const hidden = !!localStorage.getItem(this._topbarKey());
+        const btn = document.getElementById('cbd-rain-toggle');
+        if (hidden) {
+            localStorage.removeItem(this._topbarKey());
+            this._startEmojiRain();
+            if (btn) btn.textContent = 'Вимкнути ефекти';
+        } else {
+            localStorage.setItem(this._topbarKey(), '1');
+            this._stopEmojiRain();
+            if (btn) btn.textContent = 'Увімкнути ефекти';
+        }
+    },
+
+    _show() {
+        const years = new Date().getFullYear() - this.FOUNDED;
+        const gems = Array.from({length: 24}, (_, i) => {
+            const emojis = ['💎','✨','⭐','🌟','💫','🏆'];
+            const em = emojis[i % emojis.length];
+            const colors = ['#C9A227','#FFD700','#6366f1','#10b981','#f59e0b','#ec4899'];
+            return `<div style="position:absolute;top:-12px;left:${Math.random()*100}%;
+                font-size:${.9+Math.random()*.8}rem;pointer-events:none;
+                animation:cbd-drop ${2+Math.random()*2}s ease-in ${(i*0.1).toFixed(2)}s infinite">
+                ${em}</div>`;
+        }).join('');
+
+        const overlay = document.createElement('div');
+        overlay.id = 'company-bday-modal';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:10001;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(10px);animation:fadeIn .3s ease';
+        overlay.innerHTML = `
+<style>
+@keyframes cbd-drop{0%{opacity:1;transform:translateY(-10px) rotate(0deg)}100%{opacity:0;transform:translateY(140px) rotate(720deg)}}
+@keyframes cbd-in{from{opacity:0;transform:scale(.8) translateY(30px)}to{opacity:1;transform:none}}
+@keyframes cbd-shine{0%,100%{background-position:200% center}50%{background-position:-200% center}}
+@keyframes cbd-pulse{0%,100%{box-shadow:0 0 0 0 rgba(201,162,39,.4)}50%{box-shadow:0 0 0 18px rgba(201,162,39,0)}}
+@keyframes cbd-float{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-14px) rotate(2deg)}}
+.cbd-box{background:linear-gradient(160deg,#0f0c29,#1a1535,#0f0c29);border-radius:32px;padding:0;max-width:520px;width:100%;
+    overflow:hidden;box-shadow:0 32px 100px rgba(0,0,0,.5),0 0 0 1px rgba(201,162,39,.3);
+    animation:cbd-in .5s cubic-bezier(.34,1.4,.64,1)}
+.cbd-hero{position:relative;padding:2.5rem 2rem 1.8rem;text-align:center;overflow:hidden;
+    background:linear-gradient(135deg,rgba(201,162,39,.15),rgba(99,102,241,.1),rgba(201,162,39,.12))}
+.cbd-hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(201,162,39,.25),transparent 70%)}
+.cbd-gems-wrap{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.cbd-logo{width:80px;height:80px;margin:0 auto .75rem;display:flex;align-items:center;justify-content:center;
+    border-radius:24px;background:linear-gradient(135deg,#C9A227,#FFD700,#C9A227);
+    box-shadow:0 8px 32px rgba(201,162,39,.5);animation:cbd-pulse 2.5s ease-in-out infinite,cbd-float 4s ease-in-out infinite;
+    font-size:2.8rem}
+.cbd-year-badge{display:inline-flex;align-items:center;gap:.4rem;background:rgba(201,162,39,.15);
+    border:1px solid rgba(201,162,39,.4);border-radius:20px;padding:.3rem 1rem;margin-bottom:.6rem;
+    font-size:.75rem;font-weight:700;color:#C9A227;letter-spacing:.08em;text-transform:uppercase}
+.cbd-title{font-size:1.65rem;font-weight:900;line-height:1.2;margin-bottom:.4rem;
+    background:linear-gradient(90deg,#C9A227,#FFD700,#C9A227);background-size:200% auto;
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:cbd-shine 4s linear infinite}
+.cbd-sub{font-size:.92rem;color:rgba(255,255,255,.65);line-height:1.55}
+.cbd-body{padding:1.5rem 2rem 2rem;background:var(--bg-surface)}
+.cbd-stat{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.75rem;margin-bottom:1.25rem}
+.cbd-stat-item{text-align:center;background:var(--bg-raised);border:1px solid var(--border);border-radius:14px;padding:.75rem .5rem}
+.cbd-stat-num{font-size:1.6rem;font-weight:900;color:#C9A227;line-height:1}
+.cbd-stat-lbl{font-size:.7rem;color:var(--text-muted);margin-top:.2rem;line-height:1.3}
+.cbd-msg{font-size:.9rem;color:var(--text-secondary);line-height:1.6;text-align:center;margin-bottom:1.5rem}
+.cbd-btn{width:100%;padding:.85rem;border:none;border-radius:50px;font-size:1rem;font-weight:800;cursor:pointer;
+    background:linear-gradient(135deg,#C9A227,#FFD700,#C9A227);background-size:200% auto;
+    color:#0f0c29;box-shadow:0 6px 24px rgba(201,162,39,.4);animation:cbd-shine 3s linear infinite;
+    transition:opacity .15s,transform .1s;font-family:inherit}
+.cbd-btn:hover{opacity:.9;transform:scale(1.02)}
+</style>
+<div class="cbd-box">
+    <div class="cbd-hero">
+        <div class="cbd-gems-wrap">${gems}</div>
+        <div class="cbd-logo">💎</div>
+        <div class="cbd-year-badge">✦ З 1992 року ✦</div>
+        <div class="cbd-title">З Днем Народження,<br>Скарбниця!</div>
+        <div class="cbd-sub">Першій мережі ломбардів в Україні — вже <strong style="color:#FFD700">${years} років</strong>!</div>
+    </div>
+    <div class="cbd-body">
+        <div class="cbd-stat">
+            <div class="cbd-stat-item">
+                <div class="cbd-stat-num">${years}</div>
+                <div class="cbd-stat-lbl">років на ринку</div>
+            </div>
+            <div class="cbd-stat-item">
+                <div class="cbd-stat-num">#1</div>
+                <div class="cbd-stat-lbl">перша мережа ломбардів в Україні</div>
+            </div>
+            <div class="cbd-stat-item">
+                <div class="cbd-stat-num">1992</div>
+                <div class="cbd-stat-lbl">рік заснування</div>
+            </div>
+        </div>
+        <div class="cbd-msg">
+            Сьогодні ми відзначаємо особливу дату — день народження нашої компанії.
+            Дякуємо кожному члену команди, хто є частиною цієї великої родини! 🏆
+        </div>
+        <button class="cbd-btn" onclick="CompanyBirthdayModal._close()">
+            💎 Вітаємо Скарбницю!
+        </button>
+    </div>
+</div>`;
+        document.body.appendChild(overlay);
+        overlay.addEventListener('click', e => { if (e.target === overlay) this._close(); });
+    },
+
+    _close() {
+        const modal = document.getElementById('company-bday-modal');
+        if (modal) { modal.style.transition = 'opacity .3s'; modal.style.opacity = '0'; setTimeout(() => modal.remove(), 320); }
+    },
+
+    _chatChannel: null,
+    _msgs: [],
+
+    _initDashboardChat() {
+        const el = document.getElementById('db-bday-chat');
+        if (!el) return;
+        const today = new Date();
+        const isCompanyDay = today.getDate() === this.FOUNDED_DAY && today.getMonth() === this.FOUNDED_MONTH;
+        if (!isCompanyDay) { el.innerHTML = ''; return; }
+        this._renderChatCard(el);
+    },
+
+    _renderChatCard(container) {
+        const year = new Date().getFullYear();
+        container.innerHTML = `
+<style>
+@keyframes cbd-card-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.cbd-card{display:flex;align-items:center;gap:.7rem;padding:.75rem 1rem;
+    background:linear-gradient(135deg,rgba(201,162,39,.1),rgba(255,215,0,.05));
+    border:1.5px solid rgba(201,162,39,.35);border-radius:var(--radius-xl);
+    cursor:pointer;user-select:none;transition:background .15s,border-color .2s;
+    animation:cbd-card-in .3s ease}
+.cbd-card:hover{background:linear-gradient(135deg,rgba(201,162,39,.18),rgba(255,215,0,.1));border-color:rgba(201,162,39,.6)}
+.cbd-card-gem{font-size:1.3rem;flex-shrink:0}
+.cbd-card-info{flex:1;min-width:0}
+.cbd-card-title{font-size:.85rem;font-weight:700;color:var(--text-primary)}
+.cbd-card-sub{font-size:.7rem;color:#C9A227;margin-top:.05rem}
+.cbd-card-badge{background:linear-gradient(135deg,#C9A227,#FFD700);color:#0f0c29;
+    font-size:.7rem;font-weight:800;border-radius:20px;padding:.15rem .55rem;
+    min-width:22px;text-align:center;line-height:1.6;flex-shrink:0}
+.cbd-card-arrow{font-size:.75rem;color:rgba(201,162,39,.6);flex-shrink:0}
+</style>
+<div class="cbd-card" onclick="CompanyBirthdayModal._openFullscreen()">
+    <span class="cbd-card-gem">💎</span>
+    <div class="cbd-card-info">
+        <div class="cbd-card-title">Вітаємо Скарбницю!</div>
+        <div class="cbd-card-sub">День народження компанії · ${year}</div>
+    </div>
+    <span id="cbd-card-badge" class="cbd-card-badge" style="display:none">0</span>
+    <i class="fa-solid fa-up-right-and-down-left-from-center cbd-card-arrow"></i>
+</div>`;
+        this._loadMessages(year);
+        this._subscribeRealtime(year);
+    },
+
+    async _loadMessages(year) {
+        try {
+            this._msgs = await API.companyBdayMessages.getByYear(year);
+            this._updateBadge();
+            this._renderFullscreenMessages();
+        } catch { }
+    },
+
+    _updateBadge() {
+        const badge = document.getElementById('cbd-card-badge');
+        if (!badge) return;
+        const count = this._msgs.length;
+        if (count > 0) { badge.textContent = count; badge.style.display = ''; }
+        else { badge.style.display = 'none'; }
+    },
+
+    _subscribeRealtime(year) {
+        this._chatChannel?.unsubscribe();
+        this._chatChannel = supabase.channel(`cbd-chat-${year}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'company_bday_messages', filter: `year=eq.${year}` },
+                () => this._loadMessages(year))
+            .subscribe();
+    },
+
+    _openFullscreen() {
+        if (document.getElementById('cbd-fs')) return;
+        const year = new Date().getFullYear();
+        const EMOJIS = ['🎉','🎊','🎂','🎈','🏆','🌟','⭐','✨','💎','🥂','🍾','🎁','🤩','🙌','👏','💐','🌸','💝','💖','🎵','🎆','🎇','🌈','😊','🥳','🎀','🔥','💫','🎯','👑'];
+        const fs = document.createElement('div');
+        fs.id = 'cbd-fs';
+        fs.style.cssText = 'position:fixed;inset:0;z-index:10002;background:rgba(0,0,0,.65);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;padding:16px;animation:fadeIn .2s ease';
+        fs.innerHTML = `
+<style>
+@keyframes cbd-fs-in{from{opacity:0;transform:scale(.95) translateY(20px)}to{opacity:1;transform:none}}
+.cbd-fs-panel{background:var(--bg-surface);border-radius:24px;width:100%;max-width:680px;height:min(82vh,700px);
+    display:flex;flex-direction:column;overflow:hidden;
+    box-shadow:0 32px 80px rgba(0,0,0,.4),0 0 0 1px rgba(201,162,39,.25);
+    animation:cbd-fs-in .3s cubic-bezier(.34,1.2,.64,1)}
+.cbd-fs-head{display:flex;align-items:center;gap:.7rem;padding:1rem 1.25rem;
+    background:linear-gradient(135deg,rgba(201,162,39,.15),rgba(255,215,0,.07));
+    border-bottom:1px solid rgba(201,162,39,.25);flex-shrink:0}
+.cbd-fs-title{font-size:.95rem;font-weight:700;color:var(--text-primary);flex:1}
+.cbd-fs-sub{font-size:.72rem;color:#C9A227}
+.cbd-fs-close{background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:1.1rem;padding:.3rem;border-radius:8px;transition:background .15s,color .15s;line-height:1;margin-left:auto;flex-shrink:0}
+.cbd-fs-close:hover{background:var(--bg-hover);color:var(--text-primary)}
+.cbd-fs-msgs{flex:1;overflow-y:auto;padding:.85rem;display:flex;flex-direction:column;gap:.55rem;scrollbar-width:thin}
+.cbd-fs-empty{text-align:center;color:var(--text-muted);font-size:.88rem;padding:3rem .5rem}
+.cbd-fs-emoji{display:flex;flex-wrap:nowrap;overflow-x:auto;gap:.25rem;padding:.5rem .85rem;
+    border-top:1px solid var(--border);background:var(--bg-raised);scrollbar-width:none;flex-shrink:0}
+.cbd-fs-emoji::-webkit-scrollbar{display:none}
+.cbd-fs-emoji-btn{background:none;border:none;cursor:pointer;font-size:1.2rem;padding:.15rem .2rem;border-radius:6px;transition:transform .1s,background .1s;flex-shrink:0}
+.cbd-fs-emoji-btn:hover{transform:scale(1.3);background:var(--bg-hover)}
+.cbd-fs-send-row{display:flex;gap:.5rem;padding:.65rem .85rem;border-top:1px solid var(--border);flex-shrink:0}
+.cbd-fs-input{flex:1;border:1.5px solid var(--border);border-radius:14px;padding:.5rem .85rem;font-size:.88rem;
+    background:var(--bg-surface);color:var(--text-primary);outline:none;font-family:inherit;transition:border-color .15s}
+.cbd-fs-input:focus{border-color:#C9A227}
+.cbd-fs-send-btn{background:linear-gradient(135deg,#C9A227,#FFD700);border:none;border-radius:14px;
+    padding:.5rem 1.1rem;cursor:pointer;color:#0f0c29;font-weight:700;font-size:.88rem;font-family:inherit;
+    white-space:nowrap;transition:opacity .15s}
+.cbd-fs-send-btn:hover{opacity:.88}
+</style>
+<div class="cbd-fs-panel">
+    <div class="cbd-fs-head">
+        <span style="font-size:1.4rem">💎</span>
+        <div>
+            <div class="cbd-fs-title">Вітаємо Скарбницю!</div>
+            <div class="cbd-fs-sub">День народження компанії · ${year}</div>
+        </div>
+        <button class="cbd-fs-close" onclick="CompanyBirthdayModal._closeFullscreen()" title="Закрити"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div id="cbd-fs-msgs" class="cbd-fs-msgs">
+        <div style="text-align:center;padding:2rem"><div class="spinner"></div></div>
+    </div>
+    <div class="cbd-fs-emoji">
+        ${EMOJIS.map(e => `<button class="cbd-fs-emoji-btn" onclick="CompanyBirthdayModal._insertFsEmoji('${e}')">${e}</button>`).join('')}
+    </div>
+    <div class="cbd-fs-send-row">
+        <input id="cbd-fs-input" class="cbd-fs-input" type="text" maxlength="500" placeholder="Напишіть привітання... 🎉"
+            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();CompanyBirthdayModal._sendMsg()}">
+        <button class="cbd-fs-send-btn" onclick="CompanyBirthdayModal._sendMsg()">Надіслати</button>
+    </div>
+</div>`;
+        fs.addEventListener('click', e => { if (e.target === fs) this._closeFullscreen(); });
+        document.addEventListener('keydown', this._onFsKey);
+        document.body.appendChild(fs);
+        this._renderFullscreenMessages();
+        setTimeout(() => document.getElementById('cbd-fs-input')?.focus(), 80);
+    },
+
+    _onFsKey(e) { if (e.key === 'Escape') CompanyBirthdayModal._closeFullscreen(); },
+
+    _closeFullscreen() {
+        const fs = document.getElementById('cbd-fs');
+        if (!fs) return;
+        fs.style.transition = 'opacity .2s';
+        fs.style.opacity = '0';
+        setTimeout(() => fs.remove(), 210);
+        document.removeEventListener('keydown', this._onFsKey);
+    },
+
+    _renderFullscreenMessages() {
+        const list = document.getElementById('cbd-fs-msgs');
+        if (!list) return;
+        const msgs = this._msgs;
+        if (!msgs.length) {
+            list.innerHTML = `<div class="cbd-fs-empty">Будьте першим хто привітає! 🎊</div>`;
+            return;
+        }
+        const myId = AppState.user?.id;
+        list.innerHTML = msgs.map(m => {
+            const isMe = m.user?.id === myId;
+            const initials = Fmt.initials(m.user?.full_name || '?');
+            const time = new Date(m.created_at).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
+            const avatar = m.user?.avatar_url
+                ? `<img src="${m.user.avatar_url}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0" onerror="this.style.display='none'">`
+                : `<div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#C9A227,#6366f1);display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:700;color:#fff;flex-shrink:0">${Fmt.esc(initials)}</div>`;
+            return `<div style="display:flex;gap:.55rem;align-items:flex-start;${isMe ? 'flex-direction:row-reverse' : ''}">
+                ${avatar}
+                <div style="max-width:72%;min-width:0">
+                    <div style="font-size:.7rem;color:var(--text-muted);margin-bottom:.2rem;${isMe ? 'text-align:right' : ''}">
+                        ${isMe ? 'Ви' : Fmt.esc(m.user?.full_name || '—')} · ${time}
+                    </div>
+                    <div style="background:${isMe ? 'linear-gradient(135deg,#C9A227,#FFD700)' : 'var(--bg-raised)'};color:${isMe ? '#0f0c29' : 'var(--text-primary)'};
+                        border-radius:${isMe ? '16px 4px 16px 16px' : '4px 16px 16px 16px'};
+                        padding:.55rem .85rem;font-size:.88rem;line-height:1.5;word-break:break-word;
+                        border:1px solid ${isMe ? 'transparent' : 'var(--border)'}">
+                        ${Fmt.esc(m.message)}
+                    </div>
+                    ${isMe ? `<div style="text-align:right;margin-top:.2rem"><button onclick="CompanyBirthdayModal._deleteMsg('${m.id}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:.65rem;padding:0" title="Видалити">✕ видалити</button></div>` : ''}
+                </div>
+            </div>`;
+        }).join('');
+        list.scrollTop = list.scrollHeight;
+    },
+
+    _insertFsEmoji(e) {
+        const inp = document.getElementById('cbd-fs-input');
+        if (!inp) return;
+        const pos = inp.selectionStart || inp.value.length;
+        inp.value = inp.value.slice(0, pos) + e + inp.value.slice(pos);
+        inp.focus();
+        inp.setSelectionRange(pos + e.length, pos + e.length);
+    },
+
+    async _sendMsg() {
+        const input = document.getElementById('cbd-fs-input');
+        const text = input?.value?.trim();
+        if (!text) return;
+        input.value = '';
+        input.disabled = true;
+        try { await API.companyBdayMessages.add(text); }
+        catch (e) { Toast.error('Помилка', e.message); input.value = text; }
+        finally { input.disabled = false; input.focus(); }
+    },
+
+    async _deleteMsg(id) {
+        try { await API.companyBdayMessages.remove(id); }
+        catch (e) { Toast.error('Помилка', e.message); }
+    },
+
+    // CompanyBirthdayModal.demo()
+    demo() {
+        document.getElementById('company-bday-modal')?.remove();
+        this._show();
+        document.getElementById('cbd-topbar-badge')?.remove();
+        document.getElementById('cbd-emoji-rain')?.remove();
+        localStorage.removeItem(this._topbarKey());
+        setTimeout(() => { this._showTopbarBadge(); this._startEmojiRain(); }, 600);
+        const chatEl = document.getElementById('db-bday-chat');
+        if (chatEl) this._renderChatCard(chatEl);
     }
 };

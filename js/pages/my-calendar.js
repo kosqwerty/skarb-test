@@ -401,6 +401,21 @@ ${this._styles()}`;
         DashboardPage._refreshCalWidget?.();
     },
 
+    // Швидке додавання свята в календар з модального вікна свят
+    async addHolidayEvent(dateStr, title, emoji) {
+        const { error } = await supabase.from('personal_cal_events').insert({
+            user_id: AppState.user.id,
+            title: `${emoji} ${title}`,
+            date: dateStr,
+            color: '#005BBB',
+            is_important: false,
+        });
+        if (error) { Toast.error('Помилка', error.message); return false; }
+        Toast.success('Додано до календаря', title);
+        DashboardPage._refreshCalWidget?.();
+        return true;
+    },
+
     async _deleteEvent(id) {
         if (!confirm('Видалити подію?')) return;
         const { error } = await supabase.from('personal_cal_events').delete().eq('id', id);

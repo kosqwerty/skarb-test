@@ -6,6 +6,7 @@ const RedFolderPage = {
 
     _items: [],
     _docs: {},   // itemId -> resource[]
+    _pages: [],  // available Collections pages
 
     _iconOptions: [
         { icon: 'fa-scale-balanced', label: 'Юристи',         color: '#6366f1' },
@@ -99,11 +100,13 @@ const RedFolderPage = {
         try {
             const canManage = AppState.isAdmin() && !AppState.isPreviewing();
             const seeAll = AppState.isAdmin() || AppState.isManager() || AppState.isSmm();
-            const [items, docs, myDovs] = await Promise.all([
+            const [items, docs, myDovs, pages] = await Promise.all([
                 API.redFolderItems.getAll(),
                 API.resources.getRedFolderDocs().catch(() => []),
-                seeAll ? Promise.resolve(null) : API.dovirenosti.getForProfile(AppState.user.id).catch(() => [])
+                seeAll ? Promise.resolve(null) : API.dovirenosti.getForProfile(AppState.user.id).catch(() => []),
+                API.pages.getAll().catch(() => [])
             ]);
+            this._pages = pages;
             this._items = items;
             this._docs = {};
 
@@ -138,8 +141,14 @@ const RedFolderPage = {
         const rows = this._items.map((item, idx) => {
             const itemDocs = this._docs[item.id] || [];
             const ico = item.icon && item.icon !== 'fa-circle' ? this._iconOptions.find(o => o.icon === item.icon) : null;
-            const docsHtml = `
-                <div class="rf-doc-list">
+            const linkedPage = item.page_id ? this._pages.find(p => p.id === item.page_id) : null;
+            const docsHtml = linkedPage
+                ? `<div class="rf-doc-list">
+                    <button class="rf-doc-link" onclick="Router.go('collections/${linkedPage.id}')">
+                        <i class="fa-solid fa-arrow-up-right-from-square" style="margin-right:.35rem;font-size:.72rem"></i>${Fmt.esc(linkedPage.title)}
+                    </button>
+                   </div>`
+                : `<div class="rf-doc-list">
                     ${itemDocs.map(d => `
                         <div class="rf-doc-item">
                             <button class="rf-doc-link" data-path="${Fmt.esc(d.storage_path||'')}" onclick="RedFolderPage._openDoc(this.dataset.path)">
@@ -150,7 +159,7 @@ const RedFolderPage = {
                                 <button class="rf-doc-del" onclick="RedFolderPage._deleteDoc('${d.id}')" title="Видалити файл"><i class="fa-solid fa-trash"></i></button>` : ''}
                         </div>`).join('')}
                     ${canManage ? `<button class="rf-upload-btn" onclick="RedFolderPage._uploadModal('${item.id}',${JSON.stringify(item.title).replace(/"/g,'&quot;')})"><i class="fa-solid fa-plus"></i> Завантажити</button>` : ''}
-                </div>`;
+                   </div>`;
             return `
             <tr class="rf-tr">
                 <td class="rf-num">${idx + 1}</td>
@@ -195,6 +204,9 @@ const RedFolderPage = {
                 <i class="fa-solid ${o.icon}" style="color:${o.color}"></i>
                 <span>${Fmt.esc(o.label)}</span>
             </button>`).join('');
+        const pageOptions = this._pages.map(p =>
+            `<option value="${p.id}" ${item?.page_id === p.id ? 'selected' : ''}>${Fmt.esc(p.title)}</option>`
+        ).join('');
         Modal.open({
             title: item ? 'Редагувати рядок' : 'Додати рядок',
             size: 'lg',
@@ -208,6 +220,13 @@ const RedFolderPage = {
                 <div>
                     <label>Відповідальний</label>
                     <input id="rf-inp-responsible" value="${item ? Fmt.esc(item.responsible || '') : ''}" placeholder="ПІБ або відділ">
+                </div>
+                <div>
+                    <label>Сторінка-колекція <span style="font-weight:400;color:var(--text-muted)">— замість завантаження файлів</span></label>
+                    <select id="rf-inp-page" style="width:100%;padding:.5rem .75rem;border-radius:var(--radius-md);border:1px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.88rem;font-family:inherit;outline:none">
+                        <option value="">— файли завантажуються вручну —</option>
+                        ${pageOptions}
+                    </select>
                 </div>
                 <div>
                     <label>Іконка відповідального</label>
@@ -233,8 +252,9 @@ const RedFolderPage = {
         const title = Dom.val('rf-inp-title').trim();
         const responsible = Dom.val('rf-inp-responsible').trim();
         const icon = document.getElementById('rf-inp-icon')?.value || null;
+        const page_id = Dom.val('rf-inp-page') || null;
         if (!title) { Toast.warning('Заповніть назву документу'); return; }
-        const fields = { title, responsible, icon: icon || null };
+        const fields = { title, responsible, icon: icon || null, page_id };
         try {
             Loader.show();
             if (id) {

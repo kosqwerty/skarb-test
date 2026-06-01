@@ -799,9 +799,10 @@ const API = {
         },
 
         async markRead(id) {
-            await supabase.from('notifications')
+            const { error } = await supabase.from('notifications')
                 .update({ is_read: true })
                 .eq('id', id).eq('user_id', AppState.user.id);
+            if (error) throw error;
         },
 
         async markAllRead() {

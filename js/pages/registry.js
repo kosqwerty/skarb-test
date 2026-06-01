@@ -71,16 +71,15 @@ const RegistryPage = {
                         <td class="rg-td-topic" rowspan="${rowCount}">
                             <div class="rg-td-topic-inner">
                                 <span style="flex:1">${Fmt.esc(item.topic)}</span>
-                                ${canManage ? `
-                                <div class="rg-topic-actions">
-                                    <button class="rg-ta-btn" title="Редагувати" onclick="RegistryPage._editTopic('${item.id}',${JSON.stringify(item.topic).replace(/"/g,'&quot;')})"><i class="fa-solid fa-pen"></i></button>
-                                    <button class="rg-ta-btn" title="Вгору" onclick="RegistryPage._moveTopic('${item.id}',-1)"><i class="fa-solid fa-arrow-up"></i></button>
-                                    <button class="rg-ta-btn" title="Вниз" onclick="RegistryPage._moveTopic('${item.id}',1)"><i class="fa-solid fa-arrow-down"></i></button>
-                                    <button class="rg-ta-btn danger" title="Видалити тему" onclick="RegistryPage._deleteTopic('${item.id}',${JSON.stringify(item.topic).replace(/"/g,'&quot;')})"><i class="fa-solid fa-trash"></i></button>
-                                </div>` : ''}
                             </div>
                             ${canManage ? `
-                            <div style="display:flex;gap:.35rem;margin-top:.5rem;flex-wrap:wrap">
+                            <div class="rg-topic-actions">
+                                <button class="rg-ta-btn" title="Редагувати" onclick="RegistryPage._editTopic('${item.id}',${JSON.stringify(item.topic).replace(/"/g,'&quot;')})"><i class="fa-solid fa-pen"></i></button>
+                                <button class="rg-ta-btn" title="Вгору" onclick="RegistryPage._moveTopic('${item.id}',-1)"><i class="fa-solid fa-arrow-up"></i></button>
+                                <button class="rg-ta-btn" title="Вниз" onclick="RegistryPage._moveTopic('${item.id}',1)"><i class="fa-solid fa-arrow-down"></i></button>
+                                <button class="rg-ta-btn danger" title="Видалити тему" onclick="RegistryPage._deleteTopic('${item.id}',${JSON.stringify(item.topic).replace(/"/g,'&quot;')})"><i class="fa-solid fa-trash"></i></button>
+                            </div>
+                            <div style="display:flex;gap:.35rem;margin-top:.35rem;flex-wrap:wrap">
                                 <button class="rg-add-doc" onclick="RegistryPage._addDoc('${item.id}','order')"><i class="fa-solid fa-plus"></i> наказ</button>
                                 <button class="rg-add-doc" onclick="RegistryPage._addDoc('${item.id}','disposition')"><i class="fa-solid fa-plus"></i> розпорядження</button>
                             </div>` : ''}
@@ -152,8 +151,7 @@ const RegistryPage = {
             .rg-tr-c6 td{background:rgba(20,184,166,.06)}
             .rg-table tr:hover td{background:var(--bg-raised)!important}
             .rg-td-topic-inner{display:flex;align-items:flex-start;gap:.4rem}
-            .rg-topic-actions{display:flex;gap:.25rem;flex-shrink:0;opacity:0;transition:opacity .15s}
-            .rg-table tr:hover .rg-topic-actions{opacity:1}
+            .rg-topic-actions{display:flex;gap:.25rem;flex-wrap:wrap;margin-top:.3rem}
             .rg-ta-btn{width:22px;height:22px;border-radius:5px;border:1px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.65rem;transition:all .15s;font-family:inherit}
             .rg-ta-btn:hover{border-color:var(--primary);color:var(--primary)}
             .rg-ta-btn.danger:hover{border-color:#ef4444;color:#ef4444}

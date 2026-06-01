@@ -311,7 +311,7 @@ const DashboardPage = {
             API.enrollments.getMyEnrollments().catch(() => []),
             API.news.getAll({ published: true, pageSize: 5 }).catch(() => ({ data: [] })),
             API.birthdays.getToday().catch(() => []),
-            API.notifications.getMine().then(all => all.filter(n => !n.is_read).slice(0, 6)).catch(() => []),
+            API.notifications.getMine().then(all => all.filter(n => !n.is_read)).catch(() => []),
             supabase.from('personal_cal_events')
                 .select('id,title,date,time,end_time,color,is_important,is_done,acked_date,repeat_type,remind_before_days')
                 .eq('user_id', AppState.user.id)
@@ -1262,8 +1262,7 @@ const DashboardPage = {
                    <div id="db-alc-notif">
                         ${recentNotifs.slice(0, 5).map(n => {
                             const m = typeMap(n.type);
-                            const dest = n.link ? JSON.stringify(n.link).replace(/"/g,'&quot;') : '&quot;notifications&quot;';
-                            return `<div class="db-alc-nitem" id="db-ntf-${n.id}" onclick="DashboardPage._openNotif('${n.id}',${dest})">
+                            return `<div class="db-alc-nitem" id="db-ntf-${n.id}" data-link="${Fmt.esc(n.link || 'notifications')}" onclick="DashboardPage._openNotif('${n.id}',this.dataset.link)">
                                 <div class="db-alc-nicon" style="background:${m.bg};color:${m.color}"><i class="fa-solid ${m.icon}"></i></div>
                                 <div style="flex:1;min-width:0">
                                     <div class="db-alc-ntitle">${Fmt.esc(n.title)}</div>
@@ -1274,7 +1273,7 @@ const DashboardPage = {
                                 </button>
                             </div>`;
                         }).join('')}
-                        ${unreadCount > 5 ? `<div class="db-alc-more-row" onclick="Router.go('notifications')">ще ${unreadCount - 5}… <i class="fa-solid fa-arrow-right"></i></div>` : ''}
+                        ${recentNotifs.length > 5 ? `<div class="db-alc-more-row" onclick="Router.go('notifications')">ще ${recentNotifs.length - 5}… <i class="fa-solid fa-arrow-right"></i></div>` : ''}
                    </div>`
                 : `<div class="db-alc-empty">
                     <div class="db-alc-empty-bubble" style="background:rgba(16,185,129,.1);color:#10b981">
@@ -1370,14 +1369,14 @@ const DashboardPage = {
     },
 
     async _openNotif(id, link) {
-        await API.notifications.markRead(id).catch(() => {});
-        UI.updateNotificationBadge(-1);
+        const ok = await API.notifications.markRead(id).then(() => true).catch(() => false);
+        if (ok) UI.updateNotificationBadge(-1);
         Router.go(link);
     },
 
     async _markNotifRead(id) {
-        await API.notifications.markRead(id).catch(() => {});
-        UI.updateNotificationBadge(-1);
+        const ok = await API.notifications.markRead(id).then(() => true).catch(() => false);
+        if (ok) UI.updateNotificationBadge(-1);
         const el = document.getElementById(`db-ntf-${id}`);
         if (el) {
             el.style.transition = 'opacity .25s, transform .25s';

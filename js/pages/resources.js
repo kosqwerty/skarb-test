@@ -599,7 +599,7 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
             }, 30000);
 
         } catch (e) {
-            content.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>${e.message}</h3></div>`;
+            content.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>${Fmt.esc(e.message)}</h3></div>`;
         }
     },
 

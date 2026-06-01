@@ -618,7 +618,8 @@ ${this._styles()}`;
 
         if (timedToday.length || remindEvents.length) {
             try {
-                const todayLocalMidnightUTC = new Date(today + 'T00:00:00').toISOString();
+                const [_y, _m, _d] = today.split('-').map(Number);
+                const todayLocalMidnightUTC = new Date(Date.UTC(_y, _m - 1, _d)).toISOString();
                 const { data: existingNtf } = await supabase
                     .from('notifications')
                     .select('title')

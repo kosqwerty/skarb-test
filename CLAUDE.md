@@ -6,8 +6,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 At the start of every new conversation, before taking any task:
 1. Run `git log --oneline -5` and `git status`
-2. Read relevant memory files from `C:\Users\Boss\.claude\projects\d--lms\memory\`
+2. Read relevant memory files from `C:\Users\neoli\.claude\projects\d--lms\memory\`
 3. Output a brief summary: last commits, dirty files, current migration version, key reminders from memory
+
+## Self-review after writing code
+
+After writing or editing any JS code, before reporting the task as done, always review your own output for:
+1. **XSS** — every DB string in `innerHTML` must be wrapped in `Fmt.esc()`. Exceptions: UUIDs, Fmt.* output, intentional HTML (Quill). URLs from DB must use `Fmt.safeUrl()`.
+2. **onclick injection** — non-UUID strings passed to onclick must use `data-*` attribute pattern, not string interpolation. UUIDs are safe with single quotes.
+3. **UTC date bugs** — never use `new Date(dateStr + 'T00:00:00').toISOString()` — it shifts UTC+ users by one day. Use `new Date(Date.UTC(y, m-1, d)).toISOString()` or `_fmtLocal()`.
+4. **Missing await** — async calls inside loops or sequences must be awaited; fire-and-forget only when intentional.
+5. **Silent error swallow** — `.catch(() => {})` hides real failures. Only swallow when genuinely non-critical; otherwise `.catch(e => console.error(...))` or rethrow.
+6. **Badge/counter drift** — only update UI counters (badges, counts) after confirming the DB operation succeeded, not unconditionally.
 
 ## Project Overview
 
@@ -94,16 +104,17 @@ const SomePage = {
 
 All Supabase calls live here, grouped by domain. Always throws on error so callers can try/catch.
 
-Full namespace list: `API.profiles`, `API.courses`, `API.enrollments`, `API.lessons`, `API.resources`, `API.scorm`, `API.tests`, `API.questions`, `API.testImages`, `API.notifications`, `API.attempts`, `API.progress`, `API.pages`, `API.pageAttachments`, `API.news`, `API.directories`, `API.dovirenosti`, `API.documentDownloads`, `API.birthdays`, `API.accessGroups`, `API.analytics`, `API.system`, `API.surveys`, `API.redFolderItems`.
+Full namespace list: `API.profiles`, `API.courses`, `API.enrollments`, `API.lessons`, `API.resources`, `API.scorm`, `API.tests`, `API.questions`, `API.testImages`, `API.notifications`, `API.attempts`, `API.progress`, `API.pages`, `API.pageAttachments`, `API.news`, `API.directories`, `API.dovirenosti`, `API.documentDownloads`, `API.birthdays`, `API.accessGroups`, `API.analytics`, `API.system`, `API.surveys`, `API.redFolderItems`, `API.companyBdayMessages`.
 
 ### Database migrations
 
-`sql/migration_v*.sql` — incremental, numbered. The current schema is the result of applying all migrations in order. When adding a new column/table, create `migration_v{N+1}.sql` and run it in the Supabase SQL Editor. **Latest is v74** (`resources.red_folder_item_id UUID` — links docs to red folder items).
+`sql/migration_v*.sql` — incremental, numbered. The current schema is the result of applying all migrations in order. When adding a new column/table, create `migration_v{N+1}.sql` and run it in the Supabase SQL Editor. **Latest is v89** (`company_bday_messages` — chat for company birthday).
 
 Key recent migrations:
 - v63: notifications — added `message`, `is_read`, `link`, `created_by`; dropped `notifications_type_check`; enabled realtime
 - v73: created `red_folder_items` table (id, number, title, documents, responsible, icon, timestamps); RLS policies
 - v74: `ALTER TABLE resources ADD COLUMN IF NOT EXISTS red_folder_item_id UUID REFERENCES red_folder_items(id) ON DELETE SET NULL`
+- v89: created `company_bday_messages` table (id, user_id, message, year, created_at); RLS; enabled realtime
 
 When writing a migration, always include `IF NOT EXISTS` / `IF EXISTS` guards and end with RLS + policies.
 
@@ -114,7 +125,7 @@ When writing a migration, always include `IF NOT EXISTS` / `IF EXISTS` guards an
 | `js/config.js` | Supabase credentials, `AppState`, `APP_CONFIG` (buckets, roles, `pageSize: 12`) |
 | `js/app.js` | Route definitions, sidebar rendering, post-login bootstrap, `ImpersonationBanner` |
 | `js/api.js` | All DB/storage access — add new methods here, never call `supabase` from page files |
-| `js/pages/dashboard.js` | Main dashboard: 2-row CSS grid layout (docs/notif/calendar + continue/news), Realtime notification badge |
+| `js/pages/dashboard.js` | Main dashboard: 2-row CSS grid layout (docs/notif/calendar + continue/news), Realtime notification badge. `CompanyBirthdayModal._initDashboardChat()` called on init — renders birthday chat card in `.db-cal-col` (visible only on 9 Nov or via `demo()`) |
 | `js/pages/tests-manager.js` | Largest page (~2300 lines): test builder, question editor (Quill), auto-assign, results |
 | `js/pages/admin.js` | Multi-tab admin panel: users, courses, tests, logs |
 | `js/pages/scheduler.js` | Schedule management (owner/admin/manager only — `canSchedule()`) |
@@ -164,6 +175,7 @@ All PKs are UUID. All tables have `created_at TIMESTAMPTZ DEFAULT NOW()`. Tables
 | `test_attempts` | `user_id`, `test_id`, `attempt_number`, `score`, `percentage`, `passed`, `completed_at` | |
 | `news` | `title`, `content`, `excerpt`, `thumbnail_url`, `thumbnail_position`, `author_id`, `is_published`, `is_pinned` | `thumbnail_position`: `left`\|`center`\|`right` — apply via `background-position` on div, not `object-position` on img |
 | `notifications` | `user_id`, `title`, `message`, `type`, `is_read`, `link` | |
+| `company_bday_messages` | `user_id`, `message`, `year` | Chat for company birthday (9 Nov); Realtime enabled; v89 |
 | `pages` | `title`, `slug`, `content` (HTML), `is_published`, `access_type` | CMS pages for collections |
 | `schedule_events` | `title`, `start_time`, `end_time`, `location_id`, `created_by` | |
 | `access_groups` | `name`, `cities`, `positions`, `departments`, `labels` | Filter groups for content access |
@@ -484,6 +496,29 @@ Drag handle between sidebar and content (`sg-sidebar-resizer`). Width saved to `
 
 ### ScheduleViewPage — location picker
 Replaces tab bar with searchable dropdown (`sgv-loc-search` + `sgv-loc-dropdown`). On focus → `_openLocList()` shows all; on input → `_filterLocs(q)` filters; on select → `_pickLoc(locId, name)`. Works for 200+ locations.
+
+## Notification logic for documents
+
+Two functions send notifications when a document is saved/updated (called from `ResourcesPage.saveResource`):
+
+| Function | When | Recipients |
+|----------|------|-----------|
+| `API.documentDownloads.notifyOnPublish(resource, isUpdate)` | `is_tracked_download = true` | Staff + users who have a matching dovirenost in `resource_dovirenosti` → `profile_dovirenosti`. **No fallback to all users.** If no dovirenosti assigned — only staff. |
+| `API.notifications.notifyResourcePublished(resource, link, isUpdate)` | `is_tracked_download = false` | Staff + `_resolveNotifyUserIds()`: checks `resource_dovirenosti` first, then `access_group_id`, then all users as last resort. |
+
+**Critical order in `saveResource` for updates:** `setDovirenosti` must be called and **awaited** before the notify function — otherwise `_resolveNotifyUserIds` queries stale data from `resource_dovirenosti`.
+
+**`openForm()` guard:** Before opening the edit form, always ensure `_accessGroups` and `_allDovirenosti` are loaded. `openForm()` already does this — do not remove the guard. If either is empty when the form is saved, `access_group_id` gets reset to `null` and `resource_dovirenosti` gets wiped, causing notify to fall back to all users.
+
+## CompanyBirthdayModal (`js/app.js`)
+
+Celebrates company birthday (9 November). Active only that day; use `CompanyBirthdayModal.demo()` to test.
+
+- **Compact card** in `.db-cal-col` — always rendered when `_initDashboardChat()` is called; shows message count badge
+- **Fullscreen overlay** — opens on card click; backdrop blur, Esc/backdrop to close
+- **Realtime** — channel `cbd-chat-{year}` on `company_bday_messages` filtered by `year`
+- **Table** `company_bday_messages`: `user_id`, `message` (1–500 chars), `year` — `API.companyBdayMessages.getByYear(year)` / `.add(text)` / `.remove(id)`
+- **Delete** — user can delete only their own messages (RLS + ✕ button shown only for `isMe`)
 
 ## dashboard.js specifics
 

@@ -341,6 +341,7 @@ const DashboardPage = {
         this._renderCalWidget(calEvents, today, scheduleEntries);
         this._renderImportantEvents(calEvents, today);
         this._renderAlerts(unackedDocs, recentNotifs);
+        UI.updateNotificationBadge(recentNotifs.length, true);
         this._renderBirthdays(birthdays);
         CompanyBirthdayModal._initDashboardChat();
 

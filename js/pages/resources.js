@@ -1582,7 +1582,10 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
         }
     },
 
-    openForm(resource = null) {
+    async openForm(resource = null) {
+        if (!this._accessGroups?.length || !this._allDovirenosti?.length) {
+            await this._loadFilters().catch(() => {});
+        }
         const isEdit = !!resource;
         const fileHint = resource && resource.storage_path
             ? (resource.original_name || resource.storage_path.split('/').pop().replace(/^\d+_/, ''))

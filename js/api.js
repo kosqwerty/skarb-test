@@ -828,15 +828,12 @@ const API = {
         async _resolveNotifyUserIds(resourceId, accessGroupId) {
             if (!resourceId) return [];
             // 1. Перевіряємо довіреності документа
-            const { data: resDovs, error: resDovErr } = await supabase.from('resource_dovirenosti').select('dovirenost_id').eq('resource_id', resourceId);
-            console.log('[notify] resource_dovirenosti query:', { resourceId, resDovs, resDovErr });
+            const { data: resDovs } = await supabase.from('resource_dovirenosti').select('dovirenost_id').eq('resource_id', resourceId);
             const dovIds = (resDovs || []).map(r => r.dovirenost_id);
             if (dovIds.length) {
                 const { data: profDovs } = await supabase.from('profile_dovirenosti').select('profile_id').in('dovirenost_id', dovIds);
-                console.log('[notify] profDovs (users with dovirenost):', profDovs);
                 return [...new Set((profDovs || []).map(r => r.profile_id))];
             }
-            console.log('[notify] no resource_dovirenosti found, falling to accessGroup/all. accessGroupId:', accessGroupId);
             // 2. Якщо є access_group — фільтруємо за її критеріями
             if (accessGroupId) {
                 const { data: ag } = await supabase.from('access_groups')
@@ -872,7 +869,6 @@ const API = {
             const regularIds = await this._resolveNotifyUserIds(resource.id, resource.access_group_id);
 
             const userIds = [...new Set([...staffIds, ...regularIds])];
-            console.log('[notify] notifyResourcePublished final userIds:', userIds, 'staffIds:', staffIds.length, 'regularIds:', regularIds.length);
             if (!userIds.length) return;
             const isDoc = resource.is_tracked_download;
             const link = resource.id ? `resource/${resource.id}` : (overrideLink || (isDoc ? 'documents' : 'knowledge-base'));

@@ -466,6 +466,9 @@ const DashboardPage = {
         document.getElementById('news-popup')?.remove();
         document.getElementById('birthday-modal')?.remove();
         document.getElementById('bd-topbar-cake')?.remove();
+        // Відновлюємо реальні значення бейджів топбару
+        UI.loadNotificationCount();
+        UI.loadNewsCount();
         // Перезапускаємо init щоб відновити реальні дані
         const container = document.getElementById('page-content');
         if (container) this.init(container);
@@ -962,13 +965,15 @@ const DashboardPage = {
                 </div>
             </div>`;
         };
-        const _evRow = (ev) => {
+        const _evRow = (ev, dateLabel) => {
             const c = ev.color || '#6366f1';
-            const time = ev.time ? ` <span style="color:${c};font-size:.7rem;font-weight:600">${ev.time.slice(0,5)}</span>` : '';
+            const time = ev.time ? `${ev.time.slice(0,5)}` : '';
+            const meta = [dateLabel, time].filter(Boolean).join(' · ');
             return `<div class="dp-row">
                 <div class="dp-dot" style="background:${c}"></div>
                 <div class="dp-rtext">
-                    <span class="dp-rtitle">${Fmt.esc(ev.title)}${time}</span>
+                    <span class="dp-rtitle">${Fmt.esc(ev.title)}</span>
+                    ${meta ? `<span class="dp-rsub" style="color:${c};font-weight:600">${meta}</span>` : ''}
                 </div>
             </div>`;
         };
@@ -976,18 +981,21 @@ const DashboardPage = {
         const ua = new Date().toLocaleDateString('uk-UA',{weekday:'long',day:'numeric',month:'long'});
         const ub = tomorrowD.toLocaleDateString('uk-UA',{weekday:'long',day:'numeric',month:'long'});
 
+        const todayShort    = todayD.toLocaleDateString('uk-UA',{day:'numeric',month:'short'});
+        const tomorrowShort = tomorrowD.toLocaleDateString('uk-UA',{day:'numeric',month:'short'});
+
         const secToday = (todayShift || todayEvs.length) ? `
             <div class="dp-day-hdr"><i class="fa-solid fa-sun"></i> Сьогодні · ${ua}</div>
             <div class="dp-day-rows">
                 ${_shiftRow(todayShift)}
-                ${todayEvs.map(_evRow).join('')}
+                ${todayEvs.map(e => _evRow(e, todayShort)).join('')}
             </div>` : '';
 
         const secTomorrow = (tomorrowShift || tomorrowEvs.length) ? `
             <div class="dp-day-hdr" style="margin-top:.75rem"><i class="fa-regular fa-moon"></i> Завтра · ${ub}</div>
             <div class="dp-day-rows">
                 ${_shiftRow(tomorrowShift)}
-                ${tomorrowEvs.map(_evRow).join('')}
+                ${tomorrowEvs.map(e => _evRow(e, tomorrowShort)).join('')}
             </div>` : '';
 
         const body = `<style>

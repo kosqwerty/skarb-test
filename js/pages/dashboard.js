@@ -176,8 +176,8 @@ const DashboardPage = {
             .db-alc-nitem:hover{background:var(--bg-raised)}
             .db-alc-nitem:last-child{border-bottom:none}
             .db-alc-nicon{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:.9rem;flex-shrink:0}
-            .db-alc-ntitle{font-size:.82rem;font-weight:600;color:var(--text-primary);line-height:1.35}
-            .db-alc-nmsg{font-size:.71rem;color:var(--text-muted);margin-top:.1rem;line-height:1.3;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+            .db-alc-ntitle{font-size:.92rem;font-weight:600;color:var(--text-primary);line-height:1.4;white-space:normal;word-break:break-word}
+            .db-alc-nmsg{font-size:.78rem;color:var(--text-muted);margin-top:.1rem;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
             .db-ntf-check{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.58rem;flex-shrink:0;transition:all .15s;font-family:inherit;opacity:0;margin-top:.05rem}
             .db-alc-nitem:hover .db-ntf-check{opacity:1}
             .db-ntf-check:hover{border-color:#10b981;color:#10b981;background:rgba(16,185,129,.1)}

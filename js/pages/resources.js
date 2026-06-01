@@ -15,7 +15,7 @@ const ResourcesPage = {
     _resourceFile: null,
     _myDownloads: {},
     _myLocations: [],
-    _activeTab: 'list',
+    _activeTab: 'registry',
     _pendingResource: null,
     _pendingDownloadFile: false,
     _kbViewMode: localStorage.getItem('kb_view') || 'grid',
@@ -37,7 +37,7 @@ const ResourcesPage = {
         this._resourceFile = null;
         this._myDownloads = {};
         this._myLocations = [];
-        this._activeTab = 'list';
+        this._activeTab = view === 'docs' ? 'registry' : 'list';
 
         if (view === 'admin' && !AppState.isStaff()) {
             Toast.error('Заборонено', 'Тільки адміністратори та викладачі можуть керувати ресурсами');
@@ -78,15 +78,6 @@ const ResourcesPage = {
                     </div>
                     <div class="page-actions">
                         <div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:center">
-                            <input type="text" id="resource-search" placeholder="Пошук..." value=""
-                                   style="width:200px" onkeyup="ResourcesPage.onSearch(event)">
-                            <select id="docs-sort-sel" onchange="ResourcesPage._docsSetSort(this.value)" style="width:auto">
-                                <option value="priority">🔴 Нові / оновлені першими</option>
-                                <option value="newest">↓ Дата додавання</option>
-                                <option value="name_az">A → Я назва</option>
-                                <option value="status_asc">✅ Ознайомлені першими</option>
-                            </select>
-                        </div>
                         ${AppState.isStaff() && AppState.canMutate() ? '<button class="btn btn-primary" onclick="ResourcesPage.openForm()"><i class="fa-solid fa-plus"></i> Додати</button>' : ''}
                             ${AppState.isOwner() ? '<button class="btn btn-ghost btn-sm" onclick="ResourcesPage._openTrash()" title="Кошик"><i class="fa-solid fa-trash"></i> Кошик</button>' : ''}
                         ${HelpTip.render('docs', {
@@ -104,13 +95,39 @@ const ResourcesPage = {
                 })}
                     </div>
                 </div>
-                <div style="display:flex;gap:.5rem;margin-bottom:1.25rem;border-bottom:1px solid var(--border);padding-bottom:.75rem;flex-wrap:wrap;align-items:center">
-                    <button id="docs-tab-list" class="btn btn-primary btn-sm" onclick="ResourcesPage.switchTabList(this)">📋 Всі</button>
-                    <div id="docs-cat-chips" style="display:flex;gap:.4rem;flex-wrap:wrap"></div>
-                    <button id="docs-tab-branch" class="btn btn-ghost btn-sm" onclick="ResourcesPage.switchTab('branch',this)">⚖️ Куточок споживача</button>
-                    <button id="docs-tab-red-folder" class="btn btn-ghost btn-sm" onclick="ResourcesPage.switchTab('red-folder',this)" style="color:#ef4444;border-color:rgba(239,68,68,.3)">📁 Червона папка</button>
-                    <button id="docs-tab-registry" class="btn btn-ghost btn-sm" onclick="ResourcesPage.switchTab('registry',this)">📋 Реєстри</button>
-                    ${isManager ? '<button id="docs-tab-status" class="btn btn-ghost btn-sm" onclick="ResourcesPage.switchTab(\'status\',this)" style="margin-left:auto">📊 Статус</button>' : ''}
+                </div>
+                <style>
+                .dtab-bar{display:flex;align-items:center;gap:.3rem;border-bottom:1px solid var(--border);margin-bottom:1.25rem;padding-bottom:.6rem;overflow-x:auto;scrollbar-width:none;flex-wrap:wrap}
+                .dtab-bar::-webkit-scrollbar{display:none}
+                .dtab-sep{width:1px;height:24px;background:var(--text-muted);opacity:.35;margin:0 .2rem;flex-shrink:0}
+                .dtab{display:inline-flex;align-items:center;gap:.45rem;padding:.45rem .9rem;font-size:.85rem;font-weight:600;font-family:inherit;color:var(--text-muted);background:none;border:none;border-radius:var(--radius-md);cursor:pointer;white-space:nowrap;transition:all .15s;flex-shrink:0}
+                .dtab:hover{color:var(--text-primary);background:var(--bg-raised)}
+                .dtab.active{color:var(--primary);background:rgba(99,102,241,.12);font-weight:700}
+                .dtab.active .dtab-ic{background:rgba(99,102,241,.18);color:var(--primary)}
+                .dtab-ic{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:.78rem;background:var(--bg-base);transition:all .15s;flex-shrink:0}
+                .dtab-red{color:#ef4444!important}
+                .dtab-red .dtab-ic{background:rgba(239,68,68,.12);color:#ef4444}
+                .dtab-red:hover{background:rgba(239,68,68,.07)!important}
+                .dtab-red.active{color:#ef4444!important;background:rgba(239,68,68,.13)!important;font-weight:700}
+                .dtab-red.active .dtab-ic{background:rgba(239,68,68,.22)!important;color:#ef4444!important}
+                .dtab-status{margin-left:auto}
+                </style>
+                <div id="docs-tabs-bar" class="dtab-bar">
+                    <button id="docs-tab-registry" class="dtab active" onclick="ResourcesPage.switchTab('registry',this)"><span class="dtab-ic">📋</span>Реєстри</button>
+                    <div class="dtab-sep"></div>
+                    <button id="docs-tab-red-folder" class="dtab dtab-red" onclick="ResourcesPage.switchTab('red-folder',this)"><span class="dtab-ic"><i class="fa-solid fa-folder" style="color:#ef4444"></i></span>Червона папка</button>
+                    <div class="dtab-sep"></div>
+                    <button id="docs-tab-branch" class="dtab" onclick="ResourcesPage.switchTab('branch',this)"><span class="dtab-ic">⚖️</span>Куточок споживача</button>
+                    <div class="dtab-sep"></div>
+                    <button id="docs-cat-npa" class="dtab" onclick="ResourcesPage._setCatFilter('Список НПА',this)"><span class="dtab-ic">📜</span>Список НПА</button>
+                    <div class="dtab-sep"></div>
+                    <button id="docs-cat-nakaz" class="dtab" onclick="ResourcesPage._setCatFilter('Наказ',this)"><span class="dtab-ic">📄</span>Накази</button>
+                    <div class="dtab-sep"></div>
+                    <button id="docs-cat-rozp" class="dtab" onclick="ResourcesPage._setCatFilter('Розпорядження',this)"><span class="dtab-ic">📄</span>Розпорядження</button>
+                    <div class="dtab-sep"></div>
+                    <button id="docs-tab-list" class="dtab" onclick="ResourcesPage.switchTabList(this)"><span class="dtab-ic">🗂️</span>Всі</button>
+                    <div id="docs-cat-chips" style="display:none"></div>
+                    ${isManager ? '<button id="docs-tab-status" class="dtab dtab-status" onclick="ResourcesPage.switchTab(\'status\',this)"><span class="dtab-ic">📊</span>Статус</button>' : ''}
                 </div>
                 <div id="docs-tab-content">
                     <div id="resource-list" class="resource-list-docs"></div>
@@ -118,13 +135,15 @@ const ResourcesPage = {
                 </div>`;
 
             await this._loadFilters();
-            // Якщо повертаємось з документа з активним чіпом — застосовуємо до load
-            if (this._initCat) this._category = this._initCat;
-            await this.load(true);
-            // Відновлюємо вкладку якщо повернулись з документа
-            if (this._initTab && this._initTab !== 'list') {
-                const tabBtn = document.getElementById(`docs-tab-${this._initTab}`);
-                if (tabBtn) this.switchTab(this._initTab, tabBtn);
+            // Відновлюємо вкладку або відкриваємо дефолтну (registry)
+            const restoreTab = this._initTab || 'registry';
+            this._activeTab = ''; // скидаємо щоб switchTab не вийшов достроково
+            if (restoreTab === 'list') {
+                if (this._initCat) this._category = this._initCat;
+                await this.load(true);
+            } else {
+                const tabBtn = document.getElementById(`docs-tab-${restoreTab}`);
+                if (tabBtn) this.switchTab(restoreTab, tabBtn);
             }
             return;
         }
@@ -394,10 +413,9 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
     },
 
     switchTabList(el) {
-        // Завжди скидаємо категорію і перезавантажуємо, навіть якщо вже на list
         this._category = '';
-        document.querySelectorAll('.docs-cat-chip').forEach(b => { b.classList.remove('btn-primary'); b.classList.add('btn-ghost'); });
-        if (el) { el.classList.add('btn-primary'); el.classList.remove('btn-ghost'); }
+        document.querySelectorAll('#docs-tabs-bar .dtab').forEach(b => b.classList.remove('active'));
+        document.getElementById('docs-tab-list')?.classList.add('active');
         if (this._activeTab === 'list') {
             this._page = 0;
             this.load();
@@ -406,7 +424,7 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
         }
     },
 
-    switchTab(tab, el) {
+    switchTab(tab, el, { skipLoad = false } = {}) {
         if (this._activeTab === tab) return; // повторний клік — нічого не робимо
         this._activeTab = tab;
         // Оновлюємо URL тихо — щоб history.back() повертав на правильну вкладку
@@ -414,24 +432,9 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
             const newHash = tab === 'list' ? '#/documents' : `#/documents?tab=${tab}`;
             history.replaceState(null, '', newHash);
         }
-        document.querySelectorAll('button[id^="docs-tab-"]').forEach(btn => {
-            const isActive = btn.id === `docs-tab-${tab}`;
-            const isRed = btn.id === 'docs-tab-red-folder';
-            btn.className = isActive ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm';
-            if (isRed && isActive) {
-                btn.style.background = 'linear-gradient(135deg,#ef4444,#b91c1c)';
-                btn.style.color = '#fff';
-                btn.style.borderColor = 'transparent';
-            } else if (isRed) {
-                btn.style.background = '';
-                btn.style.color = '#ef4444';
-                btn.style.borderColor = 'rgba(239,68,68,.3)';
-            } else {
-                btn.style.background = '';
-                btn.style.color = '';
-                btn.style.borderColor = '';
-            }
-        });
+        // скидаємо всі таби і кат-кнопки
+        document.querySelectorAll('#docs-tabs-bar .dtab').forEach(btn => btn.classList.remove('active'));
+        document.getElementById(`docs-tab-${tab}`)?.classList.add('active');
         const content = document.getElementById('docs-tab-content');
         if (!content) return;
         clearInterval(this._statusRefreshTimer);
@@ -442,12 +445,25 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
 
         if (tab === 'list') {
             content.innerHTML = `
+                <div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem">
+                    <div style="position:relative;flex:1;min-width:200px;max-width:360px">
+                        <i class="fa-solid fa-magnifying-glass" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:.85rem;pointer-events:none"></i>
+                        <input type="text" id="resource-search" placeholder="Пошук за назвою або описом..." value="${this._search}"
+                               style="width:100%;padding-left:2.1rem;box-sizing:border-box" oninput="ResourcesPage.onSearch(event)">
+                    </div>
+                    <select id="docs-sort-sel" onchange="ResourcesPage._docsSetSort(this.value)" style="width:auto">
+                        <option value="priority">🔴 Нові / оновлені першими</option>
+                        <option value="newest">↓ Дата додавання</option>
+                        <option value="name_az">A → Я назва</option>
+                        <option value="status_asc">✅ Ознайомлені першими</option>
+                    </select>
+                </div>
                 <div id="resource-list" class="resource-list-docs"></div>
                 <div id="resources-pagination" style="display:flex;justify-content:center;gap:.5rem;margin-top:1.5rem"></div>`;
-            this.load();
+            if (!skipLoad) this.load();
         } else if (tab === 'branch') {
             content.innerHTML = `
-                ${AppState.isAdmin() ? '<div style="margin-bottom:.75rem"><button class="btn btn-primary btn-sm" onclick="BranchDocsPage._blockModal()"><i class="fa-solid fa-plus"></i> Додати блок</button></div>' : ''}
+                ${AppState.isAdmin() ? '<div style="margin-bottom:.75rem"><button class="btn btn-primary" onclick="BranchDocsPage._blockModal()"><i class="fa-solid fa-plus"></i> Додати блок</button></div>' : ''}
                 <div id="bd-tab-area" style="width:1000px"></div>`;
             BranchDocsPage.renderInTab(document.getElementById('bd-tab-area'));
         } else if (tab === 'red-folder') {
@@ -826,37 +842,31 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
         // docs-cat-chips are built dynamically in load() from actual documents
     },
 
+    _highlightCatBtn(activeBtn, cat) {
+        // скидаємо всі таби
+        document.querySelectorAll('#docs-tabs-bar .dtab').forEach(b => b.classList.remove('active'));
+        if (cat && activeBtn) {
+            activeBtn.classList.add('active');
+        } else {
+            document.getElementById('docs-tab-list')?.classList.add('active');
+        }
+    },
+
     _setCatFilter(cat, btn) {
         if (this._category === cat) return; // повторний клік — нічого не робимо
         this._category = cat;
-        // if not on list tab — switch first, then apply filter
+        // if not on list tab — switch first (skipLoad=true), then load once with category
         if (this._activeTab !== 'list') {
             const savedCat = this._category;
-            const savedBtn = btn;
-            this.switchTab('list', document.getElementById('docs-tab-list'));
+            this.switchTab('list', document.getElementById('docs-tab-list'), { skipLoad: true });
             // restore category (switchTab reset it to '')
             this._category = savedCat;
             this._page = 0;
-            // re-apply chip + "Всі" button visual state
-            if (savedCat) {
-                document.querySelectorAll('.docs-cat-chip').forEach(b => {
-                    if (b.textContent.trim() === savedCat) { b.classList.add('btn-primary'); b.classList.remove('btn-ghost'); }
-                });
-                const tabAll = document.getElementById('docs-tab-list');
-                if (tabAll) { tabAll.classList.remove('btn-primary'); tabAll.classList.add('btn-ghost'); }
-            }
+            this._highlightCatBtn(btn, savedCat);
             this.load();
             return;
         }
-        // reset all chips
-        document.querySelectorAll('.docs-cat-chip').forEach(b => { b.classList.remove('btn-primary'); b.classList.add('btn-ghost'); });
-        const tabAll = document.getElementById('docs-tab-list');
-        if (this._category) {
-            btn.classList.add('btn-primary'); btn.classList.remove('btn-ghost');
-            if (tabAll) { tabAll.classList.remove('btn-primary'); tabAll.classList.add('btn-ghost'); }
-        } else {
-            if (tabAll) { tabAll.classList.add('btn-primary'); tabAll.classList.remove('btn-ghost'); }
-        }
+        this._highlightCatBtn(btn, this._category);
         this._page = 0;
         // Оновлюємо URL щоб history.back() повернув з активним чіпом
         const catParam = this._category ? `&cat=${encodeURIComponent(this._category)}` : '';
@@ -1183,7 +1193,7 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
 
             if (this._view === 'docs') {
                 // always rebuild category chips from full unfiltered visible list
-                const cats = [...new Set(filtered.map(r => r.category).filter(c => c && c.toLowerCase() !== 'general' && c.toLowerCase() !== 'реєстри нпа' && c.toLowerCase() !== 'реєстри'))].sort();
+                const cats = [...new Set(filtered.map(r => r.category).filter(c => c && c.toLowerCase() !== 'general' && c.toLowerCase() !== 'реєстри нпа' && c.toLowerCase() !== 'реєстри' && c.toLowerCase() !== 'список нпа' && c.toLowerCase() !== 'наказ' && c.toLowerCase() !== 'розпорядження' && c.toLowerCase() !== 'анкета'))].sort();
                 const catChips = document.getElementById('docs-cat-chips');
                 if (catChips) {
                     catChips.innerHTML = cats.map(c => `
@@ -1252,18 +1262,21 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
                 ? (dlAt && !isNewVersion ? 'doc-acked' : 'doc-needs-ack')
                 : '';
 
+            const typeColor = { pdf:'#ef4444', video:'#2563eb', scorm:'#f59e0b', link:'#06b6d4', file:'#6366f1', document:'#10b981', image:'#ec4899' };
+            const tc = typeColor[resource.type||'file'] || '#6366f1';
             return `
-                <div class="resource-item ${docClass}" data-id="${resource.id}" onclick="ResourcesPage.openViewer('${resource.id}')" style="cursor:pointer">
+                <div class="resource-item ${docClass}" data-id="${resource.id}" onclick="ResourcesPage.openViewer('${resource.id}')" style="cursor:pointer;border-left-color:${tc}">
                     <div class="resource-icon ${resource.type || 'file'}">${icon}</div>
                     <div class="resource-info">
                         <div class="resource-title">${this._highlight(resource.title, this._search)}</div>
-                        ${resource.description ? `<div style="font-size:.8rem;color:var(--text-muted);margin-top:.15rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${this._highlight(resource.description, this._search)}</div>` : ''}
+                        ${resource.description ? `<div style="font-size:.8rem;color:var(--text-secondary);margin-top:.2rem;white-space:normal;word-break:break-word;line-height:1.5">${this._highlight(resource.description, this._search)}</div>` : ''}
                         <div class="resource-meta">
-                            ${resource.category ? `Категорія: ${Fmt.esc(resource.category)}` : ''}
-                            <span style="font-size:.72rem;font-weight:600;background:var(--bg-base);border:1px solid var(--border);border-radius:4px;padding:1px 5px;margin-left:.3rem;color:var(--text-muted)">${this._fileLabel(resource)}</span>
-                            ${resource.access_group
-                                ? ` · <span style="color:var(--primary);font-weight:500">${resource.access_group.is_public ? '🌐' : '🔐'} ${resource.access_group.name}</span>`
-                                : ''}
+                            ${resource.category ? `<span class="resource-meta-chip" style="background:rgba(99,102,241,.08);color:var(--primary);border-color:rgba(99,102,241,.2)"><i class="fa-solid fa-tag" style="font-size:.6rem"></i>${Fmt.esc(resource.category)}</span>` : ''}
+                            <span class="resource-meta-chip" style="background:${tc}14;color:${tc};border-color:${tc}30">${this._fileLabel(resource)}</span>
+                            ${resource.access_group ? `<span class="resource-meta-chip" style="background:rgba(99,102,241,.08);color:var(--primary);border-color:rgba(99,102,241,.2)">${resource.access_group.is_public ? '🌐' : '🔐'} ${Fmt.esc(resource.access_group.name)}</span>` : ''}
+                            ${(resource.resource_dovirenosti||[]).length
+                                ? (resource.resource_dovirenosti).map(rd => rd.dovirenosti?.name ? `<span class="resource-meta-chip" style="background:rgba(245,158,11,.08);color:#d97706;border-color:rgba(245,158,11,.25)"><i class="fa-solid fa-building" style="font-size:.6rem"></i>${Fmt.esc(rd.dovirenosti.name)}</span>` : '').join('')
+                                : `<span class="resource-meta-chip" style="background:rgba(16,185,129,.08);color:#059669;border-color:rgba(16,185,129,.25)"><i class="fa-solid fa-globe" style="font-size:.6rem"></i>Для всіх ТОВ</span>`}
                         </div>
                         <div data-status-row style="margin-top:.3rem;display:flex;align-items:center;gap:.4rem;flex-wrap:wrap">${statusBadge}${deadlineBadge}</div>
                     </div>
@@ -1601,7 +1614,7 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
 
                     <div class="form-group" style="grid-column:1/-1">
                         <label>Опис</label>
-                        <textarea id="res-desc" placeholder="Короткий опис ресурсу">${resource?.description || ''}</textarea>
+                        <textarea id="res-desc" placeholder="Короткий опис ресурсу" lang="uk" spellcheck="true">${resource?.description || ''}</textarea>
                     </div>
 
                     <div class="form-group">

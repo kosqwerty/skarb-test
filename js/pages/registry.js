@@ -187,6 +187,10 @@ const RegistryPage = {
             .rg-sec-body{display:none;flex-direction:column}
             .rg-sec.open .rg-sec-body{display:flex}
             .rg-sec-toolbar{padding:.6rem 1rem;border-bottom:1px solid var(--border);background:var(--bg-surface)}
+            .rg-sec-desc-wrap{padding:.7rem 1.1rem;border-bottom:1px solid var(--border);background:linear-gradient(135deg,rgba(99,102,241,.04) 0%,rgba(99,102,241,.01) 100%)}
+            .rg-sec-desc-input{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius-md);padding:.5rem .75rem;font-size:.84rem;color:var(--text-primary);background:var(--bg-raised);resize:vertical;min-height:56px;font-family:inherit;line-height:1.5;outline:none;transition:border-color .15s}
+            .rg-sec-desc-input:focus{border-color:var(--primary)}
+            .rg-sec-desc-text{margin:0;font-size:1rem;color:var(--primary);line-height:1.65;white-space:pre-wrap;font-style:italic;padding:.1rem 0 .1rem .85rem;border-left:3px solid rgba(99,102,241,.35)}
             .rg-sec .rg-table-wrap{border:none;border-radius:0;border-top:none;margin-bottom:.75rem}
             .rg-sec .rg-table tr:last-child td{border-bottom:none}
             .rg-sections-empty{text-align:center;padding:2rem 1rem;color:var(--text-muted);font-size:.85rem;border:1px dashed var(--border);border-radius:var(--radius-xl);margin-top:1.5rem}
@@ -224,6 +228,15 @@ const RegistryPage = {
                             </div>` : ''}
                         </div>
                         <div class="rg-sec-body">
+                            ${sec.description || canManage ? `
+                            <div class="rg-sec-desc-wrap">
+                                ${canManage ? `
+                                <textarea class="rg-sec-desc-input" id="rg-desc-${sec.id}"
+                                    placeholder="Опис розділу (необов'язково)..."
+                                    onblur="RegistryPage._saveSecDesc('${sec.id}',this.value)"
+                                    >${Fmt.esc(sec.description || '')}</textarea>` :
+                                (sec.description ? `<p class="rg-sec-desc-text">${Fmt.esc(sec.description)}</p>` : '')}
+                            </div>` : ''}
                             ${canManage ? `<div class="rg-sec-toolbar">
                                 <button class="btn btn-primary btn-sm" onclick="RegistryPage._addTopicToSection('${sec.id}')"><i class="fa-solid fa-plus"></i> Додати тему</button>
                             </div>` : ''}
@@ -251,6 +264,18 @@ const RegistryPage = {
     _toggleSec(id) {
         const el = document.getElementById(`rg-sec-${id}`);
         if (el) el.classList.toggle('open');
+    },
+
+    async _saveSecDesc(id, value) {
+        const desc = value.trim() || null;
+        const sec = this._sections.find(s => s.id === id);
+        if (!sec || sec.description === desc) return;
+        sec.description = desc;
+        try {
+            await API.registrySections.update(id, { description: desc });
+        } catch (e) {
+            Toast.error('Помилка', e.message);
+        }
     },
 
     // ── Додати тему (глобально, без розділу) ─────────────────────────
@@ -373,13 +398,16 @@ const RegistryPage = {
         try {
             Loader.show();
             const { data } = await supabase.from('resources')
-                .select('id, title, type, description')
+                .select('id, title, type, description, resource_dovirenosti(dovirenosti(id,name))')
                 .is('deleted_at', null)
                 .is('display_block', null)
                 .is('red_folder_item_id', null)
                 .is('course_id', null)
                 .order('title');
-            resources = data || [];
+            resources = (data || []).map(r => ({
+                ...r,
+                _dovNames: (r.resource_dovirenosti || []).map(rd => rd.dovirenosti?.name).filter(Boolean)
+            }));
         } catch (_) {} finally { Loader.hide(); }
 
         if (!resources.length) {
@@ -645,10 +673,16 @@ const RegistryPage = {
         const selectedId = this._docPickerSelected?.id;
         picker.innerHTML = filtered.map(r => {
             const isActive = r.id === selectedId;
+            const dovBadges = (r._dovNames || []).map(n =>
+                `<span style="font-size:.68rem;background:rgba(99,102,241,.1);color:var(--primary);border:1px solid rgba(99,102,241,.2);border-radius:10px;padding:.05rem .4rem;white-space:nowrap">${Fmt.esc(n)}</span>`
+            ).join('');
             return `<div class="rg-picker-item${isActive ? ' active' : ''}" data-id="${r.id}"
                 onclick="RegistryPage._pickDoc('${r.id}',${JSON.stringify(r.title).replace(/"/g,'&quot;')})">
                 <div class="rg-picker-item-icon"><i class="fa-solid fa-file-lines"></i></div>
-                <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Fmt.esc(r.title)}</span>
+                <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:.2rem">
+                    <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Fmt.esc(r.title)}</span>
+                    ${dovBadges ? `<div style="display:flex;gap:.3rem;flex-wrap:wrap">${dovBadges}</div>` : ''}
+                </div>
                 <i class="fa-solid fa-check rg-picker-item-check"></i>
             </div>`;
         }).join('');

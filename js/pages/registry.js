@@ -403,6 +403,7 @@ const RegistryPage = {
                 .is('display_block', null)
                 .is('red_folder_item_id', null)
                 .is('course_id', null)
+                .eq('type', 'pdf')
                 .order('title');
             resources = (data || []).map(r => ({
                 ...r,
@@ -673,9 +674,11 @@ const RegistryPage = {
         const selectedId = this._docPickerSelected?.id;
         picker.innerHTML = filtered.map(r => {
             const isActive = r.id === selectedId;
-            const dovBadges = (r._dovNames || []).map(n =>
-                `<span style="font-size:.68rem;background:rgba(99,102,241,.1);color:var(--primary);border:1px solid rgba(99,102,241,.2);border-radius:10px;padding:.05rem .4rem;white-space:nowrap">${Fmt.esc(n)}</span>`
-            ).join('');
+            const dovBadges = (r._dovNames || []).length
+                ? (r._dovNames).map(n =>
+                    `<span style="font-size:.68rem;background:rgba(99,102,241,.1);color:var(--primary);border:1px solid rgba(99,102,241,.2);border-radius:10px;padding:.05rem .4rem;white-space:nowrap">${Fmt.esc(n)}</span>`
+                  ).join('')
+                : `<span style="font-size:.68rem;background:rgba(16,185,129,.08);color:#059669;border:1px solid rgba(16,185,129,.25);border-radius:10px;padding:.05rem .4rem;white-space:nowrap">🌐 Для всіх ТОВ</span>`;
             return `<div class="rg-picker-item${isActive ? ' active' : ''}" data-id="${r.id}"
                 onclick="RegistryPage._pickDoc('${r.id}',${JSON.stringify(r.title).replace(/"/g,'&quot;')})">
                 <div class="rg-picker-item-icon"><i class="fa-solid fa-file-lines"></i></div>

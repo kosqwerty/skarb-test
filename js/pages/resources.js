@@ -1274,6 +1274,9 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
                             ${resource.category ? `<span class="resource-meta-chip" style="background:rgba(99,102,241,.08);color:var(--primary);border-color:rgba(99,102,241,.2)"><i class="fa-solid fa-tag" style="font-size:.6rem"></i>${Fmt.esc(resource.category)}</span>` : ''}
                             <span class="resource-meta-chip" style="background:${tc}14;color:${tc};border-color:${tc}30">${this._fileLabel(resource)}</span>
                             ${resource.access_group ? `<span class="resource-meta-chip" style="background:rgba(99,102,241,.08);color:var(--primary);border-color:rgba(99,102,241,.2)">${resource.access_group.is_public ? '🌐' : '🔐'} ${Fmt.esc(resource.access_group.name)}</span>` : ''}
+                            ${resource.download_allowed !== false
+                                ? `<span class="resource-meta-chip" style="background:rgba(16,185,129,.08);color:#059669;border-color:rgba(16,185,129,.25)"><i class="fa-solid fa-download" style="font-size:.6rem"></i>Завантаження</span>`
+                                : `<span class="resource-meta-chip" style="background:rgba(239,68,68,.06);color:#ef4444;border-color:rgba(239,68,68,.2)"><i class="fa-solid fa-ban" style="font-size:.6rem"></i>Тільки перегляд</span>`}
                             ${(resource.resource_dovirenosti||[]).length
                                 ? (resource.resource_dovirenosti).map(rd => rd.dovirenosti?.name ? `<span class="resource-meta-chip" style="background:rgba(245,158,11,.08);color:#d97706;border-color:rgba(245,158,11,.25)"><i class="fa-solid fa-building" style="font-size:.6rem"></i>${Fmt.esc(rd.dovirenosti.name)}</span>` : '').join('')
                                 : `<span class="resource-meta-chip" style="background:rgba(16,185,129,.08);color:#059669;border-color:rgba(16,185,129,.25)"><i class="fa-solid fa-globe" style="font-size:.6rem"></i>Для всіх ТОВ</span>`}
@@ -2023,7 +2026,8 @@ const ResourceViewPage = {
             }
 
             // ── Перевірка доступу для не-staff (враховує preview-режим) ──
-            if (!AppState.isStaff()) {
+            // Менеджери бачать всі документи (як у docs list view)
+            if (!AppState.isStaff() && !AppState.isManager()) {
                 // 1. Access group
                 if (!AccessGroupsPage.checkAccess(resource.access_group)) {
                     container.innerHTML = `

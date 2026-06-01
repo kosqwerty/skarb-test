@@ -824,23 +824,49 @@ const API = {
             await supabase.from('notifications').delete().eq('link', link);
         },
 
+        // Визначає яким звичайним користувачам надіслати сповіщення з урахуванням довіреностей та access_group
+        async _resolveNotifyUserIds(resourceId, accessGroupId) {
+            if (!resourceId) return [];
+            // 1. Перевіряємо довіреності документа
+            const { data: resDovs } = await supabase.from('resource_dovirenosti').select('dovirenost_id').eq('resource_id', resourceId);
+            const dovIds = (resDovs || []).map(r => r.dovirenost_id);
+            if (dovIds.length) {
+                const { data: profDovs } = await supabase.from('profile_dovirenosti').select('profile_id').in('dovirenost_id', dovIds);
+                return [...new Set((profDovs || []).map(r => r.profile_id))];
+            }
+            // 2. Якщо є access_group — фільтруємо за її критеріями
+            if (accessGroupId) {
+                const { data: ag } = await supabase.from('access_groups')
+                    .select('is_public, cities:access_group_cities(city), positions:access_group_positions(position), departments:access_group_departments(department), labels:access_group_labels(label)')
+                    .eq('id', accessGroupId).single();
+                if (!ag) return []; // групу видалено — нікому не надсилаємо
+                if (ag.is_public) {
+                    const { data: all } = await supabase.from('profiles').select('id').eq('is_active', true).eq('role', 'user');
+                    return (all || []).map(p => p.id);
+                }
+                // Будуємо фільтр за містами/посадами/підрозділами/мітками
+                let q = supabase.from('profiles').select('id').eq('is_active', true).eq('role', 'user');
+                const cities = (ag.cities || []).map(c => c.city).filter(Boolean);
+                const positions = (ag.positions || []).map(p => p.position).filter(Boolean);
+                const depts = (ag.departments || []).map(d => d.department).filter(Boolean);
+                const labels = (ag.labels || []).map(l => l.label).filter(Boolean);
+                if (cities.length) q = q.in('city', cities);
+                if (positions.length) q = q.in('job_position', positions);
+                if (depts.length) q = q.in('subdivision', depts);
+                if (labels.length) q = q.in('label', labels);
+                const { data: filtered } = await q;
+                return (filtered || []).map(p => p.id);
+            }
+            // 3. Без обмежень — всі активні користувачі
+            const { data: allUsers } = await supabase.from('profiles').select('id').eq('is_active', true).eq('role', 'user');
+            return (allUsers || []).map(p => p.id);
+        },
+
         async notifyResourcePublished(resource, overrideLink = null, isUpdate = false) {
             const staffRoles = ['owner', 'admin', 'smm', 'teacher', 'manager'];
             const { data: staffData } = await supabase.from('profiles').select('id').eq('is_active', true).in('role', staffRoles);
             const staffIds = (staffData || []).map(p => p.id);
-
-            let regularIds = [];
-            if (resource.id) {
-                const { data: resDovs } = await supabase.from('resource_dovirenosti').select('dovirenost_id').eq('resource_id', resource.id);
-                const dovIds = (resDovs || []).map(r => r.dovirenost_id);
-                if (dovIds.length) {
-                    const { data: profDovs } = await supabase.from('profile_dovirenosti').select('profile_id').in('dovirenost_id', dovIds);
-                    regularIds = [...new Set((profDovs || []).map(r => r.profile_id))];
-                } else {
-                    const { data: allUsers } = await supabase.from('profiles').select('id').eq('is_active', true).eq('role', 'user');
-                    regularIds = (allUsers || []).map(p => p.id);
-                }
-            }
+            const regularIds = await this._resolveNotifyUserIds(resource.id, resource.access_group_id);
 
             const userIds = [...new Set([...staffIds, ...regularIds])];
             if (!userIds.length) return;
@@ -1449,19 +1475,7 @@ const API = {
             const staffRoles = ['owner', 'admin', 'smm', 'teacher', 'manager'];
             const { data: staffData } = await supabase.from('profiles').select('id').eq('is_active', true).in('role', staffRoles);
             const staffIds = (staffData || []).map(p => p.id);
-
-            let regularIds = [];
-            if (resource.id) {
-                const { data: resDovs } = await supabase.from('resource_dovirenosti').select('dovirenost_id').eq('resource_id', resource.id);
-                const dovIds = (resDovs || []).map(r => r.dovirenost_id);
-                if (dovIds.length) {
-                    const { data: profDovs } = await supabase.from('profile_dovirenosti').select('profile_id').in('dovirenost_id', dovIds);
-                    regularIds = [...new Set((profDovs || []).map(r => r.profile_id))];
-                } else {
-                    const { data: allUsers } = await supabase.from('profiles').select('id').eq('is_active', true).eq('role', 'user');
-                    regularIds = (allUsers || []).map(p => p.id);
-                }
-            }
+            const regularIds = await API.notifications._resolveNotifyUserIds(resource.id, resource.access_group_id);
 
             const userIds = [...new Set([...staffIds, ...regularIds])];
             if (!userIds.length) return;

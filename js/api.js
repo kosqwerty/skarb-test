@@ -872,6 +872,7 @@ const API = {
             const regularIds = await this._resolveNotifyUserIds(resource.id, resource.access_group_id);
 
             const userIds = [...new Set([...staffIds, ...regularIds])];
+            console.log('[notify] notifyResourcePublished final userIds:', userIds, 'staffIds:', staffIds.length, 'regularIds:', regularIds.length);
             if (!userIds.length) return;
             const isDoc = resource.is_tracked_download;
             const link = resource.id ? `resource/${resource.id}` : (overrideLink || (isDoc ? 'documents' : 'knowledge-base'));

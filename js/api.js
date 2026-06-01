@@ -1475,7 +1475,15 @@ const API = {
             const staffRoles = ['owner', 'admin', 'smm', 'teacher', 'manager'];
             const { data: staffData } = await supabase.from('profiles').select('id').eq('is_active', true).in('role', staffRoles);
             const staffIds = (staffData || []).map(p => p.id);
-            const regularIds = await API.notifications._resolveNotifyUserIds(resource.id, resource.access_group_id);
+            // For tracked docs: only notify regular users who have the matching dovirenost.
+            // Never fall back to "all users" — if no dovirenosti assigned, only staff are notified.
+            const { data: resDovs } = await supabase.from('resource_dovirenosti').select('dovirenost_id').eq('resource_id', resource.id);
+            const dovIds = (resDovs || []).map(r => r.dovirenost_id);
+            let regularIds = [];
+            if (dovIds.length) {
+                const { data: profDovs } = await supabase.from('profile_dovirenosti').select('profile_id').in('dovirenost_id', dovIds);
+                regularIds = [...new Set((profDovs || []).map(r => r.profile_id))];
+            }
 
             const userIds = [...new Set([...staffIds, ...regularIds])];
             if (!userIds.length) return;

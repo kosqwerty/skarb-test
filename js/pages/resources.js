@@ -1774,6 +1774,7 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
                 }
                 delete fields._bump_version;
                 await API.resources.update(resourceId, fields);
+                await API.resources.setDovirenosti(resourceId, dovIds).catch(() => {});
                 if (document.getElementById('res-notify')?.checked) {
                     if (fields.is_tracked_download) {
                         API.documentDownloads.notifyOnPublish({ ...fields, id: resourceId }, true).catch(e => console.error('[notify] notifyOnPublish error:', e));
@@ -1798,8 +1799,6 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
                 }
                 Toast.success('Додано', 'Новий ресурс успішно створено');
             }
-
-            if (resourceId) await API.resources.setDovirenosti(savedId, dovIds).catch(() => {});
 
             Modal.close();
             await Promise.all([this.load(), this._loadFilters()]);

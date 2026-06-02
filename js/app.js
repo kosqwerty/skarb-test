@@ -52,8 +52,9 @@ const App = {
 
         // Check if user is on a trusted network (IP whitelist)
         await AppState.checkTrustedNetwork();
-        // Rebuild nav after network check so blocked icons appear
+        // Rebuild nav + mob-nav after network check so blocked icons appear
         UI.renderNavigation(profile.role);
+        UI.applyMobNavRestrictions();
 
         // Render navigation based on role
         UI.renderNavigation(profile.role);

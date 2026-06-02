@@ -3201,6 +3201,19 @@ select {
     }
     .mob-nav-btn i { font-size: 1.15rem; }
     .mob-nav-btn.active { color: var(--primary); }
+    .mob-nav-btn-blocked { opacity: .35; cursor: not-allowed; }
+    .mob-blocked-icon {
+        position: absolute;
+        top: 6px;
+        left: 50%;
+        transform: translateX(6px);
+        font-size: .55rem;
+        color: #ef4444;
+        background: var(--bg-surface, #0B1733);
+        border-radius: 50%;
+        line-height: 1;
+        pointer-events: none;
+    }
     .mob-nav-btn .ntf-bell-badge {
         position: absolute;
         top: 6px;

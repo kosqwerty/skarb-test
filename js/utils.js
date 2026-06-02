@@ -491,6 +491,24 @@ const UI = {
             { title: 'Особисте',  items: [ contactsItem, schedulerItemNs, bmItem ] }
         ];
     },
+    applyMobNavRestrictions() {
+        // profile не потребує довіреної мережі — тому в allowed
+        const allowed = new Set(['dashboard', 'news', 'profile']);
+        document.querySelectorAll('.mob-nav-btn').forEach(btn => {
+            const route = btn.dataset.route;
+            const blocked = !AppState.isTrustedNetwork && route && !allowed.has(route);
+            btn.classList.toggle('mob-nav-btn-blocked', blocked);
+            // прибираємо старий значок якщо є
+            btn.querySelector('.mob-blocked-icon')?.remove();
+            if (blocked) {
+                const icon = document.createElement('span');
+                icon.className = 'mob-blocked-icon';
+                icon.innerHTML = '<i class="fa-solid fa-ban"></i>';
+                btn.querySelector('i')?.parentElement?.appendChild(icon) || btn.prepend(icon);
+            }
+        });
+    },
+
     updateActiveNav(route) {
         const parentRoute = {
             'schedule-graph': 'scheduler',

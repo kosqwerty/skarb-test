@@ -371,6 +371,7 @@ const DashboardPage = {
     },
 
     _startTour() {
+        if (window.innerWidth <= 1024) return;
         const steps = [
             {
                 icon: '👋',

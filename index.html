@@ -203,30 +203,31 @@
         <main id="page-content" class="page-content"></main>
     </div>
 
-    <!-- Mobile bottom navigation -->
-    <nav class="mob-nav" id="mob-nav">
-        <button class="mob-nav-btn" onclick="Router.go('dashboard')" data-route="dashboard">
-            <i class="fa-solid fa-house"></i>
-            <span>Головна</span>
-        </button>
-        <button class="mob-nav-btn" onclick="Router.go('expert-path')" data-route="expert-path">
-            <i class="fa-solid fa-book-open"></i>
-            <span>Навчання</span>
-        </button>
-        <button class="mob-nav-btn" onclick="Router.go('news')" data-route="news">
-            <i class="fa-solid fa-newspaper"></i>
-            <span>Новини</span>
-        </button>
-        <button class="mob-nav-btn" onclick="Router.go('bookmarks')" data-route="bookmarks">
-            <i class="fa-solid fa-bookmark"></i>
-            <span>Закладки</span>
-        </button>
-        <button class="mob-nav-btn" id="mob-profile-btn" onclick="Router.go('profile')" data-route="profile">
-            <i class="fa-solid fa-circle-user"></i>
-            <span>Профіль</span>
-        </button>
-    </nav>
 </div>
+
+<!-- Mobile bottom navigation (поза app-shell щоб fixed працював коректно) -->
+<nav class="mob-nav" id="mob-nav">
+    <button class="mob-nav-btn" onclick="Router.go('dashboard')" data-route="dashboard">
+        <i class="fa-solid fa-house"></i>
+        <span>Головна</span>
+    </button>
+    <button class="mob-nav-btn" onclick="Router.go('expert-path')" data-route="expert-path">
+        <i class="fa-solid fa-book-open"></i>
+        <span>Навчання</span>
+    </button>
+    <button class="mob-nav-btn" onclick="Router.go('news')" data-route="news">
+        <i class="fa-solid fa-newspaper"></i>
+        <span>Новини</span>
+    </button>
+    <button class="mob-nav-btn" onclick="Router.go('bookmarks')" data-route="bookmarks">
+        <i class="fa-solid fa-bookmark"></i>
+        <span>Закладки</span>
+    </button>
+    <button class="mob-nav-btn" id="mob-profile-btn" onclick="Router.go('profile')" data-route="profile">
+        <i class="fa-solid fa-circle-user"></i>
+        <span>Профіль</span>
+    </button>
+</nav>
 
 <!-- МОДАЛЬНЕ ВІКНО -->
 <div id="modal-backdrop" class="modal-backdrop hidden" onclick="Modal.close()"></div>

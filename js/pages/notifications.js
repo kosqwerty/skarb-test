@@ -240,7 +240,20 @@ const NotificationsPage = {
             <div class="ntf-icon ntf-icon-${n.type}">${typeIcon}</div>
             <div class="ntf-body">
                 <div class="ntf-item-title">${Fmt.esc(n.title)}</div>
-                <div class="ntf-item-msg">${Fmt.esc(n.message || '')}</div>
+                <div class="ntf-item-msg">${(() => {
+                    if (AppState.isAdmin() && n.message?.includes('з IP:')) {
+                        const ip = (n.message.match(/з IP:\s*([\d.:\w]+)/) || [])[1] || '';
+                        if (ip) {
+                            const before = Fmt.esc(n.message.replace(`з IP: ${ip}`, '').trim());
+                            return `${before} з IP: <span style="font-family:monospace;font-weight:700;color:var(--text-primary)">${Fmt.esc(ip)}</span>
+                                <button title="Скопіювати IP" data-ip="${Fmt.esc(ip)}" onclick="event.stopPropagation();navigator.clipboard.writeText(this.dataset.ip).then(()=>{this.innerHTML='<i class=\\'fa-solid fa-check\\' style=\\'color:#10b981\\'></i>';setTimeout(()=>this.innerHTML='<i class=\\'fa-regular fa-copy\\'></i>',1500)})"
+                                    style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:.1rem .25rem;border-radius:4px;vertical-align:middle;line-height:1">
+                                    <i class="fa-regular fa-copy"></i>
+                                </button>`;
+                        }
+                    }
+                    return Fmt.esc(n.message || '');
+                })()}</div>
                 <div class="ntf-item-meta">
                     <span class="${typeCls}">${typeLabel}</span>
                     <span>від ${Fmt.esc(sender)}</span>
@@ -249,10 +262,6 @@ const NotificationsPage = {
                 </div>
             </div>
             <div class="ntf-actions" onclick="event.stopPropagation()">
-                ${AppState.isAdmin() && n.message?.includes('з IP:') ? (() => {
-                    const ip = (n.message.match(/з IP:\s*([\d.:\w]+)/) || [])[1] || '';
-                    return ip ? `<button class="ntf-act" title="Скопіювати IP" data-ip="${Fmt.esc(ip)}" onclick="navigator.clipboard.writeText(this.dataset.ip).then(()=>{this.innerHTML='<i class=\\'fa-solid fa-check\\'></i>';setTimeout(()=>this.innerHTML='<i class=\\'fa-solid fa-copy\\'></i>',1500)})"><i class="fa-solid fa-copy"></i></button>` : '';
-                })() : ''}
                 <button class="ntf-act" title="Видалити" onclick="NotificationsPage._deleteOne('${n.id}', this.closest('.ntf-item'))"><i class="fa-solid fa-trash"></i></button>
             </div>
             ${n.link ? `<i class="fa-solid fa-chevron-right" style="font-size:.6rem;color:var(--text-muted);align-self:center;flex-shrink:0"></i>` : ''}

@@ -88,7 +88,7 @@ const Router = {
         document.body.scrollTop = 0;
         container.style.transition = 'none';
         container.style.opacity = '0';
-        container.style.transform = 'translateY(8px)';
+        container.style.transform = '';
         container.innerHTML = `
             <div style="display:flex;align-items:center;justify-content:center;min-height:300px">
                 <div class="spinner"></div>
@@ -102,9 +102,8 @@ const Router = {
             });
             this._prevCleanup = cleanup || null;
             requestAnimationFrame(() => {
-                container.style.transition = 'opacity 0.6s cubic-bezier(.4,0,.2,1), transform 0.6s cubic-bezier(.4,0,.2,1)';
+                container.style.transition = 'opacity 0.4s ease';
                 container.style.opacity = '1';
-                container.style.transform = 'translateY(0)';
             });
         } catch(err) {
             console.error('Router error:', err);

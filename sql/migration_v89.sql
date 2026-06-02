@@ -23,3 +23,4 @@ CREATE POLICY "company_bday_messages_delete" ON company_bday_messages
 
 -- Увімкнути Realtime
 ALTER PUBLICATION supabase_realtime ADD TABLE company_bday_messages;
+это

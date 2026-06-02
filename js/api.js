@@ -2050,6 +2050,30 @@ const API = {
 
     // ── User Sessions ──────────────────────────────────────────────────
     trustedIps: {
+        async requestAccess(ip) {
+            // Отримуємо всіх адмінів та овнерів
+            const { data: admins, error } = await supabase.from('profiles')
+                .select('id')
+                .in('role', ['admin', 'owner'])
+                .eq('is_active', true);
+            if (error) throw error;
+            if (!admins?.length) return;
+
+            const name = AppState.profile?.full_name || AppState.profile?.email || 'Користувач';
+            const notifications = admins.map(a => ({
+                user_id: a.id,
+                title: '🔐 Запит на довірений IP',
+                message: `${name} запитує доступ з IP: ${ip}`,
+                type: 'info',
+                link: 'admin?tab=trusted-ips',
+                created_by: AppState.user.id,
+                is_read: false,
+            }));
+
+            const { error: insErr } = await supabase.from('notifications').insert(notifications);
+            if (insErr) throw insErr;
+        },
+
         async getAll() {
             const { data, error } = await supabase.from('trusted_ips')
                 .select('id, ip, label, created_at, created_by')

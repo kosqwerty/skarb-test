@@ -370,6 +370,21 @@ const DashboardPage = {
         setTimeout(() => this._startTour(), 1800);
     },
 
+    async _requestIpAccess() {
+        const ip = AppState._clientIp;
+        if (!ip || ip === 'unknown') { Toast.error('IP не визначено', ''); return; }
+        const btn = document.getElementById('db-req-ip-btn');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Надсилання...'; }
+        try {
+            await API.trustedIps.requestAccess(ip);
+            Toast.success('Запит надіслано', `Адміністратори отримали ваш IP: ${ip}`);
+            if (btn) { btn.innerHTML = '<i class="fa-solid fa-check"></i> Надіслано'; btn.style.color = '#10b981'; }
+        } catch(e) {
+            Toast.error('Помилка', e.message);
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Запросити доступ'; }
+        }
+    },
+
     _startTour() {
         if (window.innerWidth <= 1024) return;
         const steps = [
@@ -1765,7 +1780,10 @@ const DashboardPage = {
                 <div style="margin-top:.25rem">
                     ${AppState.isTrustedNetwork
                         ? `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.72rem;font-weight:600;color:#10b981;background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.25);border-radius:20px;padding:.15rem .6rem"><i class="fa-solid fa-shield-halved"></i> Мережа довірена</span>`
-                        : `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.72rem;font-weight:600;color:#f59e0b;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.25);border-radius:20px;padding:.15rem .6rem"><i class="fa-solid fa-triangle-exclamation"></i> Обмежений доступ</span>`
+                        : `<span style="display:inline-flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+                               <span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.72rem;font-weight:600;color:#f59e0b;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.25);border-radius:20px;padding:.15rem .6rem"><i class="fa-solid fa-triangle-exclamation"></i> Обмежений доступ</span>
+                               <button id="db-req-ip-btn" onclick="DashboardPage._requestIpAccess()" style="display:inline-flex;align-items:center;gap:.3rem;font-size:.72rem;font-weight:600;color:#6366f1;background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.25);border-radius:20px;padding:.15rem .7rem;cursor:pointer;font-family:inherit;transition:all .18s" onmouseover="this.style.background='rgba(99,102,241,.2)'" onmouseout="this.style.background='rgba(99,102,241,.1)'"><i class="fa-solid fa-paper-plane"></i> Запросити доступ</button>
+                           </span>`
                     }
                 </div>
             </div>

@@ -249,6 +249,10 @@ const NotificationsPage = {
                 </div>
             </div>
             <div class="ntf-actions" onclick="event.stopPropagation()">
+                ${AppState.isAdmin() && n.message?.includes('з IP:') ? (() => {
+                    const ip = (n.message.match(/з IP:\s*([\d.:\w]+)/) || [])[1] || '';
+                    return ip ? `<button class="ntf-act" title="Скопіювати IP" data-ip="${Fmt.esc(ip)}" onclick="navigator.clipboard.writeText(this.dataset.ip).then(()=>{this.innerHTML='<i class=\\'fa-solid fa-check\\'></i>';setTimeout(()=>this.innerHTML='<i class=\\'fa-solid fa-copy\\'></i>',1500)})"><i class="fa-solid fa-copy"></i></button>` : '';
+                })() : ''}
                 <button class="ntf-act" title="Видалити" onclick="NotificationsPage._deleteOne('${n.id}', this.closest('.ntf-item'))"><i class="fa-solid fa-trash"></i></button>
             </div>
             ${n.link ? `<i class="fa-solid fa-chevron-right" style="font-size:.6rem;color:var(--text-muted);align-self:center;flex-shrink:0"></i>` : ''}

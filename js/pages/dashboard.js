@@ -1750,7 +1750,13 @@ const DashboardPage = {
         </style>
         <div class="db-welcome-bar">
             <div class="dbw-ava">${avatarHtml}</div>
-            <div class="dbw-greet">${greeting}, <strong>${Fmt.esc(firstName)}!</strong></div>
+            <div class="dbw-greet">
+                ${greeting}, <strong>${Fmt.esc(firstName)}!</strong>
+                ${AppState.isTrustedNetwork
+                    ? `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.72rem;font-weight:600;color:#10b981;background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.25);border-radius:20px;padding:.15rem .6rem;margin-left:.5rem;vertical-align:middle"><i class="fa-solid fa-shield-halved"></i> Мережа довірена</span>`
+                    : `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.72rem;font-weight:600;color:#f59e0b;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.25);border-radius:20px;padding:.15rem .6rem;margin-left:.5rem;vertical-align:middle"><i class="fa-solid fa-triangle-exclamation"></i> Обмежений доступ</span>`
+                }
+            </div>
             ${courseHtml}
             ${chipsHtml}
             <svg class="dbw-deco" viewBox="0 0 620 80" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" preserveAspectRatio="xMaxYMid slice">

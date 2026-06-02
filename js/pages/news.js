@@ -229,6 +229,15 @@ const NewsPage = {
                     .nv-recent-title{font-size:.83rem;font-weight:600;line-height:1.4;color:var(--text-primary);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
                     .nv-recent-date{font-size:.73rem;color:var(--text-muted);margin-top:.2rem}
                     @media(max-width:900px){.nv-top,.nv-article{grid-template-columns:1fr}.nv-sidebar{position:static}.nv-hero{height:260px}.nv-hero-title{font-size:1.5rem}.nv-hero-content{padding:1.25rem}}
+                    @media(max-width:768px){
+                        .nv-hero{height:200px;border-radius:10px}
+                        .nv-hero-title{font-size:1.15rem;line-height:1.3}
+                        .nv-hero-content{width:90%;padding:.9rem 1rem;bottom:0;left:0}
+                        .nv-hero-meta{gap:.6rem;font-size:.75rem;flex-wrap:wrap}
+                        .nv-hero-actions{top:.5rem;left:.5rem}
+                        .nv-article-body{font-size:.9rem}
+                        .nv-react-btn{padding:.35rem .7rem;font-size:.8rem}
+                    }
                 </style>
 
                 <!-- ── Top: Hero + Sidebar ── -->

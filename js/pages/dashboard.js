@@ -1769,8 +1769,8 @@ const DashboardPage = {
                     }
                 </div>
             </div>
-            ${courseHtml}
-            ${chipsHtml}
+            ${AppState.isTrustedNetwork ? courseHtml : ''}
+            ${AppState.isTrustedNetwork ? chipsHtml : ''}
             <svg class="dbw-deco" viewBox="0 0 620 80" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" preserveAspectRatio="xMaxYMid slice">
                 <defs>
                     <filter id="dbw-f-glow" x="-60%" y="-60%" width="220%" height="220%">

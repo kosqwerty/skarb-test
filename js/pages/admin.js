@@ -4222,6 +4222,15 @@ const AdminPage = {
                 font-size: .78rem; color: var(--text-muted); display: flex; gap: .5rem; align-items: flex-start;
             }
             .tip-info i { color: var(--primary); margin-top: .1rem; flex-shrink: 0; }
+            .tip-row.tip-row-highlight {
+                background: rgba(245,158,11,.12);
+                border-left: 3px solid #f59e0b;
+                animation: tip-pulse 0.4s ease;
+            }
+            @keyframes tip-pulse {
+                0%   { background: rgba(245,158,11,.35); }
+                100% { background: rgba(245,158,11,.12); }
+            }
             </style>
 
             <div class="tip-wrap">
@@ -4276,7 +4285,7 @@ const AdminPage = {
                             <i class="fa-solid fa-shield-halved" style="font-size:2.5rem;opacity:.2;display:block;margin-bottom:.75rem"></i>
                             Список порожній — додайте перший IP
                         </div>` : ips.map(row => `
-                        <div class="tip-row">
+                        <div class="tip-row" data-ip="${Fmt.esc(row.ip)}">
                             <div class="tip-row-ip">
                                 ${Fmt.esc(row.ip)}
                                 ${row.ip === myIp ? `<span class="badge badge-success" style="font-size:.62rem;margin-left:.35rem">Ваш</span>` : ''}
@@ -4293,7 +4302,7 @@ const AdminPage = {
 
                 <div class="tip-info">
                     <i class="fa-solid fa-circle-info"></i>
-                    <span>Розділи <b>Адміністрування, Аналітика, Планування, Графік</b> доступні лише з довірених IP-адрес.</span>
+                    <span>З недовіреної мережі доступні лише <b>Головна</b> та <b>Новини</b>. Всі інші розділи заблоковані.</span>
                 </div>
 
             </div>`;
@@ -4301,6 +4310,18 @@ const AdminPage = {
 
         await render();
         AdminPage._tipRerender = render;
+    },
+
+    _highlightTipRows(ips) {
+        if (!Array.isArray(ips)) ips = [ips];
+        ips.forEach(ip => {
+            const row = document.querySelector(`.tip-row[data-ip="${ip}"]`);
+            if (!row) return;
+            row.classList.remove('tip-row-highlight');
+            void row.offsetWidth; // reflow to restart animation
+            row.classList.add('tip-row-highlight');
+            row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        });
     },
 
     async _addTrustedIp() {
@@ -4313,7 +4334,12 @@ const AdminPage = {
             Toast.success('Додано', ip);
             await AdminPage._tipRerender?.();
         } catch(e) {
-            Toast.error('Помилка', e.message);
+            if (e.code === '23505' || e.message?.includes('duplicate') || e.message?.includes('unique')) {
+                Toast.warning('Вже існує', `IP ${ip} вже є в списку довірених`);
+                AdminPage._highlightTipRows(ip);
+            } else {
+                Toast.error('Помилка', e.message);
+            }
         }
     },
 
@@ -4330,6 +4356,7 @@ const AdminPage = {
         const text = await file.text();
         const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
         let added = 0, skipped = 0;
+        const duplicates = [];
         for (const line of lines) {
             const [ip, ...rest] = line.split(/\s+/);
             const label = rest.join(' ') || null;
@@ -4337,11 +4364,21 @@ const AdminPage = {
             try {
                 await API.trustedIps.add(ip, label);
                 added++;
-            } catch { skipped++; }
+            } catch(e) {
+                if (e.code === '23505' || e.message?.includes('duplicate') || e.message?.includes('unique')) {
+                    duplicates.push(ip);
+                }
+                skipped++;
+            }
         }
         input.value = '';
-        Toast.success('Імпорт завершено', `Додано: ${added}, пропущено: ${skipped}`);
         await AdminPage._tipRerender?.();
+        if (duplicates.length) {
+            Toast.warning('Імпорт завершено', `Додано: ${added}, дублікатів: ${duplicates.length}`);
+            AdminPage._highlightTipRows(duplicates);
+        } else {
+            Toast.success('Імпорт завершено', `Додано: ${added}, пропущено: ${skipped}`);
+        }
     },
 
     async _deleteTrustedIp(id, ip) {

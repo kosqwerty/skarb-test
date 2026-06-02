@@ -52,6 +52,8 @@ const App = {
 
         // Check if user is on a trusted network (IP whitelist)
         await AppState.checkTrustedNetwork();
+        // Rebuild nav after network check so blocked icons appear
+        UI.renderNavigation(profile.role);
 
         // Render navigation based on role
         UI.renderNavigation(profile.role);
@@ -74,14 +76,15 @@ const App = {
         CompanyBirthdayModal.check();
 
         // Розділи закриті для недовіреної мережі
-        const TRUSTED_ONLY_ROUTES = ['admin', 'analytics', 'scheduler', 'schedule-graph', 'schedule-view', 'label-access', 'access-groups'];
-        const requireTrusted = (fallback = 'dashboard') => {
-            if (!AppState.isTrustedNetwork) {
+        const requireTrusted = (isDocs = false) => {
+            if (AppState.isTrustedNetwork) return true;
+            if (isDocs) {
+                Toast.error('Немає доступу', 'Перегляд документів та файлів доступний лише з довіреної мережі');
+            } else {
                 Toast.warning('Обмежений доступ', 'Цей розділ доступний лише з довіреної мережі');
-                Router.go(fallback);
-                return false;
             }
-            return true;
+            Router.go('dashboard');
+            return false;
         };
 
         // Define routes
@@ -91,14 +94,17 @@ const App = {
             },
 
             'courses/:id': async ({ container, params }) => {
+                if (!requireTrusted()) return;
                 await CourseViewPage.init(container, params);
             },
 
             'lessons/:id': async ({ container, params }) => {
+                if (!requireTrusted()) return;
                 await LessonViewPage.init(container, params);
             },
 
             'tests/:id': async ({ container, params }) => {
+                if (!requireTrusted()) return;
                 await TestsPage.init(container, params);
             },
 
@@ -114,30 +120,37 @@ const App = {
             },
 
             'resources': async ({ container, params }) => {
+                if (!requireTrusted(true)) return;
                 Router.go('knowledge-base');
             },
 
             'knowledge-base': async ({ container, params }) => {
+                if (!requireTrusted(true)) return;
                 await ResourcesPage.init(container, { view: 'kb' });
             },
 
             'documents': async ({ container, params }) => {
+                if (!requireTrusted(true)) return;
                 await ResourcesPage.init(container, { view: 'docs', tab: params.tab || '', cat: params.cat || '' });
             },
 
             'branch-docs': async ({ container }) => {
+                if (!requireTrusted(true)) return;
                 await BranchDocsPage.init(container);
             },
 
             'collections': async ({ container }) => {
+                if (!requireTrusted(true)) return;
                 await CollectionsPage.init(container);
             },
 
             'collections/:id': async ({ container, params }) => {
+                if (!requireTrusted(true)) return;
                 await CollectionsPage.initView(container, params);
             },
 
             'resource/:id': async ({ container, params }) => {
+                if (!requireTrusted(true)) return;
                 await ResourceViewPage.init(container, params);
             },
 
@@ -150,6 +163,7 @@ const App = {
             },
 
             'results': async ({ container }) => {
+                if (!requireTrusted()) return;
                 await App.renderResults(container);
             },
 
@@ -163,19 +177,21 @@ const App = {
             },
 
             'notifications': async ({ container }) => {
+                if (!requireTrusted()) return;
                 NotificationsPage.destroy?.();
                 await NotificationsPage.init(container);
                 return () => NotificationsPage.destroy?.();
             },
 
             'contacts': async ({ container }) => {
+                if (!requireTrusted()) return;
                 await ContactsPage.init(container);
             },
 
             'bookmarks': async ({ container }) => {
+                if (!requireTrusted()) return;
                 await BookmarksPage.init(container);
             },
-
 
             'schedule-graph': async ({ container, params }) => {
                 if (!requireTrusted()) return;
@@ -189,18 +205,22 @@ const App = {
             },
 
             'my-calendar': async ({ container, params }) => {
+                if (!requireTrusted()) return;
                 await MyCalendarPage.init(container, params);
             },
 
             'tests-manager': async () => {
+                if (!requireTrusted()) return;
                 Router.go('admin?tab=tests');
             },
 
             'my-tests': async ({ container }) => {
+                if (!requireTrusted()) return;
                 await MyTestsPage.init(container);
             },
 
             'expert-path': async ({ container }) => {
+                if (!requireTrusted()) return;
                 await ExpertPathPage.init(container);
             }
         });

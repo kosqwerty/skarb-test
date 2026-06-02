@@ -1648,6 +1648,33 @@ body.light-theme .logo-icon .logo-dark  { display: none; }
     border-color: rgba(255,255,255,.15);
     box-shadow: 0 2px 8px rgba(0,0,0,.25);
 }
+
+/* Заблоковані пункти (недовірена мережа) */
+.nav-item-blocked {
+    opacity: .45;
+    cursor: not-allowed;
+}
+.nav-item-blocked:hover {
+    background: transparent;
+    color: inherit;
+}
+.nav-item-blocked:hover .nav-icon {
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+}
+.nav-blocked-icon {
+    position: absolute;
+    bottom: -3px;
+    right: -3px;
+    font-size: .62rem;
+    color: #ef4444;
+    background: var(--bg-surface);
+    border-radius: 50%;
+    line-height: 1;
+    pointer-events: none;
+}
+.light-theme .nav-item-blocked { opacity: .4; }
 .nav-item.active .nav-icon {
     background: rgba(201,162,39,.25);
     border-color: rgba(201,162,39,.4);

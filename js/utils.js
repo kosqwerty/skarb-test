@@ -3,7 +3,7 @@
 // ================================================================
 
 const Toast = {
-    show(type, title, message = '', duration = 4000) {
+    show(type, title, message = '', duration = 7000) {
         const icons = { success: '✅', error: '❌', warning: '⚠️', info: 'ℹ️' };
         const container = document.getElementById('toast-container');
         const el = document.createElement('div');
@@ -138,9 +138,13 @@ const UI = {
         el.insertAdjacentHTML('beforeend', html);
         el.scrollTop = 0;
     },
+    // Роути доступні без довіреної мережі
+    _trustedAllowed: new Set(['dashboard', 'news']),
+
     renderNavigation(role) {
         const nav   = document.getElementById('sidebar-nav');
         const items = this._getNavItems(role);
+        const blocked = !AppState.isTrustedNetwork;
         nav.innerHTML = items.map(section => {
             const visible = section.items.filter(item => {
                 try { return typeof AccessRestrictions !== 'undefined' ? AccessRestrictions.canAccess(item.route) : true; }
@@ -150,16 +154,20 @@ const UI = {
             return `
             <div class="nav-section">
                 <div class="nav-section-title" style="background:linear-gradient(90deg,#C9A227,#2563EB);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">${section.title}</div>
-                ${visible.map(item => `
-                    <div class="nav-item" data-route="${item.route}" data-label="${item.label}" onclick="Router.go('${item.route}')">
+                ${visible.map(item => {
+                    const isBlocked = blocked && !this._trustedAllowed.has(item.route);
+                    return `
+                    <div class="nav-item${isBlocked ? ' nav-item-blocked' : ''}" data-route="${item.route}" data-label="${item.label}" onclick="Router.go('${item.route}')">
                         <span class="nav-icon">
                             ${item.icon}
                             ${item.badge ? `<span class="nav-badge nav-badge-dot">${item.badge}</span>` : ''}
                             ${item.badgeId ? `<span class="nav-badge nav-badge-dot hidden" id="${item.badgeId}"></span>` : ''}
                             ${item.impBadgeId ? `<span class="nav-imp-bolt hidden" id="${item.impBadgeId}"><i class="fa-solid fa-bolt"></i></span>` : ''}
+                            ${isBlocked ? `<span class="nav-blocked-icon" title="Недоступно з цієї мережі"><i class="fa-solid fa-ban"></i></span>` : ''}
                         </span>
                         <span class="nav-label">${item.label}</span>
-                    </div>`).join('')}
+                    </div>`;
+                }).join('')}
             </div>`;
         }).join('');
     },

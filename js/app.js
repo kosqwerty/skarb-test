@@ -50,6 +50,9 @@ const App = {
         // Load restrictions before rendering nav (safe — never throws)
         try { await AccessRestrictions.load(); } catch { /* table may not exist yet */ }
 
+        // Check if user is on a trusted network (IP whitelist)
+        await AppState.checkTrustedNetwork();
+
         // Render navigation based on role
         UI.renderNavigation(profile.role);
         UI.renderSidebarUser(profile);
@@ -70,6 +73,17 @@ const App = {
         // День народження Скарбниці — 9 листопада
         CompanyBirthdayModal.check();
 
+        // Розділи закриті для недовіреної мережі
+        const TRUSTED_ONLY_ROUTES = ['admin', 'analytics', 'scheduler', 'schedule-graph', 'schedule-view', 'label-access', 'access-groups'];
+        const requireTrusted = (fallback = 'dashboard') => {
+            if (!AppState.isTrustedNetwork) {
+                Toast.warning('Обмежений доступ', 'Цей розділ доступний лише з довіреної мережі');
+                Router.go(fallback);
+                return false;
+            }
+            return true;
+        };
+
         // Define routes
         Router.define({
             'dashboard': async ({ container }) => {
@@ -89,11 +103,13 @@ const App = {
             },
 
             'analytics': async ({ container, params }) => {
+                if (!requireTrusted()) return;
                 await AnalyticsPage.init(container, params);
                 return () => AnalyticsPage.destroy?.();
             },
 
             'admin': async ({ container, params }) => {
+                if (!requireTrusted()) return;
                 await AdminPage.init(container, params);
             },
 
@@ -142,6 +158,7 @@ const App = {
             },
 
             'scheduler': async ({ container, params }) => {
+                if (!requireTrusted()) return;
                 await SchedulerPage.init(container, params);
             },
 
@@ -161,11 +178,13 @@ const App = {
 
 
             'schedule-graph': async ({ container, params }) => {
+                if (!requireTrusted()) return;
                 if (params?.view === 'employee') await ScheduleGraphEmployee.init(container);
                 else await ScheduleGraphPage.init(container);
             },
 
             'schedule-view': async ({ container }) => {
+                if (!requireTrusted()) return;
                 await ScheduleViewPage.init(container);
             },
 

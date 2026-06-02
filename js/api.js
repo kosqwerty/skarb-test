@@ -2049,6 +2049,25 @@ const API = {
     },
 
     // ── User Sessions ──────────────────────────────────────────────────
+    trustedIps: {
+        async getAll() {
+            const { data, error } = await supabase.from('trusted_ips')
+                .select('id, ip, label, created_at, created_by')
+                .order('created_at', { ascending: false });
+            if (error) throw error;
+            return data || [];
+        },
+        async add(ip, label) {
+            const { error } = await supabase.from('trusted_ips')
+                .insert({ ip: ip.trim(), label: label?.trim() || null, created_by: AppState.user.id });
+            if (error) throw error;
+        },
+        async remove(id) {
+            const { error } = await supabase.from('trusted_ips').delete().eq('id', id);
+            if (error) throw error;
+        },
+    },
+
     companyBdayMessages: {
         async getByYear(year) {
             const { data, error } = await supabase.from('company_bday_messages')

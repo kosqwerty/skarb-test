@@ -32,6 +32,7 @@ const AdminPage = {
                 ${AppState.isOwner() ? `<button class="tab" data-tab="trash" onclick="AdminPage.switchTab('trash', this)"><i class="fa-solid fa-trash"></i> Кошик</button>` : ''}
                 ${canManageUsers ? `<button class="tab" data-tab="supersearch" onclick="AdminPage.switchTab('supersearch', this)"><i class="fa-solid fa-magnifying-glass-chart"></i> Супер пошук</button>` : ''}
                 ${AppState.isOwner() ? `<button class="tab" data-tab="activity" onclick="AdminPage.switchTab('activity', this)"><i class="fa-solid fa-clock-rotate-left"></i> Активність</button>` : ''}
+                ${AppState.isAdmin() ? `<button class="tab" data-tab="trusted-ips" onclick="AdminPage.switchTab('trusted-ips', this)"><i class="fa-solid fa-shield-halved"></i> Довірені IP</button>` : ''}
             </div>
 
             <div id="admin-content"></div>`;
@@ -59,6 +60,7 @@ const AdminPage = {
             'users': 'Користувачі', 'courses': 'Курси', 'tests': 'Тести', 'news': 'Новини',
             'access-groups': 'Доступ до ресурсів',
             'trash': 'Кошик', 'logs': 'Логи', 'supersearch': 'Супер пошук', 'activity': 'Активність',
+            'trusted-ips': 'Довірені IP',
         };
         ActivityTracker.track('page_view', {
             page: `admin|${tab}`,
@@ -82,6 +84,7 @@ const AdminPage = {
                 case 'trash':         await this._renderTrash(el);                  break;
                 case 'supersearch':   await this._renderSuperSearch(el);            break;
                 case 'activity':      await this._renderActivity(el);               break;
+                case 'trusted-ips':   await this._renderTrustedIps(el);             break;
             }
         } catch(e) {
             el.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>${e.message}</h3></div>`;
@@ -4142,6 +4145,116 @@ const AdminPage = {
 
         } catch(e) {
             resultsEl.innerHTML = `<div class="ss-empty"><i class="fa-solid fa-triangle-exclamation"></i>${Fmt.esc(e.message)}</div>`;
+        }
+    },
+
+    // ── Довірені IP ───────────────────────────────────────────────
+    async _renderTrustedIps(el) {
+        if (!AppState.isAdmin()) { el.innerHTML = ''; return; }
+
+        const render = async () => {
+            const ips = await API.trustedIps.getAll();
+            const myIp = AppState._clientIp || '—';
+
+            el.innerHTML = `
+            <div style="max-width:640px">
+                <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem;flex-wrap:wrap">
+                    <h2 style="margin:0;font-size:1.05rem;font-weight:700"><i class="fa-solid fa-shield-halved" style="color:var(--primary)"></i> Довірені IP-адреси</h2>
+                    <span style="margin-left:auto;font-size:.78rem;color:var(--text-muted)">Ваш поточний IP: <b style="color:var(--text-primary)">${Fmt.esc(myIp)}</b></span>
+                </div>
+
+                <div style="background:var(--bg-surface);border:1px solid var(--border);border-radius:12px;padding:1rem;margin-bottom:1rem">
+                    <div style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.75rem">Додати IP</div>
+                    <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+                        <input id="tip-ip" type="text" placeholder="Наприклад: 192.168.1.1" style="flex:1;min-width:160px">
+                        <input id="tip-label" type="text" placeholder="Назва (Офіс Київ, VPN...)" style="flex:1;min-width:160px">
+                        <button class="btn btn-primary btn-sm" onclick="AdminPage._addTrustedIp()">
+                            <i class="fa-solid fa-plus"></i> Додати
+                        </button>
+                        <button class="btn btn-ghost btn-sm" onclick="AdminPage._addMyIp()" title="Додати мій поточний IP">
+                            <i class="fa-solid fa-location-crosshairs"></i> Додати мій IP
+                        </button>
+                    </div>
+                </div>
+
+                <div style="background:var(--bg-surface);border:1px solid var(--border);border-radius:12px;overflow:hidden">
+                    ${ips.length === 0 ? `
+                        <div style="padding:2rem;text-align:center;color:var(--text-muted)">
+                            <i class="fa-solid fa-shield-halved" style="font-size:2rem;opacity:.3;display:block;margin-bottom:.5rem"></i>
+                            Немає довірених IP. Додайте перший.
+                        </div>` : `
+                        <table style="width:100%;border-collapse:collapse">
+                            <thead>
+                                <tr style="border-bottom:1px solid var(--border)">
+                                    <th style="padding:.6rem 1rem;text-align:left;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">IP-адреса</th>
+                                    <th style="padding:.6rem 1rem;text-align:left;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Назва</th>
+                                    <th style="padding:.6rem 1rem;text-align:left;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Додано</th>
+                                    <th style="padding:.6rem 1rem;width:48px"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${ips.map(row => `
+                                <tr style="border-bottom:1px solid var(--border)">
+                                    <td style="padding:.65rem 1rem;font-size:.875rem;font-weight:600;font-family:monospace">
+                                        ${Fmt.esc(row.ip)}
+                                        ${row.ip === myIp ? `<span class="badge badge-success" style="margin-left:.4rem;font-size:.65rem">Ваш IP</span>` : ''}
+                                    </td>
+                                    <td style="padding:.65rem 1rem;font-size:.85rem;color:var(--text-muted)">${Fmt.esc(row.label || '—')}</td>
+                                    <td style="padding:.65rem 1rem;font-size:.8rem;color:var(--text-muted)">${Fmt.dateShort(row.created_at)}</td>
+                                    <td style="padding:.65rem 1rem">
+                                        <button class="btn btn-ghost btn-sm" style="color:var(--danger,#ef4444);padding:.25rem .5rem"
+                                            data-ip="${Fmt.esc(row.ip)}"
+                                            onclick="AdminPage._deleteTrustedIp('${row.id}', this.dataset.ip)" title="Видалити">
+                                            <i class="fa-solid fa-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>`).join('')}
+                            </tbody>
+                        </table>`}
+                </div>
+
+                <div style="margin-top:1rem;padding:.75rem 1rem;background:rgba(99,102,241,.07);border:1px solid rgba(99,102,241,.2);border-radius:10px;font-size:.8rem;color:var(--text-muted)">
+                    <i class="fa-solid fa-circle-info" style="color:var(--primary);margin-right:.4rem"></i>
+                    Розділи <b>Адміністрування, Аналітика, Планування, Графік</b> доступні лише з довірених IP-адрес.
+                </div>
+            </div>`;
+        };
+
+        await render();
+
+        AdminPage._tipRerender = render;
+    },
+
+    async _addTrustedIp() {
+        const ip    = document.getElementById('tip-ip')?.value?.trim();
+        const label = document.getElementById('tip-label')?.value?.trim();
+        if (!ip) { Toast.warning('Введіть IP', ''); return; }
+        if (!/^[\d.:\w]+$/.test(ip)) { Toast.error('Невірний формат IP', ''); return; }
+        try {
+            await API.trustedIps.add(ip, label);
+            Toast.success('Додано', ip);
+            await AdminPage._tipRerender?.();
+        } catch(e) {
+            Toast.error('Помилка', e.message);
+        }
+    },
+
+    async _addMyIp() {
+        const ip = AppState._clientIp;
+        if (!ip || ip === 'unknown') { Toast.warning('IP не визначено', ''); return; }
+        document.getElementById('tip-ip').value = ip;
+        document.getElementById('tip-label').focus();
+    },
+
+    async _deleteTrustedIp(id, ip) {
+        const ok = await Modal.confirm({ message: `Видалити IP ${ip}?`, danger: true });
+        if (!ok) return;
+        try {
+            await API.trustedIps.remove(id);
+            Toast.success('Видалено', ip);
+            await AdminPage._tipRerender?.();
+        } catch(e) {
+            Toast.error('Помилка', e.message);
         }
     },
 

@@ -63,10 +63,29 @@ const APP_CONFIG = {
 
 // ── Global App State ───────────────────────────────────────────────
 const AppState = {
-    user:    null,   // current auth user (from supabase.auth)
-    profile: null,   // current profile row
+    user:    null,
+    profile: null,
     session: null,
-    _realRole: null, // saved real role during role preview
+    _realRole: null,
+    isTrustedNetwork: false,  // встановлюється після checkTrustedNetwork()
+    _clientIp: null,
+
+    async checkTrustedNetwork() {
+        try {
+            const res = await fetch(`${SUPABASE_URL}/functions/v1/check-ip`, {
+                headers: {
+                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                    'apikey': SUPABASE_ANON_KEY
+                }
+            });
+            const json = await res.json();
+            this.isTrustedNetwork = !!json.trusted;
+            this._clientIp = json.ip || null;
+        } catch(e) {
+            console.error('IP check failed:', e);
+            this.isTrustedNetwork = false;
+        }
+    },
 
     isOwner()   { return this.profile?.role === 'owner'; },
     isAdmin()   { return this.profile?.role === 'admin' || this.profile?.role === 'owner'; },

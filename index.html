@@ -150,21 +150,23 @@
                 <img src="/light_new.png" alt="">
             </span>
             <div class="sidebar-bottom" id="sidebar-bottom">
-                <button class="ntf-bell-btn" id="history-bell" onclick="UI.toggleHistoryPopup()" title="Нещодавно переглянуті">
-                    <i class="fa-solid fa-clock-rotate-left" style="font-size:17px"></i>
-                    <span class="ntf-bell-badge hidden" id="history-bell-badge">0</span>
-                </button>
-                <button class="ntf-bell-btn news-bell-btn" id="news-bell" onclick="UI.toggleNewsPopup()" title="Новини">
-                    <img src="/news.png" alt="" width="22" height="22" style="object-fit:contain;display:block">
-                    <span class="ntf-bell-badge news-bell-badge hidden" id="news-bell-badge">0</span>
-                </button>
-                <button class="ntf-bell-btn" id="ntf-bell" onclick="Router.go('notifications')" title="Сповіщення">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-                        <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-                    </svg>
-                    <span class="ntf-bell-badge hidden" id="ntf-bell-badge">0</span>
-                </button>
+                <div class="sb-icons-row">
+                    <button class="ntf-bell-btn" id="history-bell" onclick="UI.toggleHistoryPopup()" title="Нещодавно переглянуті">
+                        <i class="fa-solid fa-clock-rotate-left" style="font-size:17px"></i>
+                        <span class="ntf-bell-badge hidden" id="history-bell-badge">0</span>
+                    </button>
+                    <button class="ntf-bell-btn news-bell-btn" id="news-bell" onclick="UI.toggleNewsPopup()" title="Новини">
+                        <img src="/news.png" alt="" width="22" height="22" style="object-fit:contain;display:block">
+                        <span class="ntf-bell-badge news-bell-badge hidden" id="news-bell-badge">0</span>
+                    </button>
+                    <button class="ntf-bell-btn" id="ntf-bell" onclick="Router.go('notifications')" title="Сповіщення">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                        </svg>
+                        <span class="ntf-bell-badge hidden" id="ntf-bell-badge">0</span>
+                    </button>
+                </div>
                 <div class="tb-user-wrap">
                     <div id="header-user" class="tb-user" onclick="UI.toggleUserPopup()"></div>
                     <div id="su-popup" class="su-popup hidden">
@@ -200,6 +202,30 @@
     <div class="main-wrapper">
         <main id="page-content" class="page-content"></main>
     </div>
+
+    <!-- Mobile bottom navigation -->
+    <nav class="mob-nav" id="mob-nav">
+        <button class="mob-nav-btn" onclick="Router.go('dashboard')" data-route="dashboard">
+            <i class="fa-solid fa-house"></i>
+            <span>Головна</span>
+        </button>
+        <button class="mob-nav-btn" onclick="Router.go('expert-path')" data-route="expert-path">
+            <i class="fa-solid fa-book-open"></i>
+            <span>Навчання</span>
+        </button>
+        <button class="mob-nav-btn" onclick="Router.go('news')" data-route="news">
+            <i class="fa-solid fa-newspaper"></i>
+            <span>Новини</span>
+        </button>
+        <button class="mob-nav-btn" onclick="Router.go('bookmarks')" data-route="bookmarks">
+            <i class="fa-solid fa-bookmark"></i>
+            <span>Закладки</span>
+        </button>
+        <button class="mob-nav-btn" id="mob-profile-btn" onclick="Router.go('profile')" data-route="profile">
+            <i class="fa-solid fa-circle-user"></i>
+            <span>Профіль</span>
+        </button>
+    </nav>
 </div>
 
 <!-- МОДАЛЬНЕ ВІКНО -->

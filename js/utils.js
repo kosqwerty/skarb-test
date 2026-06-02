@@ -93,23 +93,28 @@ const Loader = {
 
 const UI = {
     toggleSidebar() {
+        if (window.innerWidth <= 1024) {
+            const sidebar = document.getElementById('sidebar');
+            const isOpen = sidebar.classList.contains('open');
+            if (isOpen) this.closeSidebar(); else this.openSidebar();
+            return;
+        }
         const sidebar = document.getElementById('sidebar');
         sidebar.classList.toggle('collapsed');
         const isCollapsed = sidebar.classList.contains('collapsed');
         document.body.classList.toggle('sidebar-collapsed', isCollapsed);
         localStorage.setItem('sidebar_collapsed', isCollapsed);
-        const btn = sidebar.querySelector('.sidebar-toggle');
-        if (btn) {
-            btn.querySelector('i').className = isCollapsed ? 'fa-solid fa-bars' : 'fa-solid fa-bars';
-            btn.title = isCollapsed ? 'Розгорнути меню' : 'Згорнути меню';
-        }
     },
     openSidebar() {
-        document.getElementById('sidebar').classList.add('open');
+        const sidebar = document.getElementById('sidebar');
+        sidebar.classList.add('open');
+        document.body.classList.add('sidebar-open');
         document.getElementById('sidebar-overlay').style.display = 'block';
     },
     closeSidebar() {
-        document.getElementById('sidebar').classList.remove('open');
+        const sidebar = document.getElementById('sidebar');
+        sidebar.classList.remove('open');
+        document.body.classList.remove('sidebar-open');
         document.getElementById('sidebar-overlay').style.display = 'none';
     },
     globalSearch(e) {
@@ -202,8 +207,9 @@ const UI = {
     _setNotificationBadge(count) {
         const nav     = document.getElementById('nav-ntf-badge');
         const bell    = document.getElementById('ntf-bell-badge');
+        const mobBell = document.getElementById('mob-ntf-badge');
         const bellBtn = document.getElementById('ntf-bell');
-        [nav, bell].forEach(el => {
+        [nav, bell, mobBell].forEach(el => {
             if (!el) return;
             if (count > 0) {
                 el.textContent = count > 99 ? '99+' : count;
@@ -484,6 +490,9 @@ const UI = {
             'my-calendar':    'scheduler',
         }[route] || route;
         document.querySelectorAll('.nav-item').forEach(el => {
+            el.classList.toggle('active', el.dataset.route === parentRoute);
+        });
+        document.querySelectorAll('.mob-nav-btn').forEach(el => {
             el.classList.toggle('active', el.dataset.route === parentRoute);
         });
     },

@@ -12,6 +12,7 @@ const Router = {
     },
 
     go(path) {
+        if (window.innerWidth <= 1024) UI.closeSidebar?.();
         location.hash = '#/' + path;
     },
 

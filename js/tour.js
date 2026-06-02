@@ -140,8 +140,14 @@ const TourManager = {
         const nextBtn = document.getElementById('tour-next');
         nextBtn.textContent = index === this._steps.length - 1 ? '✓ Завершити' : 'Далі ›';
 
-        // Highlight & position — підтримує масив селекторів (береться перший видимий)
+        // Step callback (e.g. show a demo popup / render elements needed for targeting)
+        if (step.onShow) step.onShow();
+
+        // Scroll first (instant) so getBoundingClientRect gives correct viewport coords
         const target = this._resolveTarget(step.target);
+        if (target) target.scrollIntoView({ behavior: 'instant', block: 'nearest' });
+
+        // Highlight & position after scroll settled
         this._positionHighlight(target, step.position || 'bottom');
 
         // Override tip position if step provides explicit tipStyle
@@ -157,12 +163,6 @@ const TourManager = {
             const hl = document.getElementById('tour-highlight');
             if (hl) hl.style.display = 'none';
         }
-
-        // Scroll target into view
-        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-        // Step callback (e.g. show a demo popup)
-        if (step.onShow) step.onShow();
     },
 
     // Повертає перший видимий DOM-елемент зі списку селекторів (або null)
@@ -203,7 +203,7 @@ const TourManager = {
         // Highlight
         hl.style.cssText = `
             display:block;
-            top:${r.top - PAD + window.scrollY}px;
+            top:${r.top - PAD}px;
             left:${r.left - PAD}px;
             width:${r.width + PAD * 2}px;
             height:${r.height + PAD * 2}px`;

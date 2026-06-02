@@ -1747,6 +1747,16 @@ const DashboardPage = {
                 box-shadow:0 0 0 3px rgba(var(--cc-rgb),.12);transform:translateY(-1px)}
             .dbw-chip:active{transform:translateY(0)}
             .dbw-chip-check{font-size:.58rem;margin-left:.1rem}
+            @media(max-width:768px){
+                .db-welcome-bar{padding:.65rem .9rem;gap:.65rem;border-radius:12px}
+                .dbw-sep{display:none}
+                .dbw-deco{display:none}
+                .dbw-course-name{max-width:clamp(120px,50vw,240px)}
+                .dbw-pbar{width:70px}
+                .dbw-chips{gap:.3rem}
+                .dbw-chip{font-size:.72rem;padding:.22rem .55rem}
+                .dbw-btn{font-size:.72rem;padding:.32rem .65rem}
+            }
         </style>
         <div class="db-welcome-bar">
             <div class="dbw-ava">${avatarHtml}</div>

@@ -4153,75 +4153,153 @@ const AdminPage = {
         if (!AppState.isAdmin()) { el.innerHTML = ''; return; }
 
         const render = async () => {
-            const ips = await API.trustedIps.getAll();
+            const ips  = await API.trustedIps.getAll();
             const myIp = AppState._clientIp || '—';
+            const myIpTrusted = ips.some(r => r.ip === myIp);
 
             el.innerHTML = `
-            <div style="max-width:640px">
-                <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem;flex-wrap:wrap">
-                    <h2 style="margin:0;font-size:1.05rem;font-weight:700"><i class="fa-solid fa-shield-halved" style="color:var(--primary)"></i> Довірені IP-адреси</h2>
-                    <span style="margin-left:auto;font-size:.78rem;color:var(--text-muted)">Ваш поточний IP: <b style="color:var(--text-primary)">${Fmt.esc(myIp)}</b></span>
+            <style>
+            .tip-wrap { max-width: 700px; }
+            .tip-status-bar {
+                display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
+                background: var(--bg-surface); border: 1px solid var(--border);
+                border-radius: 14px; padding: .85rem 1.1rem; margin-bottom: 1.25rem;
+            }
+            .tip-status-ip {
+                display: flex; align-items: center; gap: .5rem;
+                font-size: .875rem; font-weight: 600; font-family: monospace;
+                color: var(--text-primary);
+            }
+            .tip-status-dot {
+                width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
+                background: ${myIpTrusted ? '#10b981' : '#f59e0b'};
+                box-shadow: 0 0 0 3px ${myIpTrusted ? 'rgba(16,185,129,.2)' : 'rgba(245,158,11,.2)'};
+            }
+            .tip-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.25rem; }
+            @media (max-width: 600px) { .tip-cards { grid-template-columns: 1fr; } }
+            .tip-card {
+                background: var(--bg-surface); border: 1px solid var(--border);
+                border-radius: 14px; padding: 1.1rem 1.25rem;
+            }
+            .tip-card-title {
+                font-size: .7rem; font-weight: 700; text-transform: uppercase;
+                letter-spacing: .07em; color: var(--text-muted); margin-bottom: .85rem;
+                display: flex; align-items: center; gap: .4rem;
+            }
+            .tip-card-title i { color: var(--primary); }
+            .tip-form-row { display: flex; flex-direction: column; gap: .5rem; }
+            .tip-form-row input { width: 100%; box-sizing: border-box; }
+            .tip-form-btns { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .25rem; }
+            .tip-upload-zone {
+                border: 2px dashed var(--border); border-radius: 10px;
+                padding: 1.25rem; text-align: center; cursor: pointer;
+                color: var(--text-muted); font-size: .82rem; transition: all .18s;
+            }
+            .tip-upload-zone:hover { border-color: var(--primary); color: var(--primary); background: rgba(99,102,241,.04); }
+            .tip-upload-zone i { font-size: 1.4rem; display: block; margin-bottom: .4rem; }
+            .tip-table-wrap {
+                background: var(--bg-surface); border: 1px solid var(--border);
+                border-radius: 14px; overflow: hidden; margin-bottom: 1rem;
+            }
+            .tip-table-head {
+                display: flex; align-items: center; justify-content: space-between;
+                padding: .75rem 1.1rem; border-bottom: 1px solid var(--border);
+            }
+            .tip-table-head-title { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); }
+            .tip-count { background: var(--bg-raised); border-radius: 20px; padding: .15rem .55rem; font-size: .72rem; font-weight: 700; color: var(--text-muted); }
+            .tip-row {
+                display: flex; align-items: center; gap: .75rem;
+                padding: .7rem 1.1rem; border-bottom: 1px solid var(--border); transition: background .15s;
+            }
+            .tip-row:last-child { border-bottom: none; }
+            .tip-row:hover { background: var(--bg-hover); }
+            .tip-row-ip { font-family: monospace; font-size: .88rem; font-weight: 700; color: var(--text-primary); min-width: 140px; }
+            .tip-row-label { font-size: .82rem; color: var(--text-muted); flex: 1; }
+            .tip-row-date { font-size: .75rem; color: var(--text-muted); white-space: nowrap; }
+            .tip-info {
+                padding: .7rem 1rem; background: rgba(99,102,241,.06);
+                border: 1px solid rgba(99,102,241,.18); border-radius: 10px;
+                font-size: .78rem; color: var(--text-muted); display: flex; gap: .5rem; align-items: flex-start;
+            }
+            .tip-info i { color: var(--primary); margin-top: .1rem; flex-shrink: 0; }
+            </style>
+
+            <div class="tip-wrap">
+
+                <!-- Статус бар -->
+                <div class="tip-status-bar">
+                    <div class="tip-status-dot"></div>
+                    <span style="font-size:.82rem;color:var(--text-muted)">Ваш поточний IP:</span>
+                    <span class="tip-status-ip">${Fmt.esc(myIp)}</span>
+                    <span class="badge ${myIpTrusted ? 'badge-success' : 'badge-warning'}" style="margin-left:auto">
+                        ${myIpTrusted ? '<i class="fa-solid fa-circle-check"></i> Довірена мережа' : '<i class="fa-solid fa-triangle-exclamation"></i> Не довірена'}
+                    </span>
                 </div>
 
-                <div style="background:var(--bg-surface);border:1px solid var(--border);border-radius:12px;padding:1rem;margin-bottom:1rem">
-                    <div style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.75rem">Додати IP</div>
-                    <div style="display:flex;gap:.5rem;flex-wrap:wrap">
-                        <input id="tip-ip" type="text" placeholder="Наприклад: 192.168.1.1" style="flex:1;min-width:160px">
-                        <input id="tip-label" type="text" placeholder="Назва (Офіс Київ, VPN...)" style="flex:1;min-width:160px">
-                        <button class="btn btn-primary btn-sm" onclick="AdminPage._addTrustedIp()">
-                            <i class="fa-solid fa-plus"></i> Додати
-                        </button>
-                        <button class="btn btn-ghost btn-sm" onclick="AdminPage._addMyIp()" title="Додати мій поточний IP">
-                            <i class="fa-solid fa-location-crosshairs"></i> Додати мій IP
-                        </button>
+                <!-- Форма + Завантаження файлу -->
+                <div class="tip-cards">
+                    <div class="tip-card">
+                        <div class="tip-card-title"><i class="fa-solid fa-plus"></i> Додати IP вручну</div>
+                        <div class="tip-form-row">
+                            <input id="tip-ip" type="text" placeholder="192.168.1.1">
+                            <input id="tip-label" type="text" placeholder="Назва (Офіс Київ, VPN...)">
+                        </div>
+                        <div class="tip-form-btns">
+                            <button class="btn btn-primary btn-sm" onclick="AdminPage._addTrustedIp()">
+                                <i class="fa-solid fa-plus"></i> Додати
+                            </button>
+                            <button class="btn btn-ghost btn-sm" onclick="AdminPage._addMyIp()">
+                                <i class="fa-solid fa-location-crosshairs"></i> Мій IP
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="tip-card">
+                        <div class="tip-card-title"><i class="fa-solid fa-file-arrow-up"></i> Завантажити з файлу</div>
+                        <div class="tip-upload-zone" onclick="document.getElementById('tip-file').click()">
+                            <i class="fa-solid fa-file-lines"></i>
+                            Клікніть або перетягніть .txt файл<br>
+                            <span style="font-size:.75rem;opacity:.7">Один IP на рядок, можна з назвою: 1.2.3.4 Офіс</span>
+                        </div>
+                        <input id="tip-file" type="file" accept=".txt" style="display:none" onchange="AdminPage._importIpFile(this)">
                     </div>
                 </div>
 
-                <div style="background:var(--bg-surface);border:1px solid var(--border);border-radius:12px;overflow:hidden">
+                <!-- Список -->
+                <div class="tip-table-wrap">
+                    <div class="tip-table-head">
+                        <span class="tip-table-head-title"><i class="fa-solid fa-list" style="margin-right:.4rem"></i>Список</span>
+                        <span class="tip-count">${ips.length} IP</span>
+                    </div>
                     ${ips.length === 0 ? `
-                        <div style="padding:2rem;text-align:center;color:var(--text-muted)">
-                            <i class="fa-solid fa-shield-halved" style="font-size:2rem;opacity:.3;display:block;margin-bottom:.5rem"></i>
-                            Немає довірених IP. Додайте перший.
-                        </div>` : `
-                        <table style="width:100%;border-collapse:collapse">
-                            <thead>
-                                <tr style="border-bottom:1px solid var(--border)">
-                                    <th style="padding:.6rem 1rem;text-align:left;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">IP-адреса</th>
-                                    <th style="padding:.6rem 1rem;text-align:left;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Назва</th>
-                                    <th style="padding:.6rem 1rem;text-align:left;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Додано</th>
-                                    <th style="padding:.6rem 1rem;width:48px"></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${ips.map(row => `
-                                <tr style="border-bottom:1px solid var(--border)">
-                                    <td style="padding:.65rem 1rem;font-size:.875rem;font-weight:600;font-family:monospace">
-                                        ${Fmt.esc(row.ip)}
-                                        ${row.ip === myIp ? `<span class="badge badge-success" style="margin-left:.4rem;font-size:.65rem">Ваш IP</span>` : ''}
-                                    </td>
-                                    <td style="padding:.65rem 1rem;font-size:.85rem;color:var(--text-muted)">${Fmt.esc(row.label || '—')}</td>
-                                    <td style="padding:.65rem 1rem;font-size:.8rem;color:var(--text-muted)">${Fmt.dateShort(row.created_at)}</td>
-                                    <td style="padding:.65rem 1rem">
-                                        <button class="btn btn-ghost btn-sm" style="color:var(--danger,#ef4444);padding:.25rem .5rem"
-                                            data-ip="${Fmt.esc(row.ip)}"
-                                            onclick="AdminPage._deleteTrustedIp('${row.id}', this.dataset.ip)" title="Видалити">
-                                            <i class="fa-solid fa-trash"></i>
-                                        </button>
-                                    </td>
-                                </tr>`).join('')}
-                            </tbody>
-                        </table>`}
+                        <div style="padding:2.5rem;text-align:center;color:var(--text-muted)">
+                            <i class="fa-solid fa-shield-halved" style="font-size:2.5rem;opacity:.2;display:block;margin-bottom:.75rem"></i>
+                            Список порожній — додайте перший IP
+                        </div>` : ips.map(row => `
+                        <div class="tip-row">
+                            <div class="tip-row-ip">
+                                ${Fmt.esc(row.ip)}
+                                ${row.ip === myIp ? `<span class="badge badge-success" style="font-size:.62rem;margin-left:.35rem">Ваш</span>` : ''}
+                            </div>
+                            <div class="tip-row-label">${Fmt.esc(row.label || '—')}</div>
+                            <div class="tip-row-date">${Fmt.dateShort(row.created_at)}</div>
+                            <button class="btn btn-ghost btn-sm" style="color:var(--danger,#ef4444);padding:.25rem .4rem;flex-shrink:0"
+                                data-ip="${Fmt.esc(row.ip)}"
+                                onclick="AdminPage._deleteTrustedIp('${row.id}', this.dataset.ip)">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </div>`).join('')}
                 </div>
 
-                <div style="margin-top:1rem;padding:.75rem 1rem;background:rgba(99,102,241,.07);border:1px solid rgba(99,102,241,.2);border-radius:10px;font-size:.8rem;color:var(--text-muted)">
-                    <i class="fa-solid fa-circle-info" style="color:var(--primary);margin-right:.4rem"></i>
-                    Розділи <b>Адміністрування, Аналітика, Планування, Графік</b> доступні лише з довірених IP-адрес.
+                <div class="tip-info">
+                    <i class="fa-solid fa-circle-info"></i>
+                    <span>Розділи <b>Адміністрування, Аналітика, Планування, Графік</b> доступні лише з довірених IP-адрес.</span>
                 </div>
+
             </div>`;
         };
 
         await render();
-
         AdminPage._tipRerender = render;
     },
 
@@ -4229,7 +4307,7 @@ const AdminPage = {
         const ip    = document.getElementById('tip-ip')?.value?.trim();
         const label = document.getElementById('tip-label')?.value?.trim();
         if (!ip) { Toast.warning('Введіть IP', ''); return; }
-        if (!/^[\d.:\w]+$/.test(ip)) { Toast.error('Невірний формат IP', ''); return; }
+        if (!/^[\d.:\w/]+$/.test(ip)) { Toast.error('Невірний формат IP', ''); return; }
         try {
             await API.trustedIps.add(ip, label);
             Toast.success('Додано', ip);
@@ -4244,6 +4322,26 @@ const AdminPage = {
         if (!ip || ip === 'unknown') { Toast.warning('IP не визначено', ''); return; }
         document.getElementById('tip-ip').value = ip;
         document.getElementById('tip-label').focus();
+    },
+
+    async _importIpFile(input) {
+        const file = input.files?.[0];
+        if (!file) return;
+        const text = await file.text();
+        const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        let added = 0, skipped = 0;
+        for (const line of lines) {
+            const [ip, ...rest] = line.split(/\s+/);
+            const label = rest.join(' ') || null;
+            if (!ip || !/^[\d.:\w/]+$/.test(ip)) { skipped++; continue; }
+            try {
+                await API.trustedIps.add(ip, label);
+                added++;
+            } catch { skipped++; }
+        }
+        input.value = '';
+        Toast.success('Імпорт завершено', `Додано: ${added}, пропущено: ${skipped}`);
+        await AdminPage._tipRerender?.();
     },
 
     async _deleteTrustedIp(id, ip) {

@@ -245,11 +245,7 @@ const NotificationsPage = {
                         const ip = (n.message.match(/з IP:\s*([\d.:\w]+)/) || [])[1] || '';
                         if (ip) {
                             const before = Fmt.esc(n.message.replace(`з IP: ${ip}`, '').trim());
-                            return `${before} з IP: <span style="font-family:monospace;font-weight:700;color:var(--text-primary)">${Fmt.esc(ip)}</span>
-                                <button title="Скопіювати IP" data-ip="${Fmt.esc(ip)}" onclick="event.stopPropagation();navigator.clipboard.writeText(this.dataset.ip).then(()=>{this.innerHTML='<i class=\\'fa-solid fa-check\\' style=\\'color:#10b981\\'></i>';setTimeout(()=>this.innerHTML='<i class=\\'fa-regular fa-copy\\'></i>',1500)})"
-                                    style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:.1rem .25rem;border-radius:4px;vertical-align:middle;line-height:1">
-                                    <i class="fa-regular fa-copy"></i>
-                                </button>`;
+                            return `${before} з IP: <span style="font-family:monospace;font-weight:700;color:var(--text-primary)">${Fmt.esc(ip)}</span><button title="Скопіювати IP" data-ip="${Fmt.esc(ip)}" onclick="event.stopPropagation();navigator.clipboard.writeText(this.dataset.ip).then(()=>{this.innerHTML='<i class=\\'fa-solid fa-check\\' style=\\'color:#10b981\\'></i>';setTimeout(()=>this.innerHTML='<i class=\\'fa-regular fa-copy\\'></i>',1500)})" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:.1rem .3rem;border-radius:4px;vertical-align:middle;line-height:1;margin-left:.25rem"><i class="fa-regular fa-copy"></i></button>`;
                         }
                     }
                     return Fmt.esc(n.message || '');

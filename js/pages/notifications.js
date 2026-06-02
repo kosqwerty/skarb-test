@@ -183,6 +183,7 @@ const NotificationsPage = {
                 onclick="NotificationsPage._filter(this,'${tp}')">
                 ${{ all:'Всі', general:'Загальне', gold:'ЗОЛ', tech:'ТЕХ', system:'Системні' }[tp]}
             </button>`).join('')}
+        ${AppState.isAdmin() ? `<button class="ntf-filter-btn" data-type="ip" onclick="NotificationsPage._filter(this,'ip')"><i class="fa-solid fa-shield-halved" style="margin-right:.3rem"></i>IP-запити</button>` : ''}
     </div>
 
     <div id="ntf-list" class="ntf-list">
@@ -236,7 +237,8 @@ const NotificationsPage = {
         const clickHandler = n.link
             ? `NotificationsPage._openItem('${n.id}',${JSON.stringify(n.link).replace(/"/g,'&quot;')},this)`
             : '';
-        return `<div class="ntf-item${n.link ? ' ntf-item-clickable' : ''}" data-id="${n.id}" data-type="${n.type}" ${clickHandler ? `onclick="${clickHandler}"` : ''}>
+        const isIpReq = !!(n.message?.includes('з IP:'));
+        return `<div class="ntf-item${n.link ? ' ntf-item-clickable' : ''}" data-id="${n.id}" data-type="${n.type}" data-is-ip="${isIpReq}" ${clickHandler ? `onclick="${clickHandler}"` : ''}>
             <div class="ntf-icon ntf-icon-${n.type}">${typeIcon}</div>
             <div class="ntf-body">
                 <div class="ntf-item-title">${Fmt.esc(n.title)}</div>
@@ -314,7 +316,9 @@ const NotificationsPage = {
         document.querySelectorAll('.ntf-filter-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         document.querySelectorAll('.ntf-item').forEach(el => {
-            el.classList.toggle('hidden', type !== 'all' && el.dataset.type !== type);
+            if (type === 'all') el.classList.remove('hidden');
+            else if (type === 'ip') el.classList.toggle('hidden', el.dataset.isIp !== 'true');
+            else el.classList.toggle('hidden', el.dataset.type !== type);
         });
     },
 

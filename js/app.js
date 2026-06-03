@@ -53,8 +53,9 @@ const App = {
         // Check if user is on a trusted network (IP whitelist)
         await AppState.checkTrustedNetwork();
 
-        // Init AI assistant floating button
+        // Init AI assistant (hidden by default — shown only on dashboard + trusted network)
         Assistant.init();
+        Assistant.setVisible(false);
         // Rebuild nav + mob-nav after network check so blocked icons appear
         UI.renderNavigation(profile.role);
         UI.applyMobNavRestrictions();
@@ -505,6 +506,11 @@ const ActivityTracker = {
         if (key === this._lastKey && now - this._lastKeyTime < this._DEDUP_MS) return;
         this._lastKey     = key;
         this._lastKeyTime = now;
+
+        // Show AI assistant button only on dashboard and only for trusted network
+        if (typeof Assistant !== 'undefined') {
+            Assistant.setVisible(base === 'dashboard' && AppState.isTrustedNetwork);
+        }
 
         // These routes log their own specific event after loading — skip generic page_view
         const _skipGeneric = ['resource', 'courses', 'lessons', 'tests', 'news'];

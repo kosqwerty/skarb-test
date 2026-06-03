@@ -15,6 +15,13 @@ const Assistant = {
         try { return JSON.parse(localStorage.getItem(this._storageKey()) || '[]'); } catch(_) { return []; }
     },
 
+    setVisible(visible) {
+        const btn = document.getElementById('sidebar-assistant-btn');
+        if (!btn) return;
+        btn.style.display = visible ? '' : 'none';
+        if (!visible && this._open) this.toggle();
+    },
+
     init() {
         if (document.getElementById('ai-assistant-panel')) return;
 

@@ -104,6 +104,38 @@ const NotificationsPage = {
         } catch(e) {}
     },
 
+    playBirthdaySound() {
+        this._initAudio();
+        const ctx = this._audioCtx;
+        if (!ctx || ctx.state === 'suspended') return;
+
+        // Святковий фанфар: до-мі-соль-до↑ + трель
+        const notes = [
+            { freq: 523.25, start: 0.00, dur: 0.18 },  // C5
+            { freq: 659.25, start: 0.16, dur: 0.18 },  // E5
+            { freq: 783.99, start: 0.32, dur: 0.18 },  // G5
+            { freq: 1046.5, start: 0.48, dur: 0.40 },  // C6 — довша фінальна
+            { freq: 1174.7, start: 0.52, dur: 0.15 },  // D6 — трель
+            { freq: 1046.5, start: 0.60, dur: 0.15 },
+            { freq: 1174.7, start: 0.68, dur: 0.15 },
+            { freq: 1046.5, start: 0.76, dur: 0.30 },
+        ];
+        notes.forEach(({ freq, start, dur }) => {
+            const osc  = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.type = 'triangle';
+            osc.frequency.value = freq;
+            const t = ctx.currentTime + start;
+            gain.gain.setValueAtTime(0, t);
+            gain.gain.linearRampToValueAtTime(0.22, t + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+            osc.start(t);
+            osc.stop(t + dur);
+        });
+    },
+
     // ── Reminder every 5 min while unread exist ──────────────────
 
     startReminder() {

@@ -484,11 +484,18 @@ const DashboardPage = {
                 text: 'Розділ <strong>Новини</strong> доступний у бічному меню. А іконка 📣 у шапці показує лічильник нових новин — натисніть щоб побачити превью останньої без переходу в розділ.',
             },
             {
-                target: '#ntf-bell',
-                position: 'left',
+                target: '.sb-icons-row',
+                position: 'bottom',
                 icon: '🛎️',
                 title: 'Дзвоник сповіщень',
-                text: 'Оновлення в реальному часі — нові призначення, нагадування, повідомлення від адміністрації. Число оновлюється автоматично.',
+                text: `Оновлення в реальному часі — нові призначення, нагадування, повідомлення від адміністрації. Число оновлюється автоматично.<br><br>
+                    <div style="background:var(--bg-raised);border:1px solid var(--border);border-radius:10px;padding:.65rem 1rem;display:flex;align-items:center;gap:.75rem">
+                        <i class="fa-solid fa-volume-high" style="color:var(--primary);font-size:1.1rem;flex-shrink:0"></i>
+                        <div style="flex:1;min-width:0;font-size:.82rem">При непрочитаних — <strong>звуковий сигнал кожні 5 хв</strong></div>
+                        <button onclick="NotificationsPage.playMessageSound()" style="display:inline-flex;align-items:center;gap:.35rem;background:var(--primary);border:none;border-radius:8px;color:#fff;font-size:.75rem;font-weight:600;padding:.3rem .75rem;cursor:pointer;font-family:inherit;flex-shrink:0">
+                            <i class="fa-solid fa-play"></i> Тест
+                        </button>
+                    </div>`,
             },
             {
                 target: '.sidebar-nav',
@@ -499,9 +506,12 @@ const DashboardPage = {
                     const r = AppState.profile?.role;
                     const isStaff = ['owner','admin','smm','teacher'].includes(r);
                     const isMgr   = r === 'manager';
-                    if (isStaff) return 'Досліджуйте портал через бокове меню: <strong>Skill Up</strong>, <strong>Новини</strong>, <strong>База знань</strong>, <strong>Документи</strong>, <strong>Меню порталу</strong>. В розділі <strong>Управління</strong> — аналітика, планування та адміністрування. Успіхів!';
-                    if (isMgr)   return 'Досліджуйте портал через бокове меню: <strong>Skill Up</strong>, <strong>Новини</strong>, <strong>База знань</strong>, <strong>Документи</strong>. В розділі <strong>Управління</strong> є <strong>Розділ планування</strong>. Успіхів!';
-                    return 'Досліджуйте портал через бокове меню. Успіхів!';
+                    const base = isStaff
+                        ? 'Досліджуйте портал через бокове меню: <strong>Skill Up</strong>, <strong>Новини</strong>, <strong>База знань</strong>, <strong>Документи</strong>, <strong>Меню порталу</strong>. В розділі <strong>Управління</strong> — аналітика, планування та адміністрування.'
+                        : isMgr
+                        ? 'Досліджуйте портал через бокове меню: <strong>Skill Up</strong>, <strong>Новини</strong>, <strong>База знань</strong>, <strong>Документи</strong>. В розділі <strong>Управління</strong> є <strong>Розділ планування</strong>.'
+                        : 'Досліджуйте портал через бокове меню.';
+                    return base + ' Успіхів!';
                 })(),
             },
         ];

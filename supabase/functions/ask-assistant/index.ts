@@ -121,7 +121,9 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Адмін — без ліміту, без логування
+    // Адмін — без ліміту, але логуємо
+    if (userId) await supabase.from('assistant_logs').insert({ user_id: userId })
+
     const lastUserMsg = [...messages].reverse().find((m: any) => m.role === 'user')
     if (lastUserMsg && isInjectionAttempt(lastUserMsg.content)) {
       return new Response(

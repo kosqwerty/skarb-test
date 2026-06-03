@@ -89,7 +89,7 @@ const Assistant = {
             let closeIcon = btn.querySelector('.sa-close-icon');
             if (!closeIcon) { closeIcon = document.createElement('i'); closeIcon.className = 'fa-solid fa-xmark sa-close-icon'; closeIcon.style.cssText = 'font-size:1.2rem;color:var(--primary);flex-shrink:0'; btn.insertBefore(closeIcon, img); }
             closeIcon.style.display = this._open ? '' : 'none';
-            if (lbl) lbl.textContent = this._open ? 'Закрити' : 'Помічник';
+            if (lbl) lbl.textContent = this._open ? 'Закрити' : 'ШІ-Скарбниця';
         }
         if (this._open) setTimeout(() => document.getElementById('aip-input')?.focus(), 200);
     },
@@ -135,11 +135,13 @@ const Assistant = {
         const typingId = this._addTyping();
 
         try {
+            const session = await supabase.auth.getSession();
+            const jwt = session?.data?.session?.access_token || SUPABASE_ANON_KEY;
             const res = await fetch(`${SUPABASE_URL}/functions/v1/ask-assistant`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                    'Authorization': `Bearer ${jwt}`,
                     'apikey': SUPABASE_ANON_KEY,
                 },
                 body: JSON.stringify({ messages: this._messages }),
@@ -190,8 +192,8 @@ const Assistant = {
         const s = document.createElement('style');
         s.textContent = `
         #ai-assistant-panel {
-            position: fixed; bottom: 175px; right: 24px; z-index: 499;
-            width: 760px; max-height: 620px;
+            position: fixed; bottom: 125px; right: 324px; z-index: 499;
+            width: 560px; max-height: 620px;
             background: var(--bg-surface); border: 1px solid var(--border);
             border-radius: 20px; box-shadow: 0 12px 48px rgba(0,0,0,.22), 0 2px 8px rgba(99,102,241,.12);
             display: flex; flex-direction: column; overflow: hidden;

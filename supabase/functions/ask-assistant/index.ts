@@ -52,6 +52,9 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const apiKey = Deno.env.get('claude-chat-bot')
+    if (!apiKey) throw new Error('claude-chat-bot secret is not set in Supabase')
+
     const { messages } = await req.json()
     if (!messages?.length) throw new Error('No messages provided')
 
@@ -103,7 +106,7 @@ Deno.serve(async (req) => {
           )
         }
 
-        const client = new Anthropic({ apiKey: Deno.env.get('claude_chat_bot')! })
+        const client = new Anthropic({ apiKey })
         const response = await client.messages.create({
           model: 'claude-haiku-4-5',
           max_tokens: 1024,
@@ -127,7 +130,7 @@ Deno.serve(async (req) => {
       )
     }
 
-    const client = new Anthropic({ apiKey: Deno.env.get('claude_chat_bot')! })
+    const client = new Anthropic({ apiKey })
     const response = await client.messages.create({
       model: 'claude-haiku-4-5',
       max_tokens: 1024,

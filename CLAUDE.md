@@ -83,7 +83,7 @@ Admins can preview the app as another user. Key methods on `AppState`:
 | `Loader` | `Loader.show()` / `Loader.hide()` (ref-counted) |
 | `Fmt` | Date/time formatting: `Fmt.date`, `Fmt.dateShort`, `Fmt.datetime` |
 | `Dom` | `Dom.val(id)` → `getElementById(id).value` |
-| `UI` | Breadcrumb, sidebar, theme |
+| `UI` | Breadcrumb, sidebar, theme. News popup bell: `UI.toggleNewsPopup()` — `.np-hero` / `.np-hero-bg` / `.np-hero-img` / `.np-hero-grad` styles defined inline in `js/utils.js` → `toggleNewsPopup()`. |
 
 ### Page module pattern
 
@@ -125,7 +125,7 @@ When writing a migration, always include `IF NOT EXISTS` / `IF EXISTS` guards an
 | `js/config.js` | Supabase credentials, `AppState`, `APP_CONFIG` (buckets, roles, `pageSize: 12`) |
 | `js/app.js` | Route definitions, sidebar rendering, post-login bootstrap, `ImpersonationBanner` |
 | `js/api.js` | All DB/storage access — add new methods here, never call `supabase` from page files |
-| `js/pages/dashboard.js` | Main dashboard: 2-row CSS grid layout (docs/notif/calendar + continue/news), Realtime notification badge. `CompanyBirthdayModal._initDashboardChat()` called on init — renders birthday chat card in `.db-cal-col` (visible only on 9 Nov or via `demo()`) |
+| `js/pages/dashboard.js` | Main dashboard: 2-row CSS grid layout (docs/notif/calendar + continue/news), Realtime notification badge. `CompanyBirthdayModal._initDashboardChat()` called on init — renders birthday chat card in `.db-cal-col` (visible only on 9 Nov or via `demo()`). News modal: `DashboardPage._openNewsModal(id)` — `.dnm-hero` / `.dnm-hero-bg` / `.dnm-hero-img` styles defined inline inside `_openNewsModal`. |
 | `js/pages/tests-manager.js` | Largest page (~2300 lines): test builder, question editor (Quill), auto-assign, results |
 | `js/pages/admin.js` | Multi-tab admin panel: users, courses, tests, logs |
 | `js/pages/scheduler.js` | Schedule management (owner/admin/manager only — `canSchedule()`) |

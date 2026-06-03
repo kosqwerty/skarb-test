@@ -286,11 +286,11 @@ const UI = {
             <style>
             #news-popup{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);box-shadow:0 8px 32px rgba(0,0,0,.18);overflow:hidden;animation:np-in .18s ease}
             @keyframes np-in{from{opacity:0;transform:translateY(-8px) scale(.97)}to{opacity:1;transform:none}}
-            .np-hero{height:140px;position:relative;overflow:hidden;background:#0f1f42;cursor:pointer}
-            .np-hero-bg{position:absolute;inset:-8px;background-size:cover;background-position:${pos};filter:blur(10px) brightness(.45);transform:scale(1.05)}
-            .np-hero-img{position:absolute;inset:0;background-size:cover;background-position:${pos}}
+            .np-hero{height:140px;position:relative;overflow:hidden;cursor:pointer}
+            .np-hero-bg{position:absolute;inset:-8px;background-size:cover;background-position:${pos} center;filter:blur(14px) brightness(.4) saturate(1.2);transform:scale(1.05)}
+            .np-hero-img{position:absolute;inset:0;background-size:contain;background-repeat:no-repeat;background-position:center center;z-index:1}
             .np-hero-grad{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.65) 0%,transparent 60%)}
-            .np-hero-date{position:absolute;bottom:.6rem;right:.75rem;font-size:.65rem;color:rgba(255,255,255,.7);z-index:2}
+            .np-hero-date{position:absolute;bottom:.6rem;right:.75rem;font-size:.65rem;color:#fff;z-index:2;background:rgba(0,0,0,.45);padding:.15rem .45rem;border-radius:6px;backdrop-filter:blur(4px)}
             .np-body{padding:.85rem 1rem .75rem}
             .np-title{font-size:.9rem;font-weight:700;line-height:1.4;color:var(--text-primary);margin-bottom:.35rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;cursor:pointer}
             .np-title:hover{color:var(--primary)}

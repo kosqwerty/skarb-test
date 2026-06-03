@@ -1351,7 +1351,7 @@ const DashboardPage = {
                             </div>
                             <div class="db-alc-head-info">
                                 <span class="db-alc-head-title">Сповіщення</span>
-                                <span class="db-alc-head-sub" style="font-size:.72rem">🐵 нагадування кожні 5 хв</span>
+                                <span class="db-alc-head-sub" style="font-size:.72rem"><i class="fa-solid fa-volume-high"></i> нагадування кожні 5 хв</span>
                             </div>
                         </div>
                         ${badgeNotif}
@@ -1951,24 +1951,23 @@ const DashboardPage = {
             width: calc(100% + 3rem);
             margin: -1.5rem -1.5rem 1.25rem;
             height: 220px;
-            background: #0f1f42;
             position: relative;
             overflow: hidden;
         }
         .dnm-hero-bg {
-            position: absolute; inset: -12px;
+            position: absolute; inset: -10px;
             background-image: url('${url || ''}');
             background-size: cover;
-            background-position: ${pos};
-            filter: blur(18px) brightness(.35);
-            transform: scale(1.1);
+            background-position: ${pos} center;
+            filter: blur(14px) brightness(.4) saturate(1.2);
+            transform: scale(1.05);
         }
         .dnm-hero-img {
             position: absolute; inset: 0;
             background-image: url('${url || ''}');
             background-size: contain;
             background-repeat: no-repeat;
-            background-position: center;
+            background-position: ${pos} center;
             z-index: 1;
         }
         .dnm-hero-grad {

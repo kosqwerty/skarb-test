@@ -238,7 +238,7 @@ const App = {
         }
 
         // Show personal calendar reminder after first render
-        setTimeout(() => MyCalendarPage.showTodayReminder(), 300);
+        // setTimeout(() => MyCalendarPage.showTodayReminder(), 300);
     },
 
     // ── Results Page (quick inline) ───────────────────────────────

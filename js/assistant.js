@@ -190,8 +190,8 @@ const Assistant = {
         const s = document.createElement('style');
         s.textContent = `
         #ai-assistant-panel {
-            position: fixed; bottom: 80px; left: calc(var(--sidebar-w) + 78px); z-index: 499;
-            width: 760px; max-height: 680px;
+            position: fixed; bottom: 175px; right: 24px; z-index: 499;
+            width: 760px; max-height: 620px;
             background: var(--bg-surface); border: 1px solid var(--border);
             border-radius: 20px; box-shadow: 0 12px 48px rgba(0,0,0,.22), 0 2px 8px rgba(99,102,241,.12);
             display: flex; flex-direction: column; overflow: hidden;
@@ -200,7 +200,7 @@ const Assistant = {
         }
         #ai-assistant-panel.open { opacity: 1; transform: none; pointer-events: all; }
         @media (max-width: 1024px) {
-            #ai-assistant-panel { left: 8px; right: 8px; width: auto; bottom: 70px; }
+            #ai-assistant-panel { left: 8px; right: 8px; width: auto; bottom: 170px; }
         }
         .aip-header {
             display: flex; align-items: center; justify-content: space-between;

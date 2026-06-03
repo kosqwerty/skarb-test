@@ -292,7 +292,7 @@ const DashboardPage = {
             <div class="db-cal-col">
                 <div id="db-cal-tour-target">
                     <div id="db-cal-widget"></div>
-                    <div id="db-important"></div>
+                    <div id="db-important" style="margin-top:.75rem"></div>
                 </div>
                 <div id="db-bday-chat"></div>
             </div>

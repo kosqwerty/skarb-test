@@ -33,6 +33,7 @@ const AdminPage = {
                 ${canManageUsers ? `<button class="tab" data-tab="supersearch" onclick="AdminPage.switchTab('supersearch', this)"><i class="fa-solid fa-magnifying-glass-chart"></i> Супер пошук</button>` : ''}
                 ${AppState.isOwner() ? `<button class="tab" data-tab="activity" onclick="AdminPage.switchTab('activity', this)"><i class="fa-solid fa-clock-rotate-left"></i> Активність</button>` : ''}
                 ${AppState.isAdmin() ? `<button class="tab" data-tab="trusted-ips" onclick="AdminPage.switchTab('trusted-ips', this)"><i class="fa-solid fa-shield-halved"></i> Довірені IP</button>` : ''}
+                ${AppState.isAdmin() ? `<button class="tab" data-tab="ai-assistant" onclick="AdminPage.switchTab('ai-assistant', this)"><i class="fa-solid fa-robot"></i> AI Помічник</button>` : ''}
             </div>
 
             <div id="admin-content"></div>`;
@@ -61,6 +62,7 @@ const AdminPage = {
             'access-groups': 'Доступ до ресурсів',
             'trash': 'Кошик', 'logs': 'Логи', 'supersearch': 'Супер пошук', 'activity': 'Активність',
             'trusted-ips': 'Довірені IP',
+            'ai-assistant': 'AI Помічник',
         };
         ActivityTracker.track('page_view', {
             page: `admin|${tab}`,
@@ -85,6 +87,7 @@ const AdminPage = {
                 case 'supersearch':   await this._renderSuperSearch(el);            break;
                 case 'activity':      await this._renderActivity(el);               break;
                 case 'trusted-ips':   await this._renderTrustedIps(el);             break;
+                case 'ai-assistant':  await this._renderAiAssistant(el);            break;
             }
         } catch(e) {
             el.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>${e.message}</h3></div>`;
@@ -4391,6 +4394,79 @@ const AdminPage = {
         } catch(e) {
             Toast.error('Помилка', e.message);
         }
+    },
+
+    // ── AI Помічник ───────────────────────────────────────────────
+    async _renderAiAssistant(el) {
+        el.innerHTML = `<div style="display:flex;justify-content:center;padding:2rem"><div class="spinner"></div></div>`;
+
+        const today = new Date().toISOString().slice(0, 10);
+        const week  = new Date(Date.now() - 7*24*60*60*1000).toISOString();
+
+        // Загальна статистика
+        const [{ count: totalCount }, { count: todayCount }, { data: byUser }] = await Promise.all([
+            supabase.from('assistant_logs').select('id', { count: 'exact', head: true }),
+            supabase.from('assistant_logs').select('id', { count: 'exact', head: true }).gte('created_at', today + 'T00:00:00Z'),
+            supabase.from('assistant_logs').select('user_id, profiles(full_name, email, city)').gte('created_at', week).order('created_at', { ascending: false }),
+        ]);
+
+        // Групуємо по користувачах
+        const userMap = {};
+        (byUser || []).forEach(r => {
+            const id = r.user_id;
+            if (!userMap[id]) userMap[id] = { name: r.profiles?.full_name || r.profiles?.email || id, city: r.profiles?.city || '—', count: 0 };
+            userMap[id].count++;
+        });
+        const users = Object.values(userMap).sort((a, b) => b.count - a.count);
+
+        el.innerHTML = `
+        <div style="max-width:800px">
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1.5rem">
+                <div style="background:var(--bg-surface);border:1px solid var(--border);border-radius:12px;padding:1.1rem;text-align:center">
+                    <div style="font-size:2rem;font-weight:800;color:var(--primary)">${totalCount || 0}</div>
+                    <div style="font-size:.78rem;color:var(--text-muted);margin-top:.25rem">Всього запитів</div>
+                </div>
+                <div style="background:var(--bg-surface);border:1px solid var(--border);border-radius:12px;padding:1.1rem;text-align:center">
+                    <div style="font-size:2rem;font-weight:800;color:#10b981">${todayCount || 0}</div>
+                    <div style="font-size:.78rem;color:var(--text-muted);margin-top:.25rem">Сьогодні</div>
+                </div>
+                <div style="background:var(--bg-surface);border:1px solid var(--border);border-radius:12px;padding:1.1rem;text-align:center">
+                    <div style="font-size:2rem;font-weight:800;color:#f59e0b">${users.length}</div>
+                    <div style="font-size:.78rem;color:var(--text-muted);margin-top:.25rem">Активних за тиждень</div>
+                </div>
+            </div>
+
+            <div style="background:var(--bg-surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:1rem">
+                <div style="padding:.75rem 1rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+                    <span style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Активність за тиждень</span>
+                    <span style="font-size:.72rem;color:var(--text-muted)">ліміт: 10 запитів/день</span>
+                </div>
+                ${users.length === 0
+                    ? `<div style="padding:2rem;text-align:center;color:var(--text-muted)">Немає даних за тиждень</div>`
+                    : `<table style="width:100%;border-collapse:collapse">
+                        <thead><tr style="border-bottom:1px solid var(--border)">
+                            <th style="padding:.6rem 1rem;text-align:left;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Користувач</th>
+                            <th style="padding:.6rem 1rem;text-align:left;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Місто</th>
+                            <th style="padding:.6rem 1rem;text-align:center;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Запитів за тиждень</th>
+                        </tr></thead>
+                        <tbody>
+                            ${users.map(u => `
+                            <tr style="border-bottom:1px solid var(--border)">
+                                <td style="padding:.65rem 1rem;font-size:.875rem;font-weight:600">${Fmt.esc(u.name)}</td>
+                                <td style="padding:.65rem 1rem;font-size:.85rem;color:var(--text-muted)">${Fmt.esc(u.city)}</td>
+                                <td style="padding:.65rem 1rem;text-align:center">
+                                    <span style="background:rgba(99,102,241,.1);color:var(--primary);font-weight:700;padding:.2rem .65rem;border-radius:20px;font-size:.82rem">${u.count}</span>
+                                </td>
+                            </tr>`).join('')}
+                        </tbody>
+                    </table>`}
+            </div>
+
+            <div style="padding:.75rem 1rem;background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);border-radius:10px;font-size:.8rem;color:var(--text-muted)">
+                <i class="fa-solid fa-circle-info" style="color:#f59e0b;margin-right:.4rem"></i>
+                Баланс Anthropic перевіряйте на <a href="https://console.anthropic.com" target="_blank" rel="noopener noreferrer" style="color:var(--primary)">console.anthropic.com</a>
+            </div>
+        </div>`;
     },
 
     // ── Утиліти ───────────────────────────────────────────────────

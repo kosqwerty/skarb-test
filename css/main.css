@@ -1558,6 +1558,62 @@ body.light-theme .logo-icon .logo-dark  { display: none; }
     scrollbar-width: none;
     -ms-overflow-style: none;
 }
+
+/* AI Assistant в сайдбарі */
+@keyframes sa-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(99,102,241,.55), 0 4px 20px rgba(99,102,241,.35); }
+    70%  { box-shadow: 0 0 0 10px rgba(99,102,241,0), 0 4px 20px rgba(99,102,241,.2); }
+    100% { box-shadow: 0 0 0 0 rgba(99,102,241,0), 0 4px 20px rgba(99,102,241,.35); }
+}
+@keyframes sa-shimmer {
+    0%   { background-position: -200% center; }
+    100% { background-position: 200% center; }
+}
+.sidebar-assistant {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    position: fixed;
+    bottom: 72px;
+    left: calc(var(--sidebar-w) + 10px);
+    width: 76px;
+    height: 90px;
+    border-radius: 18px;
+    background: none;
+    border: none;
+    box-shadow: none;
+    cursor: pointer;
+    transition: transform .2s ease, left var(--transition-slow);
+    z-index: 201;
+    animation: none;
+    padding: 0;
+    outline: none;
+    user-select: none;
+}
+body.sidebar-collapsed .sidebar-assistant {
+    left: calc(var(--sidebar-w-col) + 8px);
+}
+.sidebar-assistant:hover {
+    transform: translateY(-2px) scale(1.05);
+}
+.sidebar-assistant.active {
+    transform: scale(.95);
+}
+.sa-icon {
+    width: 72px; height: 72px; object-fit: contain;
+    filter: drop-shadow(0 3px 8px rgba(0,0,0,.4));
+    transition: transform .2s;
+    display: block;
+}
+.sidebar-assistant:hover .sa-icon { transform: scale(1.06) rotate(-3deg); }
+.sa-label {
+    display: inline-block; font-size: .52rem; font-weight: 800;
+    color: #1e3a5f; text-align: center;
+    margin-top: 3px; white-space: nowrap; letter-spacing: .03em;
+    background: rgba(186,224,255,.82);
+    padding: 2px 6px; border-radius: 6px;
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(147,197,253,.3);
+}
+.sa-close-icon { font-size: 1.2rem; color: #fff; }
 .sidebar.collapsed .sidebar-nav::-webkit-scrollbar {
     display: none;
 }
@@ -2349,7 +2405,7 @@ select {
 /* ── Page Content ───────────────────────────────────────────────── */
 .page-content {
     flex: 1;
-    padding: 1rem;
+    padding: 1rem 1rem 4px 1rem;
     width: 100%;
 }
 .page-content.no-scroll {

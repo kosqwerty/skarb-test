@@ -52,6 +52,9 @@ const App = {
 
         // Check if user is on a trusted network (IP whitelist)
         await AppState.checkTrustedNetwork();
+
+        // Init AI assistant floating button
+        Assistant.init();
         // Rebuild nav + mob-nav after network check so blocked icons appear
         UI.renderNavigation(profile.role);
         UI.applyMobNavRestrictions();

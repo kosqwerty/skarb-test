@@ -203,7 +203,7 @@ const DashboardPage = {
             .db-alc-head-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0;box-shadow:0 2px 8px color-mix(in srgb,var(--alc-accent,var(--primary)) 30%,transparent)}
             .db-alc-head-info{display:flex;flex-direction:column;gap:.05rem}
             .db-alc-head-title{font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-primary);line-height:1}
-            .db-alc-head-sub{font-size:.66rem;color:var(--text-muted);line-height:1}
+            .db-alc-head-sub{font-size:.76rem;color:var(--text-muted);line-height:1;margin-top:.2rem}
             .db-alc-head-right{display:flex;align-items:center;gap:.5rem}
             .db-alc-badge{font-size:.65rem;font-weight:800;padding:.15rem .5rem;border-radius:20px;line-height:1.4}
             .db-alc-goto{width:26px;height:26px;border-radius:50%;border:1px solid var(--border);background:var(--bg-surface);color:var(--text-muted);display:flex;align-items:center;justify-content:center;font-size:.65rem;cursor:pointer;transition:all .15s;flex-shrink:0}
@@ -415,33 +415,26 @@ const DashboardPage = {
                 text: 'Ваш особистий календар — <strong>натисніть на дату</strong> щоб додати подію або нагадування. Для кожної події можна встановити <strong>нагадування за N днів</strong> — прийде сповіщення заздалегідь. Кнопка <strong>🎉 Свята</strong> показує українські державні свята на місяць. Нижче відображаються <strong>важливі події сьогодні</strong> та майбутні. При вході в портал автоматично відкривається <strong>вікно з планом дня</strong>.',
             },
             {
-                target: ['#db-birthdays', '#db-cal-widget'],
+                target: '#db-birthdays',
                 position: 'bottom',
                 icon: '🎂',
                 title: 'Дні народження колег',
                 text: 'Портал автоматично нагадує про <strong>дні народження</strong> колег. Коли у когось ДН — з\'являється яскравий банер з можливістю надіслати привітання прямо в системі.',
             },
             {
-                target: '#db-bday-chat',
-                position: 'left',
                 icon: '💎',
                 title: 'День народження Скарбниці',
-                text: `9 листопада — день народження компанії! З'являється святкова картка з <strong>чатом привітань</strong>. Натисніть картку щоб відкрити повноекранний чат і написати привітання.<br><br>
-<div style="background:linear-gradient(135deg,rgba(201,162,39,.12),rgba(255,215,0,.06));border:1.5px solid rgba(201,162,39,.4);border-radius:12px;padding:.65rem 1rem;display:flex;align-items:center;gap:.6rem;margin-top:.25rem">
-  <span style="font-size:1.2rem">💎</span>
-  <div style="flex:1;min-width:0">
-    <div style="font-size:.82rem;font-weight:700;color:var(--text-primary)">Вітаємо Скарбницю!</div>
-    <div style="font-size:.68rem;color:#C9A227">День народження компанії · 2026</div>
-  </div>
-  <span style="background:linear-gradient(135deg,#C9A227,#FFD700);color:#0f0c29;font-size:.7rem;font-weight:800;border-radius:20px;padding:.15rem .55rem">12</span>
-  <i class="fa-solid fa-up-right-and-down-left-from-center" style="font-size:.72rem;color:rgba(201,162,39,.6)"></i>
-</div>`,
-                tipStyle: { top: '50%', bottom: 'auto', left: '24px', right: 'auto', transform: 'translateY(-50%)' },
+                text: `9 листопада — день народження компанії! З'являється святкова модалка з привітанням та картка-чат на дашборді. Натисніть <b>Далі</b> щоб побачити чат.`,
+                tipStyle: { top: '50%', bottom: 'auto', left: 'auto', right: '16px', transform: 'translateY(-50%)', width: '540px' },
                 noBackdrop: true,
                 onShow: () => {
                     CompanyBirthdayModal.demo();
                     const tourRoot = document.getElementById('tour-root');
                     if (tourRoot) tourRoot.style.zIndex = '10102';
+                    setTimeout(() => {
+                        const box = document.querySelector('.cbd-box');
+                        if (box) box.style.boxShadow = '0 0 0 4px var(--primary), 0 0 0 8px rgba(99,102,241,.35), 0 32px 100px rgba(0,0,0,.5)';
+                    }, 400);
                 },
                 onLeave: () => {
                     document.getElementById('company-bday-modal')?.remove();
@@ -449,6 +442,19 @@ const DashboardPage = {
                     document.getElementById('cbd-emoji-rain')?.remove();
                     const tourRoot = document.getElementById('tour-root');
                     if (tourRoot) tourRoot.style.zIndex = '99990';
+                },
+            },
+            {
+                target: '#db-bday-chat',
+                position: 'left',
+                icon: '💬',
+                title: 'Чат привітань',
+                text: 'На дашборді з\'являється ця картка — <strong>натисніть на неї</strong> щоб відкрити повноекранний чат і написати привітання компанії.',
+                tipStyle: { top: '24px', bottom: 'auto', left: '24px', right: 'auto', transform: 'none', width: '580px' },
+                noBackdrop: true,
+                onShow: () => {
+                    const el = document.getElementById('db-bday-chat');
+                    if (el) el.scrollIntoView({ behavior: 'instant', block: 'center' });
                 },
             },
             {
@@ -1343,7 +1349,10 @@ const DashboardPage = {
                             <div class="db-alc-head-icon" style="background:rgba(99,102,241,.12);color:#6366f1">
                                 <i class="fa-regular fa-bell"></i>
                             </div>
-                            <span class="db-alc-head-title">Сповіщення</span>
+                            <div class="db-alc-head-info">
+                                <span class="db-alc-head-title">Сповіщення</span>
+                                <span class="db-alc-head-sub" style="font-size:.72rem">🐵 нагадування кожні 5 хв</span>
+                            </div>
                         </div>
                         ${badgeNotif}
                     </div>

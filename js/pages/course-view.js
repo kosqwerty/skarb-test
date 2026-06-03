@@ -197,6 +197,11 @@ const CourseViewPage = {
 
         <div style="display:grid;grid-template-columns:1fr 300px;gap:2rem;align-items:start">
             <div>
+                <button onclick="Router.go('${this._from === 'expert-path' ? 'expert-path' : 'courses'}')"
+                    style="display:inline-flex;align-items:center;gap:.4rem;background:var(--bg-surface);border:1px solid var(--border);border-radius:20px;color:var(--text-muted);font-size:.78rem;font-weight:600;padding:.3rem .85rem;cursor:pointer;transition:all .15s;margin-bottom:.75rem"
+                    onmouseover="this.style.color='var(--text-primary)'" onmouseout="this.style.color='var(--text-muted)'">
+                    <i class="fa-solid fa-arrow-left"></i> Назад
+                </button>
                 ${AppState.isStaff() ? `
                 <div class="cv-staff-bar" style="border-radius:var(--radius-lg) var(--radius-lg) 0 0;margin-bottom:0">
                     <button class="btn btn-ghost btn-sm" onclick="Router.go('analytics?course=${course.id}')"><i class="fa-solid fa-chart-bar"></i> Аналітика</button>

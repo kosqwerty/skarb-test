@@ -626,7 +626,7 @@ const BirthdayModal = {
                 ${profile.avatar_url ? `<img src="${profile.avatar_url}" alt="">` : `<span>${Fmt.initials(profile.full_name)}</span>`}
             </div>
             ${age > 0 ? `<div class="bd-age">🎂 ${age}</div>` : ''}
-            <div style="position:absolute;inset:-30px;pointer-events:none">${stars}</div>
+            <div style="position:absolute;inset:-20px;pointer-events:none;overflow:hidden">${stars}</div>
         </div>
         <div class="bd-hero-name">${Fmt.esc(profile.full_name || '')}</div>
         <div class="bd-hero-sub">${profile.job_position ? Fmt.esc(profile.job_position) : ''}</div>
@@ -1041,7 +1041,7 @@ const CompanyBirthdayModal = {
 
         const overlay = document.createElement('div');
         overlay.id = 'company-bday-modal';
-        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:10001;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(10px);animation:fadeIn .3s ease';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:10001;display:flex;align-items:center;justify-content:center;padding:16px;animation:fadeIn .3s ease';
         overlay.innerHTML = `
 <style>
 @keyframes cbd-drop{0%{opacity:1;transform:translateY(-10px) rotate(0deg)}100%{opacity:0;transform:translateY(140px) rotate(720deg)}}
@@ -1281,7 +1281,7 @@ const CompanyBirthdayModal = {
             const avatar = m.user?.avatar_url
                 ? `<img src="${m.user.avatar_url}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0" onerror="this.style.display='none'">`
                 : `<div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#C9A227,#6366f1);display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:700;color:#fff;flex-shrink:0">${Fmt.esc(initials)}</div>`;
-            return `<div style="display:flex;gap:.55rem;align-items:flex-start;${isMe ? 'flex-direction:row-reverse' : ''}">
+            return `<div data-msg-id="${m.id}" style="display:flex;gap:.55rem;align-items:flex-start;${isMe ? 'flex-direction:row-reverse' : ''}">
                 ${avatar}
                 <div style="max-width:72%;min-width:0">
                     <div style="font-size:.7rem;color:var(--text-muted);margin-bottom:.2rem;${isMe ? 'text-align:right' : ''}">
@@ -1293,7 +1293,7 @@ const CompanyBirthdayModal = {
                         border:1px solid ${isMe ? 'transparent' : 'var(--border)'}">
                         ${Fmt.esc(m.message)}
                     </div>
-                    ${isMe ? `<div style="text-align:right;margin-top:.2rem"><button onclick="CompanyBirthdayModal._deleteMsg('${m.id}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:.65rem;padding:0" title="Видалити">✕ видалити</button></div>` : ''}
+                    ${AppState.isAdmin() ? `<div style="text-align:${isMe ? 'right' : 'left'};margin-top:.2rem"><button onclick="CompanyBirthdayModal._deleteMsg('${m.id}', this)" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:.65rem;padding:0;transition:color .15s" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color=''" title="Видалити">✕ видалити</button></div>` : ''}
                 </div>
             </div>`;
         }).join('');
@@ -1320,8 +1320,11 @@ const CompanyBirthdayModal = {
         finally { input.disabled = false; input.focus(); }
     },
 
-    async _deleteMsg(id) {
-        try { await API.companyBdayMessages.remove(id); }
+    async _deleteMsg(id, btn) {
+        try {
+            await API.companyBdayMessages.remove(id);
+            btn?.closest('[data-msg-id]')?.remove();
+        }
         catch (e) { Toast.error('Помилка', e.message); }
     },
 

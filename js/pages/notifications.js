@@ -75,11 +75,10 @@ const NotificationsPage = {
         const ctx = this._audioCtx;
         if (!ctx || ctx.state === 'suspended') return;
 
-        // Pleasant 3-note chime: C5 → E5 → G5
+        // QIP-style: two quick high tones (ding-ding)
         const notes = [
-            { freq: 523.25, start: 0.00, dur: 0.35 },
-            { freq: 659.25, start: 0.18, dur: 0.35 },
-            { freq: 783.99, start: 0.36, dur: 0.50 },
+            { freq: 1200, start: 0.00, dur: 0.18 },
+            { freq: 1400, start: 0.16, dur: 0.22 },
         ];
         notes.forEach(({ freq, start, dur }) => {
             const osc  = ctx.createOscillator();
@@ -90,11 +89,19 @@ const NotificationsPage = {
             osc.frequency.value = freq;
             const t = ctx.currentTime + start;
             gain.gain.setValueAtTime(0, t);
-            gain.gain.linearRampToValueAtTime(0.25, t + 0.04);
+            gain.gain.linearRampToValueAtTime(0.18, t + 0.01);
             gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
             osc.start(t);
             osc.stop(t + dur);
         });
+    },
+
+    playMessageSound() {
+        try {
+            const audio = new Audio('/sound/monkey.mp3');
+            audio.volume = 0.6;
+            audio.play().catch(() => {});
+        } catch(e) {}
     },
 
     // ── Reminder every 5 min while unread exist ──────────────────
@@ -109,7 +116,7 @@ const NotificationsPage = {
                 .eq('user_id', AppState.user.id)
                 .eq('is_read', false);
             if (count > 0) {
-                this.playSound();
+                this.playMessageSound();
                 Toast.info('🔔 Нагадування', `У вас ${count} непрочитаних сповіщень`);
             } else {
                 this.stopReminder();

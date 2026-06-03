@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Свята України — від червня 2026</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --blue: #005BBB;
+    --yellow: #FFD700;
+    --dark: #0a0e1a;
+    --card-bg: #fff;
+    --text: #1a1a2e;
+    --muted: #6b7280;
+    --border: #e5e7eb;
+    --accent: #c0392b;
+    --state-bg: #EBF4FF;
+    --state-border: #005BBB;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Montserrat', sans-serif;
+    background: #f0f4f8;
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  /* HEADER */
+  .hero {
+    background: var(--dark);
+    position: relative;
+    overflow: hidden;
+    padding: 56px 32px 48px;
+    text-align: center;
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 6px;
+    background: linear-gradient(90deg, var(--blue) 50%, var(--yellow) 50%);
+  }
+
+  .hero::after {
+    content: '🇺🇦';
+    position: absolute;
+    right: 48px; top: 50%;
+    transform: translateY(-50%);
+    font-size: 96px;
+    opacity: 0.12;
+  }
+
+  .hero h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(28px, 5vw, 52px);
+    font-weight: 900;
+    color: #fff;
+    letter-spacing: -1px;
+    line-height: 1.15;
+  }
+
+  .hero h1 span {
+    color: var(--yellow);
+  }
+
+  .hero p {
+    color: #a0aec0;
+    font-size: 14px;
+    margin-top: 12px;
+    font-weight: 300;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .hero .badge {
+    display: inline-block;
+    margin-top: 20px;
+    background: rgba(255,215,0,0.12);
+    border: 1px solid var(--yellow);
+    color: var(--yellow);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 18px;
+    border-radius: 100px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  /* MAIN */
+  main {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 40px 24px 64px;
+  }
+
+  /* MONTH BLOCK */
+  .month-section {
+    margin-bottom: 48px;
+  }
+
+  .month-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--text);
+    border-bottom: 3px solid var(--yellow);
+    display: inline-block;
+    padding-bottom: 4px;
+    margin-bottom: 24px;
+    letter-spacing: -0.5px;
+  }
+
+  /* HOLIDAY CARD */
+  .holiday-card {
+    background: var(--card-bg);
+    border-radius: 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+    margin-bottom: 16px;
+    overflow: hidden;
+    display: flex;
+    align-items: stretch;
+    transition: transform 0.2s, box-shadow 0.2s;
+    border: 1px solid var(--border);
+  }
+
+  .holiday-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 28px rgba(0,0,0,0.12);
+  }
+
+  .holiday-card.state {
+    border-left: 4px solid var(--blue);
+    background: var(--state-bg);
+  }
+
+  .holiday-card.memorial {
+    border-left: 4px solid #6b7280;
+  }
+
+  .holiday-card.religious {
+    border-left: 4px solid #9b59b6;
+  }
+
+  .holiday-card.professional {
+    border-left: 4px solid #27ae60;
+  }
+
+  /* DATE BLOCK */
+  .date-block {
+    min-width: 76px;
+    padding: 18px 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #f9fafb;
+    border-right: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .holiday-card.state .date-block {
+    background: #dbeafe;
+  }
+
+  .date-day {
+    font-family: 'Playfair Display', serif;
+    font-size: 32px;
+    font-weight: 900;
+    color: var(--blue);
+    line-height: 1;
+  }
+
+  .date-month {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 2px;
+  }
+
+  .date-weekday {
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  /* CONTENT */
+  .card-content {
+    padding: 16px 20px;
+    flex: 1;
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+  }
+
+  .card-emoji {
+    font-size: 32px;
+    line-height: 1;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .card-text { flex: 1; }
+
+  .card-name {
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--text);
+    line-height: 1.4;
+    margin-bottom: 4px;
+  }
+
+  .card-desc {
+    font-size: 12.5px;
+    color: var(--muted);
+    font-weight: 400;
+    line-height: 1.6;
+  }
+
+  .tag {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 100px;
+    margin-top: 6px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+
+  .tag.state    { background: #dbeafe; color: #1d4ed8; }
+  .tag.memorial { background: #f3f4f6; color: #6b7280; }
+  .tag.religious { background: #f3e8ff; color: #7c3aed; }
+  .tag.professional { background: #dcfce7; color: #15803d; }
+  .tag.international { background: #fef9c3; color: #92400e; }
+
+  /* NOTE BANNER */
+  .war-note {
+    background: #fffbeb;
+    border: 1px solid #fbbf24;
+    border-radius: 12px;
+    padding: 14px 18px;
+    font-size: 13px;
+    color: #92400e;
+    margin-bottom: 36px;
+    line-height: 1.6;
+  }
+
+  .war-note strong { color: #b45309; }
+
+  /* FOOTER */
+  footer {
+    text-align: center;
+    padding: 24px;
+    font-size: 12px;
+    color: var(--muted);
+    border-top: 1px solid var(--border);
+    background: #fff;
+  }
+
+  footer a { color: var(--blue); text-decoration: none; }
+
+  /* LEGEND */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 32px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .legend-dot {
+    width: 12px; height: 12px;
+    border-radius: 3px;
+  }
+  .ld-state { background: var(--blue); }
+  .ld-memorial { background: #9ca3af; }
+  .ld-religious { background: #9b59b6; }
+  .ld-professional { background: #27ae60; }
+  .ld-international { background: #f59e0b; }
+
+  @media (max-width: 600px) {
+    .hero { padding: 40px 20px 36px; }
+    .hero::after { display: none; }
+    main { padding: 28px 14px 48px; }
+    .card-content { padding: 12px 14px; gap: 10px; }
+    .card-emoji { font-size: 26px; }
+    .date-block { min-width: 62px; }
+    .date-day { font-size: 26px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>Свята <span>України</span></h1>
+  <p>Офіційний календар — червень 2026 і далі</p>
+  <div class="badge">Джерело: КЗпП України, ст. 73 · zakon.rada.gov.ua</div>
+</div>
+
+<main>
+
+  <div class="war-note">
+    ⚠️ <strong>Увага — воєнний стан:</strong> Під час воєнного стану перенесення вихідних, що збіглись зі святами, <strong>не застосовується</strong>. Додаткові вихідні дні після святкових надаються виключно на розсуд роботодавця. Усі дати нижче — офіційні святкові дні згідно із законодавством України.
+  </div>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot ld-state"></div> Державне свято (вихідний)</div>
+    <div class="legend-item"><div class="legend-dot ld-memorial"></div> День пам'яті / скорботи</div>
+    <div class="legend-item"><div class="legend-dot ld-religious"></div> Релігійне</div>
+    <div class="legend-item"><div class="legend-dot ld-professional"></div> Професійне</div>
+    <div class="legend-item"><div class="legend-dot ld-international"></div> Міжнародне</div>
+  </div>
+
+  <!-- ============ ЧЕРВЕНЬ 2026 ============ -->
+  <section class="month-section">
+    <div class="month-title">Червень 2026</div>
+
+    <div class="holiday-card professional">
+      <div class="date-block">
+        <div class="date-day">4</div>
+        <div class="date-month">Чер</div>
+        <div class="date-weekday">Четвер</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">👨‍👩‍👧‍👦</div>
+        <div class="card-text">
+          <div class="card-name">День захисту дітей та батьків, усиновлювачів і опікунів, які взяли під захист дитину позбавлену батьківського піклування</div>
+          <div class="card-desc">День захисту дітей — міжнародне свято на підтримку прав та добробуту дітей.</div>
+          <span class="tag international">Міжнародне</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="holiday-card professional">
+      <div class="date-block">
+        <div class="date-day">6</div>
+        <div class="date-month">Чер</div>
+        <div class="date-weekday">Субота</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">🌿</div>
+        <div class="card-text">
+          <div class="card-name">День довкілля (екологічна дата)</div>
+          <div class="card-desc">Щорічне свято на захист природи й навколишнього середовища.</div>
+          <span class="tag professional">Професійне</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="holiday-card religious">
+      <div class="date-block">
+        <div class="date-day">7</div>
+        <div class="date-month">Чер</div>
+        <div class="date-weekday">Неділя</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">🕊️</div>
+        <div class="card-text">
+          <div class="card-name">День Святої Трійці (П'ятидесятниця)</div>
+          <div class="card-desc">Одне з найбільших християнських свят — день зішестя Святого Духа на апостолів. Відзначається на 50-й день після Великодня. Широко відзначається в Україні.</div>
+          <span class="tag religious">Релігійне</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="holiday-card professional">
+      <div class="date-block">
+        <div class="date-day">12</div>
+        <div class="date-month">Чер</div>
+        <div class="date-weekday">П'ятниця</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">🌐</div>
+        <div class="card-text">
+          <div class="card-name">День боротьби з дитячою працею</div>
+          <div class="card-desc">Міжнародний день проти дитячої праці, встановлений МОП (МОП) у 2002 році.</div>
+          <span class="tag international">Міжнародне</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="holiday-card memorial">
+      <div class="date-block">
+        <div class="date-day">13</div>
+        <div class="date-month">Чер</div>
+        <div class="date-weekday">Субота</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">🕯️</div>
+        <div class="card-text">
+          <div class="card-name">День пам'яті жертв депортації кримськотатарського народу</div>
+          <div class="card-desc">День вшанування пам'яті жертв депортації кримських татар 1944 року, коли радянський режим примусово виселив весь кримськотатарський народ. Вписаний до офіційного календаря пам'ятних дат.</div>
+          <span class="tag memorial">Пам'ятна дата</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="holiday-card state">
+      <div class="date-block">
+        <div class="date-day">28</div>
+        <div class="date-month">Чер</div>
+        <div class="date-weekday">Неділя</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">📜</div>
+        <div class="card-text">
+          <div class="card-name">День Конституції України</div>
+          <div class="card-desc">Одне з найважливіших державних свят. 28 червня 1996 року Верховна Рада прийняла Конституцію незалежної України — основний закон держави. Офіційний вихідний день за ст. 73 КЗпП.</div>
+          <span class="tag state">Державне свято · Вихідний</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="holiday-card professional">
+      <div class="date-block">
+        <div class="date-day">27</div>
+        <div class="date-month">Чер</div>
+        <div class="date-weekday">Субота</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">🏥</div>
+        <div class="card-text">
+          <div class="card-name">День медичного працівника</div>
+          <div class="card-desc">Щорічне свято лікарів, медсестер та всіх медичних працівників. Відзначається в останню неділю червня.</div>
+          <span class="tag professional">Професійне</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ЛИПЕНЬ 2026 ============ -->
+  <section class="month-section">
+    <div class="month-title">Липень 2026</div>
+
+    <div class="holiday-card professional">
+      <div class="date-block">
+        <div class="date-day">1</div>
+        <div class="date-month">Лип</div>
+        <div class="date-weekday">Середа</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">🏗️</div>
+        <div class="card-text">
+          <div class="card-name">День архітектора України</div>
+          <div class="card-desc">Відзначається щороку 1 липня. Свято всіх архітекторів та містобудівників країни.</div>
+          <span class="tag professional">Професійне</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="holiday-card memorial">
+      <div class="date-block">
+        <div class="date-day">8</div>
+        <div class="date-month">Лип</div>
+        <div class="date-weekday">Середа</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">💞</div>
+        <div class="card-text">
+          <div class="card-name">День родини</div>
+          <div class="card-desc">Відзначається щороку 8 липня. Свято присвячене цінностям родини, любові та вірності.</div>
+          <span class="tag international">Міжнародне</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="holiday-card state">
+      <div class="date-block">
+        <div class="date-day">16</div>
+        <div class="date-month">Лип</div>
+        <div class="date-weekday">Четвер</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">🏛️</div>
+        <div class="card-text">
+          <div class="card-name">День Декларації про державний суверенітет України</div>
+          <div class="card-desc">16 липня 1990 року Верховна Рада Української РСР проголосила Декларацію про державний суверенітет — перший крок до незалежності. Відзначається як важлива пам'ятна дата.</div>
+          <span class="tag memorial">Пам'ятна дата</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="holiday-card professional">
+      <div class="date-block">
+        <div class="date-day">19</div>
+        <div class="date-month">Лип</div>
+        <div class="date-weekday">Неділя</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">⚗️</div>
+        <div class="card-text">
+          <div class="card-name">День металурга в Україні</div>
+          <div class="card-desc">Відзначається в третю неділю липня. Свято на честь усіх, хто працює в металургійній галузі.</div>
+          <span class="tag professional">Професійне</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="holiday-card professional">
+      <div class="date-block">
+        <div class="date-day">26</div>
+        <div class="date-month">Лип</div>
+        <div class="date-weekday">Неділя</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">⚓</div>
+        <div class="card-text">
+          <div class="card-name">День Військово-морських сил України</div>
+          <div class="card-desc">Відзначається в останню неділю липня. День військово-морського флоту та всіх моряків. Встановлений як офіційне свято.</div>
+          <span class="tag professional">Професійне</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="holiday-card professional">
+      <div class="date-block">
+        <div class="date-day">31</div>
+        <div class="date-month">Лип</div>
+        <div class="date-weekday">П'ятниця</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">🌊</div>
+        <div class="card-text">
+          <div class="card-name">День системи цивільного захисту (рятувальника)</div>
+          <div class="card-desc">День, коли Україна вшановує рятувальників і всіх, хто забезпечує цивільний захист.</div>
+          <span class="tag professional">Професійне</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ СЕРПЕНЬ 2026 ============ -->
+  <section class="month-section">
+    <div class="month-title">Серпень 2026</div>
+
+    <div class="holiday-card professional">
+      <div class="date-block">
+        <div class="date-day">2</div>
+        <div class="date-month">Сер</div>
+        <div class="date-weekday">Неділя</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">🪂</div>
+        <div class="card-text">
+          <div class="card-name">День Повітряно-десантних військ України</div>
+          <div class="card-desc">День вшанування десантників ЗСУ та аеромобільних підрозділів.</div>
+          <span class="tag professional">Військово-професійне</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="holiday-card religious">
+      <div class="date-block">
+        <div class="date-day">6</div>
+        <div class="date-month">Сер</div>
+        <div class="date-weekday">Четвер</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">✨</div>
+        <div class="card-text">
+          <div class="card-name">Преображення Господнє (Спас)</div>
+          <div class="card-desc">Одне з 12 великих православних свят. У народі відоме як «Яблучний Спас» — день, коли традиційно починають їсти яблука нового врожаю та освячують їх у церкві.</div>
+          <span class="tag religious">Релігійне</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="holiday-card memorial">
+      <div class="date-block">
+        <div class="date-day">23</div>
+        <div class="date-month">Сер</div>
+        <div class="date-weekday">Неділя</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">🖤</div>
+        <div class="card-text">
+          <div class="card-name">День Державного прапора України</div>
+          <div class="card-desc">23 серпня щороку — офіційне свято прапора України. Синьо-жовтий прапор є символом неба і пшеничних ланів. Напередодні Дня незалежності.</div>
+          <span class="tag state">Державна дата</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="holiday-card state">
+      <div class="date-block">
+        <div class="date-day">24</div>
+        <div class="date-month">Сер</div>
+        <div class="date-weekday">Понеділок</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">🇺🇦</div>
+        <div class="card-text">
+          <div class="card-name">День незалежності України</div>
+          <div class="card-desc">Найголовніше державне свято — 24 серпня 1991 року Верховна Рада проголосила незалежність України. У 2026 році Україні виповнюється 35 років незалежності. Офіційний вихідний день.</div>
+          <span class="tag state">Державне свято · Вихідний</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="holiday-card professional">
+      <div class="date-block">
+        <div class="date-day">29</div>
+        <div class="date-month">Сер</div>
+        <div class="date-weekday">Субота</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">⛏️</div>
+        <div class="card-text">
+          <div class="card-name">День шахтаря</div>
+          <div class="card-desc">День вшанування праці шахтарів. Відзначається в останню неділю серпня. Також цього дня — День гірника. Пам'ятна дата для важливої галузі економіки України.</div>
+          <span class="tag professional">Професійне</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="holiday-card professional">
+      <div class="date-block">
+        <div class="date-day">30</div>
+        <div class="date-month">Сер</div>
+        <div class="date-weekday">Неділя</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">✈️</div>
+        <div class="card-text">
+          <div class="card-name">День авіації України</div>
+          <div class="card-desc">Відзначається в останню неділю серпня. Свято всіх авіаторів, льотчиків та авіаційних фахівців України.</div>
+          <span class="tag professional">Професійне</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ВЕРЕСЕНЬ 2026 ============ -->
+  <section class="month-section">
+    <div class="month-title">Вересень 2026</div>
+
+    <div class="holiday-card international">
+      <div class="date-block">
+        <div class="date-day">1</div>
+        <div class="date-month">Вер</div>
+        <div class="date-weekday">Вівторок</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">🎒</div>
+        <div class="card-text">
+          <div class="card-name">День знань (1 вересня)</div>
+          <div class="card-desc">Перший день навчального року. Учні та студенти по всій Україні повертаються до шкіл та університетів. Традиційно відзначається урочисто з квітами й першими дзвониками.</div>
+          <span class="tag international">Загальноукраїнське</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="holiday-card professional">
+      <div class="date-block">
+        <div class="date-day">6</div>
+        <div class="date-month">Вер</div>
+        <div class="date-weekday">Неділя</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">👮</div>
+        <div class="card-text">
+          <div class="card-name">День Національної поліції України</div>
+          <div class="card-desc">Відзначається 4 липня (дата заснування) або у вересні. День вшанування поліцейських та правоохоронців.</div>
+          <span class="tag professional">Професійне</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="holiday-card memorial">
+      <div class="date-block">
+        <div class="date-day">12</div>
+        <div class="date-month">Вер</div>
+        <div class="date-weekday">Субота</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">✝️</div>
+        <div class="card-text">
+          <div class="card-name">Перенесення мощей святого князя Олексія — Воздвиження Чесного Хреста (за новим стилем)</div>
+          <div class="card-desc">Церковне свято. Різноманітні дні пам'яті Богородиці та святих: День ангела Федора, Данила, Олексія, Марії та ін.</div>
+          <span class="tag religious">Релігійне</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="holiday-card professional">
+      <div class="date-block">
+        <div class="date-day">17</div>
+        <div class="date-month">Вер</div>
+        <div class="date-weekday">Четвер</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">🌾</div>
+        <div class="card-text">
+          <div class="card-name">День фермера (День аграрія в Україні)</div>
+          <div class="card-desc">Офіційне свято агропромислового сектору України — відзначають фермери та всі, хто пов'язаний із сільським господарством.</div>
+          <span class="tag professional">Професійне</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="holiday-card professional">
+      <div class="date-block">
+        <div class="date-day">22</div>
+        <div class="date-month">Вер</div>
+        <div class="date-weekday">Вівторок</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">🌍</div>
+        <div class="card-text">
+          <div class="card-name">День партизанської слави</div>
+          <div class="card-desc">Відзначається 22 вересня. День пам'яті учасників партизанського руху в Україні під час Другої світової війни.</div>
+          <span class="tag memorial">Пам'ятна дата</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="holiday-card professional">
+      <div class="date-block">
+        <div class="date-day">27</div>
+        <div class="date-month">Вер</div>
+        <div class="date-weekday">Неділя</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">👩‍🏫</div>
+        <div class="card-text">
+          <div class="card-name">День туризму / День вихователя і педагогічних працівників</div>
+          <div class="card-desc">27 вересня — Міжнародний день туризму. Також цього дня — Міжнародне свято вихователів та педагогів (останній день вересня).</div>
+          <span class="tag international">Міжнародне</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ЖОВТЕНЬ 2026 ============ -->
+  <section class="month-section">
+    <div class="month-title">Жовтень 2026</div>
+
+    <div class="holiday-card international">
+      <div class="date-block">
+        <div class="date-day">1</div>
+        <div class="date-month">Жов</div>
+        <div class="date-weekday">Четвер</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">👵</div>
+        <div class="card-text">
+          <div class="card-name">Міжнародний день людей похилого віку / День музики</div>
+          <div class="card-desc">1 жовтня — Міжнародний день осіб похилого віку (ООН). Також День музики — в Україні та світі вшановують музику як частину культурної спадщини.</div>
+          <span class="tag international">Міжнародне</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="holiday-card professional">
+      <div class="date-block">
+        <div class="date-day">5</div>
+        <div class="date-month">Жов</div>
+        <div class="date-weekday">Понеділок</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">🍎</div>
+        <div class="card-text">
+          <div class="card-name">День вчителя (Міжнародний день освіти)</div>
+          <div class="card-desc">Відзначається в першу неділю жовтня / 5 жовтня (міжнар.). Один із найшанованіших професійних свят в Україні — учителів і всіх педагогів вітають учні, батьки та колеги.</div>
+          <span class="tag professional">Професійне</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="holiday-card state">
+      <div class="date-block">
+        <div class="date-day">1</div>
+        <div class="date-month">Жов</div>
+        <div class="date-weekday">Четвер</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">🛡️</div>
+        <div class="card-text">
+          <div class="card-name">День захисників і захисниць України</div>
+          <div class="card-desc">Офіційне державне свято, запроваджене у 2014 році замість «Дня захисника вітчизни» 23 лютого. З 2023 року відзначається 1 жовтня. Вшановуються всі, хто боронить Україну. Офіційний вихідний день за ст. 73 КЗпП.</div>
+          <span class="tag state">Державне свято · Вихідний</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="holiday-card professional">
+      <div class="date-block">
+        <div class="date-day">11</div>
+        <div class="date-month">Жов</div>
+        <div class="date-weekday">Неділя</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">🏘️</div>
+        <div class="card-text">
+          <div class="card-name">День місцевого самоврядування / День жінок</div>
+          <div class="card-desc">День місцевого самоврядування в Україні. Свято органів місцевої влади та їхніх представників.</div>
+          <span class="tag professional">Професійне</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="holiday-card memorial">
+      <div class="date-block">
+        <div class="date-day">14</div>
+        <div class="date-month">Жов</div>
+        <div class="date-weekday">Середа</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">🙏</div>
+        <div class="card-text">
+          <div class="card-name">Покрова Пресвятої Богородиці / День захисника України (традиційна дата)</div>
+          <div class="card-desc">14 жовтня — велике православне свято Покрови. Козацьке свято, пов'язане з традиціями Запорізької Січі. Шанується як символ захисту Батьківщини та козацтва.</div>
+          <span class="tag religious">Релігійне</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="holiday-card international">
+      <div class="date-block">
+        <div class="date-day">25</div>
+        <div class="date-month">Жов</div>
+        <div class="date-weekday">Неділя</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">🌙</div>
+        <div class="card-text">
+          <div class="card-name">Перехід на зимовий час / День ООН</div>
+          <div class="card-desc">В останню неділю жовтня годинники переводяться на 1 годину назад (зимовий час). Також відзначається річниця заснування ООН (24 жовтня).</div>
+          <span class="tag international">Загальноукраїнське</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ЛИСТОПАД 2026 ============ -->
+  <section class="month-section">
+    <div class="month-title">Листопад 2026</div>
+
+    <div class="holiday-card memorial">
+      <div class="date-block">
+        <div class="date-day">6</div>
+        <div class="date-month">Лис</div>
+        <div class="date-weekday">П'ятниця</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">🖤</div>
+        <div class="card-text">
+          <div class="card-name">День пам'яті жертв Голодомору</div>
+          <div class="card-desc">Відзначається в четверту суботу листопада (2026 — 28 листопада). День пам'яті жертв штучного голоду 1932–1933 рр. — одного з найтрагічніших злочинів проти українського народу. О 16:00 оголошується хвилина мовчання.</div>
+          <span class="tag memorial">День жалоби</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="holiday-card state">
+      <div class="date-block">
+        <div class="date-day">21</div>
+        <div class="date-month">Лис</div>
+        <div class="date-weekday">Субота</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">🕊️</div>
+        <div class="card-text">
+          <div class="card-name">День Гідності та Свободи (Євромайдан)</div>
+          <div class="card-desc">21 листопада 2013 року розпочався Євромайдан — Революція Гідності. Також 21 листопада 2004 — перший день Помаранчевої революції. Офіційна пам'ятна дата, встановлена Указом Президента.</div>
+          <span class="tag state">Державна дата</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="holiday-card memorial">
+      <div class="date-block">
+        <div class="date-day">28</div>
+        <div class="date-month">Лис</div>
+        <div class="date-weekday">Субота</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">🕯️</div>
+        <div class="card-text">
+          <div class="card-name">День пам'яті жертв Голодомору (4-та субота листопада)</div>
+          <div class="card-desc">Щороку в четверту суботу листопада Україна вшановує мільйони жертв штучного голоду 1932–1933 рр. По всій країні запалюють свічки — «Запали свічку». У 2026 р. — 28 листопада.</div>
+          <span class="tag memorial">День жалоби</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="holiday-card professional">
+      <div class="date-block">
+        <div class="date-day">19</div>
+        <div class="date-month">Лис</div>
+        <div class="date-weekday">Четвер</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">⚖️</div>
+        <div class="card-text">
+          <div class="card-name">День працівників прокуратури / Міжнародний день чоловіків</div>
+          <div class="card-desc">19 листопада — День чоловіків у ряді країн. У цей день також відзначаються окремі відомчі свята.</div>
+          <span class="tag international">Міжнародне</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ГРУДЕНЬ 2026 ============ -->
+  <section class="month-section">
+    <div class="month-title">Грудень 2026</div>
+
+    <div class="holiday-card international">
+      <div class="date-block">
+        <div class="date-day">1</div>
+        <div class="date-month">Гру</div>
+        <div class="date-weekday">Вівторок</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">🎗️</div>
+        <div class="card-text">
+          <div class="card-name">Всесвітній день боротьби зі СНІДом</div>
+          <div class="card-desc">1 грудня 1991 року проведено всеукраїнський референдум, на якому 90,32% громадян підтвердили незалежність України. Також — Міжнародний день боротьби зі СНІДом (символ — червона стрічка).</div>
+          <span class="tag international">Міжнародне</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="holiday-card state">
+      <div class="date-block">
+        <div class="date-day">6</div>
+        <div class="date-month">Гру</div>
+        <div class="date-weekday">Неділя</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">⚔️</div>
+        <div class="card-text">
+          <div class="card-name">День Збройних сил України</div>
+          <div class="card-desc">6 грудня 1991 року прийнято Закон України «Про Збройні Сили України». Щороку в цей день вшановуються всі військовослужбовці ЗСУ. Офіційна пам'ятна дата.</div>
+          <span class="tag state">Державна дата</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="holiday-card international">
+      <div class="date-block">
+        <div class="date-day">10</div>
+        <div class="date-month">Гру</div>
+        <div class="date-weekday">Четвер</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">🌏</div>
+        <div class="card-text">
+          <div class="card-name">День прав людини</div>
+          <div class="card-desc">10 грудня 1948 року ООН прийняла Загальну декларацію прав людини. Щороку відзначається по всьому світу як нагадування про фундаментальні права кожної людини.</div>
+          <span class="tag international">Міжнародне</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="holiday-card state">
+      <div class="date-block">
+        <div class="date-day">25</div>
+        <div class="date-month">Гру</div>
+        <div class="date-weekday">П'ятниця</div>
+      </div>
+      <div class="card-content">
+        <div class="card-emoji">⭐</div>
+        <div class="card-text">
+          <div class="card-name">Різдво Христове (за григоріанським і юліанським новим стилем)</div>
+          <div class="card-desc">З 2017 року 25 грудня є офіційним святковим вихідним в Україні. Різдво за григоріанським календарем — дедалі більше українських родин переходить на його відзначення. Офіційний вихідний день за ст. 73 КЗпП.</div>
+          <span class="tag state">Державне свято · Вихідний</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ДОДАТКОВО: ДЕРЖСВЯТА 2026 (НАГАДУВАННЯ) ============ -->
+  <section class="month-section">
+    <div class="month-title" style="border-bottom-color: var(--blue);">📌 Повний перелік державних свят 2026 (ст. 73 КЗпП)</div>
+
+    <div style="background:#fff;border-radius:16px;padding:24px 28px;border:1px solid var(--border);box-shadow:0 2px 12px rgba(0,0,0,0.06);">
+      <table style="width:100%;border-collapse:collapse;font-size:14px;">
+        <thead>
+          <tr style="border-bottom:2px solid var(--yellow);">
+            <th style="text-align:left;padding:8px 12px;font-weight:600;color:var(--text);">Дата</th>
+            <th style="text-align:left;padding:8px 12px;font-weight:600;color:var(--text);">Свято</th>
+            <th style="text-align:center;padding:8px 12px;font-weight:600;color:var(--text);">Вихідний</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="border-bottom:1px solid #f0f0f0;">
+            <td style="padding:10px 12px;font-weight:600;color:var(--blue);">1 січня</td>
+            <td style="padding:10px 12px;">Новий рік</td>
+            <td style="padding:10px 12px;text-align:center;">✅</td>
+          </tr>
+          <tr style="border-bottom:1px solid #f0f0f0;background:#fafafa;">
+            <td style="padding:10px 12px;font-weight:600;color:var(--blue);">8 березня</td>
+            <td style="padding:10px 12px;">Міжнародний жіночий день</td>
+            <td style="padding:10px 12px;text-align:center;">✅</td>
+          </tr>
+          <tr style="border-bottom:1px solid #f0f0f0;">
+            <td style="padding:10px 12px;font-weight:600;color:var(--blue);">12 квітня</td>
+            <td style="padding:10px 12px;">Великдень (Пасха)</td>
+            <td style="padding:10px 12px;text-align:center;">✅</td>
+          </tr>
+          <tr style="border-bottom:1px solid #f0f0f0;background:#fafafa;">
+            <td style="padding:10px 12px;font-weight:600;color:var(--blue);">1 травня</td>
+            <td style="padding:10px 12px;">День праці</td>
+            <td style="padding:10px 12px;text-align:center;">✅</td>
+          </tr>
+          <tr style="border-bottom:1px solid #f0f0f0;">
+            <td style="padding:10px 12px;font-weight:600;color:var(--blue);">8 травня</td>
+            <td style="padding:10px 12px;">День пам'яті та перемоги над нацизмом у Другій світовій війні</td>
+            <td style="padding:10px 12px;text-align:center;">✅</td>
+          </tr>
+          <tr style="border-bottom:1px solid #f0f0f0;background:#fafafa;">
+            <td style="padding:10px 12px;font-weight:600;color:var(--blue);">28 червня</td>
+            <td style="padding:10px 12px;">День Конституції України</td>
+            <td style="padding:10px 12px;text-align:center;">✅</td>
+          </tr>
+          <tr style="border-bottom:1px solid #f0f0f0;">
+            <td style="padding:10px 12px;font-weight:600;color:var(--blue);">24 серпня</td>
+            <td style="padding:10px 12px;">День незалежності України</td>
+            <td style="padding:10px 12px;text-align:center;">✅</td>
+          </tr>
+          <tr style="border-bottom:1px solid #f0f0f0;background:#fafafa;">
+            <td style="padding:10px 12px;font-weight:600;color:var(--blue);">1 жовтня</td>
+            <td style="padding:10px 12px;">День захисників і захисниць України</td>
+            <td style="padding:10px 12px;text-align:center;">✅</td>
+          </tr>
+          <tr style="border-bottom:1px solid #f0f0f0;">
+            <td style="padding:10px 12px;font-weight:600;color:var(--blue);">25 грудня</td>
+            <td style="padding:10px 12px;">Різдво Христове</td>
+            <td style="padding:10px 12px;text-align:center;">✅</td>
+          </tr>
+        </tbody>
+      </table>
+      <p style="font-size:12px;color:var(--muted);margin-top:16px;line-height:1.6;">
+        ⚠️ Під час воєнного стану перенесення вихідних днів, що збіглись із святами, <strong>не застосовується</strong> (тимчасові зміни до ст. 73 КЗпП).
+      </p>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  Джерела: <a href="https://zakon.rada.gov.ua/laws/main/days" target="_blank">zakon.rada.gov.ua</a> · <a href="https://www.dilovamova.com/index.php?page=142&calendar=ukraine-holidays" target="_blank">dilovamova.com</a> · Кодекс законів про працю України, ст. 73 · Складено: червень 2026
+</footer>
+
+</body>
+</html>

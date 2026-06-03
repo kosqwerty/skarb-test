@@ -145,24 +145,26 @@ const TourManager = {
 
         // Scroll first (instant) so getBoundingClientRect gives correct viewport coords
         const target = this._resolveTarget(step.target);
-        if (target) target.scrollIntoView({ behavior: 'instant', block: 'nearest' });
+        if (target) target.scrollIntoView({ behavior: 'instant', block: 'center' });
 
-        // Highlight & position after scroll settled
-        this._positionHighlight(target, step.position || 'bottom');
-
-        // Override tip position if step provides explicit tipStyle
-        if (step.tipStyle) {
-            const tip = document.getElementById('tour-tip');
-            if (tip) Object.assign(tip.style, step.tipStyle);
-        }
-
-        // noBackdrop — прибираємо затемнення для кроків з власними модалками
-        if (step.noBackdrop) {
-            const bd = document.getElementById('tour-backdrop');
-            if (bd) { bd.innerHTML = ''; bd.style.background = 'transparent'; bd.style.pointerEvents = 'none'; }
-            const hl = document.getElementById('tour-highlight');
-            if (hl) hl.style.display = 'none';
-        }
+        // Highlight & position after scroll settled (rAF ensures layout is recalculated)
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                this._positionHighlight(target, step.position || 'bottom');
+                // Apply tipStyle AFTER _positionHighlight so it wins
+                if (step.tipStyle) {
+                    const tip = document.getElementById('tour-tip');
+                    if (tip) Object.assign(tip.style, step.tipStyle);
+                }
+                // noBackdrop — must run AFTER _positionHighlight to win
+                if (step.noBackdrop) {
+                    const bd = document.getElementById('tour-backdrop');
+                    if (bd) { bd.innerHTML = ''; bd.style.background = 'transparent'; bd.style.pointerEvents = 'none'; }
+                    const hl = document.getElementById('tour-highlight');
+                    if (hl) hl.style.display = 'none';
+                }
+            });
+        });
     },
 
     // Повертає перший видимий DOM-елемент зі списку селекторів (або null)

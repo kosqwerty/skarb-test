@@ -103,7 +103,7 @@ Deno.serve(async (req) => {
           )
         }
 
-        const client = new Anthropic({ apiKey: Deno.env.get('CLAUDE_CHAT_BOT')! })
+        const client = new Anthropic({ apiKey: Deno.env.get('claude_chat_bot')! })
         const response = await client.messages.create({
           model: 'claude-haiku-4-5',
           max_tokens: 1024,
@@ -127,7 +127,7 @@ Deno.serve(async (req) => {
       )
     }
 
-    const client = new Anthropic({ apiKey: Deno.env.get('CLAUDE_CHAT_BOT')! })
+    const client = new Anthropic({ apiKey: Deno.env.get('claude_chat_bot')! })
     const response = await client.messages.create({
       model: 'claude-haiku-4-5',
       max_tokens: 1024,

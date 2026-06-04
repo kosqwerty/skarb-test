@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Адмін — Активація промокодів</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<style>
+  :root {
+    --blue:    #1A3A8F;
+    --blue2:   #2451B5;
+    --yellow:  #F5C518;
+    --ink:     #0D1B3E;
+    --muted:   #6B7A99;
+    --border:  #D0D8EC;
+    --bg:      #F0F4FF;
+    --card:    #FFFFFF;
+    --success: #1A6B3A;
+    --success-bg: #EAF5EE;
+    --error:   #C8401A;
+    --error-bg:#FDF0EC;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Instrument Sans', sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    min-height: 100vh;
+  }
+
+  /* LOGIN */
+  .login-screen {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh;
+    background: linear-gradient(150deg, #0D1B3E 0%, #1A3A8F 50%, #0D1B3E 100%);
+  }
+  .login-box {
+    background: #fff;
+    border-radius: 20px;
+    padding: 40px 44px;
+    width: 360px;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.35);
+  }
+  .login-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 22px; font-weight: 800;
+    color: var(--ink); margin-bottom: 6px;
+  }
+  .login-sub { font-size: 13px; color: var(--muted); margin-bottom: 28px; }
+  .login-label { display: block; font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); margin-bottom: 7px; }
+  .login-input {
+    width: 100%; height: 46px; padding: 0 14px;
+    border: 1.5px solid var(--border); border-radius: 10px;
+    font-size: 15px; outline: none; color: var(--ink);
+    transition: border-color 0.2s, box-shadow 0.2s;
+    margin-bottom: 18px;
+  }
+  .login-input:focus { border-color: var(--blue); box-shadow: 0 0 0 4px rgba(26,58,143,0.12); }
+  .login-btn {
+    width: 100%; height: 48px;
+    background: linear-gradient(135deg, #F5C518, #FFD740);
+    color: var(--ink); border: none; border-radius: 10px;
+    font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 700;
+    cursor: pointer; transition: transform 0.15s, box-shadow 0.2s;
+    box-shadow: 0 4px 16px rgba(245,197,24,0.4);
+  }
+  .login-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(245,197,24,0.5); }
+  .login-err { font-size: 13px; color: var(--error); margin-top: 12px; display: none; }
+
+  /* HEADER */
+  header {
+    background: linear-gradient(135deg, #0D1B3E 0%, #1A3A8F 100%);
+    padding: 18px 32px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .logo {
+    font-family: 'Syne', sans-serif; font-weight: 800; font-size: 18px;
+    color: #fff; letter-spacing: -0.3px;
+  }
+  .logo span { color: var(--yellow); }
+  .header-meta { font-size: 13px; color: rgba(255,255,255,0.55); }
+  .header-meta strong { color: var(--yellow); }
+
+  /* MAIN */
+  main { max-width: 1100px; margin: 32px auto; padding: 0 24px; }
+
+  /* STATS */
+  .stats-row { display: flex; gap: 16px; margin-bottom: 28px; flex-wrap: wrap; }
+  .stat-card {
+    background: var(--card); border-radius: 14px;
+    padding: 18px 24px; flex: 1; min-width: 160px;
+    border: 1px solid var(--border);
+    box-shadow: 0 2px 12px rgba(13,27,62,0.06);
+  }
+  .stat-val {
+    font-family: 'Syne', sans-serif; font-size: 36px; font-weight: 800;
+    color: var(--blue); line-height: 1;
+  }
+  .stat-val.yellow { color: #D4A800; }
+  .stat-val.green  { color: var(--success); }
+  .stat-label { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+  /* TOOLBAR */
+  .toolbar {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 18px; flex-wrap: wrap;
+  }
+  .search-input {
+    height: 40px; padding: 0 14px; border: 1.5px solid var(--border);
+    border-radius: 10px; font-size: 14px; outline: none; width: 260px;
+    transition: border-color 0.2s;
+  }
+  .search-input:focus { border-color: var(--blue); }
+  .filter-btn {
+    height: 40px; padding: 0 16px; border-radius: 10px;
+    border: 1.5px solid var(--border); background: var(--card);
+    font-size: 13px; font-weight: 500; cursor: pointer; color: var(--ink);
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .filter-btn.active { background: var(--blue); border-color: var(--blue); color: #fff; }
+  .refresh-btn {
+    height: 40px; padding: 0 16px; border-radius: 10px;
+    border: none; background: var(--yellow);
+    font-size: 13px; font-weight: 700; cursor: pointer; color: var(--ink);
+    margin-left: auto;
+    transition: transform 0.15s;
+  }
+  .refresh-btn:hover { transform: translateY(-1px); }
+
+  /* TABLE */
+  .table-wrap {
+    background: var(--card); border-radius: 16px;
+    border: 1px solid var(--border);
+    box-shadow: 0 2px 16px rgba(13,27,62,0.07);
+    overflow: hidden;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  thead { background: linear-gradient(135deg, #0D1B3E, #1A3A8F); }
+  thead th {
+    padding: 14px 16px; text-align: left;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.08em;
+    text-transform: uppercase; color: rgba(255,255,255,0.7);
+  }
+  tbody tr { border-bottom: 1px solid var(--border); transition: background 0.12s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: #F5F7FF; }
+  td { padding: 13px 16px; font-size: 14px; color: var(--ink); vertical-align: middle; }
+  td.muted { color: var(--muted); font-size: 13px; }
+
+  /* STATUS BADGE */
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 10px; border-radius: 99px;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+  .badge.pending  { background: #FFF8E0; color: #7C5C00; border: 1px solid #F4D97A; }
+  .badge.sent     { background: var(--success-bg); color: var(--success); border: 1px solid #A8D9BA; }
+
+  /* ACTION BUTTON */
+  .send-btn {
+    height: 34px; padding: 0 14px; border-radius: 8px; border: none;
+    background: linear-gradient(135deg, #1A3A8F, #2451B5);
+    color: #fff; font-size: 13px; font-weight: 600; cursor: pointer;
+    transition: transform 0.12s, box-shadow 0.15s;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(26,58,143,0.3);
+  }
+  .send-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(26,58,143,0.4); }
+  .send-btn:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
+  .send-btn.done {
+    background: linear-gradient(135deg, #1A6B3A, #22883F);
+    box-shadow: 0 2px 8px rgba(26,107,58,0.3);
+  }
+
+  /* EMPTY */
+  .empty { text-align: center; padding: 60px 20px; color: var(--muted); font-size: 15px; }
+
+  /* TOAST */
+  .toast {
+    position: fixed; bottom: 28px; right: 28px;
+    padding: 13px 20px; border-radius: 12px; font-size: 14px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+    opacity: 0; transform: translateY(10px);
+    transition: opacity 0.25s, transform 0.25s;
+    pointer-events: none; z-index: 999; max-width: 320px;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.success { background: var(--success-bg); color: var(--success); border: 1px solid #A8D9BA; }
+  .toast.error   { background: var(--error-bg);   color: var(--error);   border: 1px solid #F4BAA7; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner { display: inline-block; animation: spin 0.7s linear infinite; }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div class="login-screen" id="login-screen">
+  <div class="login-box">
+    <div class="login-title">🔐 Адмін-панель</div>
+    <div class="login-sub">Введіть пароль для доступу</div>
+    <label class="login-label">Пароль</label>
+    <input class="login-input" id="pwd-input" type="password" placeholder="••••••••"
+      onkeydown="if(event.key==='Enter') doLogin()">
+    <button class="login-btn" onclick="doLogin()">Увійти</button>
+    <div class="login-err" id="login-err">Невірний пароль</div>
+  </div>
+</div>
+
+<!-- ADMIN PANEL -->
+<div id="admin-panel" style="display:none">
+  <header>
+    <div class="logo">Pleso <span>Admin</span></div>
+    <div class="header-meta">Реєстрації: <strong id="h-total">—</strong> &nbsp;|&nbsp; Активовано: <strong id="h-sent">—</strong></div>
+  </header>
+
+  <main>
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-val" id="s-total">—</div>
+        <div class="stat-label">Всього реєстрацій</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val yellow" id="s-pending">—</div>
+        <div class="stat-label">Очікують активації</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val green" id="s-sent">—</div>
+        <div class="stat-label">Промокод надіслано</div>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <input class="search-input" id="search" type="text" placeholder="🔍 Пошук по імені або email…" oninput="renderTable()">
+      <button class="filter-btn active" id="f-all"     onclick="setFilter('all')">Всі</button>
+      <button class="filter-btn"        id="f-pending" onclick="setFilter('pending')">Очікують</button>
+      <button class="filter-btn"        id="f-sent"    onclick="setFilter('sent')">Активовано</button>
+      <button class="refresh-btn" onclick="loadData()">↻ Оновити</button>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>ПІБ</th>
+            <th>Email</th>
+            <th>Дата народж.</th>
+            <th>Реєстрація</th>
+            <th>Статус</th>
+            <th>Дія</th>
+          </tr>
+        </thead>
+        <tbody id="tbl-body">
+          <tr><td colspan="7" class="empty">Завантаження…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  /* ── CONFIG ── */
+  const ADMIN_PWD = 'pleso2025';          // змініть пароль!
+  const EJSVC     = 'service_a36k56e';
+  const EJTPL_ACT = 'template_lsvtqfd';  // шаблон листа про активацію
+  const EJPUB     = 'TCDsZiienAvjP67yO';
+  const BIN       = '6a180f57ddf5aa59f76f50ff';
+  const BIN_ACT   = '6a1fcbf0f5f4af5e29b0d17e';
+  const BINKEY    = '$2a$10$LJUcAV/w0RC64eR3VIzI2e714uzT1Ceq6tORIxTEP8zm9mC1kHasC';
+  const BINURL    = 'https://api.jsonbin.io/v3/b/' + BIN;
+  const BINURL_ACT = 'https://api.jsonbin.io/v3/b/' + BIN_ACT;
+
+  emailjs.init(EJPUB);
+
+  let allRegs      = [];
+  let sentSet      = new Set();
+  let activatedList = [];
+  let curFilter    = 'all';
+
+  /* ── LOGIN ── */
+  function doLogin() {
+    const val = document.getElementById('pwd-input').value;
+    if (val === ADMIN_PWD) {
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('admin-panel').style.display  = 'block';
+      loadData();
+    } else {
+      document.getElementById('login-err').style.display = 'block';
+      document.getElementById('pwd-input').value = '';
+      document.getElementById('pwd-input').focus();
+    }
+  }
+
+  /* ── DATA ── */
+  async function loadData() {
+    document.getElementById('tbl-body').innerHTML =
+      '<tr><td colspan="7" class="empty"><span class="spinner">⏳</span> Завантаження…</td></tr>';
+    try {
+      const [resRegs, resAct] = await Promise.all([
+        fetch(BINURL     + '/latest', { headers: { 'X-Master-Key': BINKEY } }),
+        fetch(BINURL_ACT + '/latest', { headers: { 'X-Master-Key': BINKEY } })
+      ]);
+      const dataRegs = await resRegs.json();
+      const dataAct  = await resAct.json();
+      allRegs       = dataRegs.record?.registrations || [];
+      activatedList = dataAct.record?.activated || [];
+      sentSet       = new Set(activatedList.map(a => String(a.num)));
+      updateStats();
+      renderTable();
+    } catch {
+      document.getElementById('tbl-body').innerHTML =
+        '<tr><td colspan="7" class="empty">❌ Помилка завантаження даних</td></tr>';
+    }
+  }
+
+  async function saveActivated() {
+    await fetch(BINURL_ACT, {
+      method: 'PUT',
+      headers: { 'X-Master-Key': BINKEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ activated: [...activatedList] })
+    });
+  }
+
+  function updateStats() {
+    const total   = allRegs.length;
+    const sent    = allRegs.filter(r => sentSet.has(String(r.num))).length;
+    const pending = total - sent;
+    document.getElementById('s-total').textContent   = total;
+    document.getElementById('s-pending').textContent = pending;
+    document.getElementById('s-sent').textContent    = sent;
+    document.getElementById('h-total').textContent   = total;
+    document.getElementById('h-sent').textContent    = sent;
+  }
+
+  /* ── FILTER & RENDER ── */
+  function setFilter(f) {
+    curFilter = f;
+    ['all','pending','sent'].forEach(id => {
+      document.getElementById('f-' + id).classList.toggle('active', id === f);
+    });
+    renderTable();
+  }
+
+  function renderTable() {
+    const q = document.getElementById('search').value.toLowerCase();
+    let rows = allRegs.filter(r => {
+      const fio = `${r.last} ${r.first} ${r.middle}`.toLowerCase();
+      const matchQ = !q || fio.includes(q) || r.email.toLowerCase().includes(q);
+      const activated = sentSet.has(String(r.num));
+      const matchF = curFilter === 'all'
+        || (curFilter === 'pending' && !activated)
+        || (curFilter === 'sent'    &&  activated);
+      return matchQ && matchF;
+    });
+
+    if (!rows.length) {
+      document.getElementById('tbl-body').innerHTML =
+        '<tr><td colspan="7" class="empty">Нічого не знайдено</td></tr>';
+      return;
+    }
+
+    document.getElementById('tbl-body').innerHTML = rows.map(r => {
+      const activated = sentSet.has(String(r.num));
+      const badge = activated
+        ? '<span class="badge sent">✓ Надіслано</span>'
+        : '<span class="badge pending">⏳ Очікує</span>';
+      const btn = activated
+        ? `<button class="send-btn done" disabled>✓ Готово</button>`
+        : `<button class="send-btn" onclick="sendActivation(${r.num})">📨 Надіслати</button>`;
+      return `<tr id="row-${r.num}">
+        <td class="muted">${r.num}</td>
+        <td><strong>${esc(r.last)} ${esc(r.first)}</strong><br><span style="font-size:12px;color:var(--muted)">${esc(r.middle)}</span></td>
+        <td class="muted">${esc(r.email)}</td>
+        <td class="muted">${esc(r.dob)}</td>
+        <td class="muted">${esc(r.date)}</td>
+        <td>${badge}</td>
+        <td>${btn}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  /* ── SEND ACTIVATION ── */
+  async function sendActivation(num) {
+    const r = allRegs.find(x => x.num === num);
+    if (!r) return;
+
+    const btn = document.querySelector(`#row-${num} .send-btn`);
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner">⏳</span>';
+
+    try {
+      await emailjs.send(EJSVC, EJTPL_ACT, {
+        to_name:    `${r.first} ${r.last}`,
+        to_email:   r.email,
+        first_name: r.first,
+        last_name:  r.last,
+        promo_code: r.promo,
+        reg_number: r.num
+      });
+
+      sentSet.add(String(num));
+      activatedList.push({
+        num:   r.num,
+        fio:   `${r.last} ${r.first} ${r.middle}`,
+        email: r.email,
+        time:  new Date().toLocaleString('uk-UA')
+      });
+      await saveActivated();
+      updateStats();
+      renderTable();
+      showToast(`✅ Лист надіслано на ${r.email}`, 'success');
+    } catch(e) {
+      btn.disabled = false;
+      btn.innerHTML = '📨 Надіслати';
+      showToast('❌ Помилка: ' + (e.text || JSON.stringify(e)), 'error');
+    }
+  }
+
+  /* ── HELPERS ── */
+  function esc(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function showToast(msg, type) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast show ' + type;
+    clearTimeout(t._timer);
+    t._timer = setTimeout(() => { t.className = 'toast ' + type; }, 3500);
+  }
+</script>
+</body>
+</html>

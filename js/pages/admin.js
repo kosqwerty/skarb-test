@@ -34,6 +34,7 @@ const AdminPage = {
                 ${AppState.isOwner() ? `<button class="tab" data-tab="activity" onclick="AdminPage.switchTab('activity', this)"><i class="fa-solid fa-clock-rotate-left"></i> Активність</button>` : ''}
                 ${AppState.isAdmin() ? `<button class="tab" data-tab="trusted-ips" onclick="AdminPage.switchTab('trusted-ips', this)"><i class="fa-solid fa-shield-halved"></i> Довірені IP</button>` : ''}
                 ${AppState.isAdmin() ? `<button class="tab" data-tab="ai-assistant" onclick="AdminPage.switchTab('ai-assistant', this)"><i class="fa-solid fa-robot"></i> AI Помічник</button>` : ''}
+                ${AppState.isAdmin() ? `<button class="tab" data-tab="pleso" onclick="AdminPage.switchTab('pleso', this)"><i class="fa-solid fa-tag"></i> Pleso</button>` : ''}
             </div>
 
             <div id="admin-content"></div>`;
@@ -88,6 +89,7 @@ const AdminPage = {
                 case 'activity':      await this._renderActivity(el);               break;
                 case 'trusted-ips':   await this._renderTrustedIps(el);             break;
                 case 'ai-assistant':  await this._renderAiAssistant(el);            break;
+                case 'pleso':         this._renderPleso(el);                        break;
             }
         } catch(e) {
             el.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>${e.message}</h3></div>`;
@@ -4466,6 +4468,17 @@ const AdminPage = {
                 <i class="fa-solid fa-circle-info" style="color:#f59e0b;margin-right:.4rem"></i>
                 Баланс Anthropic перевіряйте на <a href="https://console.anthropic.com" target="_blank" rel="noopener noreferrer" style="color:var(--primary)">console.anthropic.com</a>
             </div>
+        </div>`;
+    },
+
+    // ── Pleso ─────────────────────────────────────────────────────
+    _renderPleso(el) {
+        el.innerHTML = `
+        <div style="height:calc(100vh - 180px);min-height:500px">
+            <iframe src="/admin_pleso.html"
+                style="width:100%;height:100%;border:none;border-radius:var(--radius-lg);display:block"
+                allow="same-origin">
+            </iframe>
         </div>`;
     },
 

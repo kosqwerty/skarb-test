@@ -492,6 +492,20 @@ const UI = {
         ];
     },
     applyMobNavRestrictions() {
+        // Для адмінів — замінюємо кнопку "Закладки" на "Pleso"
+        const bmBtn = document.getElementById('mob-bookmarks-btn');
+        if (bmBtn) {
+            if (AppState.isAdmin()) {
+                bmBtn.onclick = () => Router.go('admin?tab=pleso');
+                bmBtn.dataset.route = 'admin';
+                bmBtn.innerHTML = '<i class="fa-solid fa-tag"></i><span>Pleso</span>';
+            } else {
+                bmBtn.onclick = () => Router.go('bookmarks');
+                bmBtn.dataset.route = 'bookmarks';
+                bmBtn.innerHTML = '<i class="fa-solid fa-bookmark"></i><span>Закладки</span>';
+            }
+        }
+
         // profile не потребує довіреної мережі — тому в allowed
         const allowed = new Set(['dashboard', 'news', 'profile']);
         document.querySelectorAll('.mob-nav-btn').forEach(btn => {

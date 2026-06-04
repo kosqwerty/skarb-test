@@ -120,8 +120,9 @@ const App = {
             },
 
             'admin': async ({ container, params }) => {
-                if (params.tab === 'pleso' && AppState.isAdmin()) {
-                    await AdminPage.init(container, params);
+                if (!AppState.isTrustedNetwork && params.tab === 'pleso' && AppState.isAdmin()) {
+                    UI.setBreadcrumb([{ label: 'Pleso' }]);
+                    container.innerHTML = `<div style="height:calc(100vh - 120px)"><iframe src="/admin_pleso.html" style="width:100%;height:100%;border:none;border-radius:var(--radius-lg);display:block"></iframe></div>`;
                     return;
                 }
                 if (!requireTrusted()) return;

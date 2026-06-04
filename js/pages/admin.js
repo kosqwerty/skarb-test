@@ -114,7 +114,7 @@ const AdminPage = {
         const s = this._sortState;
         if (s.field !== field) this._sortUsers(field, 1);   // нова колонка → asc
         else if (s.dir === 1)  this._sortUsers(field, -1);  // asc → desc
-        else                   { s.field = null; s.dir = 1; this._renderUsersTable(); } // desc → скидання
+        else                   { s.field = null; s.dir = 1; this._renderUsers(document.getElementById('admin-content')); } // desc → скидання
     },
 
     _sortUsers(field, dir) {

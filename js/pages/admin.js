@@ -140,7 +140,12 @@ const AdminPage = {
                 if (row) tbody.appendChild(row);
             });
         } else {
-            rows.sort((a, b) => (a.dataset[field] || '').localeCompare(b.dataset[field] || '', 'uk') * s.dir);
+            rows.sort((a, b) => {
+                const av = a.dataset[field] || '', bv = b.dataset[field] || '';
+                // ISO dates / timestamps — пряме порівняння рядків
+                if (field === 'activity') return av < bv ? -s.dir : av > bv ? s.dir : 0;
+                return av.localeCompare(bv, 'uk') * s.dir;
+            });
             rows.forEach(r => tbody.appendChild(r));
         }
         this._pageCurrent = 1;
@@ -394,7 +399,7 @@ const AdminPage = {
                 data-subdivision="${esc(u.subdivision)}"
                 data-role="${u.role || ''}"
                 data-date="${Fmt.datetime(u.created_at).toLowerCase()}"
-                data-activity="${u.last_sign_in_at ? Fmt.datetime(u.last_sign_in_at).toLowerCase() : ''}"
+                data-activity="${u.last_sign_in_at || ''}"
                 data-status="${u.is_active !== false ? 'active' : 'blocked'}">
                 <td class="uf-td uf-td-cb" style="text-align:center;padding:.7rem .4rem">
                     <input type="checkbox" class="user-cb" data-uid="${u.id}"

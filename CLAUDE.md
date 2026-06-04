@@ -641,3 +641,68 @@ When embedding rich HTML in `Modal.open({body})`, prefix all CSS classes to avoi
 
 ### _render() resets DOM completely
 After `container.innerHTML = ...` all DOM state is lost. Restore persistent UI state (sidebar width, etc.) immediately after assignment, not in event handlers.
+
+## Доступ для недовіреної мережі
+
+За замовчуванням більшість розділів заблоковані поза довіреною мережею (`AppState.isTrustedNetwork === false`). Щоб відкрити конкретний розділ або вкладку — потрібно зробити три речі:
+
+### 1. Роутер (`js/app.js`) — пропустити `requireTrusted()`
+
+У функції роуту `admin` додай окрему гілку **до** виклику `requireTrusted()`:
+
+```js
+'admin': async ({ container, params }) => {
+    if (!AppState.isTrustedNetwork && AppState.isAdmin()) {
+        if (params.tab === 'my-tab') {
+            UI.setBreadcrumb([{ label: 'Назва' }]);
+            // Варіант А — iframe (окремий HTML-файл):
+            container.innerHTML = `<div style="height:calc(100vh - 120px)">
+                <iframe src="/my-file.html" style="width:100%;height:100%;border:none;border-radius:var(--radius-lg)"></iframe>
+            </div>`;
+            // Варіант Б — метод AdminPage напряму (без вкладок):
+            // container.innerHTML = '<div id="admin-content"></div>';
+            // await AdminPage._renderMyTab(container.querySelector('#admin-content'));
+            return;
+        }
+    }
+    if (!requireTrusted()) return;
+    await AdminPage.init(container, params);
+},
+```
+
+> **Важливо:** завжди викликай конкретний метод `AdminPage._renderXxx()` або рендери iframe напряму — **ніколи** не викликай `AdminPage.init()` для недовіреної мережі, бо це рендерить усі вкладки і дає доступ до всього розділу.
+
+### 2. Мобільний nav (`js/utils.js`) — додати маршрут до `allowed`
+
+У `applyMobNavRestrictions()` додай маршрут до множини `allowed` щоб кнопка не блокувалась іконкою заборони:
+
+```js
+if (AppState.isAdmin()) {
+    allowed.add('admin');      // вже є
+    allowed.add('my-route');   // додай свій
+}
+```
+
+### 3. Мобільний nav (`js/utils.js`) — замінити кнопку (якщо потрібно)
+
+Якщо хочеш показати окрему кнопку в мобільному меню для недовіреної мережі — зроби це в `applyMobNavRestrictions()` через `getElementById` + умову `AppState.isAdmin()`:
+
+```js
+const btn = document.getElementById('mob-some-btn');
+if (btn) {
+    if (AppState.isAdmin()) {
+        btn.onclick = () => Router.go('admin?tab=my-tab');
+        btn.dataset.route = 'admin';
+        btn.innerHTML = '<i class="fa-solid fa-icon"></i><span>Назва</span>';
+    } else {
+        // відновити дефолт
+    }
+}
+```
+
+### Поточні винятки для недовіреної мережі
+
+| Маршрут | Роль | Що рендериться |
+|---------|------|----------------|
+| `admin?tab=pleso` | admin/owner | iframe `/admin_pleso.html` |
+| `admin?tab=trusted-ips` | admin/owner | `AdminPage._renderTrustedIps()` напряму |

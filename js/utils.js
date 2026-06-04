@@ -508,6 +508,7 @@ const UI = {
 
         // profile не потребує довіреної мережі — тому в allowed
         const allowed = new Set(['dashboard', 'news', 'profile']);
+        if (AppState.isAdmin()) allowed.add('admin');
         document.querySelectorAll('.mob-nav-btn').forEach(btn => {
             const route = btn.dataset.route;
             const blocked = !AppState.isTrustedNetwork && route && !allowed.has(route);

@@ -516,10 +516,10 @@ const DashboardPage = {
             },
         ];
 
-        if (localStorage.getItem('tour_done_dashboard')) return;
+        if (localStorage.getItem('tour_done_dashboard') || API.profiles.isTourDone('dashboard')) return;
         this._injectTourDemo();
         TourManager.start('dashboard', steps, {
-            force: true, // прапорець вже перевірили вище
+            force: true,
             onDone: () => this._cleanupTourDemo(),
         });
     },

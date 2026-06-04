@@ -128,7 +128,8 @@ const App = {
                     }
                     if (params.tab === 'trusted-ips') {
                         UI.setBreadcrumb([{ label: 'Довірені IP' }]);
-                        await AdminPage.init(container, params);
+                        container.innerHTML = '<div id="admin-content"></div>';
+                        await AdminPage._renderTrustedIps(container.querySelector('#admin-content'));
                         return;
                     }
                 }

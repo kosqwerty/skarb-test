@@ -196,6 +196,55 @@
 
   @keyframes spin { to { transform: rotate(360deg); } }
   .spinner { display: inline-block; animation: spin 0.7s linear infinite; }
+
+  /* ── MOBILE ── */
+  @media (max-width: 600px) {
+    header { padding: 12px 16px; }
+    .logo { font-size: 15px; }
+    .header-meta { font-size: 11px; }
+
+    main { margin: 14px auto; padding: 0 12px; }
+
+    .login-box { width: 92vw; padding: 28px 20px; }
+
+    .stats-row { gap: 10px; margin-bottom: 16px; }
+    .stat-card { padding: 12px 14px; min-width: 0; }
+    .stat-val { font-size: 26px; }
+    .stat-label { font-size: 11px; }
+
+    .toolbar { gap: 8px; margin-bottom: 12px; }
+    .search-input { width: 100%; }
+    .refresh-btn { margin-left: 0; width: 100%; }
+
+    /* Карткова таблиця на мобільному */
+    .table-wrap { border-radius: 12px; }
+    table, thead, tbody, tr, td, th { display: block; }
+    thead { display: none; }
+    tbody tr {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin-bottom: 10px;
+      padding: 10px 12px;
+      background: var(--card);
+    }
+    tbody tr:last-child { border-bottom: 1px solid var(--border); }
+    td {
+      padding: 4px 0;
+      font-size: 13px;
+      border: none;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    td.muted { font-size: 12px; }
+    td::before {
+      content: attr(data-label);
+      font-size: 10px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--muted);
+      flex-shrink: 0; margin-right: 8px;
+    }
+    td:first-child { display: none; } /* ховаємо # */
+
+    .toast { left: 12px; right: 12px; bottom: 16px; }
+  }
 </style>
 </head>
 <body>
@@ -378,12 +427,12 @@
         : `<button class="send-btn" onclick="sendActivation(${r.num})">📨 Надіслати</button>`;
       return `<tr id="row-${r.num}">
         <td class="muted">${r.num}</td>
-        <td><strong>${esc(r.last)} ${esc(r.first)}</strong><br><span style="font-size:12px;color:var(--muted)">${esc(r.middle)}</span></td>
-        <td class="muted">${esc(r.email)}</td>
-        <td class="muted">${esc(r.dob)}</td>
-        <td class="muted">${esc(r.date)}</td>
-        <td>${badge}</td>
-        <td>${btn}</td>
+        <td data-label="ПІБ"><strong>${esc(r.last)} ${esc(r.first)}</strong> ${esc(r.middle)}</td>
+        <td class="muted" data-label="Email">${esc(r.email)}</td>
+        <td class="muted" data-label="Дата нар.">${esc(r.dob)}</td>
+        <td class="muted" data-label="Реєстрація">${esc(r.date)}</td>
+        <td data-label="Статус">${badge}</td>
+        <td data-label="Дія">${btn}</td>
       </tr>`;
     }).join('');
   }

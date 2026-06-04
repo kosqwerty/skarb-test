@@ -506,9 +506,23 @@ const UI = {
             }
         }
 
+        // Для адмінів — замінюємо кнопку "Профіль" на "Довірені IP"
+        const profBtn = document.getElementById('mob-profile-btn');
+        if (profBtn) {
+            if (AppState.isAdmin()) {
+                profBtn.onclick = () => Router.go('admin?tab=trusted-ips');
+                profBtn.dataset.route = 'trusted-ips';
+                profBtn.innerHTML = '<i class="fa-solid fa-shield-halved"></i><span>Довірені IP</span>';
+            } else {
+                profBtn.onclick = () => Router.go('profile');
+                profBtn.dataset.route = 'profile';
+                profBtn.innerHTML = '<i class="fa-solid fa-circle-user"></i><span>Профіль</span>';
+            }
+        }
+
         // profile не потребує довіреної мережі — тому в allowed
         const allowed = new Set(['dashboard', 'news', 'profile']);
-        if (AppState.isAdmin()) allowed.add('admin');
+        if (AppState.isAdmin()) { allowed.add('admin'); allowed.add('trusted-ips'); }
         document.querySelectorAll('.mob-nav-btn').forEach(btn => {
             const route = btn.dataset.route;
             const blocked = !AppState.isTrustedNetwork && route && !allowed.has(route);

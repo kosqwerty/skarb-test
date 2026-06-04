@@ -120,6 +120,10 @@ const App = {
             },
 
             'admin': async ({ container, params }) => {
+                if (params.tab === 'pleso' && AppState.isAdmin()) {
+                    await AdminPage.init(container, params);
+                    return;
+                }
                 if (!requireTrusted()) return;
                 await AdminPage.init(container, params);
             },

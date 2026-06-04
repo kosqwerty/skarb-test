@@ -143,7 +143,7 @@ const AdminPage = {
             rows.sort((a, b) => {
                 const av = a.dataset[field] || '', bv = b.dataset[field] || '';
                 // ISO dates / timestamps — пряме порівняння рядків
-                if (field === 'activity') return av < bv ? -s.dir : av > bv ? s.dir : 0;
+                if (field === 'activity' || field === 'date') return av < bv ? -s.dir : av > bv ? s.dir : 0;
                 return av.localeCompare(bv, 'uk') * s.dir;
             });
             rows.forEach(r => tbody.appendChild(r));
@@ -398,7 +398,7 @@ const AdminPage = {
                 data-city="${esc(u.city)}"
                 data-subdivision="${esc(u.subdivision)}"
                 data-role="${u.role || ''}"
-                data-date="${Fmt.datetime(u.created_at).toLowerCase()}"
+                data-date="${u.created_at || ''}"
                 data-activity="${u.last_sign_in_at || ''}"
                 data-status="${u.is_active !== false ? 'active' : 'blocked'}">
                 <td class="uf-td uf-td-cb" style="text-align:center;padding:.7rem .4rem">

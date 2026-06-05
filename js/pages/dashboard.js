@@ -198,7 +198,7 @@ const DashboardPage = {
             .db-news-row-title{font-size:.8rem;font-weight:500;color:var(--text-primary);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
             .db-news-row-date{font-size:.65rem;color:var(--text-muted);flex-shrink:0}
             .db-news-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:.4rem;color:var(--text-muted);font-size:.82rem}
-            .db-alc-w{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden;height:320px;width:350px;max-width:100%;display:flex;flex-direction:column;position:relative}
+            .db-alc-w{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden;min-height:130px;width:100%;display:flex;flex-direction:column;position:relative}
             .db-alc-w::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--alc-accent,var(--primary));z-index:1}
             .db-alc-head{padding:.7rem 1rem .7rem 1rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;background:linear-gradient(120deg,color-mix(in srgb,var(--alc-accent,var(--primary)) 10%,var(--bg-surface)),var(--bg-surface));position:relative;overflow:hidden}
             .db-alc-head::after{content:'';position:absolute;right:-18px;top:50%;transform:translateY(-50%);width:70px;height:70px;border-radius:50%;background:color-mix(in srgb,var(--alc-accent,var(--primary)) 7%,transparent);pointer-events:none}
@@ -388,24 +388,8 @@ const DashboardPage = {
         CompanyBirthdayModal._initDashboardChat();
         this._renderFeed(newsRes.data || []);
 
-        // Показати головну новину один раз за сесію (якщо не відхилено назавжди)
-        const featured = (newsRes.data || []).find(n => n.is_featured || n.is_pinned);
-        this._featuredNewsId = featured?.id || null;
-        const hasFeaturedNews = !!(() => {
-            if (!featured) return false;
-            const sessionKey = `db_featured_news_${featured.id}`;
-            const dismissed = AppState.profile?.dismissed_news || [];
-            return !sessionStorage.getItem(sessionKey) && !dismissed.includes(featured.id);
-        })();
-
-        if (hasFeaturedNews) {
-            const sessionKey = `db_featured_news_${featured.id}`;
-            sessionStorage.setItem(sessionKey, '1');
-            setTimeout(() => this._openNewsModal(featured.id), 800);
-        } else {
-            // План дня — тільки якщо немає featured news що відкривається
-            this._showDayPlanPopup(scheduleEntries, calEvents, today);
-        }
+        // План дня
+        this._showDayPlanPopup(scheduleEntries, calEvents, today);
 
         // Тур для нових користувачів (запускаємо після рендеру)
         setTimeout(() => this._startTour(), 1800);
@@ -1517,7 +1501,7 @@ const DashboardPage = {
                         </span>
                    </div>
                    <div id="db-alc-notif">
-                        ${recentNotifs.slice(0, 5).map(n => {
+                        ${recentNotifs.slice(0, 3).map(n => {
                             const m = typeMap(n.type);
                             return `<div class="db-alc-nitem" id="db-ntf-${n.id}" data-link="${Fmt.esc(n.link || 'notifications')}" onclick="DashboardPage._openNotif('${n.id}',this.dataset.link)">
                                 <div class="db-alc-nicon" style="background:${m.bg};color:${m.color}"><i class="fa-solid ${m.icon}"></i></div>
@@ -1530,7 +1514,7 @@ const DashboardPage = {
                                 </button>
                             </div>`;
                         }).join('')}
-                        ${recentNotifs.length > 5 ? `<div class="db-alc-more-row" onclick="Router.go('notifications')">ще ${recentNotifs.length - 5}… <i class="fa-solid fa-arrow-right"></i></div>` : ''}
+                        ${recentNotifs.length > 3 ? `<div class="db-alc-more-row" onclick="Router.go('notifications')">ще ${recentNotifs.length - 3}… <i class="fa-solid fa-arrow-right"></i></div>` : ''}
                    </div>`
                 : `<div class="db-alc-empty">
                     <div class="db-alc-empty-bubble" style="background:rgba(16,185,129,.1);color:#10b981">

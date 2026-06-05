@@ -123,7 +123,7 @@ const App = {
                 if (!AppState.isTrustedNetwork && AppState.isAdmin()) {
                     if (params.tab === 'pleso') {
                         UI.setBreadcrumb([{ label: 'Pleso' }]);
-                        container.innerHTML = `<div style="height:calc(100vh - 120px)"><iframe src="/admin_pleso.html" style="width:100%;height:100%;border:none;border-radius:var(--radius-lg);display:block"></iframe></div>`;
+                        container.innerHTML = `<div style="height:calc(100vh - 80px)"><iframe src="/admin_pleso.html" style="width:100%;height:100%;border:none;border-radius:var(--radius-lg);display:block"></iframe></div>`;
                         return;
                     }
                     if (params.tab === 'trusted-ips') {

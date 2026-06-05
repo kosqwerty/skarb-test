@@ -27,7 +27,7 @@ const APP_CONFIG = {
 
     // Supabase Storage
     storagePublicUrl: `${SUPABASE_URL}/storage/v1/object/public`,
-    signedUrlExpiry:  3600, // seconds (1 hour)
+    signedUrlExpiry:  900, // seconds (15 minutes)
 
     buckets: {
         thumbnails: 'course-thumbnails',

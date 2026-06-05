@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root {
     --blue:    #1A3A8F;
@@ -291,6 +292,7 @@
       <button class="filter-btn"        id="f-pending" onclick="setFilter('pending')">Очікують</button>
       <button class="filter-btn"        id="f-sent"    onclick="setFilter('sent')">Активовано</button>
       <button class="refresh-btn" onclick="loadData()">↻ Оновити</button>
+      <button class="refresh-btn" onclick="exportExcel()" style="background:var(--success);color:#fff;margin-left:auto">📥 Excel</button>
     </div>
 
     <div class="table-wrap">
@@ -335,13 +337,39 @@
   let activatedList = [];
   let curFilter    = 'all';
 
+  const SESSION_KEY = 'pleso_admin_session';
+  const SESSION_TTL = 10 * 60 * 1000; // 10 хвилин
+
+  function saveSession() {
+    sessionStorage.setItem(SESSION_KEY, Date.now().toString());
+  }
+
+  function checkSession() {
+    const ts = parseInt(sessionStorage.getItem(SESSION_KEY) || '0');
+    return ts && (Date.now() - ts) < SESSION_TTL;
+  }
+
+  function showPanel() {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('admin-panel').style.display  = 'block';
+    loadData();
+    // Скидаємо таймер при активності
+    document.addEventListener('mousemove', saveSession, { passive: true });
+    document.addEventListener('keydown',   saveSession, { passive: true });
+    document.addEventListener('click',     saveSession, { passive: true });
+  }
+
+  // Перевіряємо сесію при завантаженні
+  window.addEventListener('load', () => {
+    if (checkSession()) showPanel();
+  });
+
   /* ── LOGIN ── */
   function doLogin() {
     const val = document.getElementById('pwd-input').value;
     if (val === ADMIN_PWD) {
-      document.getElementById('login-screen').style.display = 'none';
-      document.getElementById('admin-panel').style.display  = 'block';
-      loadData();
+      saveSession();
+      showPanel();
     } else {
       document.getElementById('login-err').style.display = 'block';
       document.getElementById('pwd-input').value = '';
@@ -477,6 +505,53 @@
   /* ── HELPERS ── */
   function esc(s) {
     return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function exportExcel() {
+    if (!allRegs.length) { showToast('❌ Дані ще не завантажені', 'error'); return; }
+
+    const now = new Date();
+    const dateStr = `${now.getDate().toString().padStart(2,'0')}.${(now.getMonth()+1).toString().padStart(2,'0')}.${now.getFullYear()}`;
+
+    // Аркуш 1 — всі реєстрації
+    const wsData = [
+      ['#', 'Прізвище', 'Ім\'я', 'По батькові', 'Email', 'Дата народження', 'Дата реєстрації', 'Промокод', 'Статус']
+    ];
+    allRegs.forEach(r => {
+      wsData.push([
+        r.num,
+        r.last,
+        r.first,
+        r.middle,
+        r.email,
+        r.dob,
+        r.date,
+        r.promo || '—',
+        sentSet.has(String(r.num)) ? 'Активовано' : 'Очікує'
+      ]);
+    });
+
+    // Аркуш 2 — тільки активовані
+    const wsAct = [
+      ['#', 'ПІБ', 'Email', 'Час активації']
+    ];
+    activatedList.forEach(a => {
+      wsAct.push([a.num, a.fio, a.email, a.time]);
+    });
+
+    const wb = XLSX.utils.book_new();
+    const ws1 = XLSX.utils.aoa_to_sheet(wsData);
+    const ws2 = XLSX.utils.aoa_to_sheet(wsAct);
+
+    // Ширина колонок
+    ws1['!cols'] = [4,16,14,16,28,14,16,16,12].map(w => ({ wch: w }));
+    ws2['!cols'] = [4,28,28,20].map(w => ({ wch: w }));
+
+    XLSX.utils.book_append_sheet(wb, ws1, 'Реєстрації');
+    XLSX.utils.book_append_sheet(wb, ws2, 'Активовані');
+
+    XLSX.writeFile(wb, `Pleso_${dateStr}.xlsx`);
+    showToast(`✅ Звіт збережено: Pleso_${dateStr}.xlsx`, 'success');
   }
 
   function showToast(msg, type) {

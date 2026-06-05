@@ -429,7 +429,7 @@ const UI = {
         if (badge) badge.classList.add('hidden');
     },
     _getNavItems(role) {
-        const expertItem   = { icon: '<i class="fa-solid fa-ranking-star" style="color:#a78bfa"></i>', label: 'Skill Up', route: 'expert-path' };
+        const expertItem   = { icon: '<i class="fa-solid fa-book-open" style="color:#a78bfa"></i>', label: 'Моє навчання', route: 'expert-path' };
         const common = [
             { icon: '<i class="fa-solid fa-house"     style="color:#C9A227"></i>', label: 'Головна', route: 'dashboard', impBadgeId: 'nav-imp-bolt' },
             expertItem,

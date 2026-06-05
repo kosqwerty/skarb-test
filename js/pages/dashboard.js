@@ -507,9 +507,9 @@ const DashboardPage = {
                     const isStaff = ['owner','admin','smm','teacher'].includes(r);
                     const isMgr   = r === 'manager';
                     const base = isStaff
-                        ? 'Досліджуйте портал через бокове меню: <strong>Skill Up</strong>, <strong>Новини</strong>, <strong>База знань</strong>, <strong>Документи</strong>, <strong>Меню порталу</strong>. В розділі <strong>Управління</strong> — аналітика, планування та адміністрування.'
+                        ? 'Досліджуйте портал через бокове меню: <strong>Моє навчання</strong>, <strong>Новини</strong>, <strong>База знань</strong>, <strong>Документи</strong>, <strong>Меню порталу</strong>. В розділі <strong>Управління</strong> — аналітика, планування та адміністрування.'
                         : isMgr
-                        ? 'Досліджуйте портал через бокове меню: <strong>Skill Up</strong>, <strong>Новини</strong>, <strong>База знань</strong>, <strong>Документи</strong>. В розділі <strong>Управління</strong> є <strong>Розділ планування</strong>.'
+                        ? 'Досліджуйте портал через бокове меню: <strong>Моє навчання</strong>, <strong>Новини</strong>, <strong>База знань</strong>, <strong>Документи</strong>. В розділі <strong>Управління</strong> є <strong>Розділ планування</strong>.'
                         : 'Досліджуйте портал через бокове меню.';
                     return base + ' Успіхів!';
                 })(),

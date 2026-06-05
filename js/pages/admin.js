@@ -2654,7 +2654,7 @@ const AdminPage = {
                                 <td style="color:var(--text-muted);font-size:.8rem">${Fmt.dateShort(c.created_at)}</td>
                                 <td>
                                     <div style="display:flex;gap:.4rem">
-                                        <button class="btn btn-ghost btn-sm" onclick="Router.go('courses/${c.id}?from=expert-path')" title="Переглянути в Skill Up"><i class="fa-solid fa-eye"></i></button>
+                                        <button class="btn btn-ghost btn-sm" onclick="Router.go('courses/${c.id}?from=expert-path')" title="Переглянути в Моє навчання"><i class="fa-solid fa-eye"></i></button>
                                         ${AppState.canMutate() ? `<button class="btn btn-ghost btn-sm" onclick="AdminPage._loadCourseForm('${c.id}')"><i class="fa-solid fa-pen"></i></button>` : ''}
                                         ${AppState.canMutate() ? `<button class="btn btn-danger btn-sm" onclick="AdminPage._deleteCourse('${c.id}',${JSON.stringify(c.title||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-trash"></i></button>` : ''}
                                     </div>
@@ -2804,7 +2804,7 @@ const AdminPage = {
                 </div>
                 <div class="cf-section">
                     <div class="cf-section-title">Бейдж досягнення</div>
-                    <div style="font-size:.82rem;color:var(--text-muted)">Відображається на картці курсу в <strong>Skill Up</strong> після завершення.</div>
+                    <div style="font-size:.82rem;color:var(--text-muted)">Відображається на картці курсу в <strong>Моє навчання</strong> після завершення.</div>
                     <div id="badge-upload-zone"></div>
                     ${course?.badge_url ? `
                     <div style="display:flex;align-items:center;gap:.75rem;padding:.75rem;background:var(--bg-raised);border-radius:10px;border:1px solid var(--border)">
@@ -2820,7 +2820,7 @@ const AdminPage = {
                                 <div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.6) 0%,transparent 60%);display:flex;align-items:flex-end;padding:5px 7px"><span style="font-size:.6rem;font-weight:700;color:#fff">Назва курсу</span></div>
                                 <div style="position:absolute;bottom:-1px;right:6px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 2px 4px rgba(0,0,0,.4))"><img src="${course.badge_url}" style="width:30px;height:30px;object-fit:contain"></div>
                             </div>
-                            <div style="padding:4px 7px;font-size:.6rem;color:var(--text-muted)">Skill Up · приклад</div>
+                            <div style="padding:4px 7px;font-size:.6rem;color:var(--text-muted)">Моє навчання · приклад</div>
                         </div>
                     </div>` : `
                     <div style="display:flex;align-items:center;gap:.75rem;padding:.75rem;background:var(--bg-raised);border-radius:10px;border:1px dashed var(--border)">

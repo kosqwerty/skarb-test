@@ -18,7 +18,7 @@ const LessonViewPage = {
 
             const courseRoute = `courses/${lesson.course?.id}${fromExpert ? '?from=expert-path' : ''}`;
             UI.setBreadcrumb([
-                { label: fromExpert ? 'Skill Up' : 'Курси', route: fromExpert ? 'expert-path' : 'courses' },
+                { label: fromExpert ? 'Моє навчання' : 'Курси', route: fromExpert ? 'expert-path' : 'courses' },
                 { label: lesson.course?.title || 'Курс', route: courseRoute },
                 { label: lesson.title }
             ]);

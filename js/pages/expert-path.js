@@ -6,7 +6,7 @@ const ExpertPathPage = {
     _courseCardsFn: null,
 
     async init(container) {
-        UI.setBreadcrumb([{ label: 'Skill Up' }]);
+        UI.setBreadcrumb([{ label: 'Моє навчання' }]);
         this._tab          = 'courses';
         this._courseSubTab = 'all';
         this._coursesData  = null;
@@ -282,7 +282,7 @@ const ExpertPathPage = {
         <div class="ep-hero-orb ep-hero-orb-2"></div>
         <div class="ep-hero-orb ep-hero-orb-3"></div>
         <div class="ep-hero-body">
-            <div class="ep-hero-tag"><i class="fa-solid fa-star"></i>&nbsp; Skill Up</div>
+            <div class="ep-hero-tag"><i class="fa-solid fa-star"></i>&nbsp; Моє навчання</div>
             <p class="ep-hero-sub">Продовжуй навчатися — кожен крок робить тебе кращим спеціалістом</p>
         </div>
         <div class="ep-hero-deco"><i class="fa-solid fa-graduation-cap"></i></div>

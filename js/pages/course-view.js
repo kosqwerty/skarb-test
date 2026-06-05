@@ -12,7 +12,7 @@ const CourseViewPage = {
         const courseId = params.id;
         this._from = params.from || null;
         const fromExpert = this._from === 'expert-path';
-        const backLabel  = fromExpert ? 'Skill Up' : 'Курси';
+        const backLabel  = fromExpert ? 'Моє навчання' : 'Курси';
         const backRoute  = fromExpert ? 'expert-path' : 'courses';
         UI.setBreadcrumb([{ label: backLabel, route: backRoute }, { label: 'Завантаження...' }]);
         container.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;

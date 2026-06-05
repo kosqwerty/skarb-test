@@ -26,7 +26,7 @@ const TestsPage = {
 
             if (this._from === 'expert-path') {
                 UI.setBreadcrumb([
-                    { label: 'Skill Up', route: 'expert-path' },
+                    { label: 'Моє навчання', route: 'expert-path' },
                     { label: test.title }
                 ]);
             } else {
@@ -67,7 +67,7 @@ const TestsPage = {
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">
                     <h2 style="margin:0"><i class="fa-solid fa-file-pen" style="color:var(--primary);margin-right:.4rem"></i>${test.title}</h2>
                     <button class="btn btn-ghost btn-sm" onclick="Router.go('${this._from==='expert-path'?'expert-path':test.course_id?'courses/'+test.course_id:'dashboard'}')">
-                        <i class="fa-solid fa-arrow-left"></i> ${this._from==='expert-path'?'Skill Up':test.course_id?'Назад до курсу':'Головна'}
+                        <i class="fa-solid fa-arrow-left"></i> ${this._from==='expert-path'?'Моє навчання':test.course_id?'Назад до курсу':'Головна'}
                     </button>
                 </div>
                 <div>

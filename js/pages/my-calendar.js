@@ -171,6 +171,7 @@ const MyCalendarPage = {
         this._container.innerHTML = `
 <div class="mc-wrap">
     <div class="mc-header">
+        <div><button class="mc-back-btn" onclick="Router.go('scheduler')"><i class="fa-solid fa-arrow-left"></i> Назад</button></div>
         <div class="mc-title-row">
             <h1 class="mc-title">📅 Мій календар</h1>
             ${readOnly ? `<span class="mc-readonly-badge"><i class="fa-solid fa-eye"></i> Перегляд</span>` : `
@@ -790,6 +791,8 @@ ${this._styles()}`;
 .mc-wrap { max-width:960px;padding:20px 16px 80px; }
 .mc-header { display:flex;flex-direction:column;gap:12px;margin-bottom:20px; }
 .mc-title-row { display:flex;align-items:center;gap:12px;flex-wrap:wrap; }
+.mc-back-btn { display:inline-flex;align-items:center;gap:6px;background:var(--bg-raised);color:var(--text-secondary);border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:.8rem;cursor:pointer;transition:all .15s; }
+.mc-back-btn:hover { background:var(--bg-elevated);color:var(--text-primary); }
 .mc-title { margin:0;font-size:1.3rem;font-weight:700; }
 .mc-readonly-badge { font-size:.75rem;background:rgba(99,102,241,.12);color:#818cf8;border:1px solid rgba(99,102,241,.25);border-radius:20px;padding:3px 10px; }
 .mc-access-btn { display:inline-flex;align-items:center;gap:6px;background:rgba(99,102,241,.1);color:var(--primary);border:1px solid rgba(99,102,241,.25);border-radius:20px;padding:5px 14px;font-size:.8rem;cursor:pointer;transition:all .15s; }

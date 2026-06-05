@@ -540,30 +540,19 @@ const ScheduleGraphPage = {
                     </span>
                     <button class="sg-mnav" onclick="ScheduleGraphPage._nextMonth()">›</button>
                 </div>
-                ${this._locId !== 'all' ? `
-                <div class="sg-tabs">
-                    <button class="sg-tab ${this._tab==='schedule'?'active':''}"
-                        onclick="ScheduleGraphPage._switchTab('schedule')">📅 Графік</button>
-                    <button class="sg-tab ${this._tab==='subst'?'active':''}"
-                        onclick="ScheduleGraphPage._goToSubst()">🔄 Підміни</button>
-                    <button class="sg-tab ${this._tab==='log'?'active':''}"
-                        onclick="ScheduleGraphPage._switchTab('log')">📋 Журнал змін</button>
-                </div>` : `
-                <div class="sg-tabs">
-                    <button class="sg-tab ${this._tab==='subst'?'active':''}"
-                        onclick="ScheduleGraphPage._switchTab('subst')">🔄 Підміни</button>
-                </div>`}
                 ` : ''}
                 <button class="sg-tab sg-trash-tab ${this._tab==='trash'?'active':''}"
                     onclick="ScheduleGraphPage._switchTab(${this._tab==='trash'?`'schedule'`:`'trash'`})">
-                    <i class="fa-solid fa-trash"></i> Кошик${this._deletedLocations.length ? `<span class="sg-trash-badge">${this._deletedLocations.length}</span>` : ''}
+                    ${this._tab==='trash'
+                        ? `<i class="fa-solid fa-arrow-left"></i> Назад`
+                        : `<i class="fa-solid fa-trash"></i> Кошик${this._deletedLocations.length ? `<span class="sg-trash-badge">${this._deletedLocations.length}</span>` : ''}`}
                 </button>
             </div>
             ${this._tab === 'trash'
                 ? this._trashSection()
                 : !this._locId ? '' :
                   this._locId === 'all'   ? this._allLocsSection()
-                : this._tab === 'schedule' ? this._tableSection()
+                : this._tab === 'schedule' ? this._tableWithServicePanel()
                 : this._tab === 'subst'   ? this._substSection()
                 : this._logSection()}
             ` : `
@@ -600,7 +589,6 @@ ${this._styles()}`;
             <h1 class="sg-hero-title">Графік роботи ломбарду</h1>
             <p class="sg-hero-sub">Керуйте розкладом співробітників по локаціях</p>
         </div>
-        <button class="sg-manual-btn" onclick="ScheduleGraphPage._showManual()" title="Інструкція">📖 Довідка</button>
         ${this._isAssignedAsEmployee ? `
         <button class="sg-my-sched-btn" onclick="ScheduleGraphPage._switchToEmployee()">
             👤 Мій графік
@@ -968,6 +956,12 @@ ${this._styles()}`;
         </div>`;
         }).join('')}
     </div>
+    <div class="sg-sidebar-add-loc">
+        <button class="sg-sidebar-add-loc-btn" onclick="ScheduleGraphPage._addLocation()">
+            <i class="fa-solid fa-plus"></i>
+            <span>Додати філію</span>
+        </button>
+    </div>
 </aside>`;
     },
 
@@ -1014,39 +1008,95 @@ ${this._styles()}`;
         const locked  = this._isLocked();
         const viewOnly = this._isViewOnlyLoc(this._locId);
 
+        const loc = this._locations.find(l => l.id === this._locId);
+        const creatorName = AppState.isOwner() && loc?.created_by ? (this._locCreators[loc.created_by] || null) : null;
+        const trashCount = this._deletedLocations.length;
+        const svcHtml = `<div class="sg-v2-card sg-v2-service">
+            <div class="sg-v2-card-label">Сервіс</div>
+            <div class="sg-v2-svc-list">
+                <div class="sg-v2-svc-item" onclick="ScheduleGraphPage._switchTab('log')">
+                    <div class="sg-v2-svc-icon" style="background:rgba(99,102,241,.12);color:#6366f1"><i class="fa-regular fa-file-lines"></i></div>
+                    <div class="sg-v2-svc-body"><div class="sg-v2-svc-title">Журнал змін</div><div class="sg-v2-svc-sub">Історія всіх змін в графіку</div></div>
+                    <i class="fa-solid fa-angle-right sg-v2-svc-arr"></i>
+                </div>
+                <div class="sg-v2-svc-item" onclick="ScheduleGraphPage._switchTab('trash')">
+                    <div class="sg-v2-svc-icon" style="background:rgba(239,68,68,.12);color:#ef4444"><i class="fa-solid fa-trash"></i></div>
+                    <div class="sg-v2-svc-body"><div class="sg-v2-svc-title">Кошик${trashCount ? ` <span class="sg-trash-badge">${trashCount}</span>` : ''}</div><div class="sg-v2-svc-sub">Видалені записи та співробітники</div></div>
+                    <i class="fa-solid fa-angle-right sg-v2-svc-arr"></i>
+                </div>
+                <div class="sg-v2-svc-item" onclick="ScheduleGraphPage._goToSubst('${this._locId}')">
+                    <div class="sg-v2-svc-icon" style="background:rgba(16,185,129,.12);color:#10b981"><i class="fa-solid fa-arrow-right-arrow-left"></i></div>
+                    <div class="sg-v2-svc-body"><div class="sg-v2-svc-title">Пошук підміни</div><div class="sg-v2-svc-sub">Активні та заплановані підміни</div></div>
+                    <i class="fa-solid fa-angle-right sg-v2-svc-arr"></i>
+                </div>
+                <div class="sg-v2-svc-item" onclick="ScheduleGraphPage._showManual()">
+                    <div class="sg-v2-svc-icon" style="background:rgba(245,158,11,.12);color:#f59e0b"><i class="fa-solid fa-circle-info"></i></div>
+                    <div class="sg-v2-svc-body"><div class="sg-v2-svc-title">Довідка</div><div class="sg-v2-svc-sub">Інструкції та підтримка</div></div>
+                    <i class="fa-solid fa-angle-right sg-v2-svc-arr"></i>
+                </div>
+            </div>
+        </div>`;
+
         return `
-<div class="sg-section">
-    <div class="sg-work-hours-bar${locked ? ' sg-locked-bar' : ''}">
-        <span class="sg-loc-name-ico">🏪</span>
-        <span class="sg-loc-name-text">${locName}</span>
-        ${viewOnly ? `<span class="sg-view-only-badge"><i class="fa-solid fa-eye"></i> Тільки перегляд</span>` : `
-        <button class="sg-loc-name-edit" onclick="ScheduleGraphPage._renameLocation('${this._locId}',${JSON.stringify(locName||'').replace(/"/g,'&quot;')})" title="Перейменувати"><i class="fa-solid fa-pen"></i></button>`}
-        ${(() => {
-            if (!AppState.isOwner()) return '';
-            const loc = this._locations.find(l => l.id === this._locId);
-            const creator = loc?.created_by ? (this._locCreators[loc.created_by] || null) : null;
-            return creator ? `<span class="sg-wh-sep">·</span><span class="sg-loc-creator"><i class="fa-solid fa-user-tie"></i> ${Fmt.esc(creator)}</span>` : '';
-        })()}
-        <span class="sg-wh-sep">·</span>
-        <span class="sg-wh-label">🕐 Час роботи:</span>
-        <span class="sg-wh-time" id="sg-wh-display">${wStart} — ${wEnd}</span>
-        ${viewOnly ? '' : `
-        <button class="sg-wh-edit" onclick="ScheduleGraphPage._editWorkHours()" title="Редагувати"><i class="fa-solid fa-pen"></i></button>
-        <div class="sg-wh-inputs" id="sg-wh-inputs" style="display:none">
-            <input type="time" id="sg-wh-start" class="sg-tinput" style="width:110px">
-            <span style="color:var(--text-muted)">—</span>
-            <input type="time" id="sg-wh-end" class="sg-tinput" style="width:110px">
-            <button class="sg-wh-save" onclick="ScheduleGraphPage._saveWorkHours()"><i class="fa-regular fa-floppy-disk"></i> Зберегти</button>
-            <button class="sg-wh-cancel" onclick="ScheduleGraphPage._cancelWorkHours()">✕</button>
+<div class="sg-section sg-section-v2">
+
+    <div class="sg-v2-top">
+        <!-- 1. Локація -->
+        <div class="sg-v2-card sg-v2-loc-card">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+                <div class="sg-v2-card-label">1. Локація</div>
+                ${viewOnly ? '' : `<button class="sg-loc-del-btn" onclick="ScheduleGraphPage._deleteLocation('${this._locId}')" title="Видалити локацію"><i class="fa-solid fa-trash"></i></button>`}
+            </div>
+            <div class="sg-v2-loc-name">
+                <span class="sg-loc-name-ico">🏪</span>
+                <span class="sg-loc-name-text">${Fmt.esc(locName)}</span>
+                ${viewOnly ? `<span class="sg-view-only-badge"><i class="fa-solid fa-eye"></i> Перегляд</span>` : `
+                <button class="sg-loc-name-edit" onclick="ScheduleGraphPage._renameLocation('${this._locId}',${JSON.stringify(locName||'').replace(/"/g,'&quot;')})" title="Перейменувати"><i class="fa-solid fa-pen"></i></button>`}
+            </div>
+            ${loc?.address ? `<div class="sg-v2-loc-address"><i class="fa-solid fa-location-dot" style="color:var(--text-muted);font-size:.75rem"></i> ${Fmt.esc(loc.address)}</div>` : ''}
+            ${loc?.phone ? `<div class="sg-v2-loc-address"><i class="fa-solid fa-phone" style="color:var(--text-muted);font-size:.75rem"></i> ${Fmt.esc(loc.phone)}</div>` : ''}
+            ${creatorName ? `<div class="sg-v2-loc-row"><i class="fa-solid fa-user-tie" style="color:var(--text-muted)"></i> ${Fmt.esc(creatorName)}</div>` : ''}
+            <div class="sg-v2-loc-row">
+                <i class="fa-regular fa-clock" style="color:var(--text-muted)"></i>
+                <span>Робочий час</span>
+                <span class="sg-v2-loc-val" id="sg-wh-display">${wStart} — ${wEnd}</span>
+                ${viewOnly ? '' : `<button class="sg-wh-edit" onclick="ScheduleGraphPage._editWorkHours()" title="Редагувати"><i class="fa-solid fa-pen"></i></button>`}
+            </div>
+            ${viewOnly ? '' : `
+            <div class="sg-wh-inputs" id="sg-wh-inputs" style="display:none;gap:6px;align-items:center;flex-wrap:wrap;padding:.5rem 0">
+                <input type="time" id="sg-wh-start" class="sg-tinput" style="width:110px">
+                <span style="color:var(--text-muted)">—</span>
+                <input type="time" id="sg-wh-end" class="sg-tinput" style="width:110px">
+                <button class="sg-wh-save" onclick="ScheduleGraphPage._saveWorkHours()"><i class="fa-regular fa-floppy-disk"></i> Зберегти</button>
+                <button class="sg-wh-cancel" onclick="ScheduleGraphPage._cancelWorkHours()">✕</button>
+            </div>`}
+            <div class="sg-v2-loc-row">
+                <i class="fa-solid fa-users" style="color:var(--text-muted)"></i>
+                <span>Співробітників</span>
+                <span class="sg-v2-loc-val">${this._assignments.filter(a => a.is_primary).length}</span>
+            </div>
         </div>
-        <button class="sg-lock-btn ${locked ? 'locked' : ''}"
-            onclick="ScheduleGraphPage._toggleLock()"
-            title="${locked ? 'Графік заблоковано — натисніть щоб розблокувати' : 'Заблокувати зміни для співробітників'}">
-            ${locked ? '🔒' : '🔓'}
-        </button>
-        <button class="sg-loc-del-btn" onclick="ScheduleGraphPage._deleteLocation('${this._locId}')" title="Видалити локацію"><i class="fa-solid fa-trash"></i></button>`}
+
+        <!-- 2. Управління співробітниками -->
+        ${viewOnly ? '' : `
+        <div class="sg-v2-card sg-v2-mgmt-card">
+            <div class="sg-v2-card-label">2. Управління співробітниками</div>
+            <div class="sg-v2-mgmt-btns">
+                <button class="sg-mgr-help-btn" onclick="ScheduleGraphPage._showManagerHelpModal()">
+                    🆘 Потрібна підміна
+                </button>
+                <button class="sg-viewers-btn" onclick="ScheduleGraphPage._showViewersModal()">
+                    <i class="fa-solid fa-eye"></i> Доступи
+                </button>
+            </div>
+            <p class="sg-v2-mgmt-hint">Керуйте доступами до графіку та надсилайте запити на підміну.</p>
+        </div>`}
+        ${svcHtml}
     </div>
-    <div class="sg-toolbar">
+
+    <!-- 3. Типи змін (легенда) -->
+    <div class="sg-v2-legend-section">
+        <div class="sg-v2-card-label">3. Типи змін (легенда)</div>
         <div class="sg-legend">
             ${getShiftTypeEntries().map(([k, v]) => `
             <button class="sg-leg-btn ${this._quickType === k ? 'active' : ''}"
@@ -1057,20 +1107,13 @@ ${this._styles()}`;
                 ${v.label}
                 ${!viewOnly && this._quickType === k ? '<span class="sg-leg-active-mark">✓ активно</span>' : ''}
             </button>`).join('')}
-            ${viewOnly ? '' : `<button class="sg-types-mgr-btn" onclick="ScheduleGraphPage._showShiftTypesModal()" title="Налаштувати типи змін">⚙️</button>`}
+            ${viewOnly ? '' : `
+            <button class="sg-types-mgr-btn" onclick="ScheduleGraphPage._showShiftTypesModal()" title="Налаштувати типи змін">⚙️ Налаштування</button>
+            <button class="sg-lock-btn ${locked ? 'locked' : ''}" onclick="ScheduleGraphPage._toggleLock()"
+                title="${locked ? 'Розблокувати редагування графіка' : 'Заблокувати редагування графіка'}">
+                ${locked ? '🔒 Заблоковано' : '🔓 Редагування'}
+            </button>`}
         </div>
-        ${viewOnly ? '' : `
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            <button class="sg-mgr-help-btn" onclick="ScheduleGraphPage._showManagerHelpModal()">
-                🆘 Потрібна підміна
-            </button>
-            <button class="sg-viewers-btn" onclick="ScheduleGraphPage._showViewersModal()">
-                <i class="fa-solid fa-eye"></i> Доступ
-            </button>
-            <button class="sg-add-btn" onclick="ScheduleGraphPage._addEmployee()">
-                <span class="sg-add-ico">＋</span> Співробітник
-            </button>
-        </div>`}
     </div>
     ${this._quickType ? `
     <div class="sg-quick-bar">
@@ -1082,16 +1125,19 @@ ${this._styles()}`;
         <button class="sg-quick-cancel" onclick="ScheduleGraphPage._setQuickType(null)">✕ Скасувати</button>
     </div>` : ''}
 
+
     ${!this._assignments.length ? `
     <div class="empty-state" style="margin:2rem 0">
         <div class="empty-icon">👥</div>
         <h3>Немає співробітників</h3>
         <p>Додайте першого співробітника до цього графіку</p>
+        ${viewOnly ? '' : `<button class="sg-add-emp-ghost" style="margin-top:12px" onclick="ScheduleGraphPage._addEmployee()"><i class="fa-solid fa-plus"></i> Додати співробітника</button>`}
     </div>` : !visibleAssignments.length ? `
     <div class="empty-state" style="margin:2rem 0">
         <div class="empty-icon">📅</div>
         <h3>Немає змін у цьому місяці</h3>
         <p>Основних співробітників не призначено, а тимчасові не мають змін у цьому місяці</p>
+        ${viewOnly ? '' : `<button class="sg-add-emp-ghost" style="margin-top:12px" onclick="ScheduleGraphPage._addEmployee()"><i class="fa-solid fa-plus"></i> Додати співробітника</button>`}
     </div>` : `
     <div class="sg-scroll-wrap" id="sg-wrap-main" onscroll="ScheduleGraphPage._onScroll('main')">
         <table class="sg-table">
@@ -1114,7 +1160,6 @@ ${this._styles()}`;
                         <div class="sg-th-sum-inner">Σ</div>
                         <div class="sg-th-sub">Дні</div>
                     </th>
-                    ${viewOnly ? '' : `<th class="sg-th-del"><div class="sg-th-sub">Дія</div></th>`}
                 </tr>
             </thead>
             <tbody ondragend="ScheduleGraphPage._draggingEmpId=null;document.querySelectorAll('.sg-row-dragging,.sg-row-drag-over').forEach(r=>r.classList.remove('sg-row-dragging','sg-row-drag-over'))">
@@ -1158,18 +1203,28 @@ ${this._styles()}`;
                         ${this._nameCell(a)}
                         ${cells}
                         <td class="sg-td-sum">${workTotal(a)}</td>
-                        ${viewOnly ? '' : `<td class="sg-td-del">
-                            <button class="sg-rm" title="Видалити зі списку"
-                                onclick="ScheduleGraphPage._removeEmployee('${a.id}','${a.user_id}',event)">
-                                <i class="fa-solid fa-trash"></i> <span>Видалити</span>
-                            </button>
-                        </td>`}
                     </tr>`;
                 }).join('')}
             </tbody>
+            ${viewOnly ? '' : `
+            <tfoot>
+                <tr>
+                    <td class="sg-td-add-emp" colspan="${nums.length + 2}">
+                        <button class="sg-add-emp-ghost" onclick="ScheduleGraphPage._addEmployee()">
+                            <i class="fa-solid fa-plus"></i> Додати співробітника
+                        </button>
+                    </td>
+                </tr>
+            </tfoot>`}
         </table>
     </div>`}
+
+    <p class="sg-v2-hint"><i class="fa-solid fa-circle-info"></i> Клікніть по клітинці, щоб додати зміну. Використовуйте легенду типів змін вище.</p>
 </div>`;
+    },
+
+    _tableWithServicePanel() {
+        return this._tableSection();
     },
 
     _logSection() {
@@ -1178,46 +1233,79 @@ ${this._styles()}`;
             return d.toLocaleDateString('uk-UA') + ' ' + d.toLocaleTimeString('uk-UA', {hour:'2-digit',minute:'2-digit'});
         };
         const shiftBadge = v => {
+            if (v?.request) return `<span class="sg-log-request"><i class="fa-solid fa-paper-plane"></i> Запит: «${v.message || ''}»</span>`;
             if (!v?.shift_type) return '<span class="sg-log-empty">—</span>';
             const s = getShiftTypes()[v.shift_type];
             return s ? `<span class="sg-badge" style="background:${s.bg};color:${s.color}">${s.short} ${s.label}${v.shift_start?' · '+v.shift_start.slice(0,5):''}</span>` : v.shift_type;
         };
 
         return `
-<div class="sg-section">
+<div class="sg-section" style="padding:14px 20px 4px">
+    <div style="margin-bottom:12px">
+        <button class="sg-back-btn" onclick="ScheduleGraphPage._switchTab('schedule')"><i class="fa-solid fa-arrow-left"></i> Назад</button>
+    </div>
     ${!this._log.length ? `
     <div class="empty-state" style="margin:2rem 0">
         <div class="empty-icon">📋</div>
         <h3>Журнал порожній</h3>
         <p>Зміни в графіку з'являться тут</p>
     </div>` : `
-    <div class="sg-log-list">
+    <table class="sg-log-table">
+        <thead>
+            <tr>
+                <th>Хто змінив</th>
+                <th>Співробітник</th>
+                <th>Дата зміни</th>
+                <th>Було</th>
+                <th></th>
+                <th>Стало</th>
+                <th>Час</th>
+            </tr>
+        </thead>
+        <tbody>
         ${this._log.map(e => {
             const changer = Array.isArray(e.changer) ? e.changer[0] : e.changer;
             const init = (changer?.full_name || '?').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
+            const isRequest = e.new_value?.request;
             return `
-        <div class="sg-log-row">
-            <div class="sg-av sm">${init}</div>
-            <div class="sg-log-body">
-                <strong>${changer?.full_name || 'Хтось'}</strong>
-                <span class="sg-log-emp">→ ${e.employee_name || 'Співробітник'}</span>
-                <span class="sg-log-datecel">${e.date}</span>
-                <div class="sg-log-diff">
-                    ${e.old_value ? shiftBadge(e.old_value) : '<span class="sg-log-new">новий запис</span>'}
-                    ${e.old_value ? '<span class="sg-log-arrow">→</span>' : ''}
-                    ${e.new_value ? shiftBadge(e.new_value) : '<span class="sg-log-del">видалено</span>'}
+        <tr class="${isRequest ? 'sg-log-tr-request' : ''}">
+            <td>
+                <div style="display:flex;align-items:center;gap:7px">
+                    <div class="sg-av sm">${init}</div>
+                    <span class="sg-log-who">${Fmt.esc(changer?.full_name || 'Хтось')}</span>
                 </div>
-            </div>
-            <div class="sg-log-time">${fmtDate(e.changed_at)}</div>
-        </div>`;
+            </td>
+            <td class="sg-log-emp">${Fmt.esc(e.employee_name || '—')}</td>
+            <td><span class="sg-log-datecel">${e.date}</span></td>
+            <td>${e.old_value ? shiftBadge(e.old_value) : '<span class="sg-log-new">—</span>'}</td>
+            <td class="sg-log-arrow">→</td>
+            <td>${e.new_value ? shiftBadge(e.new_value) : '<span class="sg-log-del">видалено</span>'}</td>
+            <td class="sg-log-time">${fmtDate(e.changed_at)}</td>
+        </tr>`;
         }).join('')}
-    </div>`}
+        </tbody>
+    </table>`}
 </div>`;
     },
 
     // ── Actions ───────────────────────────────────────────────────
 
-    _showLocModal({ title, placeholder, value = '', onSave }) {
+    _fmtPhone(input) {
+        let digits = input.value.replace(/\D/g, '');
+        if (!digits) { input.value = ''; return; }
+        // strip leading 38 if pasted with country code
+        if (digits.startsWith('380')) digits = digits.slice(2);
+        else if (digits.startsWith('38') && digits.length > 10) digits = digits.slice(2);
+        digits = digits.slice(0, 10);
+        let r = '';
+        if (digits.length > 0) r = '+38 (' + digits.slice(0, 3);
+        if (digits.length > 3) r += ') ' + digits.slice(3, 6);
+        if (digits.length > 6) r += '-' + digits.slice(6, 8);
+        if (digits.length > 8) r += '-' + digits.slice(8, 10);
+        input.value = r;
+    },
+
+    _showLocModal({ title, placeholder, value = '', address = '', phone = '', onSave }) {
         document.getElementById('sg-loc-modal')?.remove();
         const el = document.createElement('div');
         el.id = 'sg-loc-modal';
@@ -1232,9 +1320,16 @@ ${this._styles()}`;
         <button class="sg-mclose" onclick="document.getElementById('sg-loc-modal').remove()">✕</button>
     </div>
     <div class="sg-loc-modal-body">
+        <label class="sg-loc-label">Назва філії</label>
         <input id="sg-loc-input" class="sg-loc-input" placeholder="${placeholder}"
             value="${value.replace(/"/g,'&quot;')}" autocomplete="off" spellcheck="false">
-        <p class="sg-loc-hint">Наприклад: Магазин на Хрещатику, Відділення №3, Ломбард Центр</p>
+        <label class="sg-loc-label" style="margin-top:10px">Адреса</label>
+        <input id="sg-loc-address" class="sg-loc-input" placeholder="вул. Хрещатик, 1"
+            value="${address.replace(/"/g,'&quot;')}" autocomplete="off" spellcheck="false">
+        <label class="sg-loc-label" style="margin-top:10px">Телефон</label>
+        <input id="sg-loc-phone" class="sg-loc-input" placeholder="+38 (050) 000-00-00"
+            value="${phone.replace(/"/g,'&quot;')}" autocomplete="off" spellcheck="false" maxlength="19"
+            oninput="ScheduleGraphPage._fmtPhone(this)">
     </div>
     <div class="sg-modal-actions">
         <button class="sg-btn-save" id="sg-loc-save-btn"><i class="fa-regular fa-floppy-disk"></i> Зберегти</button>
@@ -1251,8 +1346,10 @@ ${this._styles()}`;
         const save = () => {
             const v = input.value.trim();
             if (!v) { input.classList.add('sg-input-error'); input.focus(); return; }
+            const addr = document.getElementById('sg-loc-address')?.value.trim() || '';
+            const ph   = document.getElementById('sg-loc-phone')?.value.trim() || '';
             el.remove();
-            onSave(v);
+            onSave(v, addr, ph);
         };
         document.getElementById('sg-loc-save-btn').onclick = save;
         input.addEventListener('keydown', e => { if (e.key === 'Enter') save(); });
@@ -1261,10 +1358,10 @@ ${this._styles()}`;
     async _addLocation() {
         this._showLocModal({
             title: 'Нова локація',
-            placeholder: 'Назва локації…',
-            onSave: async name => {
+            placeholder: 'Назва філії…',
+            onSave: async (name, address, phone) => {
                 const { data, error } = await supabase.from('schedule_locations')
-                    .insert({ name, created_by: AppState.user.id })
+                    .insert({ name, address: address || null, phone: phone || null, created_by: AppState.user.id })
                     .select().single();
                 if (error) { Toast.error('Помилка', error.message); return; }
                 this._locations.push(data);
@@ -1278,20 +1375,21 @@ ${this._styles()}`;
     },
 
     async _renameLocation(id, currentName) {
+        const loc = this._locations.find(l => l.id === id);
         this._showLocModal({
-            title: 'Перейменувати локацію',
-            placeholder: 'Нова назва…',
+            title: 'Редагувати локацію',
+            placeholder: 'Назва філії…',
             value: currentName,
-            onSave: async name => {
-                if (name === currentName) return;
+            address: loc?.address || '',
+            phone: loc?.phone || '',
+            onSave: async (name, address, phone) => {
                 const { error } = await supabase.from('schedule_locations')
-                    .update({ name })
+                    .update({ name, address: address || null, phone: phone || null })
                     .eq('id', id);
                 if (error) { Toast.error('Помилка', error.message); return; }
-                const loc = this._locations.find(l => l.id === id);
-                if (loc) loc.name = name;
+                if (loc) { loc.name = name; loc.address = address || null; loc.phone = phone || null; }
                 this._render(this._container);
-                Toast.success('Перейменовано');
+                Toast.success('Збережено');
             }
         });
     },
@@ -1377,7 +1475,7 @@ ${this._styles()}`;
         this._quickType = null;
         this._substDate = null;
         this._filteredUserId = null;
-        this._showPartnerLocs = false;
+        this._showPartnerLocs = true;
         this._pastMonthUnlocked = false;
         const content   = this._container.querySelector('.sg-content');
         if (content) content.innerHTML = '<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>';
@@ -1438,12 +1536,30 @@ ${this._styles()}`;
         document.addEventListener('mouseup', onUp);
     },
 
-    _goToSubst() {
+    _goToSubst(focusLocId) {
+        const prevLocId = focusLocId || this._locId;
         this._locId = 'all';
         this._tab   = 'subst';
         this._substDate    = null;
         this._filteredUserId = null;
-        this._loadAllData().then(() => this._render(this._container));
+        const content = this._container.querySelector('.sg-content');
+        if (content) content.innerHTML = '<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>';
+        this._loadAllData().then(() => {
+            this._render(this._container);
+            if (prevLocId && prevLocId !== 'all') {
+                // collapse all except the focused location
+                this._locations.forEach(l => {
+                    if (l.id !== prevLocId) {
+                        this._collapsedLocs.add(l.id);
+                        document.querySelectorAll(`[data-loc-rows="${l.id}"]`).forEach(tr => { tr.style.display = 'none'; });
+                        const btn = document.querySelector(`[data-loc-toggle="${l.id}"]`);
+                        if (btn) btn.textContent = '▼';
+                        const badge = document.querySelector(`[data-loc-badge="${l.id}"]`);
+                        if (badge) badge.style.display = 'inline';
+                    }
+                });
+            }
+        });
     },
 
     _switchTab(tab) {
@@ -1491,22 +1607,17 @@ ${this._styles()}`;
                 const { data: pData } = await supabase.from('profiles').select('id, full_name, avatar_url, role, job_position, phone, manager_id').in('id', ids);
                 profiles = pData || [];
 
-                // Load manager names
                 const mgrIds = [...new Set(profiles.map(p => p.manager_id).filter(Boolean))];
-                let mgrProfiles = [];
-                if (mgrIds.length) {
-                    const { data: mData } = await supabase.from('profiles').select('id, full_name').in('id', mgrIds);
-                    mgrProfiles = mData || [];
-                }
+                const [mgrRes, dovRes] = await Promise.all([
+                    mgrIds.length ? supabase.from('profiles').select('id, full_name').in('id', mgrIds) : Promise.resolve({ data: [] }),
+                    supabase.from('profile_dovirenosti').select('profile_id, dovirenosti(name)').in('profile_id', ids)
+                ]);
+
+                const mgrProfiles = mgrRes.data || [];
                 profiles.forEach(p => { p._managerName = mgrProfiles.find(m => m.id === p.manager_id)?.full_name || null; });
 
-                // Load dovirenosti
-                const { data: dovData } = await supabase
-                    .from('profile_dovirenosti')
-                    .select('profile_id, dovirenosti(name)')
-                    .in('profile_id', ids);
                 const dovByUser = {};
-                (dovData || []).forEach(r => {
+                (dovRes.data || []).forEach(r => {
                     if (!dovByUser[r.profile_id]) dovByUser[r.profile_id] = [];
                     if (r.dovirenosti?.name) dovByUser[r.profile_id].push(r.dovirenosti.name);
                 });
@@ -1979,6 +2090,7 @@ ${this._styles()}`;
                 <tr class="sg-loc-header-row${loc.isPartner?' sg-loc-header-partner':''}">
                     <td colspan="${days + 1}" class="sg-loc-group-header">
                         ${loc.isPartner?'🤝':'🏪'} ${loc.name}
+                        ${(() => { const l = this._locations.find(l => l.id === locId); return (l?.address ? `<span class="sg-loc-acc-addr"><i class="fa-solid fa-location-dot"></i> ${Fmt.esc(l.address)}</span>` : '') + (l?.phone ? `<span class="sg-loc-acc-addr"><i class="fa-solid fa-phone"></i> ${Fmt.esc(l.phone)}</span>` : ''); })()}
                         ${loc.isPartner ? `<span class="sg-partner-loc-badge">${loc.members[0]?.partnerOwnerLabel||'Керівник'}: ${loc.members[0]?.partnerOwnerName||''}</span>` : ''}
                     </td>
                 </tr>
@@ -2070,12 +2182,36 @@ ${this._styles()}`;
         }
         const getSubGroup = uid => { const n = subCount[uid] || 0; return n <= 1 ? 0 : n <= 3 ? 1 : 2; };
 
+        // Find last real shift date per user (in current month, before sd)
+        const lastShiftDate = {};
+        for (let d = 1; d <= days; d++) {
+            const dateStr = this._dateStr(d);
+            if (sd && dateStr >= sd) continue;
+            this._allAssignments.forEach(a => {
+                if (!a.user_id) return;
+                const e = this._allEntries[`${a.locId}_${a.user_id}_${dateStr}`]
+                    || (this._entriesByLoc?.[a.locId] || {})[`${a.user_id}_${dateStr}`] || null;
+                if (_isRealShift(e)) lastShiftDate[a.user_id] = dateStr;
+            });
+        }
+
+        // Check if last shift was yesterday or today (recently worked)
+        const todayStr = this._dateStr(new Date().getDate());
+        const _pad = n => String(n).padStart(2, '0');
+        const yesterday = (() => {
+            const y = new Date(); y.setDate(y.getDate() - 1);
+            return `${y.getFullYear()}-${_pad(y.getMonth()+1)}-${_pad(y.getDate())}`;
+        })();
+        const recentlyWorked = uid => {
+            const d = lastShiftDate[uid];
+            return d && (d >= yesterday);
+        };
+
         let freeList = [], busyList = [];
         const seenUids = new Set();
         this._allAssignments.forEach(a => {
             if (!a.user_id || seenUids.has(a.user_id)) return;
             seenUids.add(a.user_id);
-            // Check all locations for this user — busy if has a real shift anywhere that day
             const isBusy = this._allAssignments
                 .filter(a2 => a2.user_id === a.user_id)
                 .some(a2 => {
@@ -2087,7 +2223,20 @@ ${this._styles()}`;
             (isBusy ? busyList : freeList).push(a);
         });
 
-        const sortBySubCount = list => list.slice().sort((a, b) => getSubGroup(a.user_id) - getSubGroup(b.user_id));
+        const today = new Date(); today.setHours(0,0,0,0);
+        const daysSinceLastShift = uid => {
+            const d = lastShiftDate[uid];
+            if (!d) return 9999; // ніколи не працював — найвище
+            const diff = today - new Date(d + 'T00:00:00');
+            return Math.round(diff / 86400000);
+        };
+        const sortBySubCount = list => list.slice().sort((a, b) => {
+            // More days since last shift → higher (smaller days = more recent = bottom)
+            const da = daysSinceLastShift(a.user_id);
+            const db = daysSinceLastShift(b.user_id);
+            if (da !== db) return db - da; // більше днів → вище
+            return getSubGroup(a.user_id) - getSubGroup(b.user_id);
+        });
         freeList = sortBySubCount(freeList);
         busyList = sortBySubCount(busyList);
 
@@ -2109,6 +2258,13 @@ ${this._styles()}`;
             const cnt          = subCount[a.user_id] || 0;
             const cntColor     = cnt <= 1 ? '#10b981' : cnt <= 3 ? '#f59e0b' : '#ef4444';
             const cntBadge     = `<span class="sg-sub-cnt-badge" style="background:${cntColor}1a;color:${cntColor};border-color:${cntColor}40">${cnt} підм.</span>`;
+            const lastShift    = lastShiftDate[a.user_id];
+            const isRecent     = recentlyWorked(a.user_id);
+            const lastShiftBadge = lastShift
+                ? `<span class="sg-sub-last-shift${isRecent ? ' sg-sub-last-recent' : ''}" title="Остання зміна">
+                    <i class="fa-regular fa-calendar"></i> Остання зміна: ${lastShift === todayStr ? 'сьогодні' : lastShift === yesterday ? 'вчора' : Fmt.dateShort(new Date(lastShift + 'T00:00:00'))}
+                   </span>`
+                : '';
             const position     = a.profile?.job_position || '';
             const managerName  = a.profile?._managerName || '';
             const dovirenosti  = a.profile?._dovirenosti || [];
@@ -2135,6 +2291,7 @@ ${this._styles()}`;
                         ${position ? `<div class="sg-subst-position">${position}</div>` : ''}
                         ${extraInfo}
                         ${wantsSub ? `<div class="sg-sub-wants-badge">🙋 Пропонує підміну</div>` : ''}
+                        ${lastShiftBadge}
                     </div>
                     ${cntBadge}
                     ${badge}
@@ -2859,6 +3016,7 @@ ${this._styles()}`;
                         <td colspan="${days + 2}" class="sg-loc-group-header">
                             <span class="sg-loc-chevron" data-loc-toggle="${locId}">${isCollapsed ? '▼' : '▲'}</span>
                             ${loc.isPartner?'🤝':'🏪'} ${loc.name}
+                            ${(() => { const l = this._locations.find(l => l.id === locId); return (l?.address ? `<span class="sg-loc-acc-addr"><i class="fa-solid fa-location-dot"></i> ${Fmt.esc(l.address)}</span>` : '') + (l?.phone ? `<span class="sg-loc-acc-addr"><i class="fa-solid fa-phone"></i> ${Fmt.esc(l.phone)}</span>` : ''); })()}
                             ${loc.isPartner ? `<span class="sg-partner-loc-badge">${loc.members[0]?.partnerOwnerLabel||'Керівник'}: ${loc.members[0]?.partnerOwnerName||''}</span>` : ''}
                             <span class="sg-loc-meta">
                                 <span class="sg-loc-emp-count" title="Співробітників">👤 ${loc.members.length}</span>
@@ -2983,6 +3141,7 @@ ${this._styles()}`;
             await supabase.from('schedule_entries').delete()
                 .eq('location_id', locId).eq('user_id', userId).eq('date', date);
             delete this._allEntries[key];
+            if (this._entriesByLoc[locId]) delete this._entriesByLoc[locId][`${userId}_${date}`];
             document.querySelectorAll(`.sg-cell[data-uid="${userId}"][data-date="${date}"][data-locid="${locId}"]`)
                 .forEach(td => { td.innerHTML = ''; });
             return;
@@ -3001,6 +3160,8 @@ ${this._styles()}`;
             .upsert(payload, { onConflict: 'location_id,user_id,date' }).select().single();
         if (error) { Toast.error('Помилка', error.message); return; }
         this._allEntries[key] = data;
+        if (!this._entriesByLoc[locId]) this._entriesByLoc[locId] = {};
+        this._entriesByLoc[locId][`${userId}_${date}`] = data;
         const shift = getShiftTypes()[type];
         document.querySelectorAll(`.sg-cell[data-uid="${userId}"][data-date="${date}"][data-locid="${locId}"]`)
             .forEach(td => { td.innerHTML = `<span class="sg-badge" style="background:${shift.bg};color:${shift.color}">${shift.short}</span>`; });
@@ -3281,13 +3442,34 @@ ${this._styles()}`;
 
     async _addEmployee() {
         const assignedIds = new Set(this._assignments.map(a => a.user_id));
-        const { data } = await supabase.from('profiles')
-            .select('id, full_name, role, label')
-            .order('full_name');
-        const available = (data || []).filter(p => !assignedIds.has(p.id));
+        const [profRes, dovRes] = await Promise.all([
+            supabase.from('profiles').select('id, full_name, role, label, job_position, manager_id').order('full_name'),
+            supabase.from('profile_dovirenosti').select('profile_id, dovirenosti(name)')
+        ]);
+        const profiles = (profRes.data || []).filter(p => !assignedIds.has(p.id));
+        if (!profiles.length) { Toast.info('Всіх доступних вже додано'); return; }
 
-        if (!available.length) { Toast.info('Всіх доступних вже додано'); return; }
-        this._showEmpModal(available);
+        // Build manager name map
+        const mgrIds = [...new Set(profiles.map(p => p.manager_id).filter(Boolean))];
+        let mgrMap = {};
+        if (mgrIds.length) {
+            const { data: mgrs } = await supabase.from('profiles').select('id, full_name').in('id', mgrIds);
+            mgrMap = Object.fromEntries((mgrs || []).map(m => [m.id, m.full_name]));
+        }
+
+        // Build dovirenosti map
+        const dovMap = {};
+        (dovRes.data || []).forEach(r => {
+            if (!dovMap[r.profile_id]) dovMap[r.profile_id] = [];
+            if (r.dovirenosti?.name) dovMap[r.profile_id].push(r.dovirenosti.name);
+        });
+
+        profiles.forEach(p => {
+            p._managerName = p.manager_id ? (mgrMap[p.manager_id] || null) : null;
+            p._dovirenosti = dovMap[p.id] || [];
+        });
+
+        this._showEmpModal(profiles);
     },
 
     _showEmpModal(profiles) {
@@ -3308,9 +3490,11 @@ ${this._styles()}`;
         <div class="sg-emp-row" data-name="${(p.full_name||'').toLowerCase()}"
             onclick="ScheduleGraphPage._confirmAddEmployee('${p.id}')">
             <div class="sg-av sm">${(p.full_name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}</div>
-            <div>
-                <div class="sg-emp-fn">${p.full_name || 'Без імені'}</div>
-                <div class="sg-emp-meta">${p.role || ''}${p.label?' · 🏷 '+p.label:''}</div>
+            <div style="flex:1;min-width:0">
+                <div class="sg-emp-fn">${Fmt.esc(p.full_name || 'Без імені')}</div>
+                ${p.job_position ? `<div class="sg-emp-meta">${Fmt.esc(p.job_position)}</div>` : ''}
+                ${p._managerName ? `<div class="sg-emp-meta sg-emp-mgr"><i class="fa-solid fa-user-tie"></i> ${Fmt.esc(p._managerName)}</div>` : ''}
+                ${p._dovirenosti.length ? `<div class="sg-emp-dovs">${p._dovirenosti.map((d, i) => `<span class="sg-emp-dov sg-emp-dov-${i % 4}">${Fmt.esc(d)}</span>`).join('')}</div>` : ''}
             </div>
         </div>`).join('')}
     </div>
@@ -3360,13 +3544,34 @@ ${this._styles()}`;
         Toast.success('Додано до графіку');
     },
 
+    _removeEmployeeConfirm(assignId, userId, name) {
+        document.getElementById('sg-rm-emp-modal')?.remove();
+        const el = document.createElement('div');
+        el.id = 'sg-rm-emp-modal';
+        el.className = 'sg-overlay';
+        el.innerHTML = `
+<div class="sg-modal sg-rm-emp-box">
+    <div class="sg-rm-emp-icon"><i class="fa-solid fa-user-minus"></i></div>
+    <div class="sg-rm-emp-title">Видалити зі списку?</div>
+    <div class="sg-rm-emp-name">${Fmt.esc(name)}</div>
+    <div class="sg-rm-emp-hint">Співробітник буде прибраний зі списку графіку.</div>
+    <div class="sg-modal-actions" style="margin-top:16px">
+        <button class="sg-btn-cancel" onclick="document.getElementById('sg-rm-emp-modal').remove()">Скасувати</button>
+        <button class="sg-rm-emp-confirm" onclick="ScheduleGraphPage._removeEmployee('${assignId}','${userId}',null)">
+            <i class="fa-solid fa-trash"></i> Видалити
+        </button>
+    </div>
+</div>`;
+        document.body.appendChild(el);
+        el.addEventListener('click', e => { if (e.target === el) el.remove(); });
+    },
+
     async _removeEmployee(assignId, userId, e) {
-        e.stopPropagation();
-        if (!confirm('Видалити співробітника з цього графіку?')) return;
+        if (e) e.stopPropagation();
+        document.getElementById('sg-rm-emp-modal')?.remove();
         const { error } = await supabase.from('schedule_assignments').delete().eq('id', assignId);
         if (error) { Toast.error('Помилка', error.message); return; }
-        this._assignments = this._assignments.filter(a => a.id !== assignId);
-        Object.keys(this._entries).filter(k => k.startsWith(userId + '_')).forEach(k => delete this._entries[k]);
+        await this._loadPageData();
         this._render(this._container);
         Toast.success('Видалено');
     },
@@ -3433,7 +3638,7 @@ ${this._styles()}`;
         if (['work','day_off'].includes(type) || ['work','day_off'].includes(oldEnt?.shift_type)) this._updateNoWorkHighlight(date);
     },
 
-    _showShiftTypesModal() {
+    _showShiftTypesModal(empMode = false) {
         document.getElementById('sg-types-modal')?.remove();
         const types = getShiftTypes();
         const rowHtml = (key, v) => {
@@ -3443,7 +3648,7 @@ ${this._styles()}`;
     <span class="sg-type-row-label">${v.label}</span>
     <span style="background:${v.color};width:12px;height:12px;border-radius:50%;display:inline-block;flex-shrink:0"></span>
     <button class="sg-type-edit-btn" onclick="ScheduleGraphPage._editTypeRow('${key}')"><i class="fa-solid fa-pen"></i></button>
-    ${!isBuiltin ? `<button class="sg-type-del-btn" onclick="ScheduleGraphPage._deleteShiftType('${key}')"><i class="fa-solid fa-trash"></i></button>` : ''}
+    ${!isBuiltin && !empMode ? `<button class="sg-type-del-btn" onclick="ScheduleGraphPage._deleteShiftType('${key}')"><i class="fa-solid fa-trash"></i></button>` : ''}
 </div>`;
         };
         const el = document.createElement('div');
@@ -3456,12 +3661,12 @@ ${this._styles()}`;
         <button class="sg-mclose" onclick="document.getElementById('sg-types-modal').remove()">✕</button>
     </div>
     <div id="sg-typelist" style="display:flex;flex-direction:column;gap:6px;max-height:50vh;overflow-y:auto;padding:12px 0">
-        ${getShiftTypeEntries().map(([k, v]) => rowHtml(k, v)).join('')}
+        ${(empMode ? getShiftTypeEntries().filter(([k]) => ['work','vacation'].includes(k)) : getShiftTypeEntries()).map(([k, v]) => rowHtml(k, v)).join('')}
     </div>
-    <div style="padding-top:10px;border-top:1px solid var(--border)">
+    ${!empMode ? `<div style="padding-top:10px;border-top:1px solid var(--border)">
         <button class="sg-btn-add-type" id="sg-add-type-trigger" onclick="ScheduleGraphPage._showAddTypeForm()">＋ Додати тип</button>
         <div id="sg-add-type-form" style="display:none"></div>
-    </div>
+    </div>` : ''}
 </div>`;
         document.body.appendChild(el);
         el.addEventListener('click', e => { if (e.target === el) el.remove(); });
@@ -3713,6 +3918,21 @@ ${this._styles()}`;
             changed_by: AppState.user.id
         });
 
+        // Notify employee if manager made the change
+        if (!isEmployee && userId !== AppState.user.id) {
+            const mgrName = AppState.profile?.full_name || 'Керівник';
+            const shift = getShiftTypes()[type];
+            const dateLabel = new Date(date + 'T00:00:00').toLocaleDateString('uk-UA', { day:'numeric', month:'long' });
+            await supabase.from('notifications').insert({
+                user_id: userId,
+                title: '📅 Зміну в графіку оновлено',
+                message: `${mgrName} встановив ${shift?.label || type} на ${dateLabel}`,
+                type: 'general',
+                created_by: AppState.user.id,
+                link: `schedule-graph?view=employee`
+            });
+        }
+
         if (isEmployee) {
             ScheduleGraphEmployee._entries[date] = data;
             // If employee sets a work shift on a date with active manager help request — resolve it
@@ -3762,6 +3982,21 @@ ${this._styles()}`;
             new_value: null,
             changed_by: AppState.user.id
         });
+
+        // Notify employee if manager deleted the entry
+        if (!isEmp && userId !== AppState.user.id && oldEnt) {
+            const mgrName = AppState.profile?.full_name || 'Керівник';
+            const shift = getShiftTypes()[oldEnt.shift_type];
+            const dateLabel = new Date(date + 'T00:00:00').toLocaleDateString('uk-UA', { day:'numeric', month:'long' });
+            await supabase.from('notifications').insert({
+                user_id: userId,
+                title: '📅 Зміну в графіку видалено',
+                message: `${mgrName} видалив ${shift?.label || oldEnt.shift_type} на ${dateLabel}`,
+                type: 'general',
+                created_by: AppState.user.id,
+                link: `schedule-graph?view=employee`
+            });
+        }
 
         if (isEmp) {
             delete ScheduleGraphEmployee._entries[date];
@@ -3827,6 +4062,13 @@ ${this._styles()}`;
                </button>`
             : '';
 
+        const viewOnly = this._isViewOnlyLoc(this._locId);
+        const rmBtn = !viewOnly && !fired ? `<button class="sg-rm sg-rm-inline" title="Видалити зі списку"
+            data-name="${Fmt.esc(name)}"
+            onclick="event.stopPropagation();ScheduleGraphPage._removeEmployeeConfirm('${a.id}','${a.user_id}',this.dataset.name)">
+            <i class="fa-solid fa-trash"></i>
+        </button>` : '';
+
         return `
 <td class="sg-td-name" title="${name}${fired ? ' (звільнений співробітник)' : a.is_primary ? ' — основний' : ' — тимчасовий'}">
     <span class="sg-drag-handle" title="Перетягнути">⠿</span>
@@ -3835,6 +4077,7 @@ ${this._styles()}`;
         ? ` <span class="sg-deleted-badge">${firedBadge}</span>`
         : !a.is_primary ? ` <span class="sg-temp-badge">підміна</span>` : ''}
     </div>
+    ${rmBtn}
 </td>`;
     },
 
@@ -3977,7 +4220,7 @@ ${this._styles()}`;
 /* Hero */
 .sg-hero {
     border-radius:24px;padding:32px 28px;margin-bottom:20px;
-    background:linear-gradient(135deg,#1a2744 0%,#1e3a5f 50%,#1a4971 100%);
+    background:linear-gradient(135deg,#1d4ed8 0%,#2563eb 50%,#3b82f6 100%);
     position:relative;overflow:hidden;
 }
 .sg-hero::before {
@@ -3996,13 +4239,13 @@ ${this._styles()}`;
 /* Manager help request button in hero */
 .sg-mgr-help-btn {
     padding:9px 18px;border-radius:12px;
-    border:2px solid rgba(239,68,68,.5);
-    background:rgba(239,68,68,.18);color:#fff;
+    border:1.5px solid rgba(239,68,68,.35);
+    background:rgba(239,68,68,.08);color:#ef4444;
     font-size:.85rem;font-weight:700;cursor:pointer;
     white-space:nowrap;transition:all .18s;flex-shrink:0;
     backdrop-filter:blur(4px);
 }
-.sg-mgr-help-btn:hover { background:rgba(239,68,68,.35);border-color:rgba(239,68,68,.9); }
+.sg-mgr-help-btn:hover { background:rgba(239,68,68,.15);border-color:#ef4444; }
 
 /* Manager help request modal */
 .sg-mgr-help-box { max-width:420px; }
@@ -4083,10 +4326,15 @@ ${this._styles()}`;
     display:flex;align-items:center;justify-content:space-between;
     padding:10px 14px;border-bottom:1px solid var(--border);
 }
+.sg-loc-sidebar-head > div { opacity:0;transition:opacity .15s; }
+.sg-loc-sidebar-head:hover > div { opacity:1; }
 .sg-loc-sidebar-title {
     font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
     color:var(--text-muted);
 }
+.sg-sidebar-add-loc { padding:8px 6px 4px;border-top:1px solid var(--border); }
+.sg-sidebar-add-loc-btn { width:100%;display:flex;align-items:center;justify-content:center;gap:6px;padding:7px;border-radius:10px;border:1.5px dashed var(--border);background:transparent;color:var(--text-muted);font-size:.78rem;cursor:pointer;transition:all .15s; }
+.sg-sidebar-add-loc-btn:hover { border-color:var(--primary);color:var(--primary);background:color-mix(in srgb,var(--primary) 6%,transparent); }
 .sg-loc-add-ico {
     width:24px;height:24px;border-radius:7px;border:1.5px solid var(--border);
     background:transparent;color:var(--primary);font-size:1rem;font-weight:700;
@@ -4130,7 +4378,10 @@ ${this._styles()}`;
     background:transparent;cursor:pointer;font-size:.78rem;
     display:flex;align-items:center;justify-content:center;
     color:var(--text-muted);transition:all .15s;
+    opacity:0;
 }
+.sg-loc-item-row:hover .sg-loc-item-rename,
+.sg-loc-item-row:hover .sg-loc-item-del { opacity:1; }
 .sg-loc-item-rename:hover { background:var(--bg-hover,rgba(0,0,0,.07));color:var(--primary); }
 .sg-loc-item-del:hover { background:rgba(239,68,68,.1);color:#ef4444; }
 .sg-loc-drag-handle {
@@ -4193,6 +4444,35 @@ ${this._styles()}`;
 .sg-scroll-wrap {
     border-radius:0 0 18px 18px;
 }
+
+/* V2 layout */
+.sg-v2-service { flex:0 0 auto; }
+.sg-section-v2 { padding:16px 20px 4px; }
+.sg-v2-top { display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap; }
+.sg-v2-card { background:var(--bg-raised);border:1px solid var(--border);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px; }
+.sg-v2-loc-card { min-width:240px;flex:0 0 auto;background:linear-gradient(135deg,color-mix(in srgb,var(--primary) 8%,var(--bg-raised)),var(--bg-raised));border-color:color-mix(in srgb,var(--primary) 20%,var(--border)); }
+.sg-v2-mgmt-card { flex:0 0 auto; }
+.sg-v2-card-label { font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:2px; }
+.sg-v2-loc-name { display:flex;align-items:center;gap:6px;font-weight:600;font-size:.95rem; }
+.sg-v2-loc-row { display:flex;align-items:center;gap:8px;font-size:.8rem;color:var(--text-secondary); }
+.sg-v2-loc-val { font-weight:600;color:var(--text-primary);margin-left:auto; }
+.sg-v2-loc-actions { display:flex;gap:8px;align-items:center;margin-top:4px; }
+.sg-v2-mgmt-btns { display:flex;flex-wrap:wrap;gap:8px; }
+.sg-v2-mgmt-hint { font-size:.75rem;color:var(--text-muted);margin:4px 0 0; }
+.sg-v2-legend-section { margin-bottom:12px; }
+.sg-v2-hint { font-size:.72rem;color:var(--text-muted);display:flex;align-items:center;gap:6px;margin:8px 0 4px;padding:0 2px; }
+.sg-v2-svc-list { display:grid;grid-template-columns:1fr 1fr;gap:6px; }
+.sg-v2-svc-item { display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;cursor:pointer;transition:background .12s;border:1px solid transparent; }
+.sg-v2-svc-item:hover { background:var(--bg-raised);border-color:var(--border); }
+.sg-v2-svc-icon { width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.9rem;flex-shrink:0; }
+.sg-v2-svc-body { flex:1;min-width:0; }
+.sg-v2-svc-title { font-size:.8rem;font-weight:600;color:var(--text-primary); }
+.sg-v2-svc-sub { font-size:.68rem;color:var(--text-muted);margin-top:1px; }
+.sg-v2-svc-arr { font-size:.65rem;color:var(--text-muted);flex-shrink:0; }
+.sg-back-btn { display:inline-flex;align-items:center;gap:6px;background:var(--bg-raised);color:var(--text-secondary);border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:.8rem;cursor:pointer;transition:all .15s; }
+.sg-back-btn:hover { background:var(--bg-elevated);color:var(--text-primary); }
+.sg-v2-loc-address { font-size:.75rem;color:var(--text-muted);display:flex;align-items:center;gap:6px; }
+.sg-loc-label { font-size:.75rem;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px; }
 
 /* Substitution tab */
 .sg-subst-hint {
@@ -4285,28 +4565,30 @@ ${this._styles()}`;
 .sg-subst-loc-wh { font-size:.78rem;color:var(--text-muted); }
 .sg-subst-loc-arrow { color:var(--text-muted);font-size:1rem; }
 .sg-subst-name { font-size:.8rem;font-weight:600;color:var(--text-primary); }
+.sg-sub-last-shift { font-size:.68rem;color:var(--text-muted);display:inline-flex;align-items:center;gap:3px;margin-top:2px; }
+.sg-sub-last-recent { color:#f59e0b;font-weight:600; }
 .sg-subst-position { font-size:.7rem;color:var(--text-secondary);margin-top:1px; }
 .sg-subst-meta { font-size:.7rem;color:var(--text-muted);margin-top:1px; }
 .sg-subst-meta-val { font-weight:700;color:var(--primary); }
 .sg-subst-empty { font-size:.82rem;color:var(--text-muted);font-style:italic;padding:8px 0; }
 .sg-loc-group-header {
-    padding:9px 16px;font-size:.72rem;font-weight:700;
+    padding:9px 16px;font-size:1rem;font-weight:500;
     text-transform:uppercase;letter-spacing:.07em;
-    color:var(--primary);
-    text-shadow:0 1px 3px rgba(0,0,0,.25);
-    background:rgba(99,102,241,.07);
-    border-top:2px solid rgba(99,102,241,.18);
-    border-bottom:1px solid rgba(99,102,241,.14);
+    color:#7a93a8;
+    text-shadow:none;
+    background:rgba(100,130,155,.08);
+    border-top:2px solid rgba(100,130,155,.2);
+    border-bottom:1px solid rgba(100,130,155,.15);
 }
 .light-theme .sg-loc-group-header {
-    background:rgba(38,52,115,.15);
-    border-top-color:rgba(38,52,115,.35);
-    border-bottom-color:rgba(38,52,115,.22);
-    color:#263473;
-    text-shadow:0 1px 2px rgba(38,52,115,.15);
+    background:rgba(90,120,145,.1);
+    border-top-color:rgba(90,120,145,.25);
+    border-bottom-color:rgba(90,120,145,.18);
+    color:#4a6580;
+    text-shadow:none;
 }
 .sg-loc-end-row td {
-    height:10px;padding:0;
+    height:12px;padding:0;
     background:transparent;
     border-bottom:2px solid rgba(99,102,241,.12);
 }
@@ -4322,11 +4604,17 @@ ${this._styles()}`;
 .sg-loc-name-ico { font-size:1rem; }
 .sg-loc-name-text { font-size:.95rem;font-weight:700;color:var(--text-primary); }
 .sg-wh-sep { color:var(--border);font-size:1rem;margin:0 2px; }
+.sg-v2-loc-card .sg-loc-name-edit,
+.sg-v2-loc-card .sg-wh-edit,
+.sg-v2-loc-card .sg-loc-del-btn { opacity:0;transition:opacity .15s,color .15s,background .15s; }
+.sg-v2-loc-card:hover .sg-loc-name-edit,
+.sg-v2-loc-card:hover .sg-wh-edit,
+.sg-v2-loc-card:hover .sg-loc-del-btn { opacity:1; }
 .sg-loc-name-edit {
     border:none;background:none;cursor:pointer;font-size:.9rem;
-    opacity:.4;transition:opacity .15s;padding:2px 4px;border-radius:6px;
+    color:var(--text-muted);transition:color .15s;padding:2px 4px;border-radius:6px;
 }
-.sg-loc-name-edit:hover { opacity:1;background:var(--bg-hover); }
+.sg-loc-name-edit:hover { color:var(--text-primary);background:var(--bg-hover); }
 .sg-view-only-badge {
     display:inline-flex;align-items:center;gap:4px;
     font-size:.75rem;font-weight:600;padding:2px 8px;border-radius:20px;
@@ -4545,6 +4833,14 @@ ${this._styles()}`;
     font-size:.8rem;color:var(--text-muted);text-align:left;margin-bottom:4px;line-height:1.5;
 }
 .sg-del-note-ico { flex-shrink:0;font-size:.95rem; }
+.sg-emp-req-box { max-width:420px;height:auto !important; }
+.sg-rm-emp-box { max-width:340px;height:auto !important;text-align:center;padding:24px 20px; }
+.sg-rm-emp-icon { width:56px;height:56px;border-radius:50%;background:rgba(239,68,68,.1);color:#ef4444;display:flex;align-items:center;justify-content:center;font-size:1.4rem;margin:0 auto 14px; }
+.sg-rm-emp-title { font-size:1.05rem;font-weight:700;color:var(--text-primary);margin-bottom:6px; }
+.sg-rm-emp-name { font-size:.9rem;font-weight:600;color:var(--primary);background:color-mix(in srgb,var(--primary) 8%,var(--bg-raised));border-radius:8px;padding:6px 14px;display:inline-block;margin-bottom:10px; }
+.sg-rm-emp-hint { font-size:.78rem;color:var(--text-muted);line-height:1.5; }
+.sg-rm-emp-confirm { flex:1;height:42px;border-radius:10px;border:1.5px solid rgba(239,68,68,.4);background:rgba(239,68,68,.08);color:#ef4444;font-size:.9rem;font-weight:600;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;justify-content:center;gap:6px; }
+.sg-rm-emp-confirm:hover { background:#ef4444;color:#fff;border-color:#ef4444; }
 .sg-del-confirm-btn {
     flex:1;height:46px;border-radius:12px;border:2px solid rgba(239,68,68,.4);
     background:rgba(239,68,68,.08);color:#ef4444;
@@ -4700,8 +4996,8 @@ ${this._styles()}`;
     border-left:2px solid var(--border);
 }
 .sg-th-del {
-    padding:8px 12px;border-bottom:1px solid var(--border);background:var(--bg-raised);
-    text-align:center;white-space:nowrap;width:100px;
+    padding:8px 6px;border-bottom:1px solid var(--border);background:var(--bg-raised);
+    text-align:center;white-space:nowrap;width:36px;
 }
 .sg-th-sum-inner {
     font-size:1rem;font-weight:800;color:var(--primary);line-height:1;
@@ -4782,14 +5078,10 @@ tr.sg-row-drag-over td { background:rgba(99,102,241,.12) !important;border-top:2
     font-weight:800;color:var(--primary);font-size:.82rem;
     border-left:2px solid var(--border);
 }
-.sg-td-del { text-align:center;padding:2px 6px;border-bottom:1px solid var(--border); }
-.sg-rm {
-    display:inline-flex;align-items:center;gap:4px;
-    padding:3px 8px;border-radius:6px;border:1.5px solid rgba(239,68,68,.25);
-    background:rgba(239,68,68,.06);color:#ef4444;
-    cursor:pointer;font-size:.72rem;font-weight:600;
-    transition:all .15s;white-space:nowrap;
-}
+.sg-rm { display:inline-flex;align-items:center;padding:3px 6px;border-radius:6px;border:none;background:none;color:var(--text-muted);cursor:pointer;font-size:.8rem;transition:all .15s; }
+.sg-rm:hover { background:rgba(239,68,68,.1);color:#ef4444; }
+.sg-rm-inline { opacity:0;margin-left:auto;flex-shrink:0; }
+.sg-td-name:hover .sg-rm-inline { opacity:1; }
 .sg-rm span { font-size:.7rem; }
 .sg-rm:hover { background:rgba(239,68,68,.15);border-color:#ef4444; }
 tr:hover .sg-td-name,.sg-table tr:hover .sg-cell { background:var(--bg-hover); }
@@ -4798,24 +5090,27 @@ tr:last-child td { border-bottom:none; }
 
 /* Log */
 .sg-log-list { padding:8px 0; }
-.sg-log-row {
-    display:flex;align-items:flex-start;gap:12px;padding:12px 20px;
-    border-bottom:1px solid var(--border);transition:background .12s;
-}
-.sg-log-row:last-child { border-bottom:none; }
-.sg-log-row:hover { background:var(--bg-hover); }
-.sg-log-body { flex:1;display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:.875rem; }
-.sg-log-emp { color:var(--text-muted); }
-.sg-log-datecel {
-    padding:2px 8px;border-radius:6px;background:var(--bg-raised);
-    font-size:.78rem;color:var(--text-muted);
-}
-.sg-log-diff { display:flex;align-items:center;gap:6px;width:100%; }
-.sg-log-arrow { color:var(--text-muted); }
-.sg-log-new { color:#10b981;font-size:.8rem;font-style:italic; }
-.sg-log-del { color:#ef4444;font-size:.8rem;font-style:italic; }
+.sg-log-table { width:100%;border-collapse:collapse;font-size:.82rem; }
+.sg-log-table thead th { padding:8px 12px;text-align:left;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);border-bottom:2px solid var(--border);white-space:nowrap; }
+.sg-log-table td:nth-child(1),
+.sg-log-table td:nth-child(2) { white-space:nowrap; }
+.sg-log-table th:nth-child(4),
+.sg-log-table th:nth-child(6) { width:100px; }
+.sg-log-table tbody tr { border-bottom:1px solid var(--border);transition:background .12s; }
+.sg-log-table tbody tr:last-child { border-bottom:none; }
+.sg-log-table tbody tr:hover { background:var(--bg-raised); }
+.sg-log-table td { padding:10px 12px;vertical-align:middle; }
+.sg-log-tr-request { border-left:3px solid #f59e0b;background:rgba(245,158,11,.04); }
+.sg-log-tr-request:hover { background:rgba(245,158,11,.08) !important; }
+.sg-log-request { font-size:.78rem;color:#d97706;display:flex;align-items:center;gap:4px; }
+.sg-log-who { font-weight:600;color:var(--text-primary);white-space:nowrap; }
+.sg-log-emp { color:var(--text-muted);white-space:nowrap; }
+.sg-log-datecel { padding:2px 8px;border-radius:20px;background:var(--bg-raised);color:var(--primary);font-size:.72rem;font-weight:600;white-space:nowrap;display:inline-block; }
+.sg-log-arrow { color:var(--text-muted);text-align:center;font-size:.8rem; }
+.sg-log-new { color:#10b981;font-weight:500; }
+.sg-log-del { color:#ef4444;font-weight:500; }
 .sg-log-empty { color:var(--text-muted);font-style:italic; }
-.sg-log-time { color:var(--text-muted);font-size:.78rem;white-space:nowrap;margin-top:2px; }
+.sg-log-time { color:var(--text-muted);font-size:.72rem;white-space:nowrap; }
 
 /* Modal overlay */
 .sg-overlay {
@@ -4852,8 +5147,15 @@ tr:last-child td { border-bottom:none; }
     cursor:pointer;transition:background .12s;
 }
 .sg-emp-row:hover { background:var(--bg-hover); }
-.sg-emp-fn { font-weight:600;color:var(--text-primary);font-size:.9rem; }
-.sg-emp-meta { font-size:.78rem;color:var(--text-muted);margin-top:1px; }
+.sg-emp-fn { font-weight:700;color:#2563eb;font-size:.9rem; }
+.sg-emp-meta { font-size:.75rem;color:var(--text-secondary);margin-top:2px; }
+.sg-emp-mgr { font-size:.72rem;color:var(--text-muted);margin-top:2px;display:flex;align-items:center;gap:4px; }
+.sg-emp-dovs { display:flex;flex-wrap:wrap;gap:4px;margin-top:4px; }
+.sg-emp-dov { font-size:.68rem;font-weight:600;padding:2px 7px;border-radius:10px; }
+.sg-emp-dov-0 { background:rgba(37,99,235,.1);color:#2563eb; }
+.sg-emp-dov-1 { background:rgba(16,185,129,.1);color:#059669; }
+.sg-emp-dov-2 { background:rgba(245,158,11,.1);color:#d97706; }
+.sg-emp-dov-3 { background:rgba(139,92,246,.1);color:#7c3aed; }
 
 /* Shift modal */
 .sg-shift-grid {
@@ -5035,6 +5337,14 @@ tr:last-child td { border-bottom:none; }
 .sg-reminder-sub   { font-size:.78rem;color:var(--text-muted);margin:0 0 20px;line-height:1.4; }
 
 /* Add buttons */
+.sg-td-add-emp { padding:6px 10px;border-top:1px dashed var(--border);background:color-mix(in srgb,var(--primary) 4%,var(--bg-surface)); }
+.sg-add-emp-ghost {
+    display:inline-flex;align-items:center;gap:6px;
+    padding:6px 14px;border-radius:8px;border:1.5px dashed color-mix(in srgb,var(--primary) 40%,transparent);
+    background:color-mix(in srgb,var(--primary) 8%,transparent);color:var(--primary);font-size:.8rem;cursor:pointer;
+    transition:all .15s;opacity:.75;
+}
+.sg-add-emp-ghost:hover { opacity:1;border-color:var(--primary);background:color-mix(in srgb,var(--primary) 14%,transparent); }
 .sg-add-btn {
     display:inline-flex;align-items:center;gap:8px;
     padding:9px 20px;border-radius:12px;border:none;
@@ -5131,7 +5441,7 @@ tr:last-child td { border-bottom:none; }
 
 /* Accordion: collapse/expand locations */
 .sg-loc-chevron {
-    display:inline-block;width:18px;font-size:.8rem;opacity:.55;
+    display:inline-block;width:18px;font-size:1rem;opacity:.55;
     margin-right:4px;
 }
 .sg-loc-meta {
@@ -5143,13 +5453,19 @@ tr:last-child td { border-bottom:none; }
     font-size:.72rem;font-weight:400;opacity:.5;margin-left:6px;
 }
 .sg-loc-group-header { user-select:none; }
-.sg-loc-header-row:hover td { background:rgba(99,102,241,.06); }
+.sg-loc-acc-addr { font-size:1rem;font-weight:400;opacity:.8;margin-left:8px;letter-spacing:0;text-transform:none;display:inline-flex;align-items:center;gap:4px; }
+
+.sg-loc-header-row td { padding-top:10px;padding-bottom:10px;border-top:8px solid transparent; }
+.sg-loc-header-row:first-child td { border-top:none; }
+.sg-loc-header-row:nth-child(odd) td { background:rgba(100,130,155,.06); }
+.sg-loc-header-row:hover td { background:rgba(100,130,155,.12); }
 .sg-collapse-all-btn {
-    font-size:.75rem;padding:4px 10px;border-radius:8px;
-    border:1px solid var(--border);background:var(--surface);
-    color:var(--text-2);cursor:pointer;transition:.15s;white-space:nowrap;
+    display:inline-flex;align-items:center;gap:5px;
+    font-size:.75rem;font-weight:500;padding:5px 12px;border-radius:20px;
+    border:1.5px solid var(--border);background:var(--bg-raised);
+    color:var(--text-muted);cursor:pointer;transition:all .15s;white-space:nowrap;
 }
-.sg-collapse-all-btn:hover { background:var(--primary);color:#fff;border-color:var(--primary); }
+.sg-collapse-all-btn:hover { background:rgba(100,130,155,.12);color:#7a93a8;border-color:rgba(100,130,155,.35); }
 
 /* Employee name filter (all-locations view) */
 .sg-td-name--clickable {
@@ -5277,6 +5593,8 @@ const ScheduleGraphEmployee = {
     _managerHelpDates: {},
     _month: new Date().getMonth(),
     _year:  new Date().getFullYear(),
+    _quickType: null,
+    _subMode: false,
 
     async init(container) {
         this._container = container;
@@ -5296,7 +5614,7 @@ const ScheduleGraphEmployee = {
 
         const locIds = assignRows.map(a => a.location_id);
         const { data: lData } = await supabase.from('schedule_locations')
-            .select('id, name, locked_months, work_start, work_end')
+            .select('id, name, locked_months, work_start, work_end, address, phone')
             .in('id', locIds);
         const locs = lData || [];
 
@@ -5308,6 +5626,8 @@ const ScheduleGraphEmployee = {
                 locked_months: loc.locked_months || [],
                 work_start:    loc.work_start || null,
                 work_end:      loc.work_end   || null,
+                address:       loc.address || null,
+                phone:         loc.phone || null,
             };
         });
 
@@ -5321,15 +5641,34 @@ const ScheduleGraphEmployee = {
         const dateFrom = `${this._year}-${p(this._month + 1)}-01`;
         const dateTo   = `${this._year}-${p(this._month + 1)}-${new Date(this._year, this._month + 1, 0).getDate()}`;
 
-        const { data } = await supabase.from('schedule_entries')
-            .select('*')
-            .eq('location_id', this._locId)
-            .eq('user_id', AppState.user.id)
-            .gte('date', dateFrom)
-            .lte('date', dateTo);
+        // Load ALL entries for location (to show colleagues)
+        const [myRes, allRes, assignRes] = await Promise.all([
+            supabase.from('schedule_entries').select('*')
+                .eq('location_id', this._locId).eq('user_id', AppState.user.id)
+                .gte('date', dateFrom).lte('date', dateTo),
+            supabase.from('schedule_entries').select('*')
+                .eq('location_id', this._locId)
+                .gte('date', dateFrom).lte('date', dateTo),
+            supabase.from('schedule_assignments')
+                .select('id, user_id, employee_name, original_user_id, is_primary')
+                .eq('location_id', this._locId)
+        ]);
 
         this._entries = {};
-        (data || []).forEach(e => { this._entries[e.date] = e; });
+        (myRes.data || []).forEach(e => { this._entries[e.date] = e; });
+
+        this._locEntries = {};
+        (allRes.data || []).forEach(e => { this._locEntries[`${e.user_id}_${e.date}`] = e; });
+
+        // Load profiles for colleagues
+        const assigns = assignRes.data || [];
+        const pIds = [...new Set(assigns.map(a => a.user_id).filter(Boolean))];
+        let profiles = {};
+        if (pIds.length) {
+            const { data: pData } = await supabase.from('profiles').select('id, full_name, job_position').in('id', pIds);
+            profiles = Object.fromEntries((pData || []).map(p => [p.id, p]));
+        }
+        this._locAssignments = assigns.map(a => ({ ...a, profile: profiles[a.user_id] || null }));
 
         this._managerHelpDates = {};
         const myLocIds = this._assignments.map(a => a.locId).filter(Boolean);
@@ -5431,7 +5770,12 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
     <div class="sg-loc-tabs">
         ${this._assignments.map(a => `
         <button class="sg-loc-tab ${a.locId === this._locId ? 'active' : ''}"
-            onclick="ScheduleGraphEmployee._switchLoc('${a.locId}')">🏪 ${a.locName}</button>`).join('')}
+            onclick="ScheduleGraphEmployee._switchLoc('${a.locId}')">
+            <span class="sge-tab-name">🏪 ${Fmt.esc(a.locName)}</span>
+            ${a.address ? `<span class="sge-tab-addr"><i class="fa-solid fa-location-dot"></i> ${Fmt.esc(a.address)}</span>` : ''}
+            ${a.phone ? `<span class="sge-tab-addr"><i class="fa-solid fa-phone"></i> ${Fmt.esc(a.phone)}</span>` : ''}
+            ${a.work_start && a.work_end ? `<span class="sge-tab-addr"><i class="fa-regular fa-clock"></i> ${a.work_start.slice(0,5)}–${a.work_end.slice(0,5)}</span>` : ''}
+        </button>`).join('')}
     </div>
 </div>` : '';
 
@@ -5449,6 +5793,22 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
             <span class="sg-mlabel">${MONTHS_UA[this._month]} ${this._year}</span>
             <button class="sg-mnav" onclick="ScheduleGraphEmployee._nextMonth()">›</button>
         </div>
+        <div class="sg-legend" style="flex:1">
+            ${['work','vacation'].map(k => {
+                const v = getShiftTypes()[k];
+                if (!v) return '';
+                const active = this._quickType === k;
+                return `<button class="sg-leg-btn${active?' active':''}"
+                    style="--lc:${v.color};--lb:${v.bg}"
+                    onclick="ScheduleGraphEmployee._setQuickType('${k}')"
+                    title="${active ? 'Клік щоб скасувати' : 'Клік щоб вибрати — потім тиснути на свої клітинки'}">
+                    <span class="sg-leg-short" style="background:${v.bg};color:${v.color}">${v.short}</span>
+                    ${v.label}
+                    ${active ? '<span class="sg-leg-active-mark">✓ активно</span>' : ''}
+                </button>`;
+            }).join('')}
+            <button class="sg-types-mgr-btn" onclick="ScheduleGraphPage._showShiftTypesModal(true)" title="Налаштувати скорочення">⚙️</button>
+        </div>
         <div class="sge-stats">
             ${getShiftTypeEntries().map(([k, v]) => stats[k] ? `
             <div class="sge-stat-chip" style="background:${v.bg};color:${v.color}">
@@ -5456,7 +5816,19 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
                 <span>${stats[k]} ${k==='work'?'роб.':k==='day_off'?'вих.':k==='vacation'?'відп.':'лік.'}</span>
             </div>` : '').join('')}
         </div>
+        <button class="sge-sub-btn" onclick="ScheduleGraphEmployee._toggleSubMode()">
+            🙋 Можу вийти на заміну
+        </button>
     </div>
+    ${this._quickType ? `
+    <div class="sg-quick-bar">
+        <span>⚡ Швидке заповнення:</span>
+        <span class="sg-quick-badge" style="background:${getShiftTypes()[this._quickType]?.bg};color:${getShiftTypes()[this._quickType]?.color}">
+            ${getShiftTypes()[this._quickType]?.short} ${getShiftTypes()[this._quickType]?.label}
+        </span>
+        <span>— натискайте на свої клітинки</span>
+        <button class="sg-quick-cancel" onclick="ScheduleGraphEmployee._setQuickType(null)">✕ Скасувати</button>
+    </div>` : ''}
 
     ${(() => {
         const _loc = this._assignments.find(a => a.locId === this._locId);
@@ -5468,29 +5840,69 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
     </div>` : '';
     })()}
 
-    <div class="sg-section sge-cal-section">
-        <div class="sge-legend-bar">
-            ${getShiftTypeEntries().map(([k, v]) => `
-            <span class="sge-legend-item">
-                <span class="sge-legend-dot" style="background:${v.color}"></span>${v.label}
-            </span>`).join('')}
+    <div class="sg-section">
+        <div class="sg-scroll-wrap" id="sge-wrap-main">
+        <table class="sg-table">
+            <thead>
+                <tr>
+                    <th class="sg-th-name">Співробітник</th>
+                    ${Array.from({length: days}, (_, i) => i + 1).map(d => {
+                        const dow = new Date(this._year, this._month, d).getDay();
+                        const we  = dow === 0 || dow === 6;
+                        const dateStr = `${this._year}-${p(this._month + 1)}-${p(d)}`;
+                        const isToday = dateStr === todayStr;
+                        return `<th class="sg-th-day${we?' we':''}${isToday?' sge-th-today':''}">
+                            <div class="sg-day-num">${d}</div>
+                            <div class="sg-day-dow">${['Нд','Пн','Вт','Ср','Чт','Пт','Сб'][dow]}</div>
+                        </th>`;
+                    }).join('')}
+                    <th class="sg-th-sum"><div class="sg-th-sum-inner">Σ</div><div class="sg-th-sub">Дні</div></th>
+                </tr>
+            </thead>
+            <tbody>
+            ${(this._locAssignments || []).map(a => {
+                const isMe = a.user_id === AppState.user.id;
+                const name = a.profile?.full_name || a.employee_name || '—';
+                const initials = name.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
+                const nums = Array.from({length: days}, (_, i) => i + 1);
+                const workDays = nums.filter(d => {
+                    const e = isMe ? this._entries[`${this._year}-${p(this._month+1)}-${p(d)}`]
+                                   : this._locEntries[`${a.user_id}_${this._year}-${p(this._month+1)}-${p(d)}`];
+                    return e && ['work','day_off'].includes(e?.shift_type) ? false : e?.shift_type === 'work';
+                }).length;
+                const totalDays = nums.filter(d => {
+                    const dateStr = `${this._year}-${p(this._month+1)}-${p(d)}`;
+                    const e = isMe ? this._entries[dateStr] : this._locEntries[`${a.user_id}_${dateStr}`];
+                    return e && e.shift_type === 'work';
+                }).length;
+                return `<tr class="${isMe ? 'sge-my-row' : 'sge-peer-row'}">
+                    <td class="sg-td-name">
+                        <div class="sg-name-full">
+                            <div class="sg-av sm" style="${isMe?'background:var(--primary);color:#fff':''}">${initials}</div>
+                            ${Fmt.esc(name)}${isMe ? ' <span style="font-size:.65rem;color:var(--primary);font-weight:700">(я)</span>' : ''}
+                        </div>
+                    </td>
+                    ${nums.map(d => {
+                        const dateStr = `${this._year}-${p(this._month+1)}-${p(d)}`;
+                        const dow = new Date(this._year, this._month, d).getDay();
+                        const we  = dow === 0 || dow === 6;
+                        const isToday = dateStr === todayStr;
+                        const entry = isMe ? this._entries[dateStr] : this._locEntries[`${a.user_id}_${dateStr}`];
+                        const shift = entry ? getShiftTypes()[entry.shift_type] : null;
+                        const badge = shift ? `<span class="sg-badge" style="background:${shift.bg};color:${shift.color}">${shift.short}</span>` : '';
+                        return `<td class="sg-cell${we?' we':''}${isToday?' sge-cell-today':''}${isMe?'':' sge-peer-cell'}"
+                            ${isMe ? `onclick="ScheduleGraphEmployee._openCell('${dateStr}')"` : ''}
+                            title="${isMe ? (shift?.label || 'Клікніть щоб додати') : (shift?.label || '')}">
+                            ${badge}
+                        </td>`;
+                    }).join('')}
+                    <td class="sg-td-sum">${totalDays}</td>
+                </tr>`;
+            }).join('')}
+            </tbody>
+        </table>
         </div>
-
-        <div class="sge-dow-row">
-            ${['Пн','Вт','Ср','Чт','Пт','Сб','Нд'].map(d=>`<div class="sge-dow-cell">${d}</div>`).join('')}
-        </div>
-
-        <div class="sge-grid">
-            ${cells.join('')}
-        </div>
-
-        ${!hasAnyEntry ? `
-        <div class="sge-no-data">
-            <span>📋</span> Графік на цей місяць ще порожній — натисніть на будь-який день щоб додати запис
-        </div>` : `
-        <div class="sge-no-data" style="border-top:1px solid var(--border)">
-            <i class="fa-solid fa-pen"></i> Натисніть на день щоб переглянути або редагувати запис
-        </div>`}
+        <p class="sg-v2-hint" style="padding:8px 16px"><i class="fa-solid fa-circle-info"></i> Клікніть на свій рядок щоб додати або змінити запис</p>
     </div>
 </div>
 ${ScheduleGraphPage._styles()}${this._empStyles()}`;
@@ -5504,13 +5916,9 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
         return `
 <div class="sg-hero" style="margin-bottom:20px">
     <div class="sg-hero-inner">
-        <div class="sg-hero-ico">🗓</div>
+        <div class="sg-hero-ico"><i class="fa-solid fa-calendar-days" style="color:#fff"></i></div>
         <div style="flex:1">
-            <h1 class="sg-hero-title">Мій графік</h1>
-            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:4px">
-                ${locName ? `<span class="sg-hero-sub" style="margin:0">🏪 ${locName}</span>` : '<span class="sg-hero-sub" style="margin:0">Ваш персональний розклад роботи</span>'}
-                ${whText ? `<span class="sge-wh-badge">🕐 ${whText}</span>` : ''}
-            </div>
+            <h1 class="sg-hero-title">Мій графік роботи</h1>
         </div>
         ${isManager ? `
         <button class="sg-my-sched-btn" onclick="ScheduleGraphPage.init(ScheduleGraphEmployee._container)"><i class="fa-solid fa-angle-left"></i> Керування графіком
@@ -5525,12 +5933,39 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
 .sg-loc-bar { display:inline-block; }
 .sg-loc-tabs { display:flex;gap:4px;background:var(--bg-raised);border:1.5px solid var(--border);border-radius:14px;padding:4px;flex-wrap:wrap; }
 .sg-loc-tab {
-    padding:7px 16px;border-radius:10px;border:none;background:transparent;
+    padding:8px 16px;border-radius:10px;border:none;background:transparent;
     color:var(--text-muted);font-size:.85rem;font-weight:600;cursor:pointer;
-    transition:all .18s;display:flex;align-items:center;gap:5px;white-space:nowrap;
+    transition:all .18s;display:flex;flex-direction:column;align-items:flex-start;gap:3px;
 }
+.sge-tab-name { font-size:.85rem;font-weight:600; }
+.sge-tab-addr { font-size:.8rem;font-weight:500;opacity:1;color:var(--text-secondary);display:flex;align-items:center;gap:4px; }
 .sg-loc-tab:hover { background:var(--bg-hover);color:var(--text-primary); }
 .sg-loc-tab.active { background:var(--primary);color:#fff; }
+.sg-loc-tab.active .sge-tab-addr { color:#fff;opacity:.8; }
+.sge-sub-btn { display:inline-flex;align-items:center;gap:6px;padding:7px 16px;border-radius:20px;border:1.5px solid rgba(16,185,129,.4);background:rgba(16,185,129,.08);color:#10b981;font-size:.82rem;font-weight:600;cursor:pointer;transition:all .15s; }
+.sge-sub-btn:hover { background:rgba(16,185,129,.15);border-color:#10b981; }
+.sge-sub-box { max-width:520px;height:auto !important; }
+.sge-sub-legend { display:flex;gap:12px;margin:8px 0 12px;font-size:.75rem;color:var(--text-muted); }
+.sge-sub-legend-item { display:flex;align-items:center;gap:5px; }
+.sge-sub-grid { display:grid;grid-template-columns:repeat(7,1fr);gap:4px;max-height:300px;overflow-y:auto; }
+.sge-sub-day { border:1.5px solid var(--border);border-radius:8px;padding:6px 4px;text-align:center;cursor:pointer;transition:all .15s;user-select:none;position:relative; }
+.sge-sub-day:hover:not(.sge-sub-day-busy):not(.sge-sub-day-past) { border-color:var(--primary);background:color-mix(in srgb,var(--primary) 8%,transparent); }
+.sge-sub-day-selected { border-color:#10b981 !important;background:rgba(16,185,129,.12) !important; }
+.sge-sub-day-busy { opacity:.4;cursor:not-allowed;background:var(--bg-raised); }
+.sge-sub-day-past { opacity:.35;cursor:not-allowed; }
+.sge-sub-day-we { background:color-mix(in srgb,#ef4444 5%,transparent); }
+.sge-sub-day-marked { border-color:rgba(16,185,129,.5);background:rgba(16,185,129,.06); }
+.sge-sub-day-num { font-size:.82rem;font-weight:700;color:var(--text-primary); }
+.sge-sub-day-dow { font-size:.6rem;color:var(--text-muted); }
+.sge-sub-day-ico { font-size:.7rem;margin-top:2px; }
+/* Employee table view */
+.sge-my-row td { background:color-mix(in srgb,var(--primary) 4%,transparent); }
+.sge-my-row .sg-cell { cursor:pointer; }
+.sge-my-row .sg-cell:hover { background:color-mix(in srgb,var(--primary) 10%,transparent); }
+.sge-peer-row td { opacity:.75; }
+.sge-peer-cell { cursor:default !important; }
+.sge-th-today { background:color-mix(in srgb,var(--primary) 15%,var(--bg-raised)) !important;color:var(--primary) !important; }
+.sge-cell-today { background:color-mix(in srgb,var(--primary) 6%,transparent) !important; }
 
 .sge-wh-badge {
     display:inline-flex;align-items:center;gap:5px;
@@ -5660,6 +6095,169 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
 </style>`;
     },
 
+    _setQuickType(type) {
+        this._quickType = this._quickType === type ? null : type;
+        this._subMode = false;
+        this._render(this._container);
+    },
+
+    async _toggleSubMode() {
+        this._quickType = null;
+        this._showSubModal();
+    },
+
+    _showSubModal() {
+        document.getElementById('sge-sub-modal')?.remove();
+        const p = n => String(n).padStart(2,'0');
+        const days = new Date(this._year, this._month + 1, 0).getDate();
+        const today = new Date();
+        const todayStr = `${today.getFullYear()}-${p(today.getMonth()+1)}-${p(today.getDate())}`;
+
+        const dayCells = [];
+        for (let d = 1; d <= days; d++) {
+            const dateStr = `${this._year}-${p(this._month+1)}-${p(d)}`;
+            const dow = new Date(this._year, this._month, d).getDay();
+            const we  = dow === 0 || dow === 6;
+            const entry = this._entries[dateStr];
+            const hasShift = entry && !['__sub__','__needsub__'].includes(entry.notes) && entry.shift_type === 'work';
+            const isSubMarked = entry?.notes === '__sub__';
+            const isPast = dateStr < todayStr;
+
+            dayCells.push(`
+            <div class="sge-sub-day${hasShift?' sge-sub-day-busy':''}${isPast?' sge-sub-day-past':''}${we?' sge-sub-day-we':''}${isSubMarked?' sge-sub-day-marked':''}"
+                data-date="${dateStr}" data-busy="${hasShift?'1':'0'}" data-past="${isPast?'1':'0'}"
+                onclick="ScheduleGraphEmployee._toggleSubDay(this)"
+                title="${hasShift ? 'Вже є зміна в цей день' : isPast ? 'Минулий день' : 'Клікніть щоб позначити'}">
+                <div class="sge-sub-day-num">${d}</div>
+                <div class="sge-sub-day-dow">${['Нд','Пн','Вт','Ср','Чт','Пт','Сб'][dow]}</div>
+                ${hasShift ? '<div class="sge-sub-day-ico">⛔</div>' : isSubMarked ? '<div class="sge-sub-day-ico">🙋</div>' : ''}
+            </div>`);
+        }
+
+        const el = document.createElement('div');
+        el.id = 'sge-sub-modal';
+        el.className = 'sg-overlay';
+        el.innerHTML = `
+<div class="sg-modal sge-sub-box">
+    <div class="sg-mhdr">
+        <div>
+            <h3 style="margin:0;font-size:1.05rem">🙋 Можу вийти на заміну</h3>
+            <p style="margin:3px 0 0;color:var(--text-muted);font-size:.78rem">Оберіть дні коли готові вийти. Дні зі зміною недоступні.</p>
+        </div>
+        <button class="sg-mclose" onclick="document.getElementById('sge-sub-modal').remove()">✕</button>
+    </div>
+    <div class="sge-sub-legend">
+        <span class="sge-sub-legend-item"><span style="background:rgba(16,185,129,.2);border:2px solid #10b981;width:14px;height:14px;border-radius:4px;display:inline-block"></span> Обрано</span>
+        <span class="sge-sub-legend-item"><span style="background:var(--bg-raised);border:1px solid var(--border);width:14px;height:14px;border-radius:4px;display:inline-block;opacity:.4"></span> Зайнято</span>
+    </div>
+    <div class="sge-sub-grid">${dayCells.join('')}</div>
+    <div class="sg-modal-actions" style="margin-top:14px">
+        <button class="sg-btn-cancel" onclick="document.getElementById('sge-sub-modal').remove()">Скасувати</button>
+        <button class="sg-btn-save" onclick="ScheduleGraphEmployee._saveSubDays()">
+            <i class="fa-solid fa-paper-plane"></i> Надіслати керівнику
+        </button>
+    </div>
+</div>`;
+        document.body.appendChild(el);
+        el.addEventListener('click', e => { if (e.target === el) el.remove(); });
+    },
+
+    _toggleSubDay(el) {
+        if (el.dataset.busy === '1' || el.dataset.past === '1') return;
+        el.classList.toggle('sge-sub-day-selected');
+        const ico = el.querySelector('.sge-sub-day-ico');
+        if (el.classList.contains('sge-sub-day-selected')) {
+            if (!ico) el.insertAdjacentHTML('beforeend','<div class="sge-sub-day-ico">🙋</div>');
+        } else {
+            ico?.remove();
+        }
+    },
+
+    async _saveSubDays() {
+        const selected = [...document.querySelectorAll('.sge-sub-day-selected')].map(el => el.dataset.date);
+        if (!selected.length) { Toast.warning('Оберіть хоча б один день'); return; }
+        document.getElementById('sge-sub-modal')?.remove();
+
+        await Promise.all(selected.map(date => {
+            const entry = this._entries[date];
+            return supabase.from('schedule_entries').upsert({
+                location_id: this._locId,
+                user_id: AppState.user.id,
+                date,
+                shift_type: entry?.shift_type || 'work',
+                notes: '__sub__',
+                updated_by: AppState.user.id,
+                updated_at: new Date().toISOString()
+            }, { onConflict: 'location_id,user_id,date' });
+        }));
+
+        // Reload entries
+        await this._loadEntries();
+
+        // Notify managers
+        const managerIds = await this._getManagerIds();
+        const userName = AppState.profile?.full_name || 'Співробітник';
+        const datesLabel = selected.map(d => {
+            const dt = new Date(d + 'T00:00:00');
+            return dt.toLocaleDateString('uk-UA', { day:'numeric', month:'long' });
+        }).join(', ');
+
+        if (managerIds.length) {
+            await supabase.from('notifications').insert(
+                managerIds.map(uid => ({
+                    user_id: uid,
+                    title: '🙋 Готовий вийти на заміну',
+                    message: `${userName} може вийти на підміну: ${datesLabel}`,
+                    type: 'general',
+                    created_by: AppState.user.id,
+                    link: `scheduler?loc=${this._locId}`
+                }))
+            );
+        }
+
+        this._render(this._container);
+        Toast.success('Надіслано', `Позначено ${selected.length} дн${selected.length===1?'ь':'ів'}`);
+    },
+
+    async _markSubAvailable(date) {
+        const entry = this._entries[date];
+        const payload = {
+            location_id: this._locId,
+            user_id: AppState.user.id,
+            date,
+            shift_type: entry?.shift_type || 'work',
+            notes: entry?.notes === '__sub__' ? null : '__sub__',
+            updated_by: AppState.user.id,
+            updated_at: new Date().toISOString()
+        };
+        const { data, error } = await supabase.from('schedule_entries')
+            .upsert(payload, { onConflict: 'location_id,user_id,date' }).select().single();
+        if (error) { Toast.error('Помилка', error.message); return; }
+        this._entries[date] = data;
+
+        if (payload.notes === '__sub__') {
+            const managerIds = await this._getManagerIds();
+            const userName = AppState.profile?.full_name || 'Співробітник';
+            const dateLabel = new Date(date + 'T00:00:00').toLocaleDateString('uk-UA', { day:'numeric', month:'long' });
+            if (managerIds.length) {
+                await supabase.from('notifications').insert(
+                    managerIds.map(uid => ({
+                        user_id: uid,
+                        title: '🙋 Готовий вийти на заміну',
+                        message: `${userName} може вийти на підміну ${dateLabel}`,
+                        type: 'general',
+                        created_by: AppState.user.id,
+                        link: `scheduler?loc=${this._locId}&date=${date}`
+                    }))
+                );
+            }
+            Toast.success('Позначено', 'Керівник отримає сповіщення');
+        } else {
+            Toast.info('Пропозицію скасовано');
+        }
+        this._render(this._container);
+    },
+
     async _openCell(date) {
         const now = new Date();
         if (this._year < now.getFullYear() || (this._year === now.getFullYear() && this._month < now.getMonth())) {
@@ -5675,6 +6273,14 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
             Toast.error('Графік заблоковано', 'Зміни вносить тільки керівник');
             return;
         }
+        if (this._quickType) {
+            await ScheduleGraphPage._saveEntry(AppState.user.id, date, true, this._quickType);
+            return;
+        }
+        if (this._subMode) {
+            await this._markSubAvailable(date);
+            return;
+        }
         const info = this._managerHelpDates[date];
         if (info) {
             const conflictLoc = await ScheduleGraphPage._getWorkConflictLoc(
@@ -5685,6 +6291,87 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
         }
         const entry = this._entries[date];
         ScheduleGraphPage._showShiftModal(AppState.user.id, date, entry, AppState.profile, true);
+    },
+
+    _showEditRequestModal(date, entry) {
+        document.getElementById('sg-emp-req-modal')?.remove();
+        const shift = getShiftTypes()[entry.shift_type];
+        const dateLabel = new Date(date + 'T00:00:00').toLocaleDateString('uk-UA', { weekday:'long', day:'numeric', month:'long' });
+        const el = document.createElement('div');
+        el.id = 'sg-emp-req-modal';
+        el.className = 'sg-overlay';
+        el.innerHTML = `
+<div class="sg-modal sg-emp-req-box">
+    <div class="sg-mhdr">
+        <div>
+            <h3 style="margin:0;font-size:1.05rem">✏️ Запит на зміну</h3>
+            <p style="margin:3px 0 0;color:var(--text-muted);font-size:.8rem;text-transform:capitalize">${dateLabel}</p>
+        </div>
+        <button class="sg-mclose" onclick="document.getElementById('sg-emp-req-modal').remove()">✕</button>
+    </div>
+    <div style="margin:12px 0;padding:10px 14px;background:var(--bg-raised);border-radius:10px;display:flex;align-items:center;gap:10px">
+        <span class="sg-badge" style="background:${shift?.bg||'var(--bg-raised)'};color:${shift?.color||'var(--text-primary)'}">${shift?.short||'?'} ${shift?.label||entry.shift_type}</span>
+        <span style="font-size:.8rem;color:var(--text-muted)">${entry.shift_start && entry.shift_end ? entry.shift_start.slice(0,5)+' — '+entry.shift_end.slice(0,5) : ''}</span>
+    </div>
+    <p style="font-size:.82rem;color:var(--text-muted);margin:0 0 10px">Опишіть причину зміни або видалення — керівник отримає сповіщення та внесе правку.</p>
+    <textarea id="sg-emp-req-text" class="sg-notes" placeholder="Причина запиту..." rows="3" style="width:100%;box-sizing:border-box"></textarea>
+    <div class="sg-modal-actions" style="margin-top:12px">
+        <button class="sg-btn-cancel" onclick="document.getElementById('sg-emp-req-modal').remove()">Скасувати</button>
+        <button class="sg-btn-save" onclick="ScheduleGraphEmployee._sendEditRequest('${date}')">
+            <i class="fa-solid fa-paper-plane"></i> Надіслати запит
+        </button>
+    </div>
+</div>`;
+        document.body.appendChild(el);
+        el.addEventListener('click', e => { if (e.target === el) el.remove(); });
+        document.getElementById('sg-emp-req-text')?.focus();
+    },
+
+    async _sendEditRequest(date) {
+        const text = document.getElementById('sg-emp-req-text')?.value.trim();
+        if (!text) { Toast.warning('Вкажіть причину запиту'); return; }
+        document.getElementById('sg-emp-req-modal')?.remove();
+
+        const loc = this._assignments.find(a => a.locId === this._locId);
+        const managerIds = await this._getManagerIds();
+        const userName = AppState.profile?.full_name || 'Співробітник';
+        const dateLabel = new Date(date + 'T00:00:00').toLocaleDateString('uk-UA', { day:'numeric', month:'long' });
+        const entry = this._entries[date];
+
+        await Promise.all([
+            // Notifications to managers
+            managerIds.length ? supabase.from('notifications').insert(
+                managerIds.map(uid => ({
+                    user_id: uid,
+                    title: '✏️ Запит на зміну графіку',
+                    message: `${userName} просить змінити запис на ${dateLabel}${loc ? ` (${loc.locName})` : ''}: «${text}»`,
+                    type: 'general',
+                    created_by: AppState.user.id,
+                    link: `scheduler?loc=${loc ? loc.locId : ''}&date=${date}`
+                }))
+            ) : Promise.resolve(),
+            // Log the request in schedule_log
+            loc ? supabase.from('schedule_log').insert({
+                location_id:   loc.locId,
+                user_id:       AppState.user.id,
+                date:          date,
+                employee_name: userName,
+                old_value:     entry ? { shift_type: entry.shift_type, shift_start: entry.shift_start, shift_end: entry.shift_end } : null,
+                new_value:     { request: true, message: text },
+                changed_by:    AppState.user.id,
+                changed_at:    new Date().toISOString()
+            }) : Promise.resolve()
+        ]);
+
+        Toast.success('Запит надіслано', 'Керівник отримає сповіщення');
+    },
+
+    async _getManagerIds() {
+        const locIds = this._assignments.map(a => a.locId).filter(Boolean);
+        if (!locIds.length) return [];
+        const { data } = await supabase.from('schedule_locations')
+            .select('created_by').in('id', locIds);
+        return [...new Set((data || []).map(l => l.created_by).filter(Boolean))];
     },
 
     _showMgrHelpResponseModal(date, info, conflictLoc) {

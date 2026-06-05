@@ -198,10 +198,151 @@ const UI = {
                 schema: 'public',
                 table: 'notifications',
                 filter: `user_id=eq.${AppState.user.id}`
-            }, () => {
+            }, (payload) => {
                 this.updateNotificationBadge(1);
+                const n = payload.new;
+                if (n?.title?.includes('Запит на зміну')) {
+                    UI._showScheduleRequestPopup(n);
+                } else if (n?.title?.includes('Зміну в графіку')) {
+                    UI._showScheduleUpdatePopup(n);
+                } else if (n?.title?.includes('Готовий вийти на заміну')) {
+                    UI._showSubAvailablePopup(n);
+                }
             })
             .subscribe();
+    },
+
+    _openSchedulerRequest(link) {
+        if (!link) { Router.go('scheduler'); return; }
+        const url = new URL('http://x?' + link.replace('scheduler?', ''));
+        const locId = url.searchParams.get('loc');
+        const date  = url.searchParams.get('date');
+        Router.go('scheduler');
+        setTimeout(() => {
+            if (locId && typeof ScheduleGraphPage !== 'undefined') {
+                ScheduleGraphPage._selectLocation(locId);
+                if (date) {
+                    setTimeout(() => UI._highlightScheduleCell(date), 800);
+                }
+            }
+        }, 600);
+    },
+
+    _highlightScheduleCell(date) {
+        const cells = document.querySelectorAll(`.sg-cell[data-date="${date}"]`);
+        cells.forEach(cell => {
+            cell.classList.add('sg-cell-highlight');
+            cell.dataset.highlightDate = date;
+            const clear = () => {
+                cell.classList.remove('sg-cell-highlight');
+                cell.removeEventListener('click', clear);
+            };
+            cell.addEventListener('click', clear);
+        });
+        cells[0]?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+    },
+
+    _showScheduleUpdatePopup(n) {
+        document.getElementById('sg-upd-popup')?.remove();
+        const isDelete = n.title?.includes('видалено');
+        const el = document.createElement('div');
+        el.id = 'sg-upd-popup';
+        el.style.cssText = `
+            position:fixed;bottom:24px;right:24px;z-index:9999;
+            background:var(--bg-surface);border:1px solid var(--border);
+            border-left:4px solid ${isDelete ? '#ef4444' : '#10b981'};border-radius:14px;
+            padding:16px 18px;max-width:360px;
+            box-shadow:0 8px 32px rgba(0,0,0,.18);
+            animation:fadeSlideUp .25s cubic-bezier(.16,1,.3,1);
+        `;
+        el.innerHTML = `
+            <div style="display:flex;align-items:flex-start;gap:10px">
+                <div style="width:36px;height:36px;border-radius:50%;background:${isDelete ? 'rgba(239,68,68,.12)' : 'rgba(16,185,129,.12)'};color:${isDelete ? '#ef4444' : '#10b981'};display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0">${isDelete ? '🗑️' : '✅'}</div>
+                <div style="flex:1;min-width:0">
+                    <div style="font-weight:700;font-size:.88rem;color:var(--text-primary);margin-bottom:4px">${Fmt.esc(n.title || '')}</div>
+                    <div style="font-size:.78rem;color:var(--text-muted);line-height:1.4">${Fmt.esc(n.message || '')}</div>
+                    <div style="display:flex;gap:8px;margin-top:10px">
+                        <button onclick="Router.go('schedule-graph?view=employee');document.getElementById('sg-upd-popup')?.remove()"
+                            style="flex:1;padding:6px 10px;border-radius:8px;border:none;background:var(--primary);color:#fff;font-size:.78rem;font-weight:600;cursor:pointer">
+                            Мій графік
+                        </button>
+                        <button onclick="document.getElementById('sg-upd-popup').remove()"
+                            style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text-muted);font-size:.78rem;cursor:pointer">
+                            Закрити
+                        </button>
+                    </div>
+                </div>
+            </div>`;
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 15000);
+    },
+
+    _showSubAvailablePopup(n) {
+        const id = 'sg-sub-popup-' + Date.now();
+        const el = document.createElement('div');
+        el.id = id;
+        el.style.cssText = `
+            position:fixed;bottom:${24 + document.querySelectorAll('[id^=sg-sub-popup]').length * 96}px;right:24px;z-index:9999;
+            background:var(--bg-surface);border:1px solid var(--border);
+            border-left:4px solid #10b981;border-radius:14px;
+            padding:16px 18px;max-width:360px;
+            box-shadow:0 8px 32px rgba(0,0,0,.18);
+            animation:fadeSlideUp .25s cubic-bezier(.16,1,.3,1);
+        `;
+        el.innerHTML = `
+            <div style="display:flex;align-items:flex-start;gap:10px">
+                <div style="width:36px;height:36px;border-radius:50%;background:rgba(16,185,129,.12);color:#10b981;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0">🙋</div>
+                <div style="flex:1;min-width:0">
+                    <div style="font-weight:700;font-size:.88rem;color:var(--text-primary);margin-bottom:4px">${Fmt.esc(n.title || '')}</div>
+                    <div style="font-size:.78rem;color:var(--text-muted);line-height:1.4">${Fmt.esc(n.message || '')}</div>
+                    <div style="display:flex;gap:8px;margin-top:10px">
+                        <button onclick="UI._openSchedulerRequest(${JSON.stringify(n.link||'').replace(/"/g,'&quot;')});document.getElementById('${id}')?.remove()"
+                            style="flex:1;padding:6px 10px;border-radius:8px;border:none;background:#10b981;color:#fff;font-size:.78rem;font-weight:600;cursor:pointer">
+                            Відкрити графік
+                        </button>
+                        <button onclick="document.getElementById('${id}').remove()"
+                            style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text-muted);font-size:.78rem;cursor:pointer">
+                            Закрити
+                        </button>
+                    </div>
+                </div>
+            </div>`;
+        document.body.appendChild(el);
+        // No auto-close — persists until manager reads it
+    },
+
+    _showScheduleRequestPopup(n) {
+        document.getElementById('sg-req-popup')?.remove();
+        const el = document.createElement('div');
+        el.id = 'sg-req-popup';
+        el.style.cssText = `
+            position:fixed;bottom:24px;right:24px;z-index:9999;
+            background:var(--bg-surface);border:1px solid var(--border);
+            border-left:4px solid #f59e0b;border-radius:14px;
+            padding:16px 18px;max-width:360px;
+            box-shadow:0 8px 32px rgba(0,0,0,.18);
+            animation:fadeSlideUp .25s cubic-bezier(.16,1,.3,1);
+        `;
+        el.innerHTML = `
+            <div style="display:flex;align-items:flex-start;gap:10px">
+                <div style="width:36px;height:36px;border-radius:50%;background:rgba(245,158,11,.12);color:#f59e0b;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0">✏️</div>
+                <div style="flex:1;min-width:0">
+                    <div style="font-weight:700;font-size:.88rem;color:var(--text-primary);margin-bottom:4px">${Fmt.esc(n.title || '')}</div>
+                    <div style="font-size:.78rem;color:var(--text-muted);line-height:1.4">${Fmt.esc(n.message || '')}</div>
+                    <div style="display:flex;gap:8px;margin-top:10px">
+                        <button onclick="UI._openSchedulerRequest(${JSON.stringify(n.link||'').replace(/"/g,'&quot;')});document.getElementById('sg-req-popup')?.remove()"
+                            style="flex:1;padding:6px 10px;border-radius:8px;border:none;background:var(--primary);color:#fff;font-size:.78rem;font-weight:600;cursor:pointer">
+                            Відкрити графік
+                        </button>
+                        <button onclick="document.getElementById('sg-req-popup').remove()"
+                            style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text-muted);font-size:.78rem;cursor:pointer">
+                            Закрити
+                        </button>
+                    </div>
+                </div>
+            </div>`;
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 15000);
     },
 
     updateNotificationBadge(delta, reset = false) {
@@ -468,7 +609,7 @@ const UI = {
         if (role === 'manager') {
             return [
                 { title: 'Навчання',   items: contentItems },
-                { title: 'Управління', items: [ schedulerItem, myCalendarItem ] },
+                { title: 'Управління', items: [ schedulerItem ] },
                 { title: 'Особисте',   items: [ contactsItem, bmItem ] }
             ];
         }

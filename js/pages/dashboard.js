@@ -155,13 +155,16 @@ const DashboardPage = {
             .db-course-body{padding:.75rem}
             .db-course-name{font-size:.82rem;font-weight:600;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:.5rem}
 
-            .db-main-grid{display:grid;grid-template-columns:1fr 300px;grid-template-rows:auto 1fr;gap:clamp(.5rem,.75vw,.85rem);margin-bottom:1.5rem;min-width:0;width:100%}
+            .db-main-grid{display:grid;grid-template-columns:1fr 380px;grid-template-rows:auto 1fr;gap:clamp(.5rem,.75vw,.85rem);margin-bottom:1.5rem;min-width:0;width:100%}
             .db-content-cols{display:flex;flex-direction:row;flex-wrap:wrap;gap:clamp(.5rem,.75vw,.85rem);align-items:start;min-width:0}
             .db-content-cols>*{flex:0 0 auto}
             .db-cal-col{grid-column:2;grid-row:1/3;display:flex;flex-direction:column;gap:.75rem;min-width:0;width:100%}
             .db-recent-row{grid-column:1;grid-row:2;min-width:0}
-            @media(max-width:1200px){
-                .db-main-grid{grid-template-columns:1fr 260px}
+            @media(max-width:1400px) and (min-width:1281px){
+                .db-main-grid{grid-template-columns:1fr 360px}
+            }
+            @media(max-width:1280px){
+                .db-main-grid{grid-template-columns:1fr 320px}
             }
             @media(max-width:1000px){
                 .db-main-grid{grid-template-columns:1fr;grid-template-rows:auto}
@@ -195,7 +198,7 @@ const DashboardPage = {
             .db-news-row-title{font-size:.8rem;font-weight:500;color:var(--text-primary);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
             .db-news-row-date{font-size:.65rem;color:var(--text-muted);flex-shrink:0}
             .db-news-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:.4rem;color:var(--text-muted);font-size:.82rem}
-            .db-alc-w{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden;height:320px;width:400px;max-width:100%;display:flex;flex-direction:column;position:relative}
+            .db-alc-w{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden;height:320px;width:350px;max-width:100%;display:flex;flex-direction:column;position:relative}
             .db-alc-w::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--alc-accent,var(--primary));z-index:1}
             .db-alc-head{padding:.7rem 1rem .7rem 1rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;background:linear-gradient(120deg,color-mix(in srgb,var(--alc-accent,var(--primary)) 10%,var(--bg-surface)),var(--bg-surface));position:relative;overflow:hidden}
             .db-alc-head::after{content:'';position:absolute;right:-18px;top:50%;transform:translateY(-50%);width:70px;height:70px;border-radius:50%;background:color-mix(in srgb,var(--alc-accent,var(--primary)) 7%,transparent);pointer-events:none}
@@ -233,7 +236,7 @@ const DashboardPage = {
             .db-alc-more-row{padding:.5rem 1rem;font-size:.75rem;color:var(--primary);cursor:pointer;text-align:center}
             .db-alc-more-row:hover{background:var(--bg-raised)}
             .db-cal-w{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden}
-            .db-cwrap{padding:1rem 1.1rem .75rem}
+            .db-cwrap{padding:1rem 1.4rem .75rem}
             .db-cnav{display:flex;align-items:center;justify-content:space-between;margin-bottom:.85rem}
             .db-cnav-left{display:flex;flex-direction:column;gap:.05rem}
             .db-cnav-title{font-size:.95rem;font-weight:700;color:var(--text-primary)}
@@ -243,7 +246,7 @@ const DashboardPage = {
             .db-cnav-btn:hover{background:rgba(99,102,241,.1);border-color:rgba(99,102,241,.4);color:var(--primary)}
             .db-cgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px}
             .db-cdow{font-size:.6rem;font-weight:600;color:var(--text-muted);text-align:center;padding:.15rem 0 .4rem;letter-spacing:.02em}
-            .db-cday{width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:50%;font-size:.75rem;font-weight:500;color:var(--text-primary);cursor:pointer;transition:all .15s;margin:1px auto}
+            .db-cday{width:36px;height:36px;display:flex;align-items:center;justify-content:center;border-radius:50%;font-size:.75rem;font-weight:500;color:var(--text-primary);cursor:pointer;transition:all .15s;margin:1px auto}
             .db-cday:hover:not(.db-today):not(.db-othm){background:rgba(99,102,241,.08)}
             .db-today{background:var(--primary);color:#fff;font-weight:700;box-shadow:0 3px 12px rgba(99,102,241,.4)}
             .db-has-ev:not(.db-today){background:rgba(99,102,241,.13);color:var(--primary);font-weight:600}
@@ -275,19 +278,56 @@ const DashboardPage = {
             .db-cup-name{font-size:.78rem;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
             .db-cup-chip{display:inline-flex;align-items:center;gap:.25rem;font-size:.65rem;font-weight:500;padding:.1rem .4rem;border-radius:999px;margin-top:.15rem}
             .db-cup-chip-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
-        </style>
 
-        <!-- ── Welcome hero ── -->
-        <div id="db-welcome"></div>
+            /* ── Стрічка новин ── */
+            .dbf-wrap{width:100%;margin-bottom:.85rem}
+            .dbf-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:.85rem}
+            .dbf-head-title{font-size:1rem;font-weight:700;color:var(--text-primary)}
+            .dbf-head-link{font-size:.78rem;color:var(--primary);cursor:pointer}
+            .dbf-card{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden;margin-bottom:.85rem;transition:box-shadow .2s}
+            .dbf-card:hover{box-shadow:0 4px 20px rgba(0,0,0,.1)}
+            .dbf-card-head{display:flex;align-items:center;justify-content:space-between;padding:.85rem 1rem .55rem}
+            .dbf-author{display:flex;align-items:center;gap:.65rem}
+            .dbf-ava{width:40px;height:40px;border-radius:50%;flex-shrink:0;background:linear-gradient(135deg,rgba(99,102,241,.25),rgba(139,92,246,.25));display:flex;align-items:center;justify-content:center;font-size:.82rem;font-weight:800;color:var(--primary);border:2px solid rgba(99,102,241,.2)}
+            .dbf-ava img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
+            .dbf-author-name{font-size:.88rem;font-weight:700;color:var(--text-primary);line-height:1.3}
+            .dbf-author-meta{font-size:.72rem;color:var(--text-muted);display:flex;align-items:center;gap:.3rem}
+            .dbf-author-meta-dot{width:3px;height:3px;border-radius:50%;background:var(--text-muted);flex-shrink:0}
+            .dbf-more{width:28px;height:28px;border-radius:50%;border:none;background:none;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.8rem;transition:background .15s}
+            .dbf-more:hover{background:var(--bg-raised)}
+            .dbf-text{padding:0 1rem .5rem;margin-top:-.2rem;font-size:.85rem;color:var(--text-primary);line-height:1.55;cursor:pointer;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;position:relative;z-index:1}
+            .dbf-img{width:100%;height:230px;display:block;cursor:pointer;position:relative;overflow:hidden;flex-shrink:0}
+            .dbf-actions{display:flex;align-items:center;padding:.1rem .5rem;border-top:1px solid var(--border)}
+            .dbf-react-bar{display:flex;align-items:center;gap:.15rem;padding:.45rem .5rem;flex:1}
+            .dbf-emoji-btn{background:none;border:none;cursor:pointer;font-size:1.05rem;border-radius:8px;padding:.22rem .3rem;transition:transform .15s,background .15s;line-height:1}
+            .dbf-emoji-btn:hover{transform:scale(1.3);background:var(--bg-raised)}
+            .dbf-emoji-btn.active{background:rgba(99,102,241,.12)}
+            .dbf-emoji-count{font-size:.68rem;color:var(--text-muted);font-weight:700;margin-left:1px;vertical-align:middle}
+            .dbf-read-btn{background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.2);cursor:pointer;font-size:.75rem;font-weight:600;color:var(--primary);padding:.3rem .75rem;border-radius:999px;display:flex;align-items:center;gap:.35rem;transition:all .15s;white-space:nowrap;flex-shrink:0}
+            .dbf-read-btn:hover{background:rgba(99,102,241,.18);border-color:rgba(99,102,241,.4)}
+            .dbf-card-unread{border-left:3px solid var(--primary);background:color-mix(in srgb,var(--primary) 4%,var(--bg-surface))}
+            @keyframes dbf-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.85)}}
+            .dbf-unread-dot{width:8px;height:8px;border-radius:50%;background:var(--primary);flex-shrink:0;animation:dbf-pulse 1.8s ease-in-out infinite;box-shadow:0 0 6px rgba(99,102,241,.6)}
+            .dbf-card-hidden{display:none}
+            .dbf-more-btn{width:100%;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);padding:.6rem 1rem;font-size:.82rem;font-weight:600;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.45rem;transition:background .15s,color .15s;font-family:inherit}
+            .dbf-more-btn:hover{background:var(--bg-raised);color:var(--primary)}
+        </style>
 
         <!-- ── Birthdays ── -->
         <div id="db-birthdays"></div>
 
-        <!-- ── Main grid: [docs | notif | news] | calendar / carousel ── -->
+        <!-- ── Main grid: [left: welcome+docs+notif | right: calendar] ── -->
         <div class="db-main-grid">
-            <div class="db-content-cols">
-                <div id="db-alerts-docs"></div>
-                <div id="db-alerts-notif"></div>
+            <div class="db-left-col">
+                <div id="db-welcome"></div>
+                <div class="db-left-body">
+                    <div id="db-feed"></div>
+                    <div class="db-left-divider"></div>
+                    <div class="db-right-panels">
+                        <div id="db-alerts-docs"></div>
+                        <div id="db-alerts-notif"></div>
+                    </div>
+                </div>
             </div>
             <div class="db-cal-col">
                 <div id="db-cal-tour-target">
@@ -311,7 +351,7 @@ const DashboardPage = {
 
         const [enrollments, newsRes, birthdays, recentNotifs, calEvents, scheduleEntries] = await Promise.all([
             API.enrollments.getMyEnrollments().catch(() => []),
-            API.news.getAll({ published: true, pageSize: 5 }).catch(() => ({ data: [] })),
+            API.news.getAll({ published: true, pageSize: 10 }).catch(() => ({ data: [] })),
             API.birthdays.getToday().catch(() => []),
             API.notifications.getMine().then(all => all.filter(n => !n.is_read)).catch(() => []),
             supabase.from('personal_cal_events')
@@ -346,6 +386,7 @@ const DashboardPage = {
         UI._setNotificationBadge(recentNotifs.length);
         this._renderBirthdays(birthdays);
         CompanyBirthdayModal._initDashboardChat();
+        this._renderFeed(newsRes.data || []);
 
         // Показати головну новину один раз за сесію (якщо не відхилено назавжди)
         const featured = (newsRes.data || []).find(n => n.is_featured || n.is_pinned);
@@ -368,6 +409,153 @@ const DashboardPage = {
 
         // Тур для нових користувачів (запускаємо після рендеру)
         setTimeout(() => this._startTour(), 1800);
+    },
+
+    async _renderFeed(news) {
+        const el = document.getElementById('db-feed');
+        if (!el) return;
+        if (!news.length) { el.innerHTML = ''; return; }
+
+        const EMOJIS = ['👍','❤️','😂','😮','😢','🔥'];
+        const _timeAgo = iso => {
+            const diff = (Date.now() - new Date(iso)) / 1000;
+            if (diff < 60)   return 'щойно';
+            if (diff < 3600) return `${Math.floor(diff/60)} хв тому`;
+            if (diff < 86400) return `${Math.floor(diff/3600)} год тому`;
+            return `${Math.floor(diff/86400)} д тому`;
+        };
+        const _initials = name => {
+            if (!name) return '?';
+            return name.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase();
+        };
+
+        const visible = news.slice(0, 1);
+        const hidden  = news.slice(1, 3);
+
+        const readIds = await API.news.getReadIds(news.slice(0,3).map(n => n.id)).catch(() => new Set());
+
+        const _goNews = id => `API.news.markRead('${id}').catch(()=>{});Router.go('news/${id}?from=dashboard')`;
+
+        const _card = (n, collapsed = false) => {
+            const isUnread = !readIds.has(n.id);
+            const imgPos = n.thumbnail_position || 'center';
+            const imgHtml = n.thumbnail_url
+                ? `<div class="dbf-img" onclick="${_goNews(n.id)}" style="position:relative;overflow:hidden;background:#0f0c29">
+                    <div style="position:absolute;inset:-10px;background-image:url('${Fmt.safeUrl(n.thumbnail_url)}');background-size:cover;background-position:${Fmt.esc(imgPos)} center;filter:blur(12px) brightness(.45);transform:scale(1.05)"></div>
+                    <div style="position:absolute;inset:0;background-image:url('${Fmt.safeUrl(n.thumbnail_url)}');background-size:contain;background-repeat:no-repeat;background-position:center center;z-index:1"></div>
+                   </div>`
+                : '';
+            const excerptText = n.excerpt ? Fmt.esc(n.excerpt) : '';
+            const authorName = Fmt.esc(n.author?.full_name || 'Редакція');
+            const dept = n.author?.subdivision ? ` <span class="dbf-author-meta-dot"></span> ${Fmt.esc(n.author.subdivision)}` : '';
+            const timeStr = Fmt.esc(_timeAgo(n.published_at || n.created_at));
+            const emojiBtns = EMOJIS.map(e =>
+                `<button class="dbf-emoji-btn" id="dbf-e-${n.id}-${e.codePointAt(0)}"
+                    onclick="event.stopPropagation();DashboardPage._toggleFeedEmoji('${n.id}','${e}',this)"
+                    title="${e}"><span>${e}</span><span class="dbf-emoji-count" id="dbf-ec-${n.id}-${e.codePointAt(0)}"></span></button>`
+            ).join('');
+            return `
+            <div class="dbf-card${collapsed ? ' dbf-card-hidden' : ''}${isUnread ? ' dbf-card-unread' : ''}" onclick="${_goNews(n.id)}" style="cursor:pointer">
+                <div class="dbf-card-head">
+                    <div class="dbf-author">
+                        <div class="dbf-ava">${n.author?.avatar_url
+                            ? `<img src="${Fmt.safeUrl(n.author.avatar_url)}" alt="">`
+                            : _initials(n.author?.full_name)}</div>
+                        <div>
+                            <div class="dbf-author-name">${authorName}</div>
+                            <div class="dbf-author-meta">${timeStr}${dept}</div>
+                        </div>
+                    </div>
+                    ${isUnread ? '<span class="dbf-unread-dot"></span>' : ''}
+                </div>
+                ${excerptText ? `<div class="dbf-text">${excerptText}</div>` : ''}
+                ${imgHtml}
+                <div class="dbf-actions" onclick="event.stopPropagation()">
+                    <div class="dbf-react-bar" id="dbf-reactions-${n.id}">${emojiBtns}</div>
+                    <button class="dbf-read-btn" onclick="${_goNews(n.id)}">
+                        <i class="fa-regular fa-eye"></i> Читати
+                    </button>
+                </div>
+            </div>`;
+        };
+
+        const moreBtn = hidden.length ? `
+            <button class="dbf-more-btn" id="dbf-more-btn" onclick="DashboardPage._expandFeed()">
+                <i class="fa-solid fa-chevron-down"></i> Ще ${hidden.length} новини
+            </button>` : '';
+
+        const collapsed = false;
+        el.innerHTML = `
+        <div class="dbf-wrap">
+            <div class="dbf-head">
+                <span class="dbf-head-title">Стрічка новин</span>
+                <span class="dbf-head-link" onclick="Router.go('news')">Всі новини →</span>
+            </div>
+            ${visible.map(n => _card(n)).join('')}
+            <div id="dbf-body" class="dbf-body${collapsed ? ' dbf-body-hidden' : ''}">
+                ${hidden.map(n => _card(n, true)).join('')}
+                ${moreBtn}
+            </div>
+        </div>`;
+
+        news.slice(0, 3).forEach(n => this._loadFeedReactions(n.id));
+    },
+
+
+    _expandFeed() {
+        document.querySelectorAll('.dbf-card-hidden').forEach(c => {
+            c.classList.remove('dbf-card-hidden');
+            c.style.animation = 'dbw-in .3s ease both';
+        });
+        const btn = document.getElementById('dbf-more-btn');
+        if (btn) {
+            btn.id = 'dbf-less-btn';
+            btn.innerHTML = '<i class="fa-solid fa-chevron-up"></i> Згорнути';
+            btn.onclick = () => DashboardPage._collapseFeed();
+        }
+    },
+
+    _collapseFeed() {
+        document.querySelectorAll('#dbf-body .dbf-card').forEach(c => {
+            c.classList.add('dbf-card-hidden');
+        });
+        const btn = document.getElementById('dbf-less-btn');
+        if (btn) {
+            btn.id = 'dbf-more-btn';
+            const count = document.querySelectorAll('#dbf-body .dbf-card-hidden').length;
+            btn.innerHTML = `<i class="fa-solid fa-chevron-down"></i> Ще ${count} новини`;
+            btn.onclick = () => DashboardPage._expandFeed();
+        }
+    },
+
+    async _loadFeedReactions(newsId) {
+        try {
+            const { all, mine } = await API.news.getEmojiReactions(newsId);
+            const counts = {};
+            (all || []).forEach(r => { counts[r.emoji] = (counts[r.emoji] || 0) + 1; });
+            const myEmoji = mine?.emoji;
+            Object.entries(counts).forEach(([emoji, count]) => {
+                const key = emoji.codePointAt(0);
+                const countEl = document.getElementById(`dbf-ec-${newsId}-${key}`);
+                const btn = document.getElementById(`dbf-e-${newsId}-${key}`);
+                if (countEl) countEl.textContent = count > 0 ? count : '';
+                if (btn && emoji === myEmoji) btn.classList.add('active');
+            });
+        } catch(_) {}
+    },
+
+    async _toggleFeedEmoji(newsId, emoji, btn) {
+        const wasActive = btn.classList.contains('active');
+        // Знімаємо всі активні в цій картці
+        const key = emoji.codePointAt(0);
+        document.querySelectorAll(`[id^="dbf-e-${newsId}-"]`).forEach(b => b.classList.remove('active'));
+        try {
+            await API.news.toggleEmoji(newsId, emoji);
+            if (!wasActive) btn.classList.add('active');
+            await this._loadFeedReactions(newsId);
+        } catch(e) {
+            Toast.error('Помилка', e.message);
+        }
     },
 
     async _requestIpAccess() {
@@ -1744,27 +1932,41 @@ const DashboardPage = {
         el.innerHTML = `
         <style>
             @keyframes dbw-in{0%{opacity:0;transform:translateY(-6px)}100%{opacity:1;transform:translateY(0)}}
-            .db-welcome-bar{display:flex;align-items:center;gap:1rem;padding:.75rem 1.25rem;
-                background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);
-                margin-bottom:0.85rem;border-left:4px solid ${accent};
+            .db-welcome-bar{display:flex;align-items:center;gap:.75rem;padding:.45rem 1rem;
+                background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);
+                margin-bottom:0.6rem;border-left:3px solid ${accent};
                 box-shadow:var(--shadow-sm);animation:dbw-in .3s ease both;flex-wrap:wrap;
-                position:relative;overflow:hidden}
+                position:relative;overflow:hidden;
+            }
+            .db-left-col{display:flex;flex-direction:column;min-width:0}
+            .db-left-body{display:flex;flex-direction:column;gap:clamp(.5rem,.75vw,.85rem);min-width:0}
+            .db-left-divider{width:1px;background:var(--border);align-self:stretch;flex-shrink:0;margin:0 2rem;display:none}
+            .db-right-panels{display:flex;flex-direction:column;gap:clamp(.5rem,.75vw,.85rem);flex:1;min-width:0;padding-left:1rem}
+            @media(min-width:1001px){
+                .db-left-body{display:grid;grid-template-columns:1fr 1px 1fr;gap:0;align-items:flex-start}
+                .db-left-divider{display:block}
+                .db-right-panels{padding-left:2.5rem}
+            }
+            @media(min-width:1600px){
+                .db-left-body{grid-template-columns:600px 1px 1fr}
+                .db-right-panels{padding-left:4rem}
+            }
             .dbw-deco{position:absolute;right:0;top:0;height:100%;width:min(65%,620px);pointer-events:none;flex-shrink:0}
-            .dbw-ava{width:36px;height:36px;border-radius:50%;overflow:hidden;flex-shrink:0;
+            .dbw-ava{width:28px;height:28px;border-radius:50%;overflow:hidden;flex-shrink:0;
                 background:${accent};display:flex;align-items:center;justify-content:center}
-            .dbw-greet{font-size:.8rem;color:var(--text-muted);flex-shrink:0}
+            .dbw-greet{font-size:.75rem;color:var(--text-muted);flex-shrink:0}
             .dbw-greet strong{color:var(--text-primary);font-weight:700}
-            .dbw-sep{width:1px;height:20px;background:var(--border);flex-shrink:0}
+            .dbw-sep{width:1px;height:16px;background:var(--border);flex-shrink:0}
             .dbw-course-block{display:flex;flex-direction:column;min-width:0}
-            .dbw-course-hint{font-size:.68rem;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;line-height:1}
-            .dbw-course-name{font-size:.82rem;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:clamp(140px,18vw,260px)}
-            .dbw-pbar-wrap{display:flex;align-items:center;gap:.5rem;flex-shrink:0}
-            .dbw-pbar{width:clamp(60px,8vw,100px);height:5px;background:var(--bg-raised);border-radius:3px;overflow:hidden;flex-shrink:0}
+            .dbw-course-hint{font-size:.62rem;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;line-height:1}
+            .dbw-course-name{font-size:.78rem;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:clamp(140px,18vw,260px)}
+            .dbw-pbar-wrap{display:flex;align-items:center;gap:.4rem;flex-shrink:0}
+            .dbw-pbar{width:clamp(60px,8vw,90px);height:4px;background:var(--bg-raised);border-radius:3px;overflow:hidden;flex-shrink:0}
             .dbw-pbar-fill{height:100%;border-radius:3px;transition:width .6s ease}
-            .dbw-pct{font-size:.72rem;font-weight:700;color:var(--text-muted);min-width:26px}
-            .dbw-btn{display:inline-flex;align-items:center;gap:.35rem;background:var(--ac,${accent});
-                border:none;border-radius:var(--radius-md);color:#fff;padding:.38rem .85rem;
-                font-size:.78rem;font-weight:700;cursor:pointer;font-family:inherit;
+            .dbw-pct{font-size:.68rem;font-weight:700;color:var(--text-muted);min-width:26px}
+            .dbw-btn{display:inline-flex;align-items:center;gap:.3rem;background:var(--ac,${accent});
+                border:none;border-radius:var(--radius-sm);color:#fff;padding:.28rem .7rem;
+                font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit;
                 transition:opacity .15s,transform .1s;flex-shrink:0;white-space:nowrap}
             .dbw-btn:hover{opacity:.88;transform:translateY(-1px)}
             .dbw-btn:active{transform:translateY(0)}
@@ -1941,11 +2143,11 @@ const DashboardPage = {
     },
 
     async _openNewsModal(id) {
+
         let n = this._newsCache[id];
         if (!n) {
             try {
-                const { data } = await API.news.getById(id);
-                n = data;
+                n = await API.news.getById(id);
                 this._newsCache[id] = n;
             } catch(e) { Toast.error('Помилка завантаження новини'); return; }
         }

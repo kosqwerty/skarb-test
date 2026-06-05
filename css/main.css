@@ -3402,4 +3402,110 @@ select {
 .ht-card-ack{margin-top:auto;width:100%;padding:.28rem;border-radius:var(--radius-sm);border:1.5px solid var(--primary);background:transparent;color:var(--primary);font-size:.7rem;font-weight:600;cursor:pointer;transition:background .15s,color .15s;display:flex;align-items:center;justify-content:center;gap:.3rem;font-family:inherit}
 .ht-card-ack:hover{background:var(--primary);color:#fff}
 
+/* ══════════════════════════════════════════════════════════════════
+   RESPONSIVE — Multi-resolution support
+   1920×1080 · 1440×900 · 1280×1024 · mobile 2400×1080
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ── 1920×1080: більший padding ── */
+@media (min-width: 1600px) {
+    .page-content {
+        padding-left: 2rem;
+        padding-right: 2rem;
+    }
+}
+
+/* ── 1440×900 ── */
+@media (max-width: 1440px) and (min-width: 1281px) {
+    :root { --sidebar-w: 220px; }
+    .page-content { padding: .85rem; }
+}
+
+/* ── 1280×1024: стискаємо сайдбар ── */
+@media (max-width: 1280px) and (min-width: 1025px) {
+    :root { --sidebar-w: 200px; }
+    .page-content { padding: .75rem; }
+    .top-bar { padding: 0 1rem; }
+    .tb-user-name { max-width: 130px; }
+}
+
+/* ── Загальний планшет 1024px ── */
+@media (max-width: 1024px) {
+    :root { --sidebar-w: 235px; }
+
+    .page-content { padding: .75rem; }
+
+    /* Таблиці — горизонтальний скрол замість overflow */
+    .table-wrap, .table-responsive { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+    /* Картки в гриді — 2 колонки */
+    .course-grid { grid-template-columns: repeat(2, 1fr) !important; }
+}
+
+/* ══ MOBILE ≤768px ══ */
+@media (max-width: 768px) {
+
+    /* Сайдбар — drawer поверх контенту */
+    .sidebar { transform: translateX(-100%); z-index: 300; top: 56px; height: calc(100vh - 56px); transition: transform .25s ease; }
+    .sidebar.open { transform: translateX(0); box-shadow: 4px 0 24px rgba(0,0,0,.4); }
+    .main-wrapper { margin-left: 0 !important; }
+
+    /* Топбар */
+    .top-bar { padding: 0 .75rem; height: 56px; }
+    .main-wrapper { margin-top: 56px; }
+    .top-bar-left { gap: .35rem; }
+    .tb-user-info { display: none; }
+    .tb-user { padding: .25rem; border: none; background: none !important; }
+
+    /* Контент */
+    .page-content { padding: .6rem .65rem; }
+
+    /* Page headers */
+    .page-header { flex-direction: column; align-items: flex-start; gap: .75rem; }
+    .page-actions { width: 100%; flex-wrap: wrap; }
+    .page-actions .btn { flex: 1; justify-content: center; }
+
+    /* Таблиці → карткова розкладка */
+    .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    table { min-width: 600px; }
+
+    /* Картки — 1 колонка */
+    .course-grid,
+    .stats-grid { grid-template-columns: 1fr !important; }
+
+    /* Модалки — повний екран */
+    .modal { width: 100vw !important; max-width: 100vw !important;
+             margin: 0 !important; border-radius: 0 !important;
+             max-height: 100dvh; }
+
+    /* Приховати breadcrumb на дуже малих */
+    .breadcrumb { display: none; }
+
+    /* Форми */
+    .form-row { flex-direction: column; }
+    input, select, textarea { font-size: 16px !important; } /* запобігає zoom на iOS */
+}
+
+/* ══ MOBILE ≤480px (2400×1080 portrait / small phones) ══ */
+@media (max-width: 480px) {
+    .page-content { padding: .5rem; }
+    .top-bar { height: 52px; padding: 0 .5rem; }
+    .main-wrapper { margin-top: 52px; }
+    h1 { font-size: 1.25rem !important; }
+    h2 { font-size: 1.1rem !important; }
+    .btn { padding: .35rem .65rem; font-size: .78rem; }
+    .card { border-radius: var(--radius-md); }
+    .badge { font-size: .6rem; }
+
+    /* Мобільний nav вище */
+    .mob-nav { padding-bottom: env(safe-area-inset-bottom, 0); }
+}
+
+/* ══ Landscape mobile (2400×1080) ══ */
+@media (max-width: 768px) and (orientation: landscape) {
+    .top-bar { height: 48px; }
+    .main-wrapper { margin-top: 48px; }
+    .page-content { padding: .4rem .6rem; }
+    .mob-nav { display: none; } /* ховаємо нижній nav в landscape */
+}
 

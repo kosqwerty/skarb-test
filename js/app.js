@@ -68,7 +68,7 @@ const App = {
         UI.loadNotificationCount();
         UI.loadDocBadge();
         UI.loadNewsCount();
-        RecentlyViewed.init();
+        if (typeof RecentlyViewed !== 'undefined') RecentlyViewed.init();
 
         // Load bookmarks async (updates nav stars when done)
         Bookmarks.load();
@@ -1004,14 +1004,20 @@ const CompanyBirthdayModal = {
 @keyframes cbd-sparkle{0%,100%{transform:scale(1) rotate(-3deg)}25%{transform:scale(1.15) rotate(3deg)}75%{transform:scale(0.95) rotate(-2deg)}}
 @keyframes cbd-glow{0%,100%{filter:drop-shadow(0 0 4px rgba(201,162,39,.6))}50%{filter:drop-shadow(0 0 12px rgba(255,215,0,.9))}}
 @keyframes cbd-badge-in{from{opacity:0;transform:scale(.3)}to{opacity:1;transform:scale(1)}}
-#cbd-topbar-badge{display:inline-flex;align-items:center;gap:.3rem;background:rgba(201,162,39,.1);
-    border:1px solid rgba(201,162,39,.35);border-radius:20px;padding:.2rem .65rem .2rem .45rem;
-    cursor:pointer;transition:background .15s;margin:0 4px}
-#cbd-topbar-badge:hover{background:rgba(201,162,39,.18)}
-#cbd-topbar-badge .cbd-gem{font-size:1rem}
-#cbd-topbar-badge .cbd-text{font-size:.72rem;font-weight:700;color:#C9A227;letter-spacing:.03em;white-space:nowrap}
-#cbd-topbar-badge .cbd-close{font-size:.65rem;color:rgba(201,162,39,.5);margin-left:.2rem;line-height:1;transition:color .15s}
-#cbd-topbar-badge:hover .cbd-close{color:#C9A227}`;
+@keyframes cbd-glow{0%,100%{box-shadow:0 0 8px rgba(99,102,241,.4),0 2px 12px rgba(99,102,241,.2)}50%{box-shadow:0 0 16px rgba(139,92,246,.6),0 2px 16px rgba(99,102,241,.3)}}
+#cbd-topbar-badge{display:inline-flex;align-items:center;gap:.5rem;
+    background:linear-gradient(135deg,#1e1b4b 0%,#312e81 50%,#1e1b4b 100%);
+    border:1px solid rgba(139,92,246,.6);border-radius:999px;
+    padding:.3rem .5rem .3rem .4rem;margin:0 6px;
+    animation:cbd-glow 2.5s ease-in-out infinite;
+    transition:transform .15s}
+#cbd-topbar-badge:hover{transform:translateY(-1px)}
+#cbd-topbar-badge .cbd-gem{font-size:1rem;filter:drop-shadow(0 0 4px rgba(167,139,250,.8))}
+#cbd-topbar-badge .cbd-text{font-size:.72rem;font-weight:800;
+    background:linear-gradient(90deg,#c4b5fd,#e0d7ff,#a5b4fc);
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+    background-clip:text;letter-spacing:.03em;white-space:nowrap}
+#cbd-topbar-badge .cbd-close{display:none}`;
             document.head.appendChild(s);
         }
 
@@ -1019,12 +1025,12 @@ const CompanyBirthdayModal = {
         const badge = document.createElement('div');
         badge.id = 'cbd-topbar-badge';
         badge.innerHTML = `
-            <span class="cbd-gem" style="cursor:pointer" title="Відкрити вікно свята" onclick="CompanyBirthdayModal.demo()">💎</span>
-            <span class="cbd-text">34 роки Скарбниці!</span>
+            <span class="cbd-gem" onclick="CompanyBirthdayModal.demo()" title="Відкрити вікно свята" style="cursor:pointer">💎</span>
+            <span class="cbd-text" onclick="CompanyBirthdayModal.demo()" style="cursor:pointer">34 роки Скарбниці!</span>
             <button id="cbd-rain-toggle" onclick="CompanyBirthdayModal._toggleRain()"
-                style="background:none;border:1.5px solid rgba(201,162,39,.45);border-radius:12px;padding:.3rem .75rem;cursor:pointer;font-size:.82rem;font-weight:700;color:#C9A227;font-family:inherit;transition:background .15s;white-space:nowrap;line-height:1"
-                onmouseenter="this.style.background='rgba(201,162,39,.15)'" onmouseleave="this.style.background='none'">
-                ${rainHidden ? 'Увімкнути ефекти' : 'Вимкнути ефекти'}
+                style="background:rgba(139,92,246,.25);border:1px solid rgba(167,139,250,.45);border-radius:999px;padding:.2rem .6rem;cursor:pointer;font-size:.65rem;font-weight:700;color:#c4b5fd;font-family:inherit;transition:all .15s;white-space:nowrap;line-height:1.4"
+                onmouseenter="this.style.background='rgba(139,92,246,.45)'" onmouseleave="this.style.background='rgba(139,92,246,.25)'">
+                ${rainHidden ? '✨ Ефекти' : '✦ Вимкнути'}
             </button>`;
 
         const ntfBell = document.getElementById('ntf-bell');

@@ -8,7 +8,7 @@ const NewsPage = {
     async init(container, params) {
         // Single article view
         if (params.id) {
-            await this._viewArticle(container, params.id);
+            await this._viewArticle(container, params.id, params.from);
             return;
         }
 
@@ -25,12 +25,11 @@ const NewsPage = {
         container.innerHTML = `
             <div class="page-header">
                 <div class="page-title">
+                    <button class="btn btn-ghost btn-sm" onclick="Router.go('dashboard')" style="display:inline-flex;align-items:center;gap:.35rem;margin-bottom:.5rem"><i class="fa-solid fa-angle-left"></i> Назад</button>
                     <h1>📰 Новини та оголошення</h1>
                     <p>Останні події</p>
                 </div>
                 <div class="page-actions" style="display:flex;align-items:center;gap:.75rem">
-                    <input type="text" id="news-search" placeholder="Пошук..." style="width:200px"
-                           onkeyup="NewsPage.onSearch(event)">
                     ${AppState.isStaff() && AppState.canMutate() ? `<button class="btn btn-primary" onclick="NewsPage.openCreate()"><i class="fa-solid fa-plus"></i> Додати новину</button>` : ''}
                 </div>
             </div>
@@ -178,7 +177,7 @@ const NewsPage = {
     },
 
     // ── Article View ──────────────────────────────────────────────
-    async _viewArticle(container, id) {
+    async _viewArticle(container, id, from) {
         // Скидаємо бейдж при відкритті будь-якої новини
         localStorage.setItem('news_last_seen', new Date().toISOString());
         const newsBadge = document.getElementById('news-bell-badge');
@@ -197,10 +196,13 @@ const NewsPage = {
                     .order('published_at', { ascending: false, nullsFirst: false })
                     .limit(3);
 
-            UI.setBreadcrumb([{ label: 'Новини', route: 'news' }, { label: news.title }]);
+            const backRoute = from === 'dashboard' ? 'dashboard' : 'news';
+            const backLabel = from === 'dashboard' ? 'Головна' : 'Новини';
+            UI.setBreadcrumb([{ label: backLabel, route: backRoute }, { label: news.title }]);
             ActivityTracker.track('news_view', { entity_type: 'news', entity_id: news.id, entity_title: news.title, page: `news/${news.id}` });
 
             container.innerHTML = `
+                <button class="btn btn-ghost btn-sm" onclick="Router.go('${backRoute}')" style="display:inline-flex;align-items:center;gap:.35rem;margin-bottom:.75rem"><i class="fa-solid fa-angle-left"></i> ${backLabel}</button>
                 <style>
                     .nv-top{display:grid;grid-template-columns:1fr 280px;gap:1.5rem;align-items:start;margin-bottom:2rem}
                     .nv-hero{position:relative;width:100%;height:420px;border-radius:var(--radius-xl);overflow:hidden;background:#0f0c29}
@@ -271,9 +273,6 @@ const NewsPage = {
                                 </button>`).join('')}
                         </div>` : ''}
                         <div class="nv-hero-actions">
-                            <button class="btn btn-ghost btn-sm" onclick="Router.go('news')" style="backdrop-filter:blur(6px);background:rgba(0,0,0,.35);border-color:rgba(255,255,255,.2);color:#fff">
-                                <i class="fa-solid fa-angle-left"></i> Назад
-                            </button>
                         </div>
                         ${AppState.isStaff() && AppState.canMutate() ? `
                         <div style="position:absolute;top:1rem;right:1rem;display:flex;gap:.5rem;z-index:3">

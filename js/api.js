@@ -1154,7 +1154,7 @@ const API = {
     news: {
         async getAll({ published, page = 0, pageSize = 12 } = {}) {
             let q = supabase.from('news')
-                .select(`*, author:profiles!author_id(full_name),
+                .select(`*, author:profiles!author_id(full_name,subdivision,avatar_url),
                     access_group:access_groups(id,name,is_public,
                         cities:access_group_cities(city),
                         positions:access_group_positions(position),
@@ -1292,7 +1292,21 @@ const API = {
                 if (error) throw error;
                 return type;
             }
-        }
+        },
+
+        async getReadIds(newsIds) {
+            if (!newsIds?.length) return new Set();
+            const { data } = await supabase.from('news_reads')
+                .select('news_id')
+                .eq('user_id', AppState.user.id)
+                .in('news_id', newsIds);
+            return new Set((data || []).map(r => r.news_id));
+        },
+
+        async markRead(newsId) {
+            await supabase.from('news_reads')
+                .insert({ user_id: AppState.user.id, news_id: newsId }, { ignoreDuplicates: true });
+        },
     },
 
     // ── Довідники ────────────────────────────────────────────────────

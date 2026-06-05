@@ -433,7 +433,7 @@ const UI = {
         const common = [
             { icon: '<i class="fa-solid fa-house"     style="color:#C9A227"></i>', label: 'Головна', route: 'dashboard', impBadgeId: 'nav-imp-bolt' },
             expertItem,
-            { icon: '<img src="/news.png" style="width:18px;height:18px;object-fit:contain;display:inline-block;vertical-align:middle;filter:none">', label: 'Новини',  route: 'news' }
+            // { icon: '<img src="/news.png" style="width:18px;height:18px;object-fit:contain;display:inline-block;vertical-align:middle;filter:none">', label: 'Новини',  route: 'news' }
         ];
         const contentItems = [
             ...common,

@@ -2769,8 +2769,12 @@ ${this._styles()}`;
             myUserIds = new Set((asgn || []).map(a => a.user_id));
         }
 
+        const _p2 = n => String(n).padStart(2,'0');
+        const monthFrom = `${this._year}-${_p2(this._month+1)}-01`;
+        const monthTo   = `${this._year}-${_p2(this._month+1)}-${new Date(this._year,this._month+1,0).getDate()}`;
         const { data: subRows } = await supabase.from('schedule_entries')
-            .select('user_id, date, location_id').eq('notes', '__sub__').order('date');
+            .select('user_id, date, location_id').eq('notes', '__sub__')
+            .gte('date', monthFrom).lte('date', monthTo).order('date');
 
         const filtered = (subRows || []).filter(r => r.user_id && myUserIds.has(r.user_id));
         const subUserIds = [...new Set(filtered.map(r => r.user_id))];
@@ -3165,24 +3169,28 @@ ${this._styles()}`;
         }, { onConflict: 'location_id,user_id,date' });
         if (error) { Toast.error('Помилка', error.message); return; }
 
-        // Notify all employees across all locations
-        const locIds = this._locations.map(l => l.id);
-        const { data: assigns } = await supabase.from('schedule_assignments')
-            .select('user_id').in('location_id', locIds);
-        const userIds = [...new Set((assigns || []).map(a => a.user_id))];
+        // Notify all employees across all manager's locations
+        const allLocIds = this._locations.map(l => l.id);
+        const { data: assigns, error: ae } = await supabase.from('schedule_assignments')
+            .select('user_id').in('location_id', allLocIds).not('user_id', 'is', null);
+        if (ae) console.error('[NeedSub] assignments error:', ae);
+        const userIds = [...new Set((assigns || []).map(a => a.user_id).filter(Boolean))];
+        console.log('[NeedSub] notifying userIds:', userIds.length, 'locIds:', allLocIds.length);
 
         if (userIds.length) {
             const dateLabel = new Date(date + 'T00:00:00')
                 .toLocaleDateString('uk-UA', { weekday:'long', day:'numeric', month:'long' });
             const managerName = AppState.profile?.full_name || 'Керівник';
-            await supabase.from('notifications').insert(
+            const { error: ne } = await supabase.from('notifications').insert(
                 userIds.map(uid => ({
                     user_id: uid,
                     title: '🆘 Потрібна підміна',
-                    message: `${managerName} шукає підміну на ${dateLabel} у «${locName}». Якщо можете вийти — повідомте керівнику.`,
-                    type: 'general', created_by: AppState.user.id
+                    message: `${managerName} шукає підміну на ${dateLabel} у «${locName}». Якщо можете вийти — позначте дату у графіку.`,
+                    type: 'general', created_by: AppState.user.id,
+                    link: 'schedule-graph?view=employee'
                 }))
             );
+            if (ne) console.error('[NeedSub] notifications error:', ne);
         }
 
         document.getElementById('sg-mgr-help-modal')?.remove();

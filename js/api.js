@@ -1039,7 +1039,7 @@ const API = {
         async getAll() {
             const { data, error } = await supabase
                 .from('custom_pages')
-                .select('id, title, is_published, is_home, allowed_labels, created_at, updated_at, creator:profiles!created_by(full_name)')
+                .select('id, title, is_published, is_home, allowed_labels, created_at, updated_at')
                 .order('created_at', { ascending: false });
             if (error) throw error;
             const pages = data || [];
@@ -1057,7 +1057,7 @@ const API = {
         async getById(id) {
             const { data, error } = await supabase
                 .from('custom_pages')
-                .select('*, creator:profiles!created_by(full_name)')
+                .select('*')
                 .eq('id', id).single();
             if (error) throw error;
             return data;

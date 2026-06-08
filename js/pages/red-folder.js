@@ -15,6 +15,7 @@ const RedFolderPage = {
         { icon: 'fa-file-contract',  label: 'Договори',        color: '#f59e0b' },
         { icon: 'fa-shield-halved',  label: 'Безпека',         color: '#10b981' },
         { icon: 'fa-users',          label: 'HR / Персонал',   color: '#8b5cf6' },
+        { icon: 'fa-sack-dollar',    label: 'Бухгалтерія',     color: '#16a34a' },
         { icon: 'fa-circle',         label: 'Без іконки',      color: '#94a3b8' },
     ],
 
@@ -45,13 +46,15 @@ const RedFolderPage = {
             .rf-doc-item { display: flex; align-items: center; gap: .4rem; }
             .rf-doc-link { display: inline-flex; align-items: center; font-size: .75rem; color: #ef4444; background: none; border: none; cursor: pointer; font-family: inherit; text-decoration: underline; text-underline-offset: 2px; padding: 0; }
             .rf-doc-link:hover { opacity: .75; }
-            .rf-doc-del { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: .15rem .3rem; border-radius: 6px; font-size: .72rem; transition: all .12s; }
+            .rf-doc-del { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: .15rem .3rem; border-radius: 6px; font-size: .72rem; transition: all .12s; opacity: 0; }
             .rf-doc-del:hover { background: rgba(239,68,68,.1); color: #ef4444; }
-            .rf-doc-edit { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: .15rem .3rem; border-radius: 6px; font-size: .72rem; transition: all .12s; }
+            .rf-doc-edit { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: .15rem .3rem; border-radius: 6px; font-size: .72rem; transition: all .12s; opacity: 0; }
             .rf-doc-edit:hover { background: rgba(99,102,241,.1); color: var(--primary); }
+            .rf-doc-item:hover .rf-doc-edit, .rf-doc-item:hover .rf-doc-del { opacity: 1; }
             .rf-upload-btn { display: inline-flex; align-items: center; gap: .35rem; padding: .22rem .55rem; border-radius: var(--radius-sm); border: 1px dashed rgba(239,68,68,.4); background: transparent; color: rgba(239,68,68,.7); font-size: .72rem; cursor: pointer; transition: all .15s; font-family: inherit; }
             .rf-upload-btn:hover { border-color: #ef4444; color: #ef4444; background: rgba(239,68,68,.04); }
-            .rf-row-actions { display: flex; gap: .3rem; margin-top: .35rem; flex-wrap: wrap; }
+            .rf-row-actions { display: flex; gap: .3rem; margin-top: .35rem; flex-wrap: wrap; opacity: 0; transition: opacity .15s; }
+            .rf-tr:hover .rf-row-actions { opacity: 1; }
             .rf-action-btn { display: inline-flex; align-items: center; gap: .3rem; padding: .2rem .55rem; border-radius: var(--radius-sm); border: 1px dashed var(--border); background: transparent; color: var(--text-muted); font-size: .72rem; cursor: pointer; transition: all .15s; font-family: inherit; }
             .rf-action-btn:hover { border-color: #ef4444; color: #ef4444; }
             .rf-action-btn.danger:hover { border-color: var(--danger); color: var(--danger); }
@@ -66,6 +69,12 @@ const RedFolderPage = {
             }
             .rf-form input:focus, .rf-form textarea:focus { border-color: #ef4444; box-shadow: 0 0 0 3px rgba(239,68,68,.12); }
             .rf-form textarea { resize: vertical; min-height: 72px; }
+            .rf-form-input { width: 100%; padding: .55rem .8rem; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-surface); color: var(--text-primary); font-size: .88rem; font-family: inherit; outline: none; box-sizing: border-box; transition: border-color .15s, box-shadow .15s; }
+            .rf-form-input:focus { border-color: #ef4444; box-shadow: 0 0 0 3px rgba(239,68,68,.12); }
+            .rf-page-chk-row { display: flex; align-items: center; gap: .55rem; padding: .35rem .4rem; border-radius: var(--radius-sm); cursor: pointer; font-size: .85rem; color: var(--text-primary); transition: background .1s; }
+            .rf-page-chk-row:hover { background: rgba(239,68,68,.06); }
+            .rf-page-chk-row input[type=checkbox] { flex-shrink: 0; accent-color: #ef4444; width: 15px; height: 15px; cursor: pointer; }
+            .rf-page-chk-row span { line-height: 1.3; }
             .rf-icon-row { display: flex; flex-wrap: wrap; gap: .4rem; }
             .rf-icon-opt { display: inline-flex; align-items: center; gap: .4rem; padding: .3rem .65rem; border-radius: var(--radius-md); border: 1.5px solid var(--border); background: var(--bg-raised); cursor: pointer; font-size: .75rem; font-family: inherit; color: var(--text-secondary); transition: all .15s; }
             .rf-icon-opt:hover { border-color: var(--ic); color: var(--text-primary); }
@@ -141,12 +150,13 @@ const RedFolderPage = {
         const rows = this._items.map((item, idx) => {
             const itemDocs = this._docs[item.id] || [];
             const ico = item.icon && item.icon !== 'fa-circle' ? this._iconOptions.find(o => o.icon === item.icon) : null;
-            const linkedPage = item.page_id ? this._pages.find(p => p.id === item.page_id) : null;
-            const docsHtml = linkedPage
+            const pageIds = item.page_ids != null ? item.page_ids : (item.page_id ? [item.page_id] : []);
+            const linkedPages = pageIds.map(pid => this._pages.find(p => p.id === pid)).filter(Boolean);
+            const docsHtml = linkedPages.length
                 ? `<div class="rf-doc-list">
-                    <button class="rf-doc-link" onclick="Router.go('collections/${linkedPage.id}')">
-                        <i class="fa-solid fa-arrow-up-right-from-square" style="margin-right:.35rem;font-size:.72rem"></i>${Fmt.esc(linkedPage.title)}
-                    </button>
+                    ${linkedPages.map(lp => `<button class="rf-doc-link" onclick="Router.go('collections/${lp.id}')">
+                        <i class="fa-solid fa-arrow-up-right-from-square" style="margin-right:.35rem;font-size:.72rem"></i>${Fmt.esc(lp.title)}
+                    </button>`).join('')}
                    </div>`
                 : `<div class="rf-doc-list">
                     ${itemDocs.map(d => `
@@ -171,7 +181,7 @@ const RedFolderPage = {
                         <button class="rf-action-btn danger" onclick="RedFolderPage._delete('${item.id}')"><i class="fa-solid fa-trash"></i> Видалити рядок</button>
                     </div>` : ''}
                 </td>
-                <td class="rf-cell" style="width:250px">${docsHtml}</td>
+                <td class="rf-cell" style="width:300px">${docsHtml}</td>
                 <td class="rf-cell" style="width:200px">
                     ${(ico ? `<i class="fa-solid ${Fmt.esc(item.icon)}" style="margin-right:.35rem;color:${ico.color}"></i>` : '') + Fmt.esc(item.responsible || '')}
                 </td>
@@ -184,7 +194,7 @@ const RedFolderPage = {
                 <tr>
                     <th>№</th>
                     <th>Назва документу</th>
-                    <th style="width:250px">Документи</th>
+                    <th style="width:300px">Документи</th>
                     <th style="width:200px">Відповідальний</th>
                 </tr>
             </thead>
@@ -204,38 +214,45 @@ const RedFolderPage = {
                 <i class="fa-solid ${o.icon}" style="color:${o.color}"></i>
                 <span>${Fmt.esc(o.label)}</span>
             </button>`).join('');
-        const pageOptions = this._pages.map(p =>
-            `<option value="${p.id}" ${item?.page_id === p.id ? 'selected' : ''}>${Fmt.esc(p.title)}</option>`
-        ).join('');
+        const curPageIds = new Set(item?.page_ids != null ? item.page_ids : (item?.page_id ? [item.page_id] : []));
+        const pageCheckboxes = this._pages.length
+            ? this._pages.map(p => `
+                <label class="rf-page-chk-row">
+                    <input type="checkbox" class="rf-page-chk" value="${p.id}" ${curPageIds.has(p.id) ? 'checked' : ''}>
+                    <span>${Fmt.esc(p.title)}</span>
+                </label>`).join('')
+            : `<div style="font-size:.82rem;color:var(--text-muted);padding:.4rem 0">Немає доступних колекцій</div>`;
         Modal.open({
-            title: item ? 'Редагувати рядок' : 'Додати рядок',
+            title: item ? '<i class="fa-solid fa-pen" style="color:#ef4444;margin-right:.4rem"></i> Редагувати рядок' : '<i class="fa-solid fa-plus" style="color:#ef4444;margin-right:.4rem"></i> Додати рядок',
             size: 'lg',
             body: `
             <input type="hidden" id="rf-inp-icon" value="${Fmt.esc(curIcon)}">
-            <div class="rf-form">
+            <div style="display:flex;flex-direction:column;gap:1.1rem">
                 <div>
-                    <label>Назва документу <span style="color:var(--danger)">*</span></label>
-                    <input id="rf-inp-title" value="${item ? Fmt.esc(item.title) : ''}" placeholder="Введіть назву документу">
+                    <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.4rem">Назва документу <span style="color:var(--danger)">*</span></div>
+                    <input id="rf-inp-title" class="rf-form-input" value="${item ? Fmt.esc(item.title) : ''}" placeholder="Введіть назву документу">
                 </div>
                 <div>
-                    <label>Відповідальний</label>
-                    <input id="rf-inp-responsible" value="${item ? Fmt.esc(item.responsible || '') : ''}" placeholder="ПІБ або відділ">
+                    <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.4rem">Відповідальний</div>
+                    <input id="rf-inp-responsible" class="rf-form-input" value="${item ? Fmt.esc(item.responsible || '') : ''}" placeholder="ПІБ або відділ">
                 </div>
                 <div>
-                    <label>Сторінка-колекція <span style="font-weight:400;color:var(--text-muted)">— замість завантаження файлів</span></label>
-                    <select id="rf-inp-page" style="width:100%;padding:.5rem .75rem;border-radius:var(--radius-md);border:1px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.88rem;font-family:inherit;outline:none">
-                        <option value="">— файли завантажуються вручну —</option>
-                        ${pageOptions}
-                    </select>
+                    <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.4rem">
+                        Сторінки-колекції
+                        <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted)">— замість завантаження файлів</span>
+                    </div>
+                    <div style="border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-raised);max-height:150px;overflow-y:auto;padding:.3rem .5rem">
+                        ${pageCheckboxes}
+                    </div>
                 </div>
                 <div>
-                    <label>Іконка відповідального</label>
+                    <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.4rem">Іконка відповідального</div>
                     <div class="rf-icon-row">${iconPicker}</div>
                 </div>
             </div>`,
             footer: `
                 <button class="btn btn-ghost btn-sm" onclick="Modal.close()">Скасувати</button>
-                <button class="btn btn-sm" style="background:linear-gradient(135deg,#ef4444,#b91c1c);color:#fff;border:none" onclick="RedFolderPage._save(${JSON.stringify(id || null).replace(/"/g,'&quot;')})">
+                <button class="btn btn-sm" style="background:linear-gradient(135deg,#ef4444,#b91c1c);color:#fff;border:none;box-shadow:0 3px 10px rgba(239,68,68,.3)" onclick="RedFolderPage._save(${JSON.stringify(id || null).replace(/"/g,'&quot;')})">
                     <i class="fa-solid fa-check"></i> Зберегти
                 </button>`
         });
@@ -252,9 +269,9 @@ const RedFolderPage = {
         const title = Dom.val('rf-inp-title').trim();
         const responsible = Dom.val('rf-inp-responsible').trim();
         const icon = document.getElementById('rf-inp-icon')?.value || null;
-        const page_id = Dom.val('rf-inp-page') || null;
+        const page_ids = Array.from(document.querySelectorAll('.rf-page-chk:checked')).map(c => c.value);
         if (!title) { Toast.warning('Заповніть назву документу'); return; }
-        const fields = { title, responsible, icon: icon || null, page_id };
+        const fields = { title, responsible, icon: icon || null, page_ids };
         try {
             Loader.show();
             if (id) {

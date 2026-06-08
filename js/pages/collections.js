@@ -125,7 +125,7 @@ const CollectionsPage = {
                         <button class="res-star-btn${Bookmarks.isBookmarked('collections/'+p.id) ? ' active' : ''}"
                             data-bm-route="collections/${p.id}"
                             title="${Bookmarks.isBookmarked('collections/'+p.id) ? 'Видалити з закладок' : 'Зберегти в закладки'}"
-                            onclick="Bookmarks.toggleCollection('${p.id}',${JSON.stringify(p.title||'').replace(/"/g,'&quot;')})"><i class="fa-regular fa-bookmark"></i></button>
+                            onclick="Bookmarks.toggleCollection('${p.id}',${JSON.stringify(p.title||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-bookmark"></i></button>
                         ${adminBtns}
                     </div>
                 </div>
@@ -402,7 +402,7 @@ document.addEventListener('click', function(e) {
             <!-- Top bar -->
             <div style="display:flex;align-items:center;gap:.75rem;padding:.75rem 1rem;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);margin-bottom:.75rem;flex-wrap:wrap">
                 <button class="btn btn-ghost btn-sm" onclick="Router.back()" style="display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i> Назад</button>
-                <input id="page-title-input" type="text" value="${page?.title || ''}" placeholder="Назва сторінки..."
+                <input id="page-title-input" type="text" value="${Fmt.esc(page?.title || '')}" placeholder="Назва сторінки..."
                        style="flex:1;min-width:160px;font-size:1rem;font-weight:600;border:none;background:transparent;color:var(--text-primary);outline:none">
                 <label style="display:flex;align-items:center;gap:.4rem;font-size:.85rem;color:var(--text-secondary);cursor:pointer;flex-shrink:0">
                     <input type="checkbox" id="page-published" ${page?.is_published ? 'checked' : ''}>

@@ -470,6 +470,7 @@ const ScheduleGraphPage = {
 
         // Cross-location shift badges: load real shifts of these employees in other locations (own + partner)
         this._otherLocDayOff = {};
+        this._otherLocSubConf = {}; // __sub_confirmed__ entries at other locations (priority override)
         const ownOtherLocIds   = this._locations.filter(l => l.id !== this._locId).map(l => l.id);
         const partnerLocIds    = (this._partnerLocations || []).map(l => l.id);
         const otherLocIds      = [...ownOtherLocIds, ...partnerLocIds];
@@ -484,9 +485,13 @@ const ScheduleGraphPage = {
             (otherE || []).forEach(e => {
                 if (!_isRealShift(e)) return;
                 const key = `${e.user_id}_${e.date}`;
+                const locName = this._locations.find(l => l.id === e.location_id)?.name
+                    || (this._partnerLocations || []).find(l => l.id === e.location_id)?.name || '';
+                if (e.notes === '__sub_confirmed__') {
+                    // Confirmed substitution always takes priority
+                    this._otherLocSubConf[key] = locName;
+                }
                 if (!this._otherLocDayOff[key]) {
-                    const locName = this._locations.find(l => l.id === e.location_id)?.name
-                        || (this._partnerLocations || []).find(l => l.id === e.location_id)?.name || '';
                     this._otherLocDayOff[key] = locName;
                 }
             });
@@ -1080,16 +1085,48 @@ ${this._styles()}`;
         <!-- 2. Управління співробітниками -->
         ${viewOnly ? '' : `
         <div class="sg-v2-card sg-v2-mgmt-card">
-            <div class="sg-v2-card-label">2. Управління співробітниками</div>
-            <div class="sg-v2-mgmt-btns">
-                <button class="sg-mgr-help-btn" onclick="ScheduleGraphPage._showManagerHelpModal()">
-                    🆘 Потрібна підміна
+            <div class="sg-v2-card-label">2. Управління підмінами</div>
+            <div class="sg-v2-svc-grid">
+                ${(() => {
+                    const needsubCnt = Object.values(this._allEntries||{}).filter(e=>e.notes==='__needsub__').length;
+                    const myUids = new Set([...(this._allAssignments||[]),...(this._assignments||[])].map(a=>a.user_id).filter(Boolean));
+                    const src = this._locId === 'all' ? (this._allEntries||{}) : (this._entries||{});
+                    const cansubCnt = new Set(Object.values(src).filter(e=>e.notes==='__sub__'&&myUids.has(e.user_id)).map(e=>e.user_id)).size;
+                    return `
+                <button class="sg-svc-btn" onclick="ScheduleGraphPage._showManagerHelpModal()">
+                    <div class="sg-svc-ico" style="background:rgba(239,68,68,.12);color:#ef4444"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                    <div class="sg-svc-body">
+                        <div class="sg-svc-title">Потрібна підміна${needsubCnt ? `<span class="sg-svc-badge">${needsubCnt}</span>` : ''}</div>
+                        <div class="sg-svc-desc">Запити на пошук замінника</div>
+                    </div>
+                    <i class="fa-solid fa-chevron-right sg-svc-arr"></i>
                 </button>
-                <button class="sg-viewers-btn" onclick="ScheduleGraphPage._showViewersModal()">
-                    <i class="fa-solid fa-eye"></i> Доступи
+                <button class="sg-svc-btn" onclick="ScheduleGraphPage._showCanSubModal()">
+                    <div class="sg-svc-ico" style="background:rgba(16,185,129,.12);color:#10b981"><i class="fa-solid fa-hand"></i></div>
+                    <div class="sg-svc-body">
+                        <div class="sg-svc-title">Можуть підмінити${cansubCnt ? `<span class="sg-svc-badge sg-svc-badge-green">${cansubCnt}</span>` : ''}</div>
+                        <div class="sg-svc-desc">Готові вийти на заміну</div>
+                    </div>
+                    <i class="fa-solid fa-chevron-right sg-svc-arr"></i>
                 </button>
+                <button class="sg-svc-btn" onclick="ScheduleGraphPage._showSubstReportModal()">
+                    <div class="sg-svc-ico" style="background:rgba(245,158,11,.12);color:#f59e0b"><i class="fa-solid fa-file-lines"></i></div>
+                    <div class="sg-svc-body">
+                        <div class="sg-svc-title">Звіт по підмінам</div>
+                        <div class="sg-svc-desc">Всі підміни за місяць</div>
+                    </div>
+                    <i class="fa-solid fa-chevron-right sg-svc-arr"></i>
+                </button>
+                <button class="sg-svc-btn" onclick="ScheduleGraphPage._showViewersModal()">
+                    <div class="sg-svc-ico" style="background:rgba(99,102,241,.12);color:#6366f1"><i class="fa-solid fa-eye"></i></div>
+                    <div class="sg-svc-body">
+                        <div class="sg-svc-title">Доступи</div>
+                        <div class="sg-svc-desc">Хто може переглядати</div>
+                    </div>
+                    <i class="fa-solid fa-chevron-right sg-svc-arr"></i>
+                </button>`;
+                })()}
             </div>
-            <p class="sg-v2-mgmt-hint">Керуйте доступами до графіку та надсилайте запити на підміну.</p>
         </div>`}
         ${svcHtml}
     </div>
@@ -1176,19 +1213,21 @@ ${this._styles()}`;
                         const dow   = new Date(this._year, this._month, d).getDay();
                         const we    = dow === 0 || dow === 6;
                         const isSubConf = entry?.notes === '__sub_confirmed__';
-                        const dispShift = isSubConf ? SUB_CONFIRMED : shift;
+                        const dispShift = isSubConf ? SUB_CONFIRMED : (entry?.notes === '__sub__' ? null : shift);
                         if (fired) return `<td class="sg-cell sg-cell-fired${we?' we':''}" title="Звільнено">
                             ${dispShift ? `<span class="sg-badge" style="background:${dispShift.bg};color:${dispShift.color};opacity:.55">${dispShift.short}</span>` : ''}
                         </td>`;
-                        const flagIco = entry?.notes === '__sub__' ? '🙋' : entry?.notes === '__needsub__' ? '🆘' : '';
-                        const otherLocName = !entry && lookupId ? (this._otherLocDayOff?.[`${lookupId}_${date}`] || null) : null;
+                        const flagIco = entry?.notes === '__needsub__' ? '🆘' : '';
+                        const subConfAt = lookupId ? (this._otherLocSubConf?.[`${lookupId}_${date}`] || null) : null;
+                        const otherLocName = (!subConfAt && (!entry || entry?.notes === '__sub__') && lookupId) ? (this._otherLocDayOff?.[`${lookupId}_${date}`] || null) : null;
                         const noWork = !datesWithWork.has(date);
-                        return `<td class="sg-cell${we?' we':''}${entry?.notes==='__needsub__'?' sg-needsub-cell':''}${noWork?' sg-cell-no-work':''}${viewOnly?' sg-cell-partner':''}${!a.is_primary && dispShift?' sg-cell-sub':''}"
+                        return `<td class="sg-cell${we?' we':''}${entry?.notes==='__needsub__'?' sg-needsub-cell':''}${noWork?' sg-cell-no-work':''}${viewOnly?' sg-cell-partner':''}${!a.is_primary && dispShift && !subConfAt?' sg-cell-sub':''}"
                             data-uid="${a.user_id}" data-date="${date}"
                             ${viewOnly ? '' : `onclick="ScheduleGraphPage._openCell('${a.user_id}','${date}')"`}
-                            title="${entry?.notes==='__sub__' ? 'Може вийти на підміну' : entry?.notes==='__needsub__' ? 'Потрібна підміна' : isSubConf ? 'Підтверджена підміна' : shift ? shift.label : otherLocName ? `Підміна у «${otherLocName}»` : viewOnly ? '' : 'Клік щоб додати'}">
+                            title="${entry?.notes==='__needsub__' ? 'Потрібна підміна' : subConfAt ? `Підміна у «${subConfAt}»` : isSubConf ? 'Підтверджена підміна' : shift ? shift.label : otherLocName ? `Підміна у «${otherLocName}»` : viewOnly ? '' : 'Клік щоб додати'}">
                             ${flagIco
                                 ? `<span class="sg-flag-cell">${flagIco}</span>`
+                                : subConfAt ? `<span class="sg-other-loc-badge">${subConfAt.slice(0,3)}</span>`
                                 : dispShift ? `<span class="sg-badge" style="background:${dispShift.bg};color:${dispShift.color}">${dispShift.short}</span>`
                                 : otherLocName ? `<span class="sg-other-loc-badge">${otherLocName.slice(0,3)}</span>` : ''}
                         </td>`;
@@ -2110,13 +2149,12 @@ ${this._styles()}`;
                         const isFree = sd && !type;
                         const isBusy = sd && !isFree;
                         const isSubConf = entry?.notes === '__sub_confirmed__';
-                        const dispShift = isSubConf ? SUB_CONFIRMED : shift;
+                        const dispShift = isSubConf ? SUB_CONFIRMED : (entry?.notes === '__sub__' ? null : shift);
                         if (fired2) return `<td class="sg-cell sg-cell-fired${we?' we':''}${isSd?' sg-sd-col':''}" title="Звільнено">
                             ${dispShift ? `<span class="sg-badge" style="background:${dispShift.bg};color:${dispShift.color};opacity:.55">${dispShift.short}</span>` : ''}
                         </td>`;
-                        const flagIco = entry?.notes === '__sub__' ? '🙋' : entry?.notes === '__needsub__' ? '🆘' : '';
+                        const flagIco = entry?.notes === '__needsub__' ? '🆘' : '';
                         const cellTitle = a.isPartner ? 'Локація партнера — лише перегляд'
-                            : entry?.notes === '__sub__' ? 'Може вийти на підміну'
                             : entry?.notes === '__needsub__' ? 'Потрібна підміна'
                             : isSubConf ? 'Підтверджена підміна'
                             : shift ? shift.label : '';
@@ -2503,6 +2541,8 @@ ${this._styles()}`;
             ? 'Співробітник повідомив, що може вийти на підміну цього дня.'
             : 'Співробітник потребує заміни цього дня.';
 
+
+
         const el = document.createElement('div');
         el.id = 'sg-subst-resolve-modal';
         el.className = 'sg-overlay';
@@ -2512,7 +2552,7 @@ ${this._styles()}`;
         <div style="display:flex;align-items:center;gap:12px">
             <div class="sg-av" style="background:${color};flex-shrink:0">${initials}</div>
             <div>
-                <h3 style="margin:0;font-size:1rem">${name}</h3>
+                <h3 style="margin:0;font-size:1rem">${Fmt.esc(name)}</h3>
                 <p style="margin:2px 0 0;color:var(--text-muted);font-size:.8rem;text-transform:capitalize">${dateLabel}</p>
             </div>
         </div>
@@ -2715,6 +2755,340 @@ ${this._styles()}`;
         el.addEventListener('click', e => { if (e.target === el) el.remove(); });
     },
 
+    async _showCanSubModal() {
+        document.getElementById('sg-cansub-list-modal')?.remove();
+
+        const myLocIds = new Set((this._locations || []).map(l => l.id));
+        let myUserIds = new Set([
+            ...(this._allAssignments || []),
+            ...(this._assignments || []),
+        ].filter(a => a.user_id && myLocIds.has(a.locId)).map(a => a.user_id));
+        if (!myUserIds.size && myLocIds.size) {
+            const { data: asgn } = await supabase.from('schedule_assignments')
+                .select('user_id').in('location_id', [...myLocIds]).not('user_id', 'is', null);
+            myUserIds = new Set((asgn || []).map(a => a.user_id));
+        }
+
+        const { data: subRows } = await supabase.from('schedule_entries')
+            .select('user_id, date, location_id').eq('notes', '__sub__').order('date');
+
+        const filtered = (subRows || []).filter(r => r.user_id && myUserIds.has(r.user_id));
+        const subUserIds = [...new Set(filtered.map(r => r.user_id))];
+        let profMap = {};
+        if (subUserIds.length) {
+            const { data: profs } = await supabase.from('profiles')
+                .select('id, full_name, job_position, city').in('id', subUserIds);
+            (profs || []).forEach(p => { profMap[p.id] = p; });
+        }
+
+        // confMap: userId → Map<date, locName> for confirmed substitution dates
+        const confMap = {};
+        const allLocs = [...(this._locations || []), ...(this._partnerLocations || [])];
+        const myLocIdSet = new Set(allLocs.map(l => l.id));
+
+        // Primary home locs per user — from schedule_assignments.is_primary=true
+        const primaryLocByUser = {};
+        if (subUserIds.length) {
+            const { data: primAsgn } = await supabase.from('schedule_assignments')
+                .select('user_id, location_id').in('user_id', subUserIds).eq('is_primary', true);
+            for (const a of (primAsgn || [])) {
+                if (!primaryLocByUser[a.user_id]) primaryLocByUser[a.user_id] = new Set();
+                primaryLocByUser[a.user_id].add(a.location_id);
+            }
+        }
+
+        const _addConf = (uid, date, locId) => {
+            if (!uid || !date || !locId) return;
+            if (!confMap[uid]) confMap[uid] = new Map();
+            if (!confMap[uid].has(date)) {
+                const lname = allLocs.find(l => l.id === locId)?.name || '';
+                confMap[uid].set(date, lname);
+            }
+        };
+
+        // Signal A: already-loaded entries (current month, instant)
+        const _srcEntries = Object.values(this._locId === 'all' ? (this._allEntries || {}) : (this._entries || {}));
+        for (const e of _srcEntries) {
+            if (!subUserIds.includes(e.user_id)) continue;
+            if (e.notes === '__sub_confirmed__') { _addConf(e.user_id, e.date, e.location_id); continue; }
+            if (e.shift_type === 'work' && !primaryLocByUser[e.user_id]?.has(e.location_id))
+                _addConf(e.user_id, e.date, e.location_id);
+        }
+
+        // Signal B: DB query for all months — no location filter so we catch subs at any location
+        if (subUserIds.length) {
+            const { data: dbRows } = await supabase.from('schedule_entries')
+                .select('user_id, date, location_id, shift_type, notes')
+                .in('user_id', subUserIds)
+                .or('notes.eq.__sub_confirmed__,shift_type.eq.work');
+
+            // Дозагружаємо назви локацій яких немає в allLocs (підміна на чужій локації)
+            const knownLocIds = new Set(allLocs.map(l => l.id));
+            const unknownLocIds = new Set((dbRows || []).map(r => r.location_id).filter(id => id && !knownLocIds.has(id)));
+            if (unknownLocIds.size) {
+                const { data: extraLocs } = await supabase.from('schedule_locations')
+                    .select('id, name').in('id', [...unknownLocIds]);
+                (extraLocs || []).forEach(l => allLocs.push(l));
+            }
+
+            for (const r of (dbRows || [])) {
+                if (r.notes === '__sub_confirmed__') { _addConf(r.user_id, r.date, r.location_id); continue; }
+                if (r.shift_type === 'work' && !primaryLocByUser[r.user_id]?.has(r.location_id))
+                    _addConf(r.user_id, r.date, r.location_id);
+            }
+        }
+
+        // Build locName map: userId → primary location name
+        const allAsgn = [...(this._allAssignments || []), ...(this._assignments || [])];
+        const locNameMap = {};
+        for (const a of allAsgn) {
+            if (!a.user_id) continue;
+            if (a.is_primary !== false && !locNameMap[a.user_id]) locNameMap[a.user_id] = a.locName || '';
+        }
+        for (const a of allAsgn) {
+            if (!a.user_id || locNameMap[a.user_id]) continue;
+            locNameMap[a.user_id] = a.locName || '';
+        }
+
+        const byUser = {};
+        for (const r of filtered) {
+            const prof = profMap[r.user_id];
+            if (!prof) continue;
+            if (!byUser[r.user_id]) byUser[r.user_id] = { prof, dates: [], locName: locNameMap[r.user_id] || '' };
+            byUser[r.user_id].dates.push(r.date);
+        }
+        const candidates = Object.entries(byUser);
+
+        const el = document.createElement('div');
+        el.id = 'sg-cansub-list-modal';
+        el.className = 'sg-overlay';
+
+        const todayStr = (() => { const n = new Date(); const p = x => String(x).padStart(2,'0'); return `${n.getFullYear()}-${p(n.getMonth()+1)}-${p(n.getDate())}`; })();
+        const renderRows = (list) => list.map(([uid, { prof, dates, locName }]) => {
+            const ini = (prof.full_name || '').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+            const col = this._avatarColor(uid);
+            const userConf = confMap[uid] || new Map();
+            const chips = dates.sort().map(d => {
+                const confLoc = userConf.get(d);
+                const confirmed = confLoc !== undefined;
+                const past = d <= todayStr;
+                const label = new Date(d + 'T00:00:00').toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' });
+                if (confirmed) return `<span class="sg-csl-chip sg-csl-chip--conf" title="Був на підміні${confLoc ? ' · ' + confLoc : ''}">✓ ${label}${confLoc ? `<span class="sg-csl-chip-loc"> · ${Fmt.esc(confLoc)}</span>` : ''}</span>`;
+                if (past)      return '';
+                return             `<span class="sg-csl-chip sg-csl-chip--future">${label}</span>`;
+            }).join('');
+            const pos  = prof.job_position ? `<span class="sg-csl-pos">${Fmt.esc(prof.job_position)}</span>` : '';
+            const city = prof.city ? `<span class="sg-csl-city"><i class="fa-solid fa-location-dot"></i> ${Fmt.esc(prof.city)}</span>` : '';
+            const loc  = locName  ? `<span class="sg-csl-loc"><i class="fa-solid fa-store"></i> ${Fmt.esc(locName)}</span>` : '';
+            return `<div class="sg-csl-row" data-name="${Fmt.esc((prof.full_name || '').toLowerCase())}">
+                <div class="sg-av sg-csl-av" style="background:${col}">${ini}</div>
+                <div class="sg-csl-info">
+                    <div class="sg-csl-name">${Fmt.esc(prof.full_name || '')}</div>
+                    <div class="sg-csl-meta">${loc}${pos}${city}</div>
+                    <div class="sg-csl-chips">${chips}</div>
+                </div>
+            </div>`;
+        }).join('');
+
+        const emptyHtml = `<div class="sg-csl-empty">
+            <div class="sg-csl-empty-ico">🙋</div>
+            <div>Жоден співробітник не позначив готовність до підміни</div>
+        </div>`;
+
+        el.innerHTML = `
+<div class="sg-modal sg-csl-modal">
+    <div class="sg-csl-header">
+        <div class="sg-csl-title-row">
+            <span class="sg-csl-title">🙋 Можуть підмінити</span>
+            <span class="sg-csl-count">${candidates.length}</span>
+            <button class="sg-mclose" onclick="document.getElementById('sg-cansub-list-modal').remove()">✕</button>
+        </div>
+        ${candidates.length > 4 ? `<div class="sg-csl-search-wrap">
+            <i class="fa-solid fa-magnifying-glass sg-csl-search-ico"></i>
+            <input class="sg-csl-search" id="sg-csl-search" placeholder="Пошук за іменем..." oninput="ScheduleGraphPage._filterCanSub(this.value)">
+        </div>` : ''}
+    </div>
+    <div class="sg-csl-list" id="sg-csl-list">
+        ${candidates.length ? renderRows(candidates) : emptyHtml}
+    </div>
+</div>`;
+        document.body.appendChild(el);
+        el.addEventListener('click', e => { if (e.target === el) el.remove(); });
+    },
+
+    _filterCanSub(q) {
+        const rows = document.querySelectorAll('#sg-csl-list .sg-csl-row');
+        const s = q.trim().toLowerCase();
+        rows.forEach(r => { r.style.display = (!s || r.dataset.name.includes(s)) ? '' : 'none'; });
+    },
+
+    async _showSubstReportModal() {
+        document.getElementById('sg-subrep-modal')?.remove();
+
+        // Фільтр по поточному місяцю
+        const _p = n => String(n).padStart(2, '0');
+        const monthFrom = `${this._year}-${_p(this._month + 1)}-01`;
+        const lastDay   = new Date(this._year, this._month + 1, 0).getDate();
+        const monthTo   = `${this._year}-${_p(this._month + 1)}-${_p(lastDay)}`;
+
+        // Підміни = __sub_confirmed__ АБО робочі зміни is_primary=false співробітників
+        const myLocIds = (this._locations || []).map(l => l.id);
+        if (!myLocIds.length) { Toast.info('Звіт по підмінам', 'Немає локацій.'); return; }
+
+        // Знайти всіх підмінних (is_primary=false) по локаціях менеджера
+        const { data: subAssigns } = await supabase.from('schedule_assignments')
+            .select('user_id, location_id')
+            .in('location_id', myLocIds)
+            .eq('is_primary', false);
+        // Множина пар userId_locationId де людина є підмінником
+        const subPairs = new Set((subAssigns || []).map(a => `${a.user_id}_${a.location_id}`));
+        const subUserIds = [...new Set((subAssigns || []).map(a => a.user_id).filter(Boolean))];
+
+        const [confRes, subShiftRes] = await Promise.all([
+            // __sub_confirmed__ entries (підміни через підтвердження)
+            supabase.from('schedule_entries')
+                .select('user_id, date, location_id, shift_type, notes')
+                .in('location_id', myLocIds)
+                .gte('date', monthFrom).lte('date', monthTo)
+                .eq('notes', '__sub_confirmed__')
+                .order('date'),
+            // Робочі зміни is_primary=false співробітників
+            subUserIds.length
+                ? supabase.from('schedule_entries')
+                    .select('user_id, date, location_id, shift_type, notes')
+                    .in('location_id', myLocIds)
+                    .in('user_id', subUserIds)
+                    .gte('date', monthFrom).lte('date', monthTo)
+                    .eq('shift_type', 'work')
+                    .order('date')
+                : Promise.resolve({ data: [] })
+        ]);
+
+        // Тільки записи де user є is_primary=false САМЕ на цій локації + виключаємо технічні маркери
+        const _skipNotes = new Set(['__sub__', '__needsub__']);
+        const seen = new Set();
+        const confRows = [];
+        for (const row of [...(confRes.data || []), ...(subShiftRes.data || [])]) {
+            if (_skipNotes.has(row.notes)) continue;
+            // Для записів без __sub_confirmed__ — перевіряємо що це справді підмінна локація
+            if (row.notes !== '__sub_confirmed__' && !subPairs.has(`${row.user_id}_${row.location_id}`)) continue;
+            const key = `${row.location_id}_${row.user_id}_${row.date}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            confRows.push(row);
+        }
+        confRows.sort((a, b) => a.date.localeCompare(b.date));
+
+        if (!confRows?.length) {
+            Toast.info('Звіт по підмінам', 'Підтверджених підмін ще немає.');
+            return;
+        }
+
+        const userIds = [...new Set(confRows.map(r => r.user_id).filter(Boolean))];
+        const { data: profs } = await supabase.from('profiles')
+            .select('id, full_name, job_position, city, subdivision').in('id', userIds);
+        const profMap = {};
+        (profs || []).forEach(p => { profMap[p.id] = p; });
+
+        const allLocs = [...(this._locations || []), ...(this._partnerLocations || [])];
+        const knownLocIds = new Set(allLocs.map(l => l.id));
+        const unknownLocIds = new Set(confRows.map(r => r.location_id).filter(id => id && !knownLocIds.has(id)));
+        if (unknownLocIds.size) {
+            const { data: extraLocs } = await supabase.from('schedule_locations')
+                .select('id, name, address').in('id', [...unknownLocIds]);
+            (extraLocs || []).forEach(l => allLocs.push(l));
+        }
+        const locMap = {};
+        allLocs.forEach(l => { locMap[l.id] = l; });
+
+        // Групуємо по співробітнику
+        const byUser = {};
+        for (const r of confRows) {
+            if (!r.user_id) continue;
+            if (!byUser[r.user_id]) byUser[r.user_id] = [];
+            byUser[r.user_id].push(r);
+        }
+
+        const _fmtDate = d => new Date(d + 'T00:00:00').toLocaleDateString('uk-UA', { day: 'numeric', month: 'short', year: 'numeric' });
+
+        const monthLabel = new Date(this._year, this._month).toLocaleDateString('uk-UA', { month: 'long', year: 'numeric' });
+
+        // Плоска таблиця — всі рядки підряд, згруповані по співробітнику
+        const tableRows = Object.entries(byUser).map(([uid, entries]) => {
+            const prof  = profMap[uid];
+            const name  = prof?.full_name || '—';
+            const pos   = prof?.job_position || '';
+            const city  = prof?.city || '';
+            const color = this._avatarColor(uid);
+            const ini   = name !== '—' ? name.split(' ').filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase() : '?';
+            const meta  = [pos, city].filter(Boolean).map(Fmt.esc).join(', ');
+
+            return entries.map((r, i) => {
+                const loc     = locMap[r.location_id];
+                const locName = loc?.name || '—';
+                const addr    = loc?.address || '';
+                const dateStr = new Date(r.date + 'T00:00:00').toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' });
+                const isFirst = i === 0;
+                const empCell = isFirst
+                    ? `<td class="sg-srep-td sg-srep-td-emp sg-srep-td-first" rowspan="${entries.length}">
+                           <div class="sg-srep-emp-inner">
+                               <div class="sg-srep-av" style="background:${color}">${ini}</div>
+                               <div class="sg-srep-pinfo">
+                                   <div class="sg-srep-name">${Fmt.esc(name)}</div>
+                                   ${meta ? `<div class="sg-srep-meta">${meta}</div>` : ''}
+                                   <div class="sg-srep-cnt-inline">${entries.length} підмін</div>
+                               </div>
+                           </div>
+                       </td>`
+                    : '';
+                return `<tr class="sg-srep-tr${isFirst ? ' sg-srep-tr-first' : ''}${i % 2 === 1 ? ' sg-srep-tr-odd' : ''}">${empCell}
+                    <td class="sg-srep-td sg-srep-td-date">${dateStr}</td>
+                    <td class="sg-srep-td sg-srep-td-loc">${Fmt.esc(locName)}</td>
+                    <td class="sg-srep-td sg-srep-td-addr">${Fmt.esc(addr)}</td>
+                </tr>`;
+            }).join('');
+        }).join('');
+
+        const totalSubs  = confRows.length;
+        const totalPeople = Object.keys(byUser).length;
+
+        const el = document.createElement('div');
+        el.id = 'sg-subrep-modal';
+        el.className = 'sg-overlay';
+        el.innerHTML = `<div class="sg-modal sg-srep-modal">
+            <div class="sg-srep-head">
+                <div class="sg-srep-head-left">
+                    <span class="sg-srep-ico">📋</span>
+                    <div>
+                        <div class="sg-srep-title">Звіт по підмінам</div>
+                        <div class="sg-srep-subtitle">${monthLabel}</div>
+                    </div>
+                </div>
+                <div class="sg-srep-head-right">
+                    <div class="sg-srep-stat"><span class="sg-srep-stat-n">${totalPeople}</span><span class="sg-srep-stat-l">співробітників</span></div>
+                    <div class="sg-srep-stat-sep"></div>
+                    <div class="sg-srep-stat"><span class="sg-srep-stat-n">${totalSubs}</span><span class="sg-srep-stat-l">підмін</span></div>
+                    <button class="sg-modal-close" onclick="document.getElementById('sg-subrep-modal').remove()">✕</button>
+                </div>
+            </div>
+            <div class="sg-srep-body">
+                <table class="sg-srep-table">
+                    <thead>
+                        <tr>
+                            <th class="sg-srep-th sg-srep-th-emp">Співробітник</th>
+                            <th class="sg-srep-th">Дата</th>
+                            <th class="sg-srep-th">Локація</th>
+                            <th class="sg-srep-th">Адреса</th>
+                        </tr>
+                    </thead>
+                    <tbody>${tableRows}</tbody>
+                </table>
+            </div>
+        </div>`;
+        document.body.appendChild(el);
+        el.addEventListener('click', e => { if (e.target === el) el.remove(); });
+    },
+
     async _showManagerHelpModal() {
         const { data: existing } = await supabase.from('schedule_entries')
             .select('id, date, location_id')
@@ -2912,7 +3286,21 @@ ${this._styles()}`;
             <button class="sg-collapse-all-btn" title="Розгорнути всі локації"
                 onclick="ScheduleGraphPage._expandAllLocs()">▲ Розгорнути всі</button>
             <button class="sg-mgr-help-btn" onclick="ScheduleGraphPage._showManagerHelpModal()">
-                🆘 Потрібна підміна
+                🆘 Потрібна підміна${(() => {
+                    const cnt = Object.values(this._allEntries||{}).filter(e=>e.notes==='__needsub__').length;
+                    return cnt ? ` <span class="sg-cansub-badge">${cnt}</span>` : '';
+                })()}
+            </button>
+            <button class="sg-cansub-list-btn" onclick="ScheduleGraphPage._showCanSubModal()">
+                🙋 Можуть підмінити${(() => {
+                    const myUids = new Set([...(this._allAssignments||[]),...(this._assignments||[])].map(a=>a.user_id).filter(Boolean));
+                    const src = this._locId === 'all' ? (this._allEntries||{}) : (this._entries||{});
+                    const cnt = new Set(Object.values(src).filter(e=>e.notes==='__sub__'&&myUids.has(e.user_id)).map(e=>e.user_id)).size;
+                    return cnt ? ` <span class="sg-cansub-badge">${cnt}</span>` : '';
+                })()}
+            </button>
+            <button class="sg-subrep-btn" onclick="ScheduleGraphPage._showSubstReportModal()">
+                <i class="fa-solid fa-file-lines"></i> Звіт по підмінам
             </button>
             <button class="sg-viewers-btn" onclick="ScheduleGraphPage._showViewersModal()">
                 <i class="fa-solid fa-eye"></i> Доступ
@@ -2965,28 +3353,31 @@ ${this._styles()}`;
                             const isBusy = sd && isSd && !isFree;
                             if (_isRealShift(entry)) workDays++;
                             const isSubConf = entry?.notes === '__sub_confirmed__';
-                            const flagIco = entry?.notes === '__sub__' ? '🙋' : entry?.notes === '__needsub__' ? '🆘' : '';
-                            const dispShift = isSubConf ? SUB_CONFIRMED : shift;
+                            const flagIco = entry?.notes === '__needsub__' ? '🆘' : '';
+                            const dispShift = isSubConf ? SUB_CONFIRMED : (entry?.notes === '__sub__' ? null : shift);
                             const isFired  = !a.user_id;
                             const isEmpty  = !isFired && !locDatesWithWork[locId]?.has(date);
                             const uid2 = a.user_id || a.original_user_id;
-                            const crossShifts = !entry && uid2 ? (shiftsByUidDate[`${uid2}_${date}`] || null) : null;
+                            const allCross = uid2 ? (shiftsByUidDate[`${uid2}_${date}`] || null) : null;
+                            const subConfCross = allCross?.find(x => x.locId !== locId && (this._allEntries?.[`${x.locId}_${uid2}_${date}`]?.notes === '__sub_confirmed__')) || null;
+                            const crossShifts = (!entry || entry?.notes === '__sub__') && uid2 ? allCross : null;
                             const crossOther  = crossShifts?.find(x => x.locId !== locId) || null;
-                            const otherLocName = crossOther?.locName || null;
+                            const otherLocName = subConfCross?.locName || crossOther?.locName || null;
                             const isVOLoc = this._isViewOnlyLoc(locId);
                             const cellTitle = isFired ? 'Звільнений співробітник'
                                 : a.isPartner || isVOLoc ? 'Тільки перегляд'
-                                : entry?.notes==='__sub__' ? 'Може вийти на підміну'
                                 : entry?.notes==='__needsub__' ? 'Потрібна підміна'
+                                : subConfCross ? `Підміна у «${subConfCross.locName}»`
                                 : isSubConf ? 'Підтверджена підміна'
                                 : shift ? shift.label
-                                : otherLocName ? `Підміна у «${otherLocName}»` : 'Клік щоб додати';
+                                : crossOther ? `Підміна у «${crossOther.locName}»` : 'Клік щоб додати';
                             return `<td class="sg-cell${we?' we':''}${isSd?' sg-sd-col':''}${isFree?' sg-free-cell':''}${isBusy?' sg-busy-cell':''}${entry?.notes==='__needsub__'?' sg-needsub-cell':''}${a.isPartner||isVOLoc?' sg-cell-partner':''}${isFired?' sg-cell-fired':''}${isEmpty?' sg-cell-no-work':''}"
                                 data-uid="${a.user_id}" data-date="${date}" data-locid="${locId}"
                                 ${(isFired || a.isPartner || isVOLoc) ? '' : `onclick="ScheduleGraphPage._openCellAll('${locId}','${a.user_id}','${date}')"`}
                                 title="${cellTitle}">
                                 ${flagIco
                                     ? `<span class="sg-flag-cell">${flagIco}</span>`
+                                    : subConfCross ? `<span class="sg-other-loc-badge">${subConfCross.locName.slice(0,3)}</span>`
                                     : dispShift ? `<span class="sg-badge" style="background:${dispShift.bg};color:${dispShift.color}">${dispShift.short}</span>`
                                     : otherLocName ? `<span class="sg-other-loc-badge">${otherLocName.slice(0,3)}</span>`
                                     : isFree ? `<span class="sg-free-dot">●</span>` : ''}
@@ -4451,8 +4842,18 @@ ${this._styles()}`;
 .sg-v2-top { display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap; }
 .sg-v2-card { background:var(--bg-raised);border:1px solid var(--border);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px; }
 .sg-v2-loc-card { min-width:240px;flex:0 0 auto;background:linear-gradient(135deg,color-mix(in srgb,var(--primary) 8%,var(--bg-raised)),var(--bg-raised));border-color:color-mix(in srgb,var(--primary) 20%,var(--border)); }
-.sg-v2-mgmt-card { flex:0 0 auto; }
+.sg-v2-mgmt-card { flex:0 0 auto;min-width:300px; }
 .sg-v2-card-label { font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:2px; }
+.sg-v2-svc-grid { display:grid;grid-template-columns:1fr 1fr;gap:6px; }
+.sg-svc-btn { display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;border:none;background:transparent;cursor:pointer;text-align:left;transition:background .12s;width:100%; }
+.sg-svc-btn:hover { background:var(--bg-raised); }
+.sg-svc-ico { width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.85rem;flex-shrink:0; }
+.sg-svc-body { flex:1;min-width:0; }
+.sg-svc-title { font-size:.78rem;font-weight:600;color:var(--text-primary);display:flex;align-items:center;gap:5px;flex-wrap:wrap; }
+.sg-svc-desc { font-size:.67rem;color:var(--text-muted);margin-top:1px; }
+.sg-svc-arr { font-size:.6rem;color:var(--text-muted);flex-shrink:0;opacity:.5; }
+.sg-svc-badge { font-size:.62rem;font-weight:700;background:rgba(239,68,68,.15);color:#ef4444;border-radius:8px;padding:1px 5px;line-height:1.4; }
+.sg-svc-badge-green { background:rgba(16,185,129,.15);color:#10b981; }
 .sg-v2-loc-name { display:flex;align-items:center;gap:6px;font-weight:600;font-size:.95rem; }
 .sg-v2-loc-row { display:flex;align-items:center;gap:8px;font-size:.8rem;color:var(--text-secondary); }
 .sg-v2-loc-val { font-weight:600;color:var(--text-primary);margin-left:auto; }
@@ -5321,6 +5722,116 @@ tr:last-child td { border-bottom:none; }
     font-size:.82rem;color:var(--text-muted);margin:0 0 16px;line-height:1.5;
 }
 .sg-resolve-confirm-btn { background:linear-gradient(135deg,#10b981,#059669) !important; }
+/* Subst report button */
+.sg-subrep-btn {
+    display:flex;align-items:center;gap:6px;padding:7px 13px;border-radius:10px;
+    border:1.5px solid rgba(245,158,11,.35);background:rgba(245,158,11,.08);
+    color:var(--text-primary);font-size:.82rem;font-weight:600;cursor:pointer;transition:background .15s;
+}
+.sg-subrep-btn:hover { background:rgba(245,158,11,.15);border-color:#f59e0b; }
+/* Subst report modal */
+.sg-srep-modal { max-width:800px;width:96vw;padding:0;overflow:hidden;display:flex;flex-direction:column;max-height:min(88vh,780px); }
+.sg-modal-close { display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;border:none;background:transparent;color:var(--text-secondary);font-size:1.1rem;cursor:pointer;transition:background .15s,color .15s;flex-shrink:0; }
+.sg-modal-close:hover { background:rgba(239,68,68,.12);color:#ef4444; }
+.sg-srep-head { display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);flex-shrink:0;gap:16px; }
+.sg-srep-head-left { display:flex;align-items:center;gap:12px; }
+.sg-srep-ico { font-size:1.4rem;line-height:1; }
+.sg-srep-title { font-size:1rem;font-weight:700;color:var(--text-primary);line-height:1.2; }
+.sg-srep-subtitle { font-size:.75rem;color:var(--text-muted);margin-top:1px; }
+.sg-srep-head-right { display:flex;align-items:center;gap:12px;flex-shrink:0; }
+.sg-srep-stat { display:flex;flex-direction:column;align-items:center;gap:0; }
+.sg-srep-stat-n { font-size:1.1rem;font-weight:800;color:var(--text-primary);line-height:1; }
+.sg-srep-stat-l { font-size:.65rem;color:var(--text-muted);white-space:nowrap; }
+.sg-srep-stat-sep { width:1px;height:28px;background:var(--border); }
+.sg-srep-body { flex:1;overflow-y:auto; }
+.sg-srep-table { width:100%;border-collapse:collapse;table-layout:fixed; }
+.sg-srep-th { position:sticky;top:0;z-index:1;padding:8px 14px;font-size:.68rem;font-weight:700;color:var(--text-muted);text-align:left;text-transform:uppercase;letter-spacing:.05em;background:var(--bg-raised);border-bottom:2px solid var(--border); }
+.sg-srep-th-emp { width:38%; }
+.sg-srep-tr-first td { border-top:3px solid var(--primary); }
+.sg-srep-tr-first:first-child td { border-top:none; }
+.sg-srep-tr-odd td:not(.sg-srep-td-emp) { background:var(--bg-raised); }
+.sg-srep-td { padding:7px 14px;font-size:.8rem;color:var(--text-primary);border-bottom:1px solid var(--border);vertical-align:top; }
+.sg-srep-td-emp { background:var(--bg-raised);vertical-align:top;border-right:1px solid var(--border); }
+.sg-srep-td-first { padding:10px 14px; }
+.sg-srep-emp-inner { display:flex;align-items:flex-start;gap:8px; }
+.sg-srep-av { width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:700;color:#fff;flex-shrink:0;margin-top:1px; }
+.sg-srep-pinfo { flex:1;min-width:0; }
+.sg-srep-name { font-size:.85rem;font-weight:700;color:var(--text-primary);word-break:break-word; }
+.sg-srep-meta { font-size:.7rem;color:var(--text-muted);margin-top:1px; }
+.sg-srep-cnt-inline { display:inline-block;margin-top:5px;font-size:.68rem;font-weight:700;padding:1px 7px;border-radius:20px;background:rgba(245,158,11,.13);color:#f59e0b; }
+.sg-srep-td-date { font-weight:600;white-space:nowrap;width:90px;color:var(--text-primary); }
+.sg-srep-td-loc { color:var(--text-secondary); }
+.sg-srep-td-addr { color:var(--text-muted);font-size:.75rem; }
+.sg-srep-status { font-size:.68rem;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap; }
+.sg-srep-status--done { background:rgba(16,185,129,.12);color:#10b981; }
+.sg-srep-status--vol  { background:rgba(99,102,241,.10);color:#6366f1; }
+/* Can-sub list button */
+.sg-cansub-list-btn {
+    display:flex;align-items:center;gap:6px;padding:7px 13px;border-radius:10px;
+    border:1.5px solid rgba(99,102,241,.35);background:rgba(99,102,241,.08);
+    color:var(--text-primary);font-size:.82rem;font-weight:600;cursor:pointer;transition:background .15s;
+}
+.sg-cansub-list-btn:hover { background:rgba(99,102,241,.15);border-color:#6366f1; }
+.sg-cansub-badge { display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#6366f1;color:#fff;font-size:.7rem;font-weight:700;line-height:1; }
+/* Can-sub list modal */
+.sg-csl-modal { max-width:500px;padding:0;overflow:hidden;display:flex;flex-direction:column;max-height:min(600px,90vh); }
+.sg-csl-header { padding:18px 20px 12px;border-bottom:1px solid var(--border);flex-shrink:0; }
+.sg-csl-title-row { display:flex;align-items:center;gap:10px;margin-bottom:10px; }
+.sg-csl-title { font-size:1.05rem;font-weight:700;color:var(--text-primary);flex:1; }
+.sg-csl-count {
+    font-size:.75rem;font-weight:700;padding:2px 9px;border-radius:20px;
+    background:rgba(99,102,241,.12);color:#6366f1;
+}
+.sg-csl-search-wrap { position:relative; }
+.sg-csl-search-ico { position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:.8rem;pointer-events:none; }
+.sg-csl-search {
+    width:100%;padding:8px 12px 8px 32px;border-radius:10px;
+    border:1.5px solid var(--border);background:var(--bg-raised);
+    color:var(--text-primary);font-size:.85rem;outline:none;box-sizing:border-box;
+}
+.sg-csl-search:focus { border-color:#6366f1; }
+.sg-csl-list {
+    flex:1;overflow-y:auto;padding:10px 16px 16px;
+    display:flex;flex-direction:column;gap:6px;
+}
+.sg-csl-row {
+    display:flex;align-items:flex-start;gap:12px;
+    padding:10px 12px;border-radius:12px;background:var(--bg-raised);
+    border:1px solid var(--border);
+}
+.sg-csl-av { width:38px;height:38px;font-size:.78rem;flex-shrink:0; }
+.sg-csl-info { flex:1;min-width:0; }
+.sg-csl-name { font-size:.88rem;font-weight:600;color:var(--text-primary); }
+.sg-csl-meta { display:flex;flex-wrap:wrap;gap:6px;margin-top:3px;align-items:center; }
+.sg-csl-loc  { font-size:.72rem;font-weight:600;color:var(--text-primary);display:flex;align-items:center;gap:3px; }
+.sg-csl-pos  { font-size:.72rem;color:var(--text-muted); }
+.sg-csl-city { font-size:.72rem;color:var(--text-muted);display:flex;align-items:center;gap:3px; }
+.sg-csl-chips { display:flex;flex-wrap:wrap;gap:4px;margin-top:6px; }
+.sg-csl-chip { font-size:.7rem;font-weight:600;padding:2px 8px;border-radius:20px;white-space:nowrap; }
+.sg-csl-chip--future { background:rgba(16,185,129,.12);color:#10b981; }
+.sg-csl-chip--past   { background:var(--bg-hover);color:var(--text-muted); }
+.sg-csl-chip--conf   { background:rgba(99,102,241,.13);color:#6366f1; }
+.sg-csl-chip-loc     { opacity:.7;font-weight:500; }
+.sg-csl-empty {
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:10px;padding:40px 20px;color:var(--text-muted);font-size:.85rem;text-align:center;
+}
+.sg-csl-empty-ico { font-size:2.2rem; }
+.sg-cand-section { margin-bottom:4px; }
+.sg-cand-hdr { font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:8px; }
+.sg-cand-list { display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto; }
+.sg-cand-row {
+    display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;
+    background:var(--bg-raised);cursor:pointer;transition:background .15s;
+}
+.sg-cand-row:hover { background:var(--bg-hover); }
+.sg-cand-av { width:32px;height:32px;font-size:.72rem;flex-shrink:0; }
+.sg-cand-info { flex:1;min-width:0; }
+.sg-cand-name { font-size:.85rem;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.sg-cand-meta { display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:2px; }
+.sg-cand-dov { font-size:.72rem;color:var(--text-muted); }
+.sg-cand-dates { font-size:.72rem;color:var(--text-muted); }
+.sg-cand-arr { font-size:.65rem;color:var(--text-muted);flex-shrink:0; }
 
 /* Manager reminder modal */
 .sg-reminder-modal-box { max-width:380px;text-align:center; }
@@ -5696,6 +6207,35 @@ const ScheduleGraphEmployee = {
                 });
             }
         }
+
+        // Cross-location entries for all users shown in this table (to display other-loc badges)
+        this._crossLocEntries = {};
+        const allUserIds = [...new Set(pIds.concat(AppState.user.id))];
+        if (allUserIds.length) {
+            const { data: crossAssigns } = await supabase.from('schedule_assignments')
+                .select('user_id, location_id').in('user_id', allUserIds);
+            const allLocIds = [...new Set((crossAssigns || []).map(a => a.location_id).filter(Boolean))];
+            const crossLocIds = allLocIds.filter(id => id && id !== this._locId);
+            if (crossLocIds.length) {
+                const { data: crossLocs } = await supabase.from('schedule_locations')
+                    .select('id, name').in('id', crossLocIds);
+                const crossLocMap = Object.fromEntries((crossLocs || []).map(l => [l.id, l.name]));
+                const { data: crossE } = await supabase.from('schedule_entries')
+                    .select('user_id, date, location_id, shift_type, notes')
+                    .in('user_id', allUserIds)
+                    .in('location_id', crossLocIds)
+                    .gte('date', dateFrom).lte('date', dateTo);
+                (crossE || []).forEach(e => {
+                    if (!_isRealShift(e) && e.notes !== '__sub_confirmed__') return;
+                    const key = `${e.user_id}_${e.date}`;
+                    const locName = crossLocMap[e.location_id] || '';
+                    const existing = this._crossLocEntries[key];
+                    if (!existing || e.notes === '__sub_confirmed__') {
+                        this._crossLocEntries[key] = { locName, notes: e.notes, shift_type: e.shift_type };
+                    }
+                });
+            }
+        }
     },
 
     _render(container) {
@@ -5723,7 +6263,10 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
 
         // Stats
         const stats = { work: 0, day_off: 0, vacation: 0, sick: 0 };
-        Object.values(this._entries).forEach(e => { if (stats[e.shift_type] !== undefined) stats[e.shift_type]++; });
+        Object.values(this._entries).forEach(e => {
+            if (['__sub__','__needsub__'].includes(e.notes)) return;
+            if (stats[e.shift_type] !== undefined) stats[e.shift_type]++;
+        });
 
         // Calendar cells
         const cells = [];
@@ -5738,20 +6281,19 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
             const canSub    = entry?.notes === '__sub__';
             const needSub   = entry?.notes === '__needsub__';
             const isSubConf = entry?.notes === '__sub_confirmed__';
-            const dispShift = isSubConf ? SUB_CONFIRMED : shift;
+            const dispShift = isSubConf ? SUB_CONFIRMED : (canSub ? null : shift);
             const mgrHelpInfo = this._managerHelpDates[dateStr];
             const mgrHelp    = !!mgrHelpInfo;
             const mgrHelpLoc = mgrHelpInfo?.locName || '';
             cells.push(`
-<div class="sge-day${we?' we':''}${isToday?' today':''}${(shift||isSubConf)?' has-shift':''}${canSub?' sge-cansub':''}${needSub?' sge-needsub':''}${isSubConf?' sge-subconf':''}${mgrHelp?' sge-mgr-help':''}"
+<div class="sge-day${we?' we':''}${isToday?' today':''}${(!canSub && (shift||isSubConf))?' has-shift':''}${canSub?' sge-cansub':''}${needSub?' sge-needsub':''}${isSubConf?' sge-subconf':''}${mgrHelp?' sge-mgr-help':''}"
     onclick="ScheduleGraphEmployee._openCell('${dateStr}')"
-    title="${canSub ? 'Можу вийти на підміну' : needSub ? 'Потрібна підміна' : isSubConf ? 'Підтверджена підміна' : mgrHelp ? 'Керівник шукає підміну' : shift ? shift.label : 'Додати запис'}">
+    title="${canSub ? 'Відмічено: можу вийти на підміну' : needSub ? 'Потрібна підміна' : isSubConf ? 'Підтверджена підміна' : mgrHelp ? 'Керівник шукає підміну' : shift ? shift.label : 'Додати запис'}">
     <div class="sge-day-top">
         <span class="sge-day-num${isToday?' cur':''}">${d}</span>
         <span class="sge-day-dow">${['Пн','Вт','Ср','Чт','Пт','Сб','Нд'][dow]}</span>
     </div>
-    ${canSub  ? `<div class="sge-flag-badge sge-flag-badge-sub">🙋</div>`
-        : needSub ? `<div class="sge-flag-badge sge-flag-badge-need">🆘</div>`
+    ${needSub ? `<div class="sge-flag-badge sge-flag-badge-need">🆘</div>`
         : dispShift ? `<div class="sge-badge" style="background:${dispShift.bg};color:${dispShift.color}">
                <span class="sge-badge-top">${dispShift.short}</span>
                <span class="sge-badge-label">${dispShift.label}</span>
@@ -5873,7 +6415,7 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
                 const totalDays = nums.filter(d => {
                     const dateStr = `${this._year}-${p(this._month+1)}-${p(d)}`;
                     const e = isMe ? this._entries[dateStr] : this._locEntries[`${a.user_id}_${dateStr}`];
-                    return e && e.shift_type === 'work';
+                    return e && e.shift_type === 'work' && !['__sub__','__needsub__'].includes(e.notes);
                 }).length;
                 return `<tr class="${isMe ? 'sge-my-row' : 'sge-peer-row'}">
                     <td class="sg-td-name">
@@ -5887,13 +6429,36 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
                         const dow = new Date(this._year, this._month, d).getDay();
                         const we  = dow === 0 || dow === 6;
                         const isToday = dateStr === todayStr;
-                        const entry = isMe ? this._entries[dateStr] : this._locEntries[`${a.user_id}_${dateStr}`];
-                        const shift = entry ? getShiftTypes()[entry.shift_type] : null;
-                        const badge = shift ? `<span class="sg-badge" style="background:${shift.bg};color:${shift.color}">${shift.short}</span>` : '';
-                        return `<td class="sg-cell${we?' we':''}${isToday?' sge-cell-today':''}${isMe?'':' sge-peer-cell'}"
+                        const uid = a.user_id;
+                        const entry = isMe ? this._entries[dateStr] : this._locEntries[`${uid}_${dateStr}`];
+                        const isSub    = entry?.notes === '__sub__';
+                        const isSubConf = entry?.notes === '__sub_confirmed__';
+                        const isNeedSub = entry?.notes === '__needsub__';
+                        const crossLoc = this._crossLocEntries?.[`${uid}_${dateStr}`] || null;
+                        const subConfOther = crossLoc?.notes === '__sub_confirmed__';
+                        const baseShift = (!isSub && !isNeedSub && entry) ? getShiftTypes()[entry.shift_type] : null;
+                        const dispShift = isSubConf ? SUB_CONFIRMED : (subConfOther ? null : baseShift);
+                        const showCrossLoc = !dispShift && crossLoc && (!entry || isSub);
+                        const cellTitle = isNeedSub ? 'Потрібна підміна'
+                            : subConfOther ? `Підміна у «${crossLoc.locName}»`
+                            : isSubConf ? 'Підтверджена підміна'
+                            : dispShift ? dispShift.label
+                            : showCrossLoc ? `Зміна у «${crossLoc.locName}»`
+                            : isSub && isMe ? 'Відмічено: можу вийти на підміну'
+                            : isMe ? 'Клікніть щоб додати' : '';
+                        const badgeHtml = isNeedSub
+                            ? `<span class="sg-flag-cell">🆘</span>`
+                            : subConfOther
+                                ? `<span class="sg-other-loc-badge">${Fmt.esc(crossLoc.locName.slice(0,3))}</span>`
+                            : dispShift
+                                ? `<span class="sg-badge" style="background:${dispShift.bg};color:${dispShift.color}">${dispShift.short}</span>`
+                            : showCrossLoc
+                                ? `<span class="sg-other-loc-badge">${Fmt.esc(crossLoc.locName.slice(0,3))}</span>`
+                            : isSub && isMe ? `<span class="sge-sub-marker">✓</span>` : '';
+                        return `<td class="sg-cell${we?' we':''}${isToday?' sge-cell-today':''}${isMe?'':' sge-peer-cell'}${isSub&&isMe?' sge-cansub':''}"
                             ${isMe ? `onclick="ScheduleGraphEmployee._openCell('${dateStr}')"` : ''}
-                            title="${isMe ? (shift?.label || 'Клікніть щоб додати') : (shift?.label || '')}">
-                            ${badge}
+                            title="${Fmt.esc(cellTitle)}">
+                            ${badgeHtml}
                         </td>`;
                     }).join('')}
                     <td class="sg-td-sum">${totalDays}</td>
@@ -6039,10 +6604,11 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
     border-top:1px solid var(--border);
 }
 /* Can-substitute indicator on employee calendar cells */
-.sge-day.sge-cansub {
-    border-color:#10b981;
-    box-shadow:0 0 0 2px rgba(16,185,129,.18);
-}
+/* Can-substitute indicator — відмічено готовність, не рахується як зміна */
+.sge-day.sge-cansub { border-color:rgba(99,102,241,.35);background:rgba(99,102,241,.05); }
+/* Table cell sge-cansub — light purple tint + checkmark */
+td.sge-cansub { background:rgba(99,102,241,.06);border-left:2px solid rgba(99,102,241,.3); }
+.sge-sub-marker { font-size:.7rem;color:rgba(99,102,241,.7);font-weight:700; }
 /* Needs-substitute indicator on employee calendar cells */
 .sge-day.sge-needsub {
     border-color:#f97316;

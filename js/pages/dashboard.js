@@ -1364,7 +1364,7 @@ const DashboardPage = {
                 <div class="dp-dot" style="background:${m.color}"></div>
                 <div class="dp-rtext">
                     <span class="dp-rtitle">${m.label}${loc}</span>
-                    ${s.notes ? `<span class="dp-rsub">${Fmt.esc(s.notes)}</span>` : ''}
+                    ${s.notes && !['__sub__','__needsub__','__sub_confirmed__'].includes(s.notes) ? `<span class="dp-rsub">${Fmt.esc(s.notes)}</span>` : ''}
                 </div>
             </div>`;
         };

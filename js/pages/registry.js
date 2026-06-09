@@ -80,10 +80,10 @@ const RegistryPage = {
             .rg-sec-head{display:flex;align-items:center;gap:.6rem;padding:.7rem 1rem;background:var(--bg-raised);cursor:pointer;user-select:none;border-bottom:1px solid transparent;transition:border-color .15s,background .15s}
             .rg-sec-head:hover{background:var(--bg-hover)}
             .rg-sec.open .rg-sec-head{border-bottom-color:var(--border)}
-            .rg-sec-chevron{font-size:.65rem;color:var(--text-muted);transition:transform .2s;flex-shrink:0}
+            .rg-sec-chevron{font-size:.9rem;color:var(--text-muted);transition:transform .2s;flex-shrink:0}
             .rg-sec.open .rg-sec-chevron{transform:rotate(90deg)}
-            .rg-sec-icon{width:28px;height:28px;border-radius:8px;background:rgba(99,102,241,.12);color:var(--primary);display:flex;align-items:center;justify-content:center;font-size:.8rem;flex-shrink:0}
-            .rg-sec-title{font-size:.84rem;font-weight:700;color:var(--text-primary);flex:1;min-width:0}
+            .rg-sec-icon{width:38px;height:38px;border-radius:10px;background:rgba(99,102,241,.12);color:var(--primary);display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0}
+            .rg-sec-title{font-size:.95rem;font-weight:700;color:var(--text-primary);flex:1;min-width:0}
             .rg-sec-dov-badge{font-size:.68rem;color:var(--text-muted);background:var(--bg-base);border:1px solid var(--border);border-radius:20px;padding:.1rem .45rem;flex-shrink:0;white-space:nowrap}
             .rg-sec-actions{display:flex;gap:.25rem;flex-shrink:0;opacity:0;transition:opacity .15s}
             .rg-sec:hover .rg-sec-actions{opacity:1}

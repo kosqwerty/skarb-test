@@ -128,8 +128,8 @@ const RegistryPage = {
             .rg-doc-col-area{padding:1rem 1.1rem;display:flex;flex-direction:column;gap:.45rem}
             .rg-doc-col-area:first-child{border-right:1px solid var(--border)}
             .rg-col-header{display:flex;align-items:center;gap:.45rem;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);padding-bottom:.55rem;border-bottom:1px solid var(--border);margin-bottom:.1rem}
-            .rg-col-add-btn{margin-left:auto;width:20px;height:20px;border-radius:5px;border:1px dashed var(--border);background:transparent;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.65rem;transition:all .15s;font-family:inherit;flex-shrink:0}
-            .rg-col-add-btn:hover{border-color:var(--primary);color:var(--primary)}
+            .rg-col-add-btn{margin-left:auto;display:inline-flex;align-items:center;gap:.3rem;padding:.2rem .55rem;border-radius:5px;border:1px dashed var(--border);background:transparent;color:var(--text-muted);cursor:pointer;font-size:.7rem;font-weight:600;transition:all .15s;font-family:inherit;flex-shrink:0;white-space:nowrap}
+            .rg-col-add-btn:hover{border-color:var(--primary);color:var(--primary);background:rgba(99,102,241,.05)}
             .rg-col-empty{color:var(--text-muted);font-size:.8rem;font-style:italic;padding:.35rem .1rem}
             .rg-doc-card{border:1px solid var(--border);border-radius:8px;padding:.6rem .8rem;cursor:pointer;transition:border-color .13s,background .13s;background:var(--bg-raised);display:flex;align-items:flex-start;gap:.5rem}
             .rg-doc-card:hover{border-color:var(--primary);background:rgba(99,102,241,.06)}
@@ -305,14 +305,14 @@ const RegistryPage = {
             <div class="rg-doc-col-area">
                 <div class="rg-col-header">
                     <i class="fa-solid fa-gavel" style="color:#6366f1"></i> Накази
-                    ${canManage ? `<button class="rg-col-add-btn" title="Додати наказ" onclick="RegistryPage._addDoc('${itemId}','order')"><i class="fa-solid fa-plus"></i></button>` : ''}
+                    ${canManage ? `<button class="rg-col-add-btn" onclick="RegistryPage._addDoc('${itemId}','order')"><i class="fa-solid fa-plus"></i> Додати наказ</button>` : ''}
                 </div>
                 ${renderCards(orders, 'order')}
             </div>
             <div class="rg-doc-col-area">
                 <div class="rg-col-header">
                     <i class="fa-solid fa-file-contract" style="color:#f59e0b"></i> Розпорядження
-                    ${canManage ? `<button class="rg-col-add-btn" title="Додати розпорядження" onclick="RegistryPage._addDoc('${itemId}','disposition')"><i class="fa-solid fa-plus"></i></button>` : ''}
+                    ${canManage ? `<button class="rg-col-add-btn" onclick="RegistryPage._addDoc('${itemId}','disposition')"><i class="fa-solid fa-plus"></i> Додати розпорядження</button>` : ''}
                 </div>
                 ${renderCards(disps, 'disposition')}
             </div>

@@ -304,14 +304,14 @@ const RegistryPage = {
         <div class="rg-doc-cols">
             <div class="rg-doc-col-area">
                 <div class="rg-col-header">
-                    <i class="fa-solid fa-gavel" style="color:#6366f1"></i> Накази
+                    <i class="fa-solid fa-gavel" style="color:#6366f1;font-size:1.1rem"></i> Накази
                     ${canManage ? `<button class="rg-col-add-btn" onclick="RegistryPage._addDoc('${itemId}','order')"><i class="fa-solid fa-plus"></i> Додати наказ</button>` : ''}
                 </div>
                 ${renderCards(orders, 'order')}
             </div>
             <div class="rg-doc-col-area">
                 <div class="rg-col-header">
-                    <i class="fa-solid fa-file-contract" style="color:#f59e0b"></i> Розпорядження
+                    <i class="fa-solid fa-file-contract" style="color:#f59e0b;font-size:1.1rem"></i> Розпорядження
                     ${canManage ? `<button class="rg-col-add-btn" onclick="RegistryPage._addDoc('${itemId}','disposition')"><i class="fa-solid fa-plus"></i> Додати розпорядження</button>` : ''}
                 </div>
                 ${renderCards(disps, 'disposition')}

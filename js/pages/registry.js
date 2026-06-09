@@ -108,14 +108,15 @@ const RegistryPage = {
             .rg-topic-btn.active{background:rgba(99,102,241,.08);color:var(--primary)}
             .rg-tbtn-num{width:20px;height:20px;border-radius:6px;flex-shrink:0;background:var(--bg-raised);color:var(--text-muted);display:flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:800;margin-top:.1rem;transition:all .12s;border:1px solid var(--border)}
             .rg-topic-btn.active .rg-tbtn-num{background:var(--primary);color:#fff;border-color:var(--primary)}
-            .rg-tbtn-name{flex:1;min-width:0;font-weight:500}
+            .rg-tbtn-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:.3rem}
+            .rg-tbtn-name{font-weight:500;line-height:1.4}
             .rg-topic-btn.active .rg-tbtn-name{font-weight:700}
             .rg-tbtn-dots{display:flex;gap:3px;flex-shrink:0;margin-top:.3rem}
             .rg-tbtn-dot{width:7px;height:7px;border-radius:50%}
             .rg-tdot-unread{background:#ef4444;animation:rg-pulse 1.4s ease-in-out infinite}
             .rg-tdot-read{background:#10b981}
             .rg-tdot-empty{background:var(--border)}
-            .rg-tbtn-actions{display:flex;gap:2px;flex-shrink:0;opacity:0;transition:opacity .15s;margin-top:.05rem}
+            .rg-tbtn-actions{display:flex;gap:2px;opacity:0;transition:opacity .15s}
             .rg-topic-btn:hover .rg-tbtn-actions{opacity:1}
             .rg-split-add-topic{padding:.5rem .75rem;border-top:1px solid var(--border);margin-top:auto}
             .rg-add-topic-btn{width:100%;display:flex;align-items:center;justify-content:center;gap:.4rem;font-size:.78rem;color:var(--text-muted);cursor:pointer;padding:.45rem .5rem;border-radius:var(--radius-sm);border:1px dashed var(--border);background:transparent;transition:all .15s;font-family:inherit}
@@ -251,15 +252,17 @@ const RegistryPage = {
         <div class="rg-topic-btn${isSelected ? ' active' : ''}" id="rg-tbtn-${item.id}"
              onclick="RegistryPage._selectTopic('${secId}','${item.id}')">
             <span class="rg-tbtn-num">${idx + 1}</span>
-            <span class="rg-tbtn-name">${Fmt.esc(item.topic)}</span>
+            <div class="rg-tbtn-body">
+                <span class="rg-tbtn-name">${Fmt.esc(item.topic)}</span>
+                ${canManage ? `
+                <div class="rg-tbtn-actions" onclick="event.stopPropagation()">
+                    <button class="rg-ta-btn" title="Редагувати" onclick="RegistryPage._editTopic('${item.id}',${JSON.stringify(item.topic).replace(/"/g,'&quot;')})"><i class="fa-solid fa-pen"></i></button>
+                    <button class="rg-ta-btn" title="Вгору" ${isFirst ? 'disabled' : ''} onclick="RegistryPage._moveTopic('${item.id}',-1)"><i class="fa-solid fa-arrow-up"></i></button>
+                    <button class="rg-ta-btn" title="Вниз" ${isLast ? 'disabled' : ''} onclick="RegistryPage._moveTopic('${item.id}',1)"><i class="fa-solid fa-arrow-down"></i></button>
+                    <button class="rg-ta-btn danger" title="Видалити" onclick="RegistryPage._deleteTopic('${item.id}',${JSON.stringify(item.topic).replace(/"/g,'&quot;')})"><i class="fa-solid fa-trash"></i></button>
+                </div>` : ''}
+            </div>
             <div class="rg-tbtn-dots">${orderDot}${dispDot}</div>
-            ${canManage ? `
-            <div class="rg-tbtn-actions" onclick="event.stopPropagation()">
-                <button class="rg-ta-btn" title="Редагувати" onclick="RegistryPage._editTopic('${item.id}',${JSON.stringify(item.topic).replace(/"/g,'&quot;')})"><i class="fa-solid fa-pen"></i></button>
-                <button class="rg-ta-btn" title="Вгору" ${isFirst ? 'disabled' : ''} onclick="RegistryPage._moveTopic('${item.id}',-1)"><i class="fa-solid fa-arrow-up"></i></button>
-                <button class="rg-ta-btn" title="Вниз" ${isLast ? 'disabled' : ''} onclick="RegistryPage._moveTopic('${item.id}',1)"><i class="fa-solid fa-arrow-down"></i></button>
-                <button class="rg-ta-btn danger" title="Видалити" onclick="RegistryPage._deleteTopic('${item.id}',${JSON.stringify(item.topic).replace(/"/g,'&quot;')})"><i class="fa-solid fa-trash"></i></button>
-            </div>` : ''}
         </div>`;
     },
 

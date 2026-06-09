@@ -23,6 +23,8 @@ const ResourcesPage = {
     _kbTypeFilter: 'all',
     _kbAllItems: [],
     _docsSort: 'priority',
+    _docsTreeStatus: '',
+    _docsTreeTov: '',
     _allDovirenosti: [],
     _myDovirenosti: [],
 
@@ -119,7 +121,7 @@ const ResourcesPage = {
                 .dtab-red.active .dtab-ic{background:rgba(239,68,68,.22)!important;color:#ef4444!important}
                 .dtab-status{margin-left:auto}
                 .res-ic-wrap{position:relative;flex-shrink:0}
-                .res-ack-dot{position:absolute;top:-3px;right:-3px;width:9px;height:9px;border-radius:50%;border:2px solid var(--bg-surface)}
+                .res-ack-dot{position:absolute;top:6px;left:6px;width:9px;height:9px;border-radius:50%;border:2px solid var(--bg-surface);z-index:1}
                 .res-ack-dot.res-unread{background:#ef4444;box-shadow:0 0 0 0 rgba(239,68,68,.6);animation:res-pulse 1.4s ease-in-out infinite}
                 .res-ack-dot.res-read{background:#10b981}
                 @keyframes res-pulse{0%{box-shadow:0 0 0 0 rgba(239,68,68,.6)}70%{box-shadow:0 0 0 5px rgba(239,68,68,0)}100%{box-shadow:0 0 0 0 rgba(239,68,68,0)}}
@@ -131,19 +133,13 @@ const ResourcesPage = {
                     <div class="dtab-sep"></div>
                     <button id="docs-tab-branch" class="dtab" onclick="ResourcesPage.switchTab('branch',this)"><span class="dtab-ic dtab-ic-branch"><i class="fa-solid fa-scale-balanced"></i></span>Куточок споживача</button>
                     <div class="dtab-sep"></div>
-                    <button id="docs-cat-npa" class="dtab" onclick="ResourcesPage._setCatFilter('Список НПА',this)"><span class="dtab-ic dtab-ic-npa"><i class="fa-solid fa-scroll"></i></span>Список НПА</button>
-                    <div class="dtab-sep"></div>
-                    <button id="docs-cat-nakaz" class="dtab" onclick="ResourcesPage._setCatFilter('Наказ',this)"><span class="dtab-ic dtab-ic-nakaz"><i class="fa-solid fa-file-lines"></i></span>Накази</button>
-                    <div class="dtab-sep"></div>
-                    <button id="docs-cat-rozp" class="dtab" onclick="ResourcesPage._setCatFilter('Розпорядження',this)"><span class="dtab-ic dtab-ic-rozp"><i class="fa-solid fa-file-contract"></i></span>Розпорядження</button>
-                    <div class="dtab-sep"></div>
-                    <button id="docs-tab-list" class="dtab" onclick="ResourcesPage.switchTabList(this)"><span class="dtab-ic dtab-ic-all"><i class="fa-solid fa-layer-group"></i></span>Всі</button>
+                    <button id="docs-tab-list" class="dtab" onclick="ResourcesPage.switchTabList(this)"><span class="dtab-ic dtab-ic-all"><i class="fa-solid fa-layer-group"></i></span>Всі документи</button>
                     <div id="docs-cat-chips" style="display:none"></div>
                     ${isManager ? '<button id="docs-tab-status" class="dtab dtab-status" onclick="ResourcesPage.switchTab(\'status\',this)"><span class="dtab-ic dtab-ic-status"><i class="fa-solid fa-chart-bar"></i></span>Статус</button>' : ''}
                 </div>
                 <div id="docs-tab-content">
                     <div id="resource-list" class="resource-list-docs"></div>
-                    <div id="resources-pagination" style="display:flex;justify-content:center;gap:.5rem;margin-top:1.5rem"></div>
+                    <div id="resources-pagination" style="display:flex;justify-content:center;gap:.5rem;margin-top:1.5rem;margin-bottom:2rem"></div>
                 </div>`;
 
             await this._loadFilters();
@@ -156,9 +152,6 @@ const ResourcesPage = {
                 this.switchTab('list', tabListBtn, { skipLoad: true });
                 if (savedCat) {
                     this._category = savedCat;
-                    const fixedCatMap = { 'Список НПА': 'docs-cat-npa', 'Наказ': 'docs-cat-nakaz', 'Розпорядження': 'docs-cat-rozp' };
-                    const fixedBtn = fixedCatMap[savedCat] ? document.getElementById(fixedCatMap[savedCat]) : null;
-                    this._highlightCatBtn(fixedBtn, savedCat);
                 }
                 await this.load();
             } else {
@@ -393,7 +386,7 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
 </div>
 
 <div id="resource-list"></div>
-<div id="resources-pagination" style="display:flex;justify-content:center;gap:.5rem;margin-top:1.5rem"></div>`;
+<div id="resources-pagination" style="display:flex;justify-content:center;gap:.5rem;margin-top:1.5rem;margin-bottom:2rem"></div>`;
 
         await Promise.all([this._loadFilters(), this.load(true)]);
         if (AppState.isAdmin()) this._loadDbSize();
@@ -461,29 +454,61 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
 
         // reset category chips on any tab switch
         this._category = '';
+        this._docsTreeStatus = '';
+        this._docsTreeTov = '';
         document.querySelectorAll('.docs-cat-chip').forEach(b => { b.classList.remove('btn-primary'); b.classList.add('btn-ghost'); });
 
         if (tab === 'list') {
+            if (!document.getElementById('docs-tree-styles')) {
+                const st = document.createElement('style');
+                st.id = 'docs-tree-styles';
+                st.textContent = `
+                    .dt-sidebar { width:270px;flex-shrink:0;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;position:sticky;top:72px }
+                    .dt-sec { border-bottom:1px solid var(--border) }
+                    .dt-sec:last-child { border-bottom:none }
+                    .dt-sec-title { padding:.5rem .85rem;font-size:.83rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);background:var(--bg-raised) }
+                    .dt-item { display:flex;align-items:center;gap:.45rem;padding:.42rem .85rem;font-size:.98rem;color:var(--text-secondary);cursor:pointer;border:none;background:transparent;width:100%;text-align:left;font-family:inherit;transition:background .1s,color .1s }
+                    .dt-item:hover { background:rgba(99,102,241,.07);color:var(--text-primary) }
+                    .dt-item.active { background:rgba(99,102,241,.12);color:var(--primary);font-weight:600 }
+                    .dt-item i { font-size:1.1rem;width:16px;text-align:center;flex-shrink:0 }
+                    .dt-ic-x { display:none }
+                    .dt-item.active.dt-removable .dt-ic { display:none }
+                    .dt-item.active.dt-removable .dt-ic-x { display:inline-block;color:#ef4444 }
+                    .dt-count { margin-left:auto;font-size:.63rem;background:var(--bg-raised);color:var(--text-muted);padding:.1rem .35rem;border-radius:4px;border:1px solid var(--border) }
+                    .dt-item.active .dt-count { background:rgba(99,102,241,.15);color:var(--primary);border-color:rgba(99,102,241,.3) }
+                    .dt-reset { display:none;width:100%;padding:.5rem .85rem;font-size:.75rem;font-weight:600;color:#ef4444;background:transparent;border:none;border-top:1px solid var(--border);cursor:pointer;text-align:left;font-family:inherit;transition:background .1s }
+                    .dt-reset:hover { background:rgba(239,68,68,.06) }
+                    .dt-reset.visible { display:block }
+                `;
+                document.head.appendChild(st);
+            }
             content.innerHTML = `
-                <div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem">
-                    <div style="position:relative;flex:1;min-width:200px;max-width:360px">
-                        <i class="fa-solid fa-magnifying-glass" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:.85rem;pointer-events:none"></i>
-                        <input type="text" id="resource-search" placeholder="Пошук за назвою або описом..." value="${this._search}"
-                               style="width:100%;padding-left:2.1rem;box-sizing:border-box" oninput="ResourcesPage.onSearch(event)">
+                <div style="display:flex;gap:1rem;align-items:flex-start">
+                    <div class="dt-sidebar" id="docs-filter-sidebar">
+                        <div style="padding:.75rem;text-align:center;color:var(--text-muted);font-size:.98rem"><i class="fa-solid fa-spinner fa-spin"></i></div>
                     </div>
-                    <select id="docs-sort-sel" onchange="ResourcesPage._docsSetSort(this.value)" style="width:auto">
-                        <option value="priority">🔴 Нові / оновлені першими</option>
-                        <option value="newest">↓ Дата додавання</option>
-                        <option value="name_az">A → Я назва</option>
-                        <option value="status_asc">✅ Ознайомлені першими</option>
-                    </select>
-                </div>
-                <div id="resource-list" class="resource-list-docs"></div>
-                <div id="resources-pagination" style="display:flex;justify-content:center;gap:.5rem;margin-top:1.5rem"></div>`;
+                    <div style="flex:1;min-width:0">
+                        <div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem">
+                            <div style="position:relative;flex:1;min-width:200px;max-width:360px">
+                                <i class="fa-solid fa-magnifying-glass" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:.85rem;pointer-events:none"></i>
+                                <input type="text" id="resource-search" placeholder="Пошук за назвою або описом..." value="${this._search}"
+                                       style="width:100%;padding-left:2.1rem;box-sizing:border-box" oninput="ResourcesPage.onSearch(event)">
+                            </div>
+                            <select id="docs-sort-sel" onchange="ResourcesPage._docsSetSort(this.value)" style="width:auto">
+                                <option value="priority" ${this._docsSort==='priority'?'selected':''}>🔴 Нові / оновлені першими</option>
+                                <option value="newest" ${this._docsSort==='newest'?'selected':''}>↓ Дата додавання</option>
+                                <option value="name_az" ${this._docsSort==='name_az'?'selected':''}>A → Я назва</option>
+                                <option value="status_asc" ${this._docsSort==='status_asc'?'selected':''}>✅ Ознайомлені першими</option>
+                            </select>
+                        </div>
+                        <div id="resource-list" class="resource-list-docs"></div>
+                        <div id="resources-pagination" style="display:flex;justify-content:center;gap:.5rem;margin-top:1.5rem;margin-bottom:2rem"></div>
+                    </div>
+                </div>`;
             if (!skipLoad) this.load();
         } else if (tab === 'branch') {
             content.innerHTML = `
-                ${AppState.isAdmin() ? '<div style="margin-bottom:.75rem"><button class="btn btn-primary" onclick="BranchDocsPage._blockModal()"><i class="fa-solid fa-plus"></i> Додати блок</button></div>' : ''}
+                ${AppState.isAdmin() ? '<div style="margin-bottom:.75rem"><button class="btn btn-primary" onclick="BranchDocsPage._blockModal()"><i class="fa-solid fa-plus"></i> Додати рядок</button></div>' : ''}
                 <div id="bd-tab-area" style="width:1000px"></div>`;
             BranchDocsPage.renderInTab(document.getElementById('bd-tab-area'));
         } else if (tab === 'red-folder') {
@@ -873,7 +898,7 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
     },
 
     _setCatFilter(cat, btn) {
-        if (this._category === cat) return; // повторний клік — нічого не робимо
+        if (this._category === cat && cat !== '') return; // повторний клік — нічого не робимо
         this._category = cat;
         // if not on list tab — switch first (skipLoad=true), then load once with category
         if (this._activeTab !== 'list') {
@@ -899,6 +924,112 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
     _docsSetSort(val) {
         this._docsSort = val;
         this.load();
+    },
+
+    _docsResetFilters() {
+        this._category = '';
+        this._docsTreeStatus = '';
+        this._docsTreeTov = '';
+        this._page = 0;
+        this.load();
+    },
+
+    _docsSetStatus(val) {
+        this._docsTreeStatus = this._docsTreeStatus === val ? '' : val;
+        this._page = 0;
+        this.load();
+    },
+
+    _docsSetTov(val) {
+        this._docsTreeTov = this._docsTreeTov === val ? '' : val;
+        this._page = 0;
+        this.load();
+    },
+
+    _renderDocsFilterSidebar(allDocs) {
+        const sb = document.getElementById('docs-filter-sidebar');
+        if (!sb) return;
+
+        // Category counts (all main doc categories)
+        const catDefs = [
+            { key: 'Наказ',          label: 'Накази',         icon: 'fa-gavel',         color: '#ef4444' },
+            { key: 'Розпорядження',  label: 'Розпорядження',  icon: 'fa-file-contract', color: '#f59e0b' },
+            { key: 'Список НПА',     label: 'Список НПА',     icon: 'fa-book',          color: '#6366f1' },
+        ];
+        const otherCats = [...new Set(allDocs.map(r => r.category).filter(c => c && !catDefs.find(d => d.key === c) && c.toLowerCase() !== 'general' && c.toLowerCase() !== 'реєстри нпа' && c.toLowerCase() !== 'реєстри' && c.toLowerCase() !== 'анкета'))].sort();
+
+        // Status counts
+        const unreadCount = allDocs.filter(r => { const dl = this._myDownloads[r.id]; return !dl || r.doc_version > (dl.version||1); }).length;
+        const readCount   = allDocs.length - unreadCount;
+
+        // TOV counts
+        const tovMap = {};
+        allDocs.forEach(r => {
+            const dovs = r.resource_dovirenosti || [];
+            if (!dovs.length) {
+                tovMap['__all__'] = (tovMap['__all__'] || 0) + 1;
+            } else {
+                dovs.forEach(rd => {
+                    const n = rd.dovirenosti?.name;
+                    if (n) tovMap[n] = (tovMap[n] || 0) + 1;
+                });
+            }
+        });
+        const _isPtZt = s => s.startsWith('ПТ');
+        const _allEntries = Object.entries(tovMap).filter(([k]) => k !== '__all__');
+        const _regular = _allEntries.filter(([k]) => !_isPtZt(k)).sort((a,b) => a[0].localeCompare(b[0], 'uk'));
+        const _ptzt    = _allEntries.filter(([k]) =>  _isPtZt(k)).sort((a,b) => a[0].localeCompare(b[0], 'uk'));
+        const tovEntries = [..._regular, ..._ptzt];
+
+        const mkItem = (isActive, onclick, iconHtml, label, count, removable = true) => `
+            <button class="dt-item${isActive ? ' active' : ''}${removable ? ' dt-removable' : ''}" onclick="${onclick}">
+                <i class="fa-solid fa-xmark dt-ic-x" style="width:13px;text-align:center;font-size:.7rem"></i>
+                <span class="dt-ic">${iconHtml}</span>
+                ${label}
+                <span class="dt-count">${count}</span>
+            </button>`;
+
+        const catItems = [
+            mkItem(!this._category, "ResourcesPage._setCatFilter('',null)",
+                `<i class="fa-solid fa-layer-group" style="color:var(--primary)"></i>`, 'Всі', allDocs.length, false),
+            ...catDefs.map(c => {
+                const cnt = allDocs.filter(r => r.category === c.key).length;
+                if (!cnt) return '';
+                return mkItem(this._category === c.key, `ResourcesPage._setCatFilter(${JSON.stringify(c.key).replace(/"/g,'&quot;')},null)`,
+                    `<i class="fa-solid ${c.icon}" style="color:${c.color}"></i>`, c.label, cnt);
+            }),
+            ...otherCats.map(c => {
+                const cnt = allDocs.filter(r => r.category === c).length;
+                return mkItem(this._category === c, `ResourcesPage._setCatFilter(${JSON.stringify(c).replace(/"/g,'&quot;')},null)`,
+                    `<i class="fa-solid fa-tag" style="color:var(--text-muted)"></i>`, Fmt.esc(c), cnt);
+            }),
+        ].filter(Boolean).join('');
+
+        const statusItems = [
+            mkItem(this._docsTreeStatus === 'unread', "ResourcesPage._docsSetStatus('unread')",
+                `<i class="fa-solid fa-circle" style="color:#ef4444;font-size:.5rem"></i>`, 'Непрочитані', unreadCount),
+            mkItem(this._docsTreeStatus === 'read', "ResourcesPage._docsSetStatus('read')",
+                `<i class="fa-solid fa-circle" style="color:#10b981;font-size:.5rem"></i>`, 'Прочитані', readCount),
+        ].join('');
+
+        const mkTovItems = (entries) => entries.map(([n, cnt]) =>
+            mkItem(this._docsTreeTov === n, `ResourcesPage._docsSetTov(${JSON.stringify(n).replace(/"/g,'&quot;')})`,
+                `<i class="fa-solid fa-building" style="color:var(--text-muted)"></i>`, Fmt.esc(n), cnt)
+        ).join('');
+
+        const hasFilter = this._category || this._docsTreeStatus || this._docsTreeTov;
+
+        sb.innerHTML = `
+            <div class="dt-sec">${catItems}</div>
+            <div class="dt-sec">
+                <div class="dt-sec-title">Статус</div>
+                ${statusItems}
+            </div>
+            ${tovEntries.length ? `<div class="dt-sec"><div class="dt-sec-title">ТОВ</div>${mkTovItems(tovEntries)}</div>` : ''}
+            <button class="dt-reset${hasFilter ? ' visible' : ''}" onclick="ResourcesPage._docsResetFilters()">
+                <i class="fa-solid fa-xmark" style="margin-right:.3rem"></i> Скинути фільтри
+            </button>
+        `;
     },
 
     _docsPriority(resource) {
@@ -1222,9 +1353,23 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
                             ${Fmt.esc(c)}
                         </button>`).join('');
                 }
+
+                // Populate filter sidebar (use full unfiltered docs for counts)
+                this._renderDocsFilterSidebar(filtered);
+
                 // apply category filter frontend-side
                 if (this._category) {
                     filtered = filtered.filter(r => r.category === this._category);
+                }
+                // apply tree status filter
+                if (this._docsTreeStatus === 'unread') {
+                    filtered = filtered.filter(r => { const dl = this._myDownloads[r.id]; return !dl || r.doc_version > (dl.version||1); });
+                } else if (this._docsTreeStatus === 'read') {
+                    filtered = filtered.filter(r => { const dl = this._myDownloads[r.id]; return dl && !(r.doc_version > (dl.version||1)); });
+                }
+                // apply tree TOV filter
+                if (this._docsTreeTov) {
+                    filtered = filtered.filter(r => (r.resource_dovirenosti||[]).some(rd => rd.dovirenosti?.name === this._docsTreeTov));
                 }
                 filtered = this._sortDocs(filtered);
             }
@@ -1260,19 +1405,17 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
 
             let statusBadge;
             if (resource.is_tracked_download) {
-                if (dlAt && !isNewVersion) {
-                    statusBadge = `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.75rem;color:#10b981;font-weight:500">✅ ${this._ackLabel()} ${Fmt.dateShort(dlAt)}</span>`;
-                } else if (dlAt && isNewVersion) {
-                    statusBadge = `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.75rem;color:#d97706;font-weight:500">🔄 Нова версія — потрібне повторне ознайомлення</span>`;
+                if (isNewVersion) {
+                    statusBadge = `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.73rem;color:#d97706;font-weight:500"><i class="fa-solid fa-rotate" style="font-size:.65rem"></i> Нова версія</span>`;
                 } else if (dlAt) {
-                    statusBadge = `<span style="font-size:.75rem;color:var(--text-muted)">Не ознайомлено · відкрито ${Fmt.dateShort(dlAt)}</span>`;
+                    statusBadge = `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.73rem;color:#10b981;font-weight:500"><i class="fa-solid fa-check" style="font-size:.65rem"></i> ${this._ackLabel()} ${Fmt.dateShort(dlAt)}</span>`;
                 } else {
-                    statusBadge = `<span style="font-size:.75rem;color:var(--text-muted)">Не ознайомлено</span>`;
+                    statusBadge = `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.73rem;color:#ef4444;font-weight:500"><i class="fa-solid fa-circle-exclamation" style="font-size:.65rem"></i> Не ознайомлено</span>`;
                 }
             } else {
                 statusBadge = dlAt
-                    ? `<span style="font-size:.75rem;color:var(--text-muted)">📖 Відкрито ${Fmt.dateShort(dlAt)}</span>`
-                    : '';
+                    ? `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.73rem;color:var(--text-muted)"><i class="fa-regular fa-eye" style="font-size:.65rem"></i> Відкрито ${Fmt.dateShort(dlAt)}</span>`
+                    : `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.73rem;color:var(--text-muted)"><i class="fa-regular fa-eye-slash" style="font-size:.65rem"></i> Не переглянуто</span>`;
             }
 
             const deadlineBadge = this._deadlineBadge(resource, dlStatus);
@@ -1289,13 +1432,16 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
             const tc = typeColor[resource.type||'file'] || '#6366f1';
             return `
                 <div class="resource-item ${docClass}" data-id="${resource.id}" onclick="ResourcesPage.openViewer('${resource.id}')" style="cursor:pointer;border-left-color:${tc}">
-                    <div class="res-ic-wrap"><div class="resource-icon ${resource.type || 'file'}">${icon}</div>${ackDot}</div>
+                    ${ackDot}
+                    <div class="res-ic-wrap"><div class="resource-icon ${resource.type || 'file'}">${icon}</div></div>
                     <div class="resource-info">
-                        <div class="resource-title">${this._highlight(resource.title, this._search)}</div>
+                        <div class="resource-title" style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+                            <span>${this._highlight(resource.title, this._search)}</span>
+                            <span data-status-row style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;font-weight:400">${statusBadge}${deadlineBadge}</span>
+                        </div>
                         ${resource.description ? `<div style="font-size:.8rem;color:var(--text-secondary);margin-top:.2rem;white-space:normal;word-break:break-word;line-height:1.5">${this._highlight(resource.description, this._search)}</div>` : ''}
                         <div class="resource-meta">
                             ${resource.category ? `<span class="resource-meta-chip" style="background:rgba(99,102,241,.08);color:var(--primary);border-color:rgba(99,102,241,.2)"><i class="fa-solid fa-tag" style="font-size:.6rem"></i>${Fmt.esc(resource.category)}</span>` : ''}
-                            <span class="resource-meta-chip" style="background:${tc}14;color:${tc};border-color:${tc}30">${this._fileLabel(resource)}</span>
                             ${resource.access_group ? `<span class="resource-meta-chip" style="background:rgba(99,102,241,.08);color:var(--primary);border-color:rgba(99,102,241,.2)">${resource.access_group.is_public ? '🌐' : '🔐'} ${Fmt.esc(resource.access_group.name)}</span>` : ''}
                             ${resource.download_allowed !== false
                                 ? `<span class="resource-meta-chip" style="background:rgba(16,185,129,.08);color:#059669;border-color:rgba(16,185,129,.25)"><i class="fa-solid fa-download" style="font-size:.6rem"></i>Завантаження</span>`
@@ -1304,7 +1450,6 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
                                 ? (resource.resource_dovirenosti).map(rd => rd.dovirenosti?.name ? `<span class="resource-meta-chip" style="background:rgba(245,158,11,.08);color:#d97706;border-color:rgba(245,158,11,.25)"><i class="fa-solid fa-building" style="font-size:.6rem"></i>${Fmt.esc(rd.dovirenosti.name)}</span>` : '').join('')
                                 : `<span class="resource-meta-chip" style="background:rgba(16,185,129,.08);color:#059669;border-color:rgba(16,185,129,.25)"><i class="fa-solid fa-globe" style="font-size:.6rem"></i>Для всіх ТОВ</span>`}
                         </div>
-                        <div data-status-row style="margin-top:.3rem;display:flex;align-items:center;gap:.4rem;flex-wrap:wrap">${statusBadge}${deadlineBadge}</div>
                     </div>
                     <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center" onclick="event.stopPropagation()">
                         <button class="btn btn-ghost btn-sm" onclick="ResourcesPage.openViewer('${resource.id}')"><i class="fa-solid fa-eye"></i> Відкрити</button>
@@ -1860,9 +2005,19 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
         const container = document.getElementById('resources-pagination');
         if (!container) return;
         if (pages <= 1) { container.innerHTML = ''; return; }
-        container.innerHTML = Array.from({ length: pages }, (_, index) => `
-            <button class="btn ${index === this._page ? 'btn-primary' : 'btn-ghost'} btn-sm"
-                    onclick="ResourcesPage.setPage(${index})">${index + 1}</button>`).join('');
+        const cur = this._page;
+        const btn = (i) => `<button class="btn ${i === cur ? 'btn-primary' : 'btn-ghost'} btn-sm" onclick="ResourcesPage.setPage(${i})">${i + 1}</button>`;
+        const dot = `<span style="align-self:center;color:var(--text-muted);padding:0 .1rem">…</span>`;
+        const indices = new Set([0, 1, pages - 2, pages - 1, cur - 1, cur, cur + 1].filter(i => i >= 0 && i < pages));
+        const sorted = [...indices].sort((a, b) => a - b);
+        let html = '';
+        let prev = -1;
+        for (const i of sorted) {
+            if (prev !== -1 && i > prev + 1) html += dot;
+            html += btn(i);
+            prev = i;
+        }
+        container.innerHTML = html;
     },
 
     async deleteResource(id, title) {

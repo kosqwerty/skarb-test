@@ -3173,12 +3173,13 @@ select {
 
 /* ── Resource List ──────────────────────────────────────────────── */
 .resource-list { display: flex; flex-direction: column; gap: 0.5rem; }
-.resource-list-docs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
+.resource-list-docs { display: grid; grid-template-columns: 1fr; gap: 0.5rem; }
 @media (max-width: 700px) { .resource-list-docs { grid-template-columns: 1fr; } }
 .resource-item {
     display: flex;
     align-items: center;
     gap: 1rem;
+    position: relative;
     padding: 0.75rem 1rem;
     background: var(--bg-surface);
     border: 1px solid var(--border);

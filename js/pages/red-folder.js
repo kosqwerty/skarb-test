@@ -5,9 +5,10 @@
 const RedFolderPage = {
 
     _items: [],
-    _docs: {},   // itemId -> resource[]
-    _pages: [],  // available Collections pages
-    _ackMap: {}, // resourceId -> { at, version }
+    _docs: {},           // itemId -> resource[]
+    _pages: [],          // available Collections pages
+    _ackMap: {},         // resourceId -> { at, version }
+    _selectedItem: null, // currently selected item id
 
     _iconOptions: [
         { icon: 'fa-scale-balanced', label: 'Юристи',         color: '#6366f1' },
@@ -31,43 +32,71 @@ const RedFolderPage = {
             .rf-hero-ico { width: 46px; height: 46px; border-radius: 12px; background: linear-gradient(135deg,#ef4444,#b91c1c); display: flex; align-items: center; justify-content: center; font-size: 1.4rem; box-shadow: 0 4px 14px rgba(239,68,68,.4); flex-shrink: 0; }
             .rf-title { font-size: 1.2rem; font-weight: 800; color: var(--text-primary); }
             .rf-subtitle { font-size: .78rem; color: var(--text-muted); margin-top: .15rem; }
-            .rf-table { width: 100%; border-collapse: collapse; background: var(--bg-surface); border: 1px solid rgba(239,68,68,.25); border-radius: var(--radius-xl); overflow: hidden; box-shadow: 0 2px 16px rgba(239,68,68,.08); }
-            .rf-table thead tr { background: linear-gradient(135deg,rgba(239,68,68,.12),rgba(185,28,28,.08)); }
-            .rf-table thead th { padding: .7rem 1rem; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #ef4444; text-align: left; border-bottom: 1px solid rgba(239,68,68,.2); }
-            .rf-table thead th:first-child { width: 48px; text-align: center; }
-            .rf-tr { border-bottom: 1px solid var(--border); transition: background .12s; }
-            .rf-tr:last-child { border-bottom: none; }
-            .rf-tr:hover { background: rgba(239,68,68,.03); }
-            .rf-num { text-align: center; font-size: .85rem; font-weight: 700; color: #ef4444; padding: 1rem .5rem; vertical-align: top; }
-            .rf-cell { font-size: .85rem; font-weight: 600; color: var(--text-primary); padding: .85rem 1rem .85rem 0; vertical-align: top; line-height: 1.45; word-break: break-word; white-space: normal; min-width: 0; }
-            .rf-cell-muted { font-size: .78rem; color: var(--text-muted); padding: .85rem 1rem .85rem 0; vertical-align: top; }
-            .rf-empty { text-align: center; padding: 3rem 1rem; color: var(--text-muted); font-size: .88rem; }
-            /* doc list inside cell */
-            .rf-doc-list { display: flex; flex-direction: column; gap: .3rem; padding: .75rem 0; }
-            .rf-doc-item { display: flex; align-items: center; gap: .4rem; }
-            .rf-doc-link { display: inline-flex; align-items: center; font-size: .75rem; color: #ef4444; background: none; border: none; cursor: pointer; font-family: inherit; text-decoration: underline; text-underline-offset: 2px; padding: 0; }
-            .rf-doc-link:hover { opacity: .75; }
-            .rf-doc-del { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: .15rem .3rem; border-radius: 6px; font-size: .72rem; transition: all .12s; opacity: 0; }
-            .rf-doc-del:hover { background: rgba(239,68,68,.1); color: #ef4444; }
-            .rf-doc-edit { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: .15rem .3rem; border-radius: 6px; font-size: .72rem; transition: all .12s; opacity: 0; }
-            .rf-doc-edit:hover { background: rgba(99,102,241,.1); color: var(--primary); }
-            .rf-doc-item:hover .rf-doc-edit, .rf-doc-item:hover .rf-doc-del { opacity: 1; }
-            .rf-upload-btn { display: inline-flex; align-items: center; gap: .35rem; padding: .22rem .55rem; border-radius: var(--radius-sm); border: 1px dashed rgba(239,68,68,.4); background: transparent; color: rgba(239,68,68,.7); font-size: .72rem; cursor: pointer; transition: all .15s; font-family: inherit; }
-            .rf-upload-btn:hover { border-color: #ef4444; color: #ef4444; background: rgba(239,68,68,.04); }
-            .rf-row-actions { display: flex; gap: .3rem; margin-top: .35rem; flex-wrap: wrap; opacity: 0; transition: opacity .15s; }
-            .rf-tr:hover .rf-row-actions { opacity: 1; }
-            .rf-action-btn { display: inline-flex; align-items: center; gap: .3rem; padding: .2rem .55rem; border-radius: var(--radius-sm); border: 1px dashed var(--border); background: transparent; color: var(--text-muted); font-size: .72rem; cursor: pointer; transition: all .15s; font-family: inherit; }
-            .rf-action-btn:hover { border-color: #ef4444; color: #ef4444; }
-            .rf-action-btn.danger:hover { border-color: var(--danger); color: var(--danger); }
-            /* modal form */
+
+            /* ── Split panel ──────────────────────────────────────── */
+            .rf-split { display: flex; border: 1px solid rgba(239,68,68,.2); border-radius: var(--radius-xl); overflow: hidden; background: var(--bg-surface); box-shadow: 0 2px 16px rgba(239,68,68,.07); min-height: 280px; }
+            .rf-split-sidebar { width: 550px; flex-shrink: 0; border-right: 1px solid rgba(239,68,68,.15); display: flex; flex-direction: column; overflow-y: auto; max-height: 600px; background: var(--bg-raised); }
+            .rf-split-content { flex: 1; min-width: 0; max-width: 450px; overflow-y: auto; max-height: 600px; }
+
+            /* ── Sidebar item buttons ─────────────────────────────── */
+            .rf-item-btn { display: flex; align-items: flex-start; gap: .55rem; padding: .7rem 1rem; cursor: pointer; border: none; background: transparent; text-align: left; color: var(--text-primary); border-bottom: 1px solid rgba(239,68,68,.1); font-family: inherit; font-size: .84rem; width: 100%; transition: background .12s; }
+            .rf-item-btn:last-of-type { border-bottom: none; }
+            .rf-item-btn:hover { background: rgba(239,68,68,.05); }
+            .rf-item-btn.active { background: rgba(239,68,68,.1); }
+            .rf-item-num { width: 22px; height: 22px; border-radius: 6px; flex-shrink: 0; background: var(--bg-surface); color: var(--text-muted); display: flex; align-items: center; justify-content: center; font-size: .7rem; font-weight: 800; margin-top: .1rem; border: 1px solid var(--border); transition: all .12s; }
+            .rf-item-btn.active .rf-item-num { background: #ef4444; color: #fff; border-color: #ef4444; }
+            .rf-item-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .3rem; }
+            .rf-item-title-row { display: flex; align-items: center; gap: .4rem; font-weight: 600; line-height: 1.4; font-size: .84rem; }
+            .rf-item-btn.active .rf-item-title-row { color: #ef4444; font-weight: 700; }
+            .rf-item-responsible { font-size: .73rem; color: var(--text-muted); display: flex; align-items: center; gap: .3rem; }
+            .rf-item-actions { display: flex; gap: 3px; opacity: 0; transition: opacity .15s; }
+            .rf-item-btn:hover .rf-item-actions { opacity: 1; }
+            .rf-item-dot-wrap { display: flex; flex-shrink: 0; margin-top: .35rem; }
+            .rf-ibtn-dot { width: 8px; height: 8px; border-radius: 50%; }
+            .rf-ibtn-dot.unread { background: #ef4444; animation: rf-pulse 1.4s ease-in-out infinite; }
+            .rf-ibtn-dot.read { background: #10b981; }
+            .rf-ibtn-dot.empty { background: var(--border); }
+
+            /* ── Content area ─────────────────────────────────────── */
+            .rf-content-inner { padding: 1.1rem 1.25rem; display: flex; flex-direction: column; gap: .85rem; }
+            .rf-content-resp { display: flex; align-items: center; gap: .65rem; padding: .6rem .85rem; background: rgba(239,68,68,.06); border: 1px solid rgba(239,68,68,.15); border-radius: var(--radius-md); }
+            .rf-content-resp-icon { width: 32px; height: 32px; border-radius: 8px; background: rgba(239,68,68,.12); display: flex; align-items: center; justify-content: center; font-size: .9rem; flex-shrink: 0; }
+            .rf-content-resp-name { font-size: .88rem; font-weight: 600; color: var(--text-primary); flex: 1; }
+            .rf-content-docs-header { display: flex; align-items: center; gap: .5rem; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); padding-bottom: .5rem; border-bottom: 1px solid var(--border); }
+            .rf-content-docs-header i { font-size: .8rem; }
+            .rf-content-add-btn { margin-left: auto; display: inline-flex; align-items: center; gap: .3rem; padding: .2rem .6rem; border-radius: 5px; border: 1px dashed rgba(239,68,68,.4); background: transparent; color: rgba(239,68,68,.7); cursor: pointer; font-size: .72rem; font-weight: 600; transition: all .15s; font-family: inherit; white-space: nowrap; }
+            .rf-content-add-btn:hover { border-color: #ef4444; color: #ef4444; background: rgba(239,68,68,.05); }
+            .rf-no-selection { display: flex; align-items: center; justify-content: center; height: 100%; padding: 3rem; color: var(--text-muted); font-size: .88rem; font-style: italic; }
+            .rf-empty-docs { color: var(--text-muted); font-size: .82rem; font-style: italic; padding: .25rem 0; }
+
+            /* ── Doc cards ────────────────────────────────────────── */
+            .rf-doc-card { border: 1px solid var(--border); border-radius: 8px; padding: .6rem .85rem; display: flex; align-items: center; gap: .5rem; cursor: pointer; transition: border-color .13s, background .13s; background: var(--bg-raised); }
+            .rf-doc-card:hover { border-color: #ef4444; background: rgba(239,68,68,.05); }
+            .rf-doc-card-icon { width: 28px; height: 28px; border-radius: 7px; background: rgba(239,68,68,.1); color: #ef4444; display: flex; align-items: center; justify-content: center; font-size: .85rem; flex-shrink: 0; }
+            .rf-doc-card-title { flex: 1; min-width: 0; font-size: .84rem; color: var(--text-primary); font-weight: 500; line-height: 1.4; word-break: break-word; }
+            .rf-doc-card:hover .rf-doc-card-title { color: #ef4444; }
+            .rf-doc-card-actions { display: flex; gap: 2px; flex-shrink: 0; opacity: 0; transition: opacity .15s; }
+            .rf-doc-card:hover .rf-doc-card-actions { opacity: 1; }
+            .rf-collection-card { border: 1px solid var(--border); border-radius: 8px; padding: .6rem .85rem; display: flex; align-items: center; gap: .5rem; cursor: pointer; transition: border-color .13s, background .13s; background: var(--bg-raised); }
+            .rf-collection-card:hover { border-color: #ef4444; background: rgba(239,68,68,.05); }
+            .rf-collection-icon { width: 28px; height: 28px; border-radius: 7px; background: rgba(99,102,241,.1); color: var(--primary); display: flex; align-items: center; justify-content: center; font-size: .85rem; flex-shrink: 0; }
+            .rf-collection-title { flex: 1; font-size: .84rem; color: var(--primary); font-weight: 500; }
+
+            /* ── Shared action button ─────────────────────────────── */
+            .rf-ta-btn { width: 20px; height: 20px; border-radius: 4px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: .6rem; transition: all .15s; font-family: inherit; }
+            .rf-ta-btn:hover { border-color: var(--primary); color: var(--primary); }
+            .rf-ta-btn.danger:hover { border-color: #ef4444; color: #ef4444; }
+
+            /* ── Ack dots ─────────────────────────────────────────── */
+            .rf-ack-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; display: inline-block; vertical-align: middle; margin-right: .35rem; }
+            .rf-ack-dot.rf-unread { background: #ef4444; box-shadow: 0 0 0 0 rgba(239,68,68,.6); animation: rf-pulse 1.4s ease-in-out infinite; }
+            .rf-ack-dot.rf-read { background: #10b981; }
+            @keyframes rf-pulse { 0% { box-shadow: 0 0 0 0 rgba(239,68,68,.6); } 70% { box-shadow: 0 0 0 6px rgba(239,68,68,0); } 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); } }
+
+            /* ── Modal form ───────────────────────────────────────── */
             .rf-form { display: flex; flex-direction: column; gap: .9rem; }
             .rf-form label { font-size: .78rem; font-weight: 600; color: var(--text-muted); margin-bottom: .2rem; display: block; }
-            .rf-form input, .rf-form textarea {
-                width: 100%; padding: .55rem .8rem; border-radius: var(--radius-md);
-                border: 1px solid var(--border); background: var(--bg-surface);
-                color: var(--text-primary); font-size: .88rem; font-family: inherit;
-                outline: none; box-sizing: border-box;
-            }
+            .rf-form input, .rf-form textarea { width: 100%; padding: .55rem .8rem; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-surface); color: var(--text-primary); font-size: .88rem; font-family: inherit; outline: none; box-sizing: border-box; }
             .rf-form input:focus, .rf-form textarea:focus { border-color: #ef4444; box-shadow: 0 0 0 3px rgba(239,68,68,.12); }
             .rf-form textarea { resize: vertical; min-height: 72px; }
             .rf-form-input { width: 100%; padding: .55rem .8rem; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-surface); color: var(--text-primary); font-size: .88rem; font-family: inherit; outline: none; box-sizing: border-box; transition: border-color .15s, box-shadow .15s; }
@@ -80,10 +109,6 @@ const RedFolderPage = {
             .rf-icon-opt { display: inline-flex; align-items: center; gap: .4rem; padding: .3rem .65rem; border-radius: var(--radius-md); border: 1.5px solid var(--border); background: var(--bg-raised); cursor: pointer; font-size: .75rem; font-family: inherit; color: var(--text-secondary); transition: all .15s; }
             .rf-icon-opt:hover { border-color: var(--ic); color: var(--text-primary); }
             .rf-icon-opt-active { border-color: var(--ic) !important; background: color-mix(in srgb,var(--ic) 10%,transparent); color: var(--text-primary) !important; }
-            .rf-ack-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; display: inline-block; vertical-align: middle; margin-right: .4rem; }
-            .rf-ack-dot.rf-unread { background: #ef4444; box-shadow: 0 0 0 0 rgba(239,68,68,.6); animation: rf-pulse 1.4s ease-in-out infinite; }
-            .rf-ack-dot.rf-read { background: #10b981; }
-            @keyframes rf-pulse { 0% { box-shadow: 0 0 0 0 rgba(239,68,68,.6); } 70% { box-shadow: 0 0 0 6px rgba(239,68,68,0); } 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); } }
         `;
         document.head.appendChild(s);
     },
@@ -138,17 +163,24 @@ const RedFolderPage = {
             this._ackMap = allDocIds.length
                 ? await API.documentDownloads.getMyLatest(allDocIds).catch(() => ({}))
                 : {};
-            this._renderTable();
+
+            // Ensure selected item is still valid
+            if (!this._selectedItem || !this._items.find(i => i.id === this._selectedItem)) {
+                this._selectedItem = this._items[0]?.id || null;
+            }
+
+            this._render();
         } catch (e) {
             const el = document.getElementById('rf-content');
             if (el) el.innerHTML = `<div style="text-align:center;padding:3rem 1rem;color:var(--text-muted)">${Fmt.esc(e.message)}</div>`;
         }
     },
 
-    _renderTable() {
+    _render() {
         const el = document.getElementById('rf-content');
         if (!el) return;
         const canManage = AppState.isAdmin();
+
         if (!this._items.length) {
             el.innerHTML = `<div style="text-align:center;padding:3rem 1rem;color:var(--text-muted);font-size:.88rem">
                 <i class="fa-regular fa-folder-open" style="font-size:2rem;color:rgba(239,68,68,.3);display:block;margin-bottom:.5rem"></i>
@@ -156,63 +188,115 @@ const RedFolderPage = {
             </div>`;
             return;
         }
-        const rows = this._items.map((item, idx) => {
+
+        const sidebarHtml = this._items.map((item, idx) => {
             const itemDocs = this._docs[item.id] || [];
-            const ico = item.icon && item.icon !== 'fa-circle' ? this._iconOptions.find(o => o.icon === item.icon) : null;
             const pageIds = item.page_ids != null ? item.page_ids : (item.page_id ? [item.page_id] : []);
-            const linkedPages = pageIds.map(pid => this._pages.find(p => p.id === pid)).filter(Boolean);
-            const docsHtml = linkedPages.length
-                ? `<div class="rf-doc-list">
-                    ${linkedPages.map(lp => `<button class="rf-doc-link" onclick="Router.go('collections/${lp.id}')">
-                        <i class="fa-solid fa-arrow-up-right-from-square" style="margin-right:.35rem;font-size:.72rem"></i>${Fmt.esc(lp.title)}
-                    </button>`).join('')}
-                   </div>`
-                : `<div class="rf-doc-list">
-                    ${itemDocs.map(d => {
-                        const acked = !!this._ackMap[d.id];
-                        const dot = `<span class="rf-ack-dot ${acked ? 'rf-read' : 'rf-unread'}" data-doc-dot="${d.id}" title="${acked ? 'Ознайомлено' : 'Не ознайомлено'}"></span>`;
-                        return `
-                        <div class="rf-doc-item">
-                            <button class="rf-doc-link" data-path="${Fmt.esc(d.storage_path||'')}" data-id="${d.id}" onclick="RedFolderPage._openDoc(this.dataset.path, this.dataset.id)">
-                                ${dot}${d.dovirenosti?.name ? Fmt.esc(d.dovirenosti.name) : `<i class="fa-solid fa-file-pdf" style="margin-right:.4rem;font-size:1rem;color:#ef4444;vertical-align:middle"></i>${Fmt.esc(d.title)}`}
-                            </button>
-                            ${canManage ? `
-                                <button class="rf-doc-edit" onclick="RedFolderPage._editDocModal('${d.id}')" title="Редагувати"><i class="fa-solid fa-pen"></i></button>
-                                <button class="rf-doc-del" onclick="RedFolderPage._deleteDoc('${d.id}')" title="Видалити файл"><i class="fa-solid fa-trash"></i></button>` : ''}
-                        </div>`;
-                    }).join('')}
-                    ${canManage ? `<button class="rf-upload-btn" onclick="RedFolderPage._uploadModal('${item.id}',${JSON.stringify(item.title).replace(/"/g,'&quot;')})"><i class="fa-solid fa-plus"></i> Завантажити</button>` : ''}
-                   </div>`;
+            const hasPages = pageIds.length > 0;
+            const ico = item.icon && item.icon !== 'fa-circle' ? this._iconOptions.find(o => o.icon === item.icon) : null;
+            const isActive = this._selectedItem === item.id;
+
+            let dotHtml = '';
+            if (!hasPages && itemDocs.length > 0) {
+                const unread = itemDocs.filter(d => !this._ackMap[d.id]).length;
+                dotHtml = `<div class="rf-item-dot-wrap"><span class="rf-ibtn-dot ${unread > 0 ? 'unread' : 'read'}" title="${unread > 0 ? `Непрочитано: ${unread}` : 'Всі прочитано'}"></span></div>`;
+            } else if (!hasPages) {
+                dotHtml = `<div class="rf-item-dot-wrap"><span class="rf-ibtn-dot empty"></span></div>`;
+            }
+
             return `
-            <tr class="rf-tr">
-                <td class="rf-num">${idx + 1}</td>
-                <td class="rf-cell">
-                    ${Fmt.esc(item.title)}
+            <div class="rf-item-btn${isActive ? ' active' : ''}" id="rf-ibtn-${item.id}"
+                 onclick="RedFolderPage._selectItem('${item.id}')">
+                <span class="rf-item-num">${idx + 1}</span>
+                <div class="rf-item-body">
+                    <div class="rf-item-title-row">
+                        ${ico ? `<i class="fa-solid ${Fmt.esc(item.icon)}" style="color:${ico.color};font-size:.8rem;flex-shrink:0"></i>` : ''}
+                        <span>${Fmt.esc(item.title)}</span>
+                    </div>
                     ${canManage ? `
-                    <div class="rf-row-actions">
-                        <button class="rf-action-btn" onclick="RedFolderPage._openModal('${item.id}')"><i class="fa-solid fa-pen"></i> Редагувати</button>
-                        <button class="rf-action-btn danger" onclick="RedFolderPage._delete('${item.id}')"><i class="fa-solid fa-trash"></i> Видалити рядок</button>
+                    <div class="rf-item-actions" onclick="event.stopPropagation()">
+                        <button class="rf-ta-btn" title="Редагувати" onclick="RedFolderPage._openModal('${item.id}')"><i class="fa-solid fa-pen"></i></button>
+                        <button class="rf-ta-btn danger" title="Видалити" onclick="RedFolderPage._delete('${item.id}')"><i class="fa-solid fa-trash"></i></button>
                     </div>` : ''}
-                </td>
-                <td class="rf-cell" style="width:300px">${docsHtml}</td>
-                <td class="rf-cell" style="width:200px">
-                    ${(ico ? `<i class="fa-solid ${Fmt.esc(item.icon)}" style="margin-right:.35rem;color:${ico.color}"></i>` : '') + Fmt.esc(item.responsible || '')}
-                </td>
-            </tr>`;
+                </div>
+                ${dotHtml}
+            </div>`;
         }).join('');
 
         el.innerHTML = `
-        <table class="rf-table">
-            <thead>
-                <tr>
-                    <th>№</th>
-                    <th>Назва документу</th>
-                    <th style="width:300px">Документи</th>
-                    <th style="width:200px">Відповідальний</th>
-                </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-        </table>`;
+        <div class="rf-split">
+            <div class="rf-split-sidebar">${sidebarHtml}</div>
+            <div class="rf-split-content" id="rf-split-content">
+                ${this._buildItemContent(this._selectedItem, canManage)}
+            </div>
+        </div>`;
+    },
+
+    _buildItemContent(itemId, canManage) {
+        if (!itemId) return `<div class="rf-no-selection"><i class="fa-solid fa-arrow-left" style="margin-right:.4rem;opacity:.5"></i>Оберіть рядок зліва</div>`;
+
+        const item = this._items.find(i => i.id === itemId);
+        if (!item) return '';
+
+        const ico = item.icon && item.icon !== 'fa-circle' ? this._iconOptions.find(o => o.icon === item.icon) : null;
+        const pageIds = item.page_ids != null ? item.page_ids : (item.page_id ? [item.page_id] : []);
+        const linkedPages = pageIds.map(pid => this._pages.find(p => p.id === pid)).filter(Boolean);
+        const itemDocs = this._docs[item.id] || [];
+
+        const respHtml = item.responsible ? `
+        <div class="rf-content-resp">
+            <div class="rf-content-resp-icon">
+                ${ico ? `<i class="fa-solid ${Fmt.esc(item.icon)}" style="color:${ico.color}"></i>` : '<i class="fa-solid fa-user" style="color:#ef4444"></i>'}
+            </div>
+            <span class="rf-content-resp-name">${Fmt.esc(item.responsible)}</span>
+        </div>` : '';
+
+        let docsHtml = '';
+        if (linkedPages.length) {
+            docsHtml = linkedPages.map(lp => `
+            <div class="rf-collection-card" onclick="Router.go('collections/${lp.id}')">
+                <div class="rf-collection-icon"><i class="fa-solid fa-arrow-up-right-from-square"></i></div>
+                <span class="rf-collection-title">${Fmt.esc(lp.title)}</span>
+            </div>`).join('');
+        } else if (itemDocs.length) {
+            docsHtml = itemDocs.map(d => {
+                const acked = !!this._ackMap[d.id];
+                return `
+                <div class="rf-doc-card" onclick="RedFolderPage._openDoc('${Fmt.esc(d.storage_path||'')}','${d.id}')">
+                    <span class="rf-ack-dot ${acked ? 'rf-read' : 'rf-unread'}" data-doc-dot="${d.id}" title="${acked ? 'Ознайомлено' : 'Не ознайомлено'}"></span>
+                    <div class="rf-doc-card-icon"><i class="fa-solid fa-file-pdf"></i></div>
+                    <span class="rf-doc-card-title">${Fmt.esc(d.title)}</span>
+                    ${canManage ? `
+                    <div class="rf-doc-card-actions" onclick="event.stopPropagation()">
+                        <button class="rf-ta-btn" title="Редагувати" onclick="RedFolderPage._editDocModal('${d.id}')"><i class="fa-solid fa-pen"></i></button>
+                        <button class="rf-ta-btn danger" title="Видалити" onclick="RedFolderPage._deleteDoc('${d.id}')"><i class="fa-solid fa-trash"></i></button>
+                    </div>` : ''}
+                </div>`;
+            }).join('');
+        } else {
+            docsHtml = `<div class="rf-empty-docs">— документів немає —</div>`;
+        }
+
+        return `
+        <div class="rf-content-inner">
+            ${respHtml}
+            <div>
+                <div class="rf-content-docs-header">
+                    <i class="fa-solid fa-file-lines" style="color:#ef4444"></i>
+                    Документи
+                    ${canManage && !linkedPages.length ? `<button class="rf-content-add-btn" onclick="RedFolderPage._uploadModal('${item.id}',${JSON.stringify(item.title).replace(/"/g,'&quot;')})"><i class="fa-solid fa-plus"></i> Завантажити</button>` : ''}
+                </div>
+                <div style="display:flex;flex-direction:column;gap:.4rem;margin-top:.55rem">${docsHtml}</div>
+            </div>
+        </div>`;
+    },
+
+    _selectItem(itemId) {
+        this._selectedItem = itemId;
+        document.querySelectorAll('.rf-item-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById(`rf-ibtn-${itemId}`)?.classList.add('active');
+        const content = document.getElementById('rf-split-content');
+        if (content) content.innerHTML = this._buildItemContent(itemId, AppState.isAdmin());
     },
 
     _openModal(id) {
@@ -289,9 +373,11 @@ const RedFolderPage = {
             Loader.show();
             if (id) {
                 await API.redFolderItems.update(id, fields);
+                if (!this._selectedItem) this._selectedItem = id;
             } else {
                 const maxNum = this._items.length ? Math.max(...this._items.map(i => i.number)) : 0;
-                await API.redFolderItems.create({ ...fields, number: maxNum + 1 });
+                const newItem = await API.redFolderItems.create({ ...fields, number: maxNum + 1 });
+                this._selectedItem = newItem?.id || null;
             }
             Modal.close();
             await this._load();
@@ -308,6 +394,7 @@ const RedFolderPage = {
         if (!confirmed) return;
         try {
             Loader.show();
+            if (this._selectedItem === id) this._selectedItem = null;
             await API.redFolderItems.remove(id);
             await this._load();
             Toast.success('Рядок видалено');
@@ -395,6 +482,14 @@ const RedFolderPage = {
                 this._ackMap[resourceId] = { at: new Date().toISOString() };
                 const dot = document.querySelector(`[data-doc-dot="${resourceId}"]`);
                 if (dot) { dot.classList.remove('rf-unread'); dot.classList.add('rf-read'); dot.title = 'Ознайомлено'; }
+                // Update sidebar dot
+                const item = Object.entries(this._docs).find(([, docs]) => docs.find(d => d.id === resourceId));
+                if (item) {
+                    const [iid, idocs] = item;
+                    const anyUnread = idocs.some(d => !this._ackMap[d.id]);
+                    const sidebarDot = document.querySelector(`#rf-ibtn-${iid} .rf-ibtn-dot`);
+                    if (sidebarDot) { sidebarDot.className = `rf-ibtn-dot ${anyUnread ? 'unread' : 'read'}`; }
+                }
             }
         } catch (e) {
             Toast.error('Помилка', e.message);

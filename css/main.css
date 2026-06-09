@@ -2005,7 +2005,7 @@ body.light-theme .logo-icon .logo-dark  { display: none; }
 .sidebar-theme-btn::after {
     content: attr(title);
     font-size: 0.8rem;
-    font-family: 'Play', sans-serif;
+    font-family: 'Inter', sans-serif;
     color: var(--text-muted);
     transition: color var(--transition);
 }

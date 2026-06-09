@@ -1057,7 +1057,7 @@ const API = {
         async getById(id) {
             const { data, error } = await supabase
                 .from('custom_pages')
-                .select('*')
+                .select('*, creator:profiles!created_by(full_name), updater:profiles!updated_by(full_name)')
                 .eq('id', id).single();
             if (error) throw error;
             return data;
@@ -1075,7 +1075,7 @@ const API = {
         async update(id, fields) {
             const { data, error } = await supabase
                 .from('custom_pages')
-                .update(fields).eq('id', id).select().single();
+                .update({ ...fields, updated_by: AppState.user.id }).eq('id', id).select().single();
             if (error) throw error;
             return data;
         },
@@ -1104,10 +1104,11 @@ const API = {
         },
 
         async upload(pageId, file) {
-            const safeName = file.name.replace(/[^\w.\-]/g, '_');
+            const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
             const path = `pages/${pageId}/${Date.now()}_${safeName}`;
             const { error: upErr } = await supabase.storage
-                .from(APP_CONFIG.buckets.pageFiles).upload(path, file);
+                .from(APP_CONFIG.buckets.pageFiles)
+                .upload(path, file, { upsert: true, contentType: file.type || 'application/octet-stream' });
             if (upErr) throw upErr;
             const { data: signData } = await supabase.storage
                 .from(APP_CONFIG.buckets.pageFiles)

@@ -125,7 +125,7 @@ const CollectionsPage = {
                         <button class="res-star-btn${Bookmarks.isBookmarked('collections/'+p.id) ? ' active' : ''}"
                             data-bm-route="collections/${p.id}"
                             title="${Bookmarks.isBookmarked('collections/'+p.id) ? 'Видалити з закладок' : 'Зберегти в закладки'}"
-                            onclick="Bookmarks.toggleCollection('${p.id}',${JSON.stringify(p.title||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-bookmark"></i></button>
+                            onclick="Bookmarks.toggleCollection('${p.id}',${JSON.stringify(p.title||'').replace(/"/g,'&quot;')})">${Bookmarks.isBookmarked('collections/'+p.id) ? '<i class="fa-solid fa-bookmark"></i>' : '<i class="fa-regular fa-bookmark"></i>'}</button>
                         ${adminBtns}
                     </div>
                 </div>
@@ -202,6 +202,41 @@ const CollectionsPage = {
                     onmouseenter="this.style.background='var(--bg-hover)';this.style.borderColor='var(--primary)'"
                     onmouseleave="this.style.background='var(--bg-raised)';this.style.borderColor='var(--border)'"><i class="fa-solid fa-pen"></i></button>` : '';
 
+        const infoPanel = AppState.isStaff() ? `
+            <div style="flex-shrink:0;width:330px">
+                <div style="background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden">
+                    <div style="padding:.75rem 1.1rem;background:var(--bg-raised);border-bottom:1px solid var(--border)">
+                        <span style="font-weight:700;font-size:.8rem;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted)">
+                            <i class="fa-solid fa-circle-info" style="margin-right:.4rem;color:var(--primary)"></i>Інформація
+                        </span>
+                    </div>
+                    <div style="padding:.9rem 1.1rem;display:flex;flex-direction:column;gap:0">
+                        <div style="padding:.75rem 0">
+                            <div style="display:flex;align-items:center;gap:.4rem;color:var(--text-muted);font-size:.78rem;margin-bottom:.35rem">
+                                <i class="fa-regular fa-clock" style="font-size:.8rem"></i> Створено
+                            </div>
+                            <div style="color:var(--text-primary);font-weight:600;font-size:.92rem;line-height:1.3">${Fmt.esc(page.creator?.full_name || '—')}</div>
+                            <div style="color:var(--text-muted);font-size:.83rem;margin-top:.15rem">${page.created_at ? Fmt.datetime(page.created_at) : '—'}</div>
+                        </div>
+                        <div style="border-top:1px solid var(--border);padding:.75rem 0">
+                            <div style="display:flex;align-items:center;gap:.4rem;color:var(--text-muted);font-size:.78rem;margin-bottom:.35rem">
+                                <i class="fa-solid fa-pen-to-square" style="font-size:.8rem"></i> Остання редакція
+                            </div>
+                            <div style="color:var(--text-primary);font-weight:600;font-size:.92rem;line-height:1.3">${Fmt.esc(page.updater?.full_name || page.creator?.full_name || '—')}</div>
+                            <div style="color:var(--text-muted);font-size:.83rem;margin-top:.15rem">${page.updated_at ? Fmt.datetime(page.updated_at) : '—'}</div>
+                        </div>
+                        <div style="border-top:1px solid var(--border);padding:.75rem 0 .25rem">
+                            <div style="display:flex;align-items:center;gap:.4rem;color:var(--text-muted);font-size:.78rem;margin-bottom:.5rem">
+                                <i class="fa-solid fa-tag" style="font-size:.8rem"></i> Статус
+                            </div>
+                            ${page.is_published
+                                ? `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.83rem;padding:3px 10px;border-radius:20px;background:rgba(16,185,129,.12);color:#10b981;border:1px solid rgba(16,185,129,.25);font-weight:500"><i class="fa-solid fa-circle" style="font-size:.45rem"></i>Опубліковано</span>`
+                                : `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.83rem;padding:3px 10px;border-radius:20px;background:var(--bg-raised);color:var(--text-muted);border:1px solid var(--border);font-weight:500"><i class="fa-solid fa-circle" style="font-size:.45rem"></i>Чернетка</span>`}
+                        </div>
+                    </div>
+                </div>
+            </div>` : '';
+
         container.innerHTML = `
             <div style="display:flex;flex-direction:column;gap:1rem">
                 <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
@@ -211,13 +246,16 @@ const CollectionsPage = {
                         <button class="res-star-btn${Bookmarks.isBookmarked('collections/'+page.id) ? ' active' : ''}"
                             data-bm-route="collections/${page.id}"
                             title="${Bookmarks.isBookmarked('collections/'+page.id) ? 'Видалити з закладок' : 'Зберегти в закладки'}"
-                            onclick="Bookmarks.toggleCollection('${page.id}',${JSON.stringify(page.title||'').replace(/"/g,'&quot;')})"><i class="fa-regular fa-star"></i></button>
+                            onclick="Bookmarks.toggleCollection('${page.id}',${JSON.stringify(page.title||'').replace(/"/g,'&quot;')})">${Bookmarks.isBookmarked('collections/'+page.id) ? '<i class="fa-solid fa-bookmark"></i>' : '<i class="fa-regular fa-bookmark"></i>'}</button>
                         ${editBtn}
                     </div>
                 </div>
-                <div id="page-rendered" style="width:100%">
-                    <iframe id="page-iframe" style="width:100%;border:none;display:block" scrolling="no"
-                            sandbox="allow-scripts allow-forms allow-popups allow-top-navigation-by-user-activation allow-same-origin"></iframe>
+                <div style="display:flex;gap:1.25rem;align-items:flex-start">
+                    <div id="page-rendered" style="flex:1;min-width:0;padding-bottom:3rem">
+                        <iframe id="page-iframe" style="width:100%;border:none;display:block" scrolling="no"
+                                sandbox="allow-scripts allow-forms allow-popups allow-top-navigation-by-user-activation allow-same-origin"></iframe>
+                    </div>
+                    ${infoPanel}
                 </div>
             </div>`;
 
@@ -257,7 +295,7 @@ const CollectionsPage = {
     },
 
     _renderIframe(iframe, html, css, interceptLinks = false) {
-        css = (css || '').replace(/'Fixel Display'/g, "'Play'");
+        css = (css || '').replace(/'Fixel Display'/g, "'Inter'").replace(/'Play'/g, "'Inter'");
         const iframeScript = `
 <script>
 (function() {
@@ -266,12 +304,13 @@ const CollectionsPage = {
     document.documentElement.classList.toggle('lms-dark', !e.data.isLight);
   });
   function sendSize(buffer) {
-    var last = document.body.lastElementChild;
-    var fromContent = last ? last.getBoundingClientRect().bottom + window.scrollY : 0;
-    var h = Math.max(document.body.offsetHeight, fromContent) + (buffer || 0);
-    var w = Math.max(document.body.scrollWidth, document.body.offsetWidth,
-                     document.documentElement.scrollWidth, document.documentElement.offsetWidth);
-    if (h > 0) window.parent.postMessage({ type: 'lms-resize', height: h, width: w }, '*');
+    var h = Math.max(
+      document.body.scrollHeight,
+      document.body.offsetHeight,
+      document.documentElement.scrollHeight,
+      document.documentElement.offsetHeight
+    ) + (buffer || 0);
+    if (h > 0) window.parent.postMessage({ type: 'lms-resize', height: h }, '*');
   }
   var collapseTimer;
   document.addEventListener('mousedown', function() {
@@ -288,7 +327,11 @@ const CollectionsPage = {
       new ResizeObserver(function() { sendSize(0); }).observe(document.body);
     }
   });
-  window.addEventListener('load', function() { sendSize(0); });
+  window.addEventListener('load', function() {
+    sendSize(0);
+    setTimeout(function() { sendSize(0); }, 300);
+    setTimeout(function() { sendSize(0); }, 800);
+  });
 })();
 <\/script>`;
 
@@ -305,9 +348,9 @@ document.addEventListener('click', function(e) {
 });
 <\/script>` : '';
 
-        const doc = `<!DOCTYPE html><html><head><meta charset="UTF-8"><base href="${location.origin}/"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Play:wght@400;700&display=swap" rel="stylesheet">${iframeScript}
+        const doc = `<!DOCTYPE html><html><head><meta charset="UTF-8"><base href="${location.origin}/"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">${iframeScript}
 <style>
-  body { margin: 0; padding: 0; font-family: 'Play', sans-serif; font-weight: 400; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+  body { margin: 0; padding: 0; font-family: 'Inter', sans-serif; font-weight: 400; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
   b, strong { font-weight: 700; }
   img, video, canvas, picture, svg { max-width: 100%; }
   /* Re-invert media in dark mode so photos look natural under the iframe filter */
@@ -320,11 +363,16 @@ document.addEventListener('click', function(e) {
         iframe.onload = () => {
             try {
                 const d = iframe.contentDocument;
-                const last = d.body.lastElementChild;
-                const fromContent = last ? last.getBoundingClientRect().bottom : 0;
-                const h = Math.max(d.body.offsetHeight, fromContent);
-                const w = Math.max(d.body.scrollWidth,  d.body.offsetWidth,  d.documentElement.scrollWidth,  d.documentElement.offsetWidth);
-                if (h > 0) iframe.style.height = h + 'px';
+                const measure = () => {
+                    const h = Math.max(
+                        d.body.scrollHeight, d.body.offsetHeight,
+                        d.documentElement.scrollHeight, d.documentElement.offsetHeight
+                    );
+                    if (h > 0) iframe.style.height = h + 'px';
+                };
+                measure();
+                setTimeout(measure, 300);
+                setTimeout(measure, 800);
             } catch (_) {}
         };
     },
@@ -333,6 +381,7 @@ document.addEventListener('click', function(e) {
     _editingPageId: null,
     _attachments:   [],
     _savedCursor:   null,
+    _previewTimer:  null,
 
     async openEditor(id = null) {
         this._editingPageId = id;
@@ -410,27 +459,37 @@ document.addEventListener('click', function(e) {
                 </label>
                 <div style="position:relative;flex-shrink:0">${tagPickerHtml}</div>
                 <button class="btn btn-ghost btn-sm" onclick="CollectionsPage._insertResourceLink()">+ Ресурс</button>
-                <button class="btn btn-secondary btn-sm" onclick="CollectionsPage._openPreviewModal()"><i class="fa-solid fa-eye"></i> Перегляд</button>
                 <button class="btn btn-primary btn-sm" onclick="CollectionsPage.savePage('${page?.id || ''}')"><i class="fa-regular fa-floppy-disk"></i> Зберегти</button>
             </div>
 
-            <!-- Code panel (full width) -->
-            <div style="display:flex;flex-direction:column;flex:1;min-height:0;border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:.75rem">
-                <!-- Tabs -->
-                <div style="display:flex;background:var(--bg-raised);border-bottom:1px solid var(--border)">
-                    <button id="tab-html" onclick="CollectionsPage._switchTab('html')"
-                            style="padding:.5rem 1.25rem;font-size:.8rem;font-weight:600;letter-spacing:.05em;border:none;cursor:pointer;background:var(--bg-surface);color:var(--text-primary);border-right:1px solid var(--border);border-bottom:2px solid var(--primary)">HTML</button>
-                    <button id="tab-css" onclick="CollectionsPage._switchTab('css')"
-                            style="padding:.5rem 1.25rem;font-size:.8rem;font-weight:600;letter-spacing:.05em;border:none;cursor:pointer;background:var(--bg-raised);color:var(--text-muted);border-right:1px solid var(--border);border-bottom:2px solid transparent">CSS</button>
+            <!-- Split: code left + live preview right -->
+            <div style="display:flex;gap:.75rem;flex:1;min-height:0;margin-bottom:.75rem">
+
+                <!-- Code panel -->
+                <div style="display:flex;flex-direction:column;flex:1;min-width:0;border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden">
+                    <div style="display:flex;background:var(--bg-raised);border-bottom:1px solid var(--border)">
+                        <button id="tab-html" onclick="CollectionsPage._switchTab('html')"
+                                style="padding:.5rem 1.25rem;font-size:.8rem;font-weight:600;letter-spacing:.05em;border:none;cursor:pointer;background:var(--bg-surface);color:var(--text-primary);border-right:1px solid var(--border);border-bottom:2px solid var(--primary)">HTML</button>
+                        <button id="tab-css" onclick="CollectionsPage._switchTab('css')"
+                                style="padding:.5rem 1.25rem;font-size:.8rem;font-weight:600;letter-spacing:.05em;border:none;cursor:pointer;background:var(--bg-raised);color:var(--text-muted);border-right:1px solid var(--border);border-bottom:2px solid transparent">CSS</button>
+                    </div>
+                    <textarea id="editor-html" spellcheck="false"
+                              style="flex:1;padding:1.25rem;background:var(--bg-surface);color:var(--text-primary);border:none;outline:none;resize:none;font-family:'Courier New',monospace;font-size:.9rem;line-height:1.7;tab-size:2"
+                              oninput="CollectionsPage._updatePreview()">${this._esc(page?.html_content || this._defaultHtml())}</textarea>
+                    <textarea id="editor-css" spellcheck="false"
+                              style="flex:1;padding:1.25rem;background:var(--bg-surface);color:var(--text-primary);border:none;outline:none;resize:none;font-family:'Courier New',monospace;font-size:.9rem;line-height:1.7;tab-size:2;display:none"
+                              oninput="CollectionsPage._updatePreview()">${this._esc((page?.css_content || this._defaultCss()).replace(/'Play'/g, "'Inter'").replace(/'Fixel Display'/g, "'Inter'"))}</textarea>
                 </div>
-                <!-- Formatting toolbar (HTML only) -->
-                ${this._toolbarHtml()}
-                <textarea id="editor-html" spellcheck="false"
-                          style="flex:1;padding:1.25rem;background:var(--bg-surface);color:var(--text-primary);border:none;outline:none;resize:none;font-family:'Courier New',monospace;font-size:.9rem;line-height:1.7;tab-size:2"
-                          oninput="CollectionsPage._updatePreview()">${this._esc(page?.html_content || this._defaultHtml())}</textarea>
-                <textarea id="editor-css" spellcheck="false"
-                          style="flex:1;padding:1.25rem;background:var(--bg-surface);color:var(--text-primary);border:none;outline:none;resize:none;font-family:'Courier New',monospace;font-size:.9rem;line-height:1.7;tab-size:2;display:none"
-                          oninput="CollectionsPage._updatePreview()">${this._esc(page?.css_content || this._defaultCss())}</textarea>
+
+                <!-- Live preview -->
+                <div style="display:flex;flex-direction:column;flex:1;min-width:0;border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden">
+                    <div style="padding:.45rem .875rem;background:var(--bg-raised);border-bottom:1px solid var(--border);font-size:.8rem;font-weight:600;color:var(--text-muted);flex-shrink:0">
+                        <i class="fa-solid fa-eye" style="margin-right:.4rem"></i>Перегляд
+                    </div>
+                    <iframe id="live-preview-iframe" style="flex:1;border:none;background:#fff;width:100%"
+                            sandbox="allow-scripts allow-forms allow-popups allow-same-origin"></iframe>
+                </div>
+
             </div>
 
             <!-- Attachment panel -->
@@ -729,7 +788,7 @@ document.addEventListener('click', function(e) {
     },
 
     _initEditor(page) {
-        this._updatePreview();
+        setTimeout(() => this._updatePreview(), 0);
         // Drag-and-drop files onto attachment panel
         const panel = document.getElementById('attachment-panel');
         if (panel && this._editingPageId) {
@@ -771,7 +830,16 @@ document.addEventListener('click', function(e) {
     },
 
     _updatePreview() {
-        // No live preview panel — preview opens in modal via _openPreviewModal()
+        clearTimeout(this._previewTimer);
+        this._previewTimer = setTimeout(() => {
+            const iframe = document.getElementById('live-preview-iframe');
+            if (!iframe) return;
+            const html = document.getElementById('editor-html')?.value || '';
+            const css  = document.getElementById('editor-css')?.value  || '';
+            this._renderIframe(iframe, html, css);
+            const isLight = document.body.classList.contains('light-theme');
+            iframe.style.filter = isLight ? '' : 'invert(1) hue-rotate(180deg)';
+        }, 400);
     },
 
     _esc(str) {
@@ -797,7 +865,7 @@ document.addEventListener('click', function(e) {
         return `body {
   max-width: 800px;
   margin: 0 auto;
-  font-family: 'Play', sans-serif;
+  font-family: 'Inter', sans-serif;
   color: #1e293b;
   line-height: 1.7;
 }
@@ -934,9 +1002,10 @@ tr:hover td { background: #f8fafc; }
             setTimeout(() => {
                 document.addEventListener('click', function closeDD(e) {
                     if (!e.target.closest('#col-tags-dropdown') && !e.target.closest('#col-tags-box')) {
-                        document.getElementById('col-tags-dropdown').style.display = 'none';
+                        const d = document.getElementById('col-tags-dropdown');
+                        if (d) d.style.display = 'none';
+                        document.removeEventListener('click', closeDD);
                     }
-                    document.removeEventListener('click', closeDD);
                 });
             }, 0);
         }
@@ -1148,13 +1217,20 @@ tr:hover td { background: #f8fafc; }
         const ext   = att.file_name.split('.').pop().toLowerCase();
         const isPdf = ext === 'pdf' || att.file_type?.includes('pdf');
         const isImg = att.file_type?.startsWith('image/') || ['jpg','jpeg','png','gif','webp','svg'].includes(ext);
-        // Insert short placeholder — resolved to real URL on preview/view
+        let snippet;
         if (isImg) {
-            this._insertSnippet(`<img src="att:${attId}" alt="${att.file_name}" style="max-width:100%;border-radius:8px;margin:.5rem 0">\n`);
+            snippet = `<img src="att:${attId}" alt="${att.file_name}" style="max-width:100%;border-radius:8px;margin:.5rem 0">\n`;
         } else if (isPdf) {
-            this._insertSnippet(`<a href="att:${attId}" data-att-pdf="1" data-att-name="${att.file_name}" target="_blank" class="resource-link">📄 ${att.file_name}</a>\n`);
+            snippet = `<a href="att:${attId}" data-att-pdf="1" data-att-name="${att.file_name}" target="_blank" class="resource-link">📄 ${att.file_name}</a>\n`;
         } else {
-            this._insertSnippet(`<a href="att:${attId}" target="_blank" class="resource-link">📎 ${att.file_name}</a>\n`);
+            snippet = `<a href="att:${attId}" target="_blank" class="resource-link">📎 ${att.file_name}</a>\n`;
+        }
+        const ta = document.getElementById('editor-html');
+        if (ta) {
+            ta.value = ta.value.trimEnd() + '\n' + snippet;
+            ta.selectionStart = ta.selectionEnd = ta.value.length;
+            this._savedCursor = { ta, start: ta.value.length, end: ta.value.length };
+            this._updatePreview();
         }
         Toast.success('Посилання вставлено');
     },

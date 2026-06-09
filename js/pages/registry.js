@@ -9,7 +9,8 @@ const RegistryPage = {
     _sections: [],   // registry_sections rows
     _canManage: false,
     _allDovs:  [],
-    _ackMap:   {},   // resourceId -> { at, version }
+    _ackMap:   {},            // resourceId -> { at, version }
+    _selectedTopics: {},      // { sectionId -> itemId }
 
     async renderInTab(area) {
         if (!area) return;
@@ -56,177 +57,120 @@ const RegistryPage = {
         }
     },
 
-    // ── Спільна функція побудови таблиці тем ─────────────────────────
-    _buildTopicsTable(items, canManage) {
-        const byItem = {};
-        for (const d of this._docs) {
-            if (!byItem[d.registry_item_id]) byItem[d.registry_item_id] = { order: [], disposition: [] };
-            byItem[d.registry_item_id][d.type === 'order' ? 'order' : 'disposition'].push(d);
-        }
-
-        let rows = '';
-        if (!items.length) {
-            rows = `<tr><td colspan="3" class="rg-empty"><i class="fa-solid fa-folder-open" style="font-size:1.6rem;opacity:.3;display:block;margin-bottom:.5rem"></i>Тем ще немає</td></tr>`;
-        } else {
-            for (let ti = 0; ti < items.length; ti++) {
-                const item = items[ti];
-                const colorClass = `rg-tr-c${ti % 7}`;
-                const orders      = byItem[item.id]?.order       || [];
-                const dispositions = byItem[item.id]?.disposition || [];
-                const rowCount    = Math.max(orders.length, dispositions.length, 1);
-
-                for (let i = 0; i < rowCount; i++) {
-                    const ord  = orders[i];
-                    const disp = dispositions[i];
-                    const isFirst = i === 0;
-
-                    const topicCell = isFirst ? `
-                        <td class="rg-td-topic" rowspan="${rowCount}">
-                            <div class="rg-td-topic-inner">
-                                <span style="flex:1">${Fmt.esc(item.topic)}</span>
-                            </div>
-                            ${canManage ? `
-                            <div class="rg-topic-actions">
-                                <button class="rg-ta-btn" title="Редагувати" onclick="RegistryPage._editTopic('${item.id}',${JSON.stringify(item.topic).replace(/"/g,'&quot;')})"><i class="fa-solid fa-pen"></i></button>
-                                <button class="rg-ta-btn" title="Вгору" onclick="RegistryPage._moveTopic('${item.id}',-1)"><i class="fa-solid fa-arrow-up"></i></button>
-                                <button class="rg-ta-btn" title="Вниз" onclick="RegistryPage._moveTopic('${item.id}',1)"><i class="fa-solid fa-arrow-down"></i></button>
-                                <button class="rg-ta-btn danger" title="Видалити тему" onclick="RegistryPage._deleteTopic('${item.id}',${JSON.stringify(item.topic).replace(/"/g,'&quot;')})"><i class="fa-solid fa-trash"></i></button>
-                            </div>
-                            <div style="display:flex;gap:.35rem;margin-top:.35rem;flex-wrap:wrap">
-                                <button class="rg-add-doc" onclick="RegistryPage._addDoc('${item.id}','order')"><i class="fa-solid fa-plus"></i> наказ</button>
-                                <button class="rg-add-doc" onclick="RegistryPage._addDoc('${item.id}','disposition')"><i class="fa-solid fa-plus"></i> розпорядження</button>
-                            </div>` : ''}
-                        </td>` : '';
-
-                    const _docCell = (entry, num, list) => {
-                        if (!entry) return `<td></td>`;
-                        const desc = entry.resource?.description?.trim();
-                        const idx = list.indexOf(entry);
-                        const isFirst = idx === 0;
-                        const isLast  = idx === list.length - 1;
-                        const acked = !!this._ackMap[entry.resource_id];
-                        const dot = `<span class="rg-ack-dot ${acked ? 'rg-read' : 'rg-unread'}" title="${acked ? 'Ознайомлено' : 'Не ознайомлено'}"></span>`;
-                        return `<td>
-                            <div class="rg-doc-row">
-                                <span class="rg-doc-num">${num}.</span>
-                                <div style="flex:1;min-width:0">
-                                    <span class="rg-doc-link" onclick="RegistryPage._openDoc('${entry.resource_id}')">${dot}${Fmt.esc(entry.resource?.title || '—')}</span>
-                                    ${desc ? `<div style="font-size:.82rem;color:var(--text-muted);margin-top:.15rem;line-height:1.4;word-break:break-word;white-space:normal">${Fmt.esc(desc)}</div>` : ''}
-                                </div>
-                                ${canManage ? `
-                                <div class="rg-doc-actions">
-                                    <button class="rg-ta-btn" title="Вгору" ${isFirst ? 'disabled' : ''} onclick="RegistryPage._moveDoc('${entry.id}','${entry.registry_item_id}','${entry.type}',-1)"><i class="fa-solid fa-arrow-up"></i></button>
-                                    <button class="rg-ta-btn" title="Вниз" ${isLast ? 'disabled' : ''} onclick="RegistryPage._moveDoc('${entry.id}','${entry.registry_item_id}','${entry.type}',1)"><i class="fa-solid fa-arrow-down"></i></button>
-                                    <button class="rg-doc-del" title="Видалити" onclick="RegistryPage._removeDoc('${entry.id}')"><i class="fa-solid fa-xmark"></i></button>
-                                </div>` : ''}
-                            </div>
-                        </td>`;
-                    };
-
-                    rows += `<tr class="${colorClass}">${topicCell}${_docCell(ord, i+1, orders)}${_docCell(disp, i+1, dispositions)}</tr>`;
-                }
-            }
-        }
-
-        return `
-        <div class="rg-table-wrap">
-            <table class="rg-table">
-                <thead>
-                    <tr>
-                        <th class="rg-th-topic">Назва теми</th>
-                        <th style="border-left:1px solid var(--border)">Назва наказу</th>
-                        <th style="border-left:1px solid var(--border)">Назва розпорядження</th>
-                    </tr>
-                </thead>
-                <tbody>${rows}</tbody>
-            </table>
-        </div>`;
-    },
-
+    // ── Render ──────────────────────────────────────────────────────
     _render(area) {
         const canManage = this._canManage;
+
+        // Ensure a valid topic is selected per section
+        this._sections.forEach(sec => {
+            const secItems = this._items.filter(i => i.section_id === sec.id);
+            const cur = this._selectedTopics[sec.id];
+            if (!cur || !secItems.find(i => i.id === cur)) {
+                this._selectedTopics[sec.id] = secItems[0]?.id || null;
+            }
+        });
 
         const styles = `
         <style>
             .rg-toolbar{display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem;flex-wrap:wrap}
-            .rg-table-wrap{overflow-x:auto;border-radius:var(--radius-xl);border:1px solid var(--border);background:var(--bg-surface)}
-            .rg-table{width:100%;border-collapse:collapse;font-size:.92rem}
-            .rg-table th{padding:.65rem 1rem;font-size:.76rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);border-bottom:2px solid var(--border);white-space:nowrap;background:var(--bg-raised)}
-            .rg-table th.rg-th-topic{width:17%;min-width:120px}
-            .rg-table td{padding:.55rem 1rem;border-bottom:1px solid var(--border);vertical-align:top;line-height:1.45;word-break:break-word;overflow-wrap:break-word}
-            .rg-table tr:last-child td{border-bottom:none}
-            .rg-table tr:hover td{filter:brightness(.97)}
-            .rg-td-topic{font-weight:600;color:var(--text-primary);font-size:.92rem}
-            .rg-tr-c0 td{background:rgba(99,102,241,.06)}
-            .rg-tr-c1 td{background:rgba(16,185,129,.06)}
-            .rg-tr-c2 td{background:rgba(245,158,11,.06)}
-            .rg-tr-c3 td{background:rgba(239,68,68,.06)}
-            .rg-tr-c4 td{background:rgba(59,130,246,.06)}
-            .rg-tr-c5 td{background:rgba(168,85,247,.06)}
-            .rg-tr-c6 td{background:rgba(20,184,166,.06)}
-            .rg-table tr:hover td{background:var(--bg-raised)!important}
-            .rg-td-topic-inner{display:flex;align-items:flex-start;gap:.4rem}
-            .rg-topic-actions{display:flex;gap:.25rem;flex-wrap:wrap;margin-top:.3rem}
-            .rg-ta-btn{width:22px;height:22px;border-radius:5px;border:1px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.65rem;transition:all .15s;font-family:inherit}
-            .rg-ta-btn:hover{border-color:var(--primary);color:var(--primary)}
-            .rg-ta-btn.danger:hover{border-color:#ef4444;color:#ef4444}
-            .rg-doc-link{display:inline;color:var(--primary);font-size:.92rem;font-weight:500;cursor:pointer;padding:.15rem 0;line-height:1.45;transition:opacity .15s;word-break:break-word;white-space:normal}
-            .rg-doc-link:hover{opacity:.75;text-decoration:underline}
-            .rg-doc-row{display:flex;align-items:flex-start;gap:.3rem;margin-bottom:.3rem}
-            .rg-doc-row:last-child{margin-bottom:0}
-            .rg-doc-num{font-size:.75rem;color:var(--text-muted);flex-shrink:0;margin-top:.2rem;min-width:14px}
-            .rg-doc-actions{display:flex;align-items:center;gap:2px;flex-shrink:0;opacity:0;transition:opacity .15s}
-            .rg-doc-row:hover .rg-doc-actions{opacity:1}
-            .rg-doc-del{width:18px;height:18px;border-radius:4px;border:none;background:transparent;color:var(--text-muted);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.6rem;transition:color .15s;font-family:inherit}
-            .rg-doc-del:hover{color:#ef4444}
-            .rg-doc-actions .rg-ta-btn{width:18px;height:18px;font-size:.55rem}
-            .rg-doc-actions .rg-ta-btn:disabled{opacity:.25;cursor:default}
-            .rg-add-doc{display:inline-flex;align-items:center;gap:.3rem;font-size:.75rem;color:var(--text-muted);cursor:pointer;padding:.2rem .4rem;border-radius:var(--radius-sm);border:1px dashed var(--border);margin-top:.3rem;transition:all .15s;background:transparent;font-family:inherit}
-            .rg-add-doc:hover{border-color:var(--primary);color:var(--primary)}
-            .rg-empty{text-align:center;padding:3rem 1rem;color:var(--text-muted);font-size:.9rem}
 
-            /* ── Sections ──────────────────────────────────────── */
-            .rg-sections{display:flex;flex-direction:column;gap:.85rem;margin-top:1.5rem;max-width:1400px}
-            .rg-sec{border:1px solid var(--border);border-radius:var(--radius-xl);background:var(--bg-surface);overflow-x:hidden}
-            .rg-sec-head{display:flex;align-items:center;gap:.6rem;padding:.7rem 1rem;background:var(--bg-raised);cursor:pointer;user-select:none;border-bottom:1px solid transparent;transition:border-color .15s;border-radius:var(--radius-xl) var(--radius-xl) 0 0}
+            /* ── Sections shell ──────────────────────────────────────── */
+            .rg-sections{display:flex;flex-direction:column;gap:.85rem;max-width:1400px}
+            .rg-sec{border:1px solid var(--border);border-radius:var(--radius-xl);background:var(--bg-surface);overflow:hidden}
+            .rg-sec-head{display:flex;align-items:center;gap:.6rem;padding:.7rem 1rem;background:var(--bg-raised);cursor:pointer;user-select:none;border-bottom:1px solid transparent;transition:border-color .15s,background .15s}
+            .rg-sec-head:hover{background:var(--bg-hover)}
             .rg-sec.open .rg-sec-head{border-bottom-color:var(--border)}
             .rg-sec-chevron{font-size:.65rem;color:var(--text-muted);transition:transform .2s;flex-shrink:0}
             .rg-sec.open .rg-sec-chevron{transform:rotate(90deg)}
             .rg-sec-icon{width:28px;height:28px;border-radius:8px;background:rgba(99,102,241,.12);color:var(--primary);display:flex;align-items:center;justify-content:center;font-size:.8rem;flex-shrink:0}
             .rg-sec-title{font-size:.84rem;font-weight:700;color:var(--text-primary);flex:1;min-width:0}
-            .rg-sec-count{font-size:.7rem;color:var(--text-muted);background:var(--bg-base);border:1px solid var(--border);border-radius:20px;padding:.1rem .55rem;flex-shrink:0}
+            .rg-sec-dov-badge{font-size:.68rem;color:var(--text-muted);background:var(--bg-base);border:1px solid var(--border);border-radius:20px;padding:.1rem .45rem;flex-shrink:0;white-space:nowrap}
             .rg-sec-actions{display:flex;gap:.25rem;flex-shrink:0;opacity:0;transition:opacity .15s}
             .rg-sec:hover .rg-sec-actions{opacity:1}
             .rg-sec-body{display:none;flex-direction:column}
             .rg-sec.open .rg-sec-body{display:flex}
-            .rg-sec-toolbar{padding:.6rem 1rem;border-bottom:1px solid var(--border);background:var(--bg-surface)}
+
+            /* ── Description ────────────────────────────────────────── */
             .rg-sec-desc-wrap{padding:.7rem 1.1rem;border-bottom:1px solid var(--border);background:linear-gradient(135deg,rgba(99,102,241,.04) 0%,rgba(99,102,241,.01) 100%)}
             .rg-sec-desc-input{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius-md);padding:.5rem .75rem;font-size:.84rem;color:var(--text-primary);background:var(--bg-raised);resize:vertical;min-height:56px;font-family:inherit;line-height:1.5;outline:none;transition:border-color .15s}
             .rg-sec-desc-input:focus{border-color:var(--primary)}
-            .rg-sec-desc-text{margin:0;font-size:1rem;color:var(--primary);line-height:1.65;white-space:pre-wrap;font-style:italic;padding:.1rem 0 .1rem .85rem;border-left:3px solid rgba(99,102,241,.35)}
-            .rg-sec .rg-table-wrap{border:none;border-radius:0;border-top:none;margin-bottom:.75rem}
-            .rg-sec .rg-table tr:last-child td{border-bottom:none}
-            .rg-sections-empty{text-align:center;padding:2rem 1rem;color:var(--text-muted);font-size:.85rem;border:1px dashed var(--border);border-radius:var(--radius-xl);margin-top:1.5rem}
-            .rg-sec-dov-badge{font-size:.68rem;color:var(--text-muted);background:var(--bg-raised);border:1px solid var(--border);border-radius:20px;padding:.1rem .45rem;flex-shrink:0;white-space:nowrap}
-            .rg-ack-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;display:inline-block;vertical-align:middle;margin-right:.35rem;margin-top:-.1em}
+            .rg-sec-desc-text{margin:0;font-size:.92rem;color:var(--primary);line-height:1.65;white-space:pre-wrap;font-style:italic;padding:.1rem 0 .1rem .85rem;border-left:3px solid rgba(99,102,241,.35)}
+
+            /* ── Split layout ───────────────────────────────────────── */
+            .rg-split{display:flex;min-height:200px}
+            .rg-split-sidebar{width:260px;flex-shrink:0;border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;max-height:560px}
+            .rg-split-content{flex:1;min-width:0;overflow-y:auto;max-height:560px}
+
+            /* ── Sidebar topic buttons ──────────────────────────────── */
+            .rg-topic-btn{display:flex;align-items:flex-start;gap:.5rem;padding:.65rem .9rem;cursor:pointer;border:none;background:transparent;text-align:left;color:var(--text-primary);border-bottom:1px solid var(--border);font-family:inherit;font-size:.84rem;line-height:1.4;width:100%;transition:background .12s;position:relative}
+            .rg-topic-btn:last-of-type{border-bottom:none}
+            .rg-topic-btn:hover{background:var(--bg-raised)}
+            .rg-topic-btn.active{background:rgba(99,102,241,.08);color:var(--primary)}
+            .rg-tbtn-num{width:20px;height:20px;border-radius:6px;flex-shrink:0;background:var(--bg-raised);color:var(--text-muted);display:flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:800;margin-top:.1rem;transition:all .12s;border:1px solid var(--border)}
+            .rg-topic-btn.active .rg-tbtn-num{background:var(--primary);color:#fff;border-color:var(--primary)}
+            .rg-tbtn-name{flex:1;min-width:0;font-weight:500}
+            .rg-topic-btn.active .rg-tbtn-name{font-weight:700}
+            .rg-tbtn-dots{display:flex;gap:3px;flex-shrink:0;margin-top:.3rem}
+            .rg-tbtn-dot{width:7px;height:7px;border-radius:50%}
+            .rg-tdot-unread{background:#ef4444;animation:rg-pulse 1.4s ease-in-out infinite}
+            .rg-tdot-read{background:#10b981}
+            .rg-tdot-empty{background:var(--border)}
+            .rg-tbtn-actions{display:flex;gap:2px;flex-shrink:0;opacity:0;transition:opacity .15s;margin-top:.05rem}
+            .rg-topic-btn:hover .rg-tbtn-actions{opacity:1}
+            .rg-split-add-topic{padding:.5rem .75rem;border-top:1px solid var(--border);margin-top:auto}
+            .rg-add-topic-btn{width:100%;display:flex;align-items:center;justify-content:center;gap:.4rem;font-size:.78rem;color:var(--text-muted);cursor:pointer;padding:.45rem .5rem;border-radius:var(--radius-sm);border:1px dashed var(--border);background:transparent;transition:all .15s;font-family:inherit}
+            .rg-add-topic-btn:hover{border-color:var(--primary);color:var(--primary);background:rgba(99,102,241,.05)}
+            .rg-split-empty-topics{padding:1.5rem 1rem;text-align:center;color:var(--text-muted);font-size:.8rem;font-style:italic}
+            .rg-split-no-topic{display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-size:.85rem;padding:2rem;font-style:italic}
+
+            /* ── Doc columns in content ─────────────────────────────── */
+            .rg-doc-cols{display:grid;grid-template-columns:1fr 1fr;height:100%}
+            .rg-doc-col-area{padding:1rem 1.1rem;display:flex;flex-direction:column;gap:.45rem}
+            .rg-doc-col-area:first-child{border-right:1px solid var(--border)}
+            .rg-col-header{display:flex;align-items:center;gap:.45rem;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);padding-bottom:.55rem;border-bottom:1px solid var(--border);margin-bottom:.1rem}
+            .rg-col-add-btn{margin-left:auto;width:20px;height:20px;border-radius:5px;border:1px dashed var(--border);background:transparent;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.65rem;transition:all .15s;font-family:inherit;flex-shrink:0}
+            .rg-col-add-btn:hover{border-color:var(--primary);color:var(--primary)}
+            .rg-col-empty{color:var(--text-muted);font-size:.8rem;font-style:italic;padding:.35rem .1rem}
+            .rg-doc-card{border:1px solid var(--border);border-radius:8px;padding:.6rem .8rem;cursor:pointer;transition:border-color .13s,background .13s;background:var(--bg-raised);display:flex;align-items:flex-start;gap:.5rem}
+            .rg-doc-card:hover{border-color:var(--primary);background:rgba(99,102,241,.06)}
+            .rg-doc-card-left{display:flex;flex-direction:column;align-items:center;gap:.3rem;flex-shrink:0;margin-top:.15rem}
+            .rg-doc-card-num{font-size:.68rem;color:var(--text-muted);font-weight:700}
+            .rg-doc-card-body{flex:1;min-width:0}
+            .rg-doc-card-title{font-size:.84rem;color:var(--primary);font-weight:600;line-height:1.4;word-break:break-word}
+            .rg-doc-card:hover .rg-doc-card-title{text-decoration:underline}
+            .rg-doc-card-desc{font-size:.76rem;color:var(--text-muted);margin-top:.2rem;line-height:1.4;word-break:break-word}
+            .rg-doc-card-actions{display:flex;flex-direction:column;gap:2px;flex-shrink:0;opacity:0;transition:opacity .15s}
+            .rg-doc-card:hover .rg-doc-card-actions{opacity:1}
+
+            /* ── Shared buttons ─────────────────────────────────────── */
+            .rg-ta-btn{width:22px;height:22px;border-radius:5px;border:1px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.65rem;transition:all .15s;font-family:inherit}
+            .rg-ta-btn:hover{border-color:var(--primary);color:var(--primary)}
+            .rg-ta-btn.danger:hover{border-color:#ef4444;color:#ef4444}
+            .rg-ta-btn:disabled{opacity:.25;cursor:default;pointer-events:none}
+            .rg-doc-del{width:18px;height:18px;border-radius:4px;border:none;background:transparent;color:var(--text-muted);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.6rem;transition:color .15s;font-family:inherit}
+            .rg-doc-del:hover{color:#ef4444}
+            .rg-doc-card-actions .rg-ta-btn{width:18px;height:18px;font-size:.55rem}
+
+            /* ── Ack dots ────────────────────────────────────────────── */
+            .rg-ack-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;display:inline-block}
             .rg-ack-dot.rg-unread{background:#ef4444;box-shadow:0 0 0 0 rgba(239,68,68,.6);animation:rg-pulse 1.4s ease-in-out infinite}
             .rg-ack-dot.rg-read{background:#10b981}
             @keyframes rg-pulse{0%{box-shadow:0 0 0 0 rgba(239,68,68,.6)}70%{box-shadow:0 0 0 5px rgba(239,68,68,0)}100%{box-shadow:0 0 0 0 rgba(239,68,68,0)}}
+
+            /* ── Empty / misc ────────────────────────────────────────── */
+            .rg-sections-empty{text-align:center;padding:2rem 1rem;color:var(--text-muted);font-size:.85rem;border:1px dashed var(--border);border-radius:var(--radius-xl)}
         </style>`;
 
-        // ── Теми без розділу (верхня таблиця) — прихована ──────────
-        const rootItems = this._items.filter(i => !i.section_id);
-        const rootTable = '';
-
-        // ── Розділи з їх темами ─────────────────────────────────────
         let sectionsHtml = '';
         if (this._sections.length) {
-            const visibleSecIds = new Set(this._sections.map(s => s.id));
             sectionsHtml = `<div class="rg-sections" id="rg-sections-list">` +
                 this._sections.map(sec => {
                     const secItems = this._items.filter(i => i.section_id === sec.id);
                     const dovName  = sec._dov?.name;
-                    const innerTable = this._buildTopicsTable(secItems, canManage);
+
+                    const sidebarItems = secItems.map((item, idx) =>
+                        this._buildTopicBtn(item, idx, sec.id, secItems, canManage)
+                    ).join('');
 
                     return `
                     <div class="rg-sec" id="rg-sec-${sec.id}">
@@ -246,17 +190,27 @@ const RegistryPage = {
                         <div class="rg-sec-body">
                             ${sec.description || canManage ? `
                             <div class="rg-sec-desc-wrap">
-                                ${canManage ? `
-                                <textarea class="rg-sec-desc-input" id="rg-desc-${sec.id}"
-                                    placeholder="Опис розділу (необов'язково)..."
-                                    onblur="RegistryPage._saveSecDesc('${sec.id}',this.value)"
-                                    >${Fmt.esc(sec.description || '')}</textarea>` :
-                                (sec.description ? `<p class="rg-sec-desc-text">${Fmt.esc(sec.description)}</p>` : '')}
+                                ${canManage
+                                    ? `<textarea class="rg-sec-desc-input" id="rg-desc-${sec.id}"
+                                            placeholder="Опис розділу (необов'язково)..."
+                                            onblur="RegistryPage._saveSecDesc('${sec.id}',this.value)"
+                                        >${Fmt.esc(sec.description || '')}</textarea>`
+                                    : (sec.description ? `<p class="rg-sec-desc-text">${Fmt.esc(sec.description)}</p>` : '')}
                             </div>` : ''}
-                            ${canManage ? `<div class="rg-sec-toolbar">
-                                <button class="btn btn-primary btn-sm" onclick="RegistryPage._addTopicToSection('${sec.id}')"><i class="fa-solid fa-plus"></i> Додати тему</button>
-                            </div>` : ''}
-                            ${innerTable}
+                            <div class="rg-split">
+                                <div class="rg-split-sidebar">
+                                    ${sidebarItems || `<div class="rg-split-empty-topics">Тем ще немає</div>`}
+                                    ${canManage ? `
+                                    <div class="rg-split-add-topic">
+                                        <button class="rg-add-topic-btn" onclick="RegistryPage._addTopicToSection('${sec.id}')">
+                                            <i class="fa-solid fa-plus"></i> Додати тему
+                                        </button>
+                                    </div>` : ''}
+                                </div>
+                                <div class="rg-split-content" id="rg-split-${sec.id}">
+                                    ${this._buildDocContent(sec.id, canManage)}
+                                </div>
+                            </div>
                         </div>
                     </div>`;
                 }).join('') +
@@ -271,17 +225,119 @@ const RegistryPage = {
         ${canManage ? `<div class="rg-toolbar">
             <button class="btn btn-primary btn-sm" onclick="RegistryPage._addSection()"><i class="fa-solid fa-layer-group"></i> Додати розділ</button>
         </div>` : ''}
-
-        ${rootTable}
         ${sectionsHtml}`;
     },
 
-    // ── Toggle розділу ───────────────────────────────────────────────
+    // ── Build sidebar topic button ────────────────────────────────────
+    _buildTopicBtn(item, idx, secId, secItems, canManage) {
+        const isSelected = this._selectedTopics[secId] === item.id;
+        const orders = this._docs.filter(d => d.registry_item_id === item.id && d.type === 'order');
+        const disps  = this._docs.filter(d => d.registry_item_id === item.id && d.type === 'disposition');
+
+        const orderUnread = orders.filter(d => d.resource_id && !this._ackMap[d.resource_id]).length;
+        const dispUnread  = disps.filter(d  => d.resource_id && !this._ackMap[d.resource_id]).length;
+
+        const orderDot = orders.length
+            ? `<span class="rg-tbtn-dot ${orderUnread > 0 ? 'rg-tdot-unread' : 'rg-tdot-read'}" title="Накази: ${orders.length}"></span>`
+            : `<span class="rg-tbtn-dot rg-tdot-empty" title="Накази: 0"></span>`;
+        const dispDot = disps.length
+            ? `<span class="rg-tbtn-dot ${dispUnread > 0 ? 'rg-tdot-unread' : 'rg-tdot-read'}" title="Розпорядження: ${disps.length}"></span>`
+            : `<span class="rg-tbtn-dot rg-tdot-empty" title="Розпорядження: 0"></span>`;
+
+        const isFirst = idx === 0;
+        const isLast  = idx === secItems.length - 1;
+
+        return `
+        <div class="rg-topic-btn${isSelected ? ' active' : ''}" id="rg-tbtn-${item.id}"
+             onclick="RegistryPage._selectTopic('${secId}','${item.id}')">
+            <span class="rg-tbtn-num">${idx + 1}</span>
+            <span class="rg-tbtn-name">${Fmt.esc(item.topic)}</span>
+            <div class="rg-tbtn-dots">${orderDot}${dispDot}</div>
+            ${canManage ? `
+            <div class="rg-tbtn-actions" onclick="event.stopPropagation()">
+                <button class="rg-ta-btn" title="Редагувати" onclick="RegistryPage._editTopic('${item.id}',${JSON.stringify(item.topic).replace(/"/g,'&quot;')})"><i class="fa-solid fa-pen"></i></button>
+                <button class="rg-ta-btn" title="Вгору" ${isFirst ? 'disabled' : ''} onclick="RegistryPage._moveTopic('${item.id}',-1)"><i class="fa-solid fa-arrow-up"></i></button>
+                <button class="rg-ta-btn" title="Вниз" ${isLast ? 'disabled' : ''} onclick="RegistryPage._moveTopic('${item.id}',1)"><i class="fa-solid fa-arrow-down"></i></button>
+                <button class="rg-ta-btn danger" title="Видалити" onclick="RegistryPage._deleteTopic('${item.id}',${JSON.stringify(item.topic).replace(/"/g,'&quot;')})"><i class="fa-solid fa-trash"></i></button>
+            </div>` : ''}
+        </div>`;
+    },
+
+    // ── Build doc columns for selected topic ──────────────────────────
+    _buildDocContent(secId, canManage) {
+        const itemId = this._selectedTopics[secId];
+        if (!itemId) {
+            return `<div class="rg-split-no-topic"><i class="fa-solid fa-arrow-left" style="margin-right:.4rem;opacity:.5"></i>Оберіть тему зліва</div>`;
+        }
+
+        const orders = this._docs.filter(d => d.registry_item_id === itemId && d.type === 'order');
+        const disps  = this._docs.filter(d => d.registry_item_id === itemId && d.type === 'disposition');
+
+        const renderCards = (list, type) => {
+            if (!list.length) return `<div class="rg-col-empty">— відсутні —</div>`;
+            return list.map((d, i) => {
+                const acked  = !!this._ackMap[d.resource_id];
+                const isFirst = i === 0;
+                const isLast  = i === list.length - 1;
+                const desc = d.resource?.description?.trim();
+                return `
+                <div class="rg-doc-card" onclick="RegistryPage._openDoc('${d.resource_id}')">
+                    <div class="rg-doc-card-left">
+                        <span class="rg-doc-card-num">${i + 1}</span>
+                        <span class="rg-ack-dot ${acked ? 'rg-read' : 'rg-unread'}" title="${acked ? 'Ознайомлено' : 'Не ознайомлено'}"></span>
+                    </div>
+                    <div class="rg-doc-card-body">
+                        <div class="rg-doc-card-title">${Fmt.esc(d.resource?.title || '—')}</div>
+                        ${desc ? `<div class="rg-doc-card-desc">${Fmt.esc(desc)}</div>` : ''}
+                    </div>
+                    ${canManage ? `
+                    <div class="rg-doc-card-actions" onclick="event.stopPropagation()">
+                        <button class="rg-ta-btn" title="Вгору" ${isFirst ? 'disabled' : ''} onclick="RegistryPage._moveDoc('${d.id}','${itemId}','${type}',-1)"><i class="fa-solid fa-arrow-up"></i></button>
+                        <button class="rg-ta-btn" title="Вниз" ${isLast ? 'disabled' : ''} onclick="RegistryPage._moveDoc('${d.id}','${itemId}','${type}',1)"><i class="fa-solid fa-arrow-down"></i></button>
+                        <button class="rg-doc-del" title="Видалити" onclick="RegistryPage._removeDoc('${d.id}')"><i class="fa-solid fa-xmark"></i></button>
+                    </div>` : ''}
+                </div>`;
+            }).join('');
+        };
+
+        return `
+        <div class="rg-doc-cols">
+            <div class="rg-doc-col-area">
+                <div class="rg-col-header">
+                    <i class="fa-solid fa-gavel" style="color:#6366f1"></i> Накази
+                    ${canManage ? `<button class="rg-col-add-btn" title="Додати наказ" onclick="RegistryPage._addDoc('${itemId}','order')"><i class="fa-solid fa-plus"></i></button>` : ''}
+                </div>
+                ${renderCards(orders, 'order')}
+            </div>
+            <div class="rg-doc-col-area">
+                <div class="rg-col-header">
+                    <i class="fa-solid fa-file-contract" style="color:#f59e0b"></i> Розпорядження
+                    ${canManage ? `<button class="rg-col-add-btn" title="Додати розпорядження" onclick="RegistryPage._addDoc('${itemId}','disposition')"><i class="fa-solid fa-plus"></i></button>` : ''}
+                </div>
+                ${renderCards(disps, 'disposition')}
+            </div>
+        </div>`;
+    },
+
+    // ── Select topic in split panel ───────────────────────────────────
+    _selectTopic(secId, itemId) {
+        this._selectedTopics[secId] = itemId;
+        const sec = document.getElementById(`rg-sec-${secId}`);
+        if (sec) {
+            sec.querySelectorAll('.rg-topic-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(`rg-tbtn-${itemId}`)?.classList.add('active');
+        }
+        const content = document.getElementById(`rg-split-${secId}`);
+        if (content) content.innerHTML = this._buildDocContent(secId, this._canManage);
+    },
+
+    // ── Toggle accordion ──────────────────────────────────────────────
     _toggleSec(id) {
         const el = document.getElementById(`rg-sec-${id}`);
         if (el) el.classList.toggle('open');
     },
 
+    // ── Open doc (saves accordion state for back-navigation) ──────────
     _openDoc(resourceId) {
         const openSecs = [...document.querySelectorAll('.rg-sec.open')].map(el => el.id);
         if (openSecs.length) sessionStorage.setItem('rg_open_secs', JSON.stringify(openSecs));
@@ -301,10 +357,17 @@ const RegistryPage = {
         }
     },
 
-    // ── Додати тему (глобально, без розділу) ─────────────────────────
-    _addTopic() { this._openTopicModal(null, null, null); },
+    // ── Rerender — preserves open sections + selected topics ──────────
+    _rerender() {
+        const area = document.getElementById('rg-tab-area');
+        if (!area) return;
+        const openSecs = new Set([...document.querySelectorAll('.rg-sec.open')].map(el => el.id));
+        this._render(area);
+        openSecs.forEach(id => document.getElementById(id)?.classList.add('open'));
+    },
 
-    // ── Додати тему до розділу ───────────────────────────────────────
+    // ── Topic CRUD ────────────────────────────────────────────────────
+    _addTopic() { this._openTopicModal(null, null, null); },
     _addTopicToSection(sectionId) { this._openTopicModal(null, null, sectionId); },
 
     _openTopicModal(id, currentTopic, sectionId) {
@@ -342,6 +405,8 @@ const RegistryPage = {
             if (sectionId) fields.section_id = sectionId;
             const item = await API.registryItems.create(fields);
             this._items.push(item);
+            // Auto-select new topic
+            if (sectionId) this._selectedTopics[sectionId] = item.id;
             Modal.close();
             Toast.success('Тему додано');
             this._rerender();
@@ -375,6 +440,11 @@ const RegistryPage = {
         try {
             Loader.show();
             await API.registryItems.remove(id);
+            // If this topic was selected, clear selection
+            const item = this._items.find(i => i.id === id);
+            if (item?.section_id && this._selectedTopics[item.section_id] === id) {
+                delete this._selectedTopics[item.section_id];
+            }
             this._items = this._items.filter(i => i.id !== id);
             this._docs  = this._docs.filter(d => d.registry_item_id !== id);
             Toast.success('Тему видалено');
@@ -402,11 +472,15 @@ const RegistryPage = {
         const idx  = list.findIndex(d => d.id === id);
         const swapIdx = idx + dir;
         if (swapIdx < 0 || swapIdx >= list.length) return;
-        // Swap in main _docs array
         const a = this._docs.indexOf(list[idx]);
         const b = this._docs.indexOf(list[swapIdx]);
         [this._docs[a], this._docs[b]] = [this._docs[b], this._docs[a]];
-        this._rerender();
+        // Only update the content pane, not full rerender
+        const secId = this._sections.find(s => this._items.find(i => i.id === itemId && i.section_id === s.id))?.id;
+        if (secId) {
+            const content = document.getElementById(`rg-split-${secId}`);
+            if (content) content.innerHTML = this._buildDocContent(secId, this._canManage);
+        }
         try {
             const sameType = this._docs.filter(d => d.registry_item_id === itemId && d.type === type);
             await API.registryDocs.reorder(sameType.map(d => d.id));
@@ -415,7 +489,7 @@ const RegistryPage = {
         }
     },
 
-    // ── Додати документ до теми ──────────────────────────────────────
+    // ── Add doc to topic ──────────────────────────────────────────────
     async _addDoc(itemId, type) {
         let resources = [];
         try {
@@ -487,7 +561,7 @@ const RegistryPage = {
         } finally { Loader.hide(); }
     },
 
-    // ── Додати розділ ────────────────────────────────────────────────
+    // ── Section CRUD ──────────────────────────────────────────────────
     async _addSection() {
         const dovList = this._allDovs?.length ? this._allDovs : await API.dovirenosti.getAll().catch(() => []);
         const dovOptions = `<option value="">— Всім —</option>` +
@@ -600,9 +674,9 @@ const RegistryPage = {
         try {
             Loader.show();
             await API.registrySections.remove(id);
-            // Відв'язуємо теми від розділу локально
             this._items.forEach(i => { if (i.section_id === id) i.section_id = null; });
             this._sections = this._sections.filter(s => s.id !== id);
+            delete this._selectedTopics[id];
             Toast.success('Розділ видалено');
             this._rerender();
         } catch (e) {
@@ -623,7 +697,7 @@ const RegistryPage = {
         }
     },
 
-    // ── Спільний пікер документів ────────────────────────────────────
+    // ── Doc picker modal ──────────────────────────────────────────────
     _openDocPicker(title, saveCall) {
         Modal.open({
             title,
@@ -681,8 +755,8 @@ const RegistryPage = {
     },
 
     _filterDocPicker(q) {
-        const picker  = document.getElementById('rg-doc-picker');
-        const countEl = document.getElementById('rg-picker-count');
+        const picker   = document.getElementById('rg-doc-picker');
+        const countEl  = document.getElementById('rg-picker-count');
         const clearBtn = document.getElementById('rg-picker-clear');
         if (!picker) return;
         if (clearBtn) clearBtn.style.display = q ? 'block' : 'none';
@@ -698,7 +772,7 @@ const RegistryPage = {
         picker.innerHTML = filtered.map(r => {
             const isActive = r.id === selectedId;
             const dovBadges = (r._dovNames || []).length
-                ? (r._dovNames).map(n =>
+                ? r._dovNames.map(n =>
                     `<span style="font-size:.68rem;background:rgba(99,102,241,.1);color:var(--primary);border:1px solid rgba(99,102,241,.2);border-radius:10px;padding:.05rem .4rem;white-space:nowrap">${Fmt.esc(n)}</span>`
                   ).join('')
                 : `<span style="font-size:.68rem;background:rgba(16,185,129,.08);color:#059669;border:1px solid rgba(16,185,129,.25);border-radius:10px;padding:.05rem .4rem;white-space:nowrap">🌐 Для всіх ТОВ</span>`;
@@ -730,20 +804,6 @@ const RegistryPage = {
         if (chosenText) chosenText.textContent = title;
         document.querySelectorAll('.rg-picker-item').forEach(el => {
             el.classList.toggle('active', el.dataset.id === id);
-        });
-    },
-
-    _rerender() {
-        const area = document.getElementById('rg-tab-area');
-        if (!area) return;
-        // Зберігаємо відкриті секції
-        const openSecs = new Set(
-            [...document.querySelectorAll('.rg-sec.open')].map(el => el.id)
-        );
-        this._render(area);
-        // Відновлюємо стан акордеону
-        openSecs.forEach(id => {
-            document.getElementById(id)?.classList.add('open');
         });
     },
 };

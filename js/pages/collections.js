@@ -222,8 +222,16 @@ const CollectionsPage = {
                             <div style="display:flex;align-items:center;gap:.4rem;color:var(--text-muted);font-size:.78rem;margin-bottom:.35rem">
                                 <i class="fa-solid fa-pen-to-square" style="font-size:.8rem"></i> Остання редакція
                             </div>
-                            <div style="color:var(--text-primary);font-weight:600;font-size:.92rem;line-height:1.3">${Fmt.esc(page.updater?.full_name || page.creator?.full_name || '—')}</div>
-                            <div style="color:var(--text-muted);font-size:.83rem;margin-top:.15rem">${page.updated_at ? Fmt.datetime(page.updated_at) : '—'}</div>
+                            ${(() => {
+                                const wasEdited = page.updated_by != null ||
+                                    (page.updated_at && page.created_at &&
+                                    Math.abs(new Date(page.updated_at) - new Date(page.created_at)) > 2000);
+                                if (!wasEdited) return `<div style="color:var(--text-muted);font-size:.85rem;font-style:italic">Не редагувалась</div>`;
+                                return `${page.updater?.full_name
+                                    ? `<div style="color:var(--text-primary);font-weight:600;font-size:.92rem;line-height:1.3">${Fmt.esc(page.updater.full_name)}</div>`
+                                    : `<div style="color:var(--text-muted);font-size:.85rem">—</div>`}
+                                <div style="color:var(--text-muted);font-size:.83rem;margin-top:.15rem">${Fmt.datetime(page.updated_at)}</div>`;
+                            })()}
                         </div>
                         <div style="border-top:1px solid var(--border);padding:.75rem 0 .25rem">
                             <div style="display:flex;align-items:center;gap:.4rem;color:var(--text-muted);font-size:.78rem;margin-bottom:.5rem">
@@ -378,12 +386,43 @@ document.addEventListener('click', function(e) {
     },
 
     // ── Editor ────────────────────────────────────────────────────
-    _editingPageId: null,
-    _attachments:   [],
-    _savedCursor:   null,
-    _previewTimer:  null,
+    _editingPageId:       null,
+    _attachments:         [],
+    _savedCursor:         null,
+    _previewTimer:        null,
+    _cmHtml:              null,
+    _cmCss:               null,
+    _isDirty:             false,
+    _ctrlSHandler:        null,
+    _beforeUnloadHandler: null,
+    _cmThemeHandler:      null,
+
+    _destroyEditor() {
+        try { this._cmHtml?.toTextArea(); } catch(_) {}
+        try { this._cmCss?.toTextArea();  } catch(_) {}
+        this._cmHtml = null;
+        this._cmCss  = null;
+        if (this._ctrlSHandler)        { document.removeEventListener('keydown',    this._ctrlSHandler);        this._ctrlSHandler = null; }
+        if (this._beforeUnloadHandler) { window.removeEventListener('beforeunload', this._beforeUnloadHandler); this._beforeUnloadHandler = null; }
+        if (this._cmThemeHandler)      { window.removeEventListener('lms-theme-change', this._cmThemeHandler);  this._cmThemeHandler = null; }
+        this._isDirty = false;
+    },
+
+    _markDirty() {
+        if (this._isDirty) return;
+        this._isDirty = true;
+        const btn = document.getElementById('col-save-btn');
+        if (btn) { btn.classList.remove('btn-primary'); btn.classList.add('btn-warning'); btn.innerHTML = '<i class="fa-solid fa-circle" style="font-size:.45rem;vertical-align:middle;margin-right:.35rem"></i> Зберегти'; }
+    },
+
+    _markClean() {
+        this._isDirty = false;
+        const btn = document.getElementById('col-save-btn');
+        if (btn) { btn.classList.remove('btn-warning'); btn.classList.add('btn-primary'); btn.innerHTML = '<i class="fa-regular fa-floppy-disk"></i> Зберегти'; }
+    },
 
     async openEditor(id = null) {
+        this._destroyEditor();
         this._editingPageId = id;
         this._attachments   = [];
         this._savedCursor   = null;
@@ -459,30 +498,37 @@ document.addEventListener('click', function(e) {
                 </label>
                 <div style="position:relative;flex-shrink:0">${tagPickerHtml}</div>
                 <button class="btn btn-ghost btn-sm" onclick="CollectionsPage._insertResourceLink()">+ Ресурс</button>
-                <button class="btn btn-primary btn-sm" onclick="CollectionsPage.savePage('${page?.id || ''}')"><i class="fa-regular fa-floppy-disk"></i> Зберегти</button>
+                <button id="col-save-btn" class="btn btn-primary btn-sm" onclick="CollectionsPage.savePage('${page?.id || ''}')"><i class="fa-regular fa-floppy-disk"></i> Зберегти</button>
             </div>
 
-            <!-- Split: code left + live preview right -->
-            <div style="display:flex;gap:.75rem;flex:1;min-height:0;margin-bottom:.75rem">
+            <style>
+                #col-code-panel .CodeMirror { height:100%!important; font-family:'Courier New',monospace!important; font-size:.88rem!important; line-height:1.6!important; }
+                #col-code-panel .CodeMirror-scroll { height:100%; }
+                #col-split-handle { width:5px;background:var(--border);cursor:col-resize;flex-shrink:0;transition:background .15s; }
+                #col-split-handle:hover { background:var(--primary); }
+                .btn-warning { background:var(--warning,#f59e0b)!important; border-color:var(--warning,#f59e0b)!important; color:#fff!important; }
+            </style>
+
+            <!-- Split: code left + resize handle + live preview right -->
+            <div id="col-split" style="display:flex;gap:0;flex:1;min-height:0;margin-bottom:.75rem">
 
                 <!-- Code panel -->
-                <div style="display:flex;flex-direction:column;flex:1;min-width:0;border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden">
-                    <div style="display:flex;background:var(--bg-raised);border-bottom:1px solid var(--border)">
+                <div id="col-code-panel" style="display:flex;flex-direction:column;width:50%;min-width:180px;border:1px solid var(--border);border-radius:var(--radius-lg) 0 0 var(--radius-lg);overflow:hidden">
+                    <div style="display:flex;background:var(--bg-raised);border-bottom:1px solid var(--border);flex-shrink:0">
                         <button id="tab-html" onclick="CollectionsPage._switchTab('html')"
                                 style="padding:.5rem 1.25rem;font-size:.8rem;font-weight:600;letter-spacing:.05em;border:none;cursor:pointer;background:var(--bg-surface);color:var(--text-primary);border-right:1px solid var(--border);border-bottom:2px solid var(--primary)">HTML</button>
                         <button id="tab-css" onclick="CollectionsPage._switchTab('css')"
                                 style="padding:.5rem 1.25rem;font-size:.8rem;font-weight:600;letter-spacing:.05em;border:none;cursor:pointer;background:var(--bg-raised);color:var(--text-muted);border-right:1px solid var(--border);border-bottom:2px solid transparent">CSS</button>
                     </div>
-                    <textarea id="editor-html" spellcheck="false"
-                              style="flex:1;padding:1.25rem;background:var(--bg-surface);color:var(--text-primary);border:none;outline:none;resize:none;font-family:'Courier New',monospace;font-size:.9rem;line-height:1.7;tab-size:2"
-                              oninput="CollectionsPage._updatePreview()">${this._esc(page?.html_content || this._defaultHtml())}</textarea>
-                    <textarea id="editor-css" spellcheck="false"
-                              style="flex:1;padding:1.25rem;background:var(--bg-surface);color:var(--text-primary);border:none;outline:none;resize:none;font-family:'Courier New',monospace;font-size:.9rem;line-height:1.7;tab-size:2;display:none"
-                              oninput="CollectionsPage._updatePreview()">${this._esc((page?.css_content || this._defaultCss()).replace(/'Play'/g, "'Inter'").replace(/'Fixel Display'/g, "'Inter'"))}</textarea>
+                    <textarea id="editor-html" spellcheck="false">${this._esc(page?.html_content || this._defaultHtml())}</textarea>
+                    <textarea id="editor-css" spellcheck="false" style="display:none">${this._esc((page?.css_content || this._defaultCss()).replace(/'Play'/g, "'Inter'").replace(/'Fixel Display'/g, "'Inter'"))}</textarea>
                 </div>
 
+                <!-- Resize handle -->
+                <div id="col-split-handle" onmousedown="CollectionsPage._startResize(event)"></div>
+
                 <!-- Live preview -->
-                <div style="display:flex;flex-direction:column;flex:1;min-width:0;border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden">
+                <div id="col-preview-panel" style="display:flex;flex-direction:column;flex:1;min-width:180px;border:1px solid var(--border);border-left:none;border-radius:0 var(--radius-lg) var(--radius-lg) 0;overflow:hidden">
                     <div style="padding:.45rem .875rem;background:var(--bg-raised);border-bottom:1px solid var(--border);font-size:.8rem;font-weight:600;color:var(--text-muted);flex-shrink:0">
                         <i class="fa-solid fa-eye" style="margin-right:.4rem"></i>Перегляд
                     </div>
@@ -512,8 +558,8 @@ document.addEventListener('click', function(e) {
     },
 
     async _openPreviewModal() {
-        const rawHtml = document.getElementById('editor-html')?.value || '';
-        const css     = document.getElementById('editor-css')?.value  || '';
+        const rawHtml = this._cmHtml ? this._cmHtml.getValue() : (document.getElementById('editor-html')?.value || '');
+        const css     = this._cmCss  ? this._cmCss.getValue()  : (document.getElementById('editor-css')?.value  || '');
         const html    = await this._resolveAttachmentUrls(rawHtml);
 
         const backdrop = document.createElement('div');
@@ -632,6 +678,13 @@ document.addEventListener('click', function(e) {
     },
 
     _insertSnippet(snippet) {
+        if (this._cmHtml) {
+            this._cmHtml.replaceSelection(snippet);
+            this._cmHtml.focus();
+            this._markDirty();
+            this._updatePreview();
+            return;
+        }
         const ta = this._getActiveTA();
         if (!ta) return;
         const { start: s } = this._getCursor(ta);
@@ -757,38 +810,98 @@ document.addEventListener('click', function(e) {
 
     _switchTab(tab) {
         this._savedCursor = null;
-        const htmlTA  = document.getElementById('editor-html');
-        const cssTA   = document.getElementById('editor-css');
-        const toolbar = document.getElementById('editor-toolbar');
         const tabHtml = document.getElementById('tab-html');
         const tabCss  = document.getElementById('tab-css');
 
         const setActive = btn => {
+            if (!btn) return;
             btn.style.background   = 'var(--bg-surface)';
             btn.style.color        = 'var(--text-primary)';
             btn.style.borderBottom = '2px solid var(--primary)';
         };
         const setInactive = btn => {
+            if (!btn) return;
             btn.style.background   = 'var(--bg-raised)';
             btn.style.color        = 'var(--text-muted)';
             btn.style.borderBottom = '2px solid transparent';
         };
 
-        if (tab === 'html') {
-            htmlTA.style.display = 'flex'; htmlTA.style.flex = '1';
-            cssTA.style.display  = 'none';
-            if (toolbar) toolbar.style.display = '';
-            setActive(tabHtml); setInactive(tabCss);
+        if (this._cmHtml && this._cmCss) {
+            if (tab === 'html') {
+                this._cmHtml.getWrapperElement().style.display = '';
+                this._cmCss.getWrapperElement().style.display  = 'none';
+                setTimeout(() => this._cmHtml.refresh(), 0);
+            } else {
+                this._cmCss.getWrapperElement().style.display  = '';
+                this._cmHtml.getWrapperElement().style.display = 'none';
+                setTimeout(() => this._cmCss.refresh(), 0);
+            }
         } else {
-            cssTA.style.display  = 'flex'; cssTA.style.flex = '1';
-            htmlTA.style.display = 'none';
-            if (toolbar) toolbar.style.display = 'none';
-            setActive(tabCss); setInactive(tabHtml);
+            const htmlTA = document.getElementById('editor-html');
+            const cssTA  = document.getElementById('editor-css');
+            if (tab === 'html') {
+                if (htmlTA) { htmlTA.style.display = 'flex'; htmlTA.style.flex = '1'; }
+                if (cssTA)  cssTA.style.display = 'none';
+            } else {
+                if (cssTA)  { cssTA.style.display = 'flex'; cssTA.style.flex = '1'; }
+                if (htmlTA) htmlTA.style.display = 'none';
+            }
         }
+
+        setActive(tab === 'html' ? tabHtml : tabCss);
+        setInactive(tab === 'html' ? tabCss : tabHtml);
     },
 
     _initEditor(page) {
-        setTimeout(() => this._updatePreview(), 0);
+        // Restore split width from previous session
+        const savedW = localStorage.getItem('col_split_w');
+        if (savedW) {
+            const cp = document.getElementById('col-code-panel');
+            if (cp) cp.style.width = savedW;
+        }
+
+        // Initialize CodeMirror for HTML and CSS panels
+        const taHtml = document.getElementById('editor-html');
+        const taCss  = document.getElementById('editor-css');
+        const cmTheme = document.body.classList.contains('light-theme') ? 'default' : 'dracula';
+        const saveCmd = () => this.savePage(this._editingPageId || '');
+        const cmBase  = { theme: cmTheme, lineNumbers: true, tabSize: 2, indentWithTabs: false,
+                          lineWrapping: false,
+                          extraKeys: { Tab: cm => cm.replaceSelection('  '), 'Ctrl-S': saveCmd, 'Cmd-S': saveCmd } };
+        if (taHtml && typeof CodeMirror !== 'undefined') {
+            this._cmHtml = CodeMirror.fromTextArea(taHtml, { ...cmBase, mode: 'htmlmixed' });
+            this._cmCss  = CodeMirror.fromTextArea(taCss,  { ...cmBase, mode: 'css' });
+            this._cmHtml.getWrapperElement().style.cssText = 'flex:1;min-height:0;overflow:hidden';
+            this._cmCss.getWrapperElement().style.cssText  = 'flex:1;min-height:0;overflow:hidden;display:none';
+            this._cmHtml.on('change', () => { this._markDirty(); this._updatePreview(); });
+            this._cmCss.on('change',  () => { this._markDirty(); this._updatePreview(); });
+        }
+
+        // Ctrl+S saves the page
+        this._ctrlSHandler = e => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                e.preventDefault();
+                this.savePage(this._editingPageId || '');
+            }
+        };
+        document.addEventListener('keydown', this._ctrlSHandler);
+
+        // Warn before closing with unsaved changes
+        this._beforeUnloadHandler = e => {
+            if (!this._isDirty) return;
+            e.preventDefault();
+            e.returnValue = '';
+        };
+        window.addEventListener('beforeunload', this._beforeUnloadHandler);
+
+        // Keep CM theme in sync with LMS theme
+        this._cmThemeHandler = e => {
+            const t = e.detail?.theme === 'light' ? 'default' : 'dracula';
+            this._cmHtml?.setOption('theme', t);
+            this._cmCss?.setOption('theme', t);
+        };
+        window.addEventListener('lms-theme-change', this._cmThemeHandler);
+
         // Drag-and-drop files onto attachment panel
         const panel = document.getElementById('attachment-panel');
         if (panel && this._editingPageId) {
@@ -805,28 +918,13 @@ document.addEventListener('click', function(e) {
                 if (files.length) this._uploadFiles(this._editingPageId, files);
             });
         }
-        // Track cursor position so clicks outside textarea don't lose it
-        ['editor-html', 'editor-css'].forEach(id => {
-            const ta = document.getElementById(id);
-            if (!ta) return;
-            const save = () => {
-                if (ta.style.display !== 'none') {
-                    this._savedCursor = { ta, start: ta.selectionStart, end: ta.selectionEnd };
-                }
-            };
-            ta.addEventListener('keyup',   save);
-            ta.addEventListener('mouseup', save);
-            ta.addEventListener('blur',    save);
-            ta.addEventListener('keydown', e => {
-                if (e.key === 'Tab') {
-                    e.preventDefault();
-                    const s = ta.selectionStart, en = ta.selectionEnd;
-                    ta.value = ta.value.substring(0, s) + '  ' + ta.value.substring(en);
-                    ta.selectionStart = ta.selectionEnd = s + 2;
-                    this._updatePreview();
-                }
-            });
-        });
+
+        // Initial preview after CM renders
+        setTimeout(() => {
+            this._cmHtml?.refresh();
+            this._cmCss?.refresh();
+            this._updatePreview();
+        }, 50);
     },
 
     _updatePreview() {
@@ -834,8 +932,8 @@ document.addEventListener('click', function(e) {
         this._previewTimer = setTimeout(() => {
             const iframe = document.getElementById('live-preview-iframe');
             if (!iframe) return;
-            const html = document.getElementById('editor-html')?.value || '';
-            const css  = document.getElementById('editor-css')?.value  || '';
+            const html = this._cmHtml ? this._cmHtml.getValue() : (document.getElementById('editor-html')?.value || '');
+            const css  = this._cmCss  ? this._cmCss.getValue()  : (document.getElementById('editor-css')?.value  || '');
             this._renderIframe(iframe, html, css);
             const isLight = document.body.classList.contains('light-theme');
             iframe.style.filter = isLight ? '' : 'invert(1) hue-rotate(180deg)';
@@ -1038,9 +1136,9 @@ tr:hover td { background: #f8fafc; }
         const allowed_labels = this._getSelectedLabels();
         const fields = {
             title,
-            html_content:   document.getElementById('editor-html')?.value || '',
-            css_content:    document.getElementById('editor-css')?.value  || '',
-            is_published:   document.getElementById('page-published')?.checked || false,
+            html_content: this._cmHtml ? this._cmHtml.getValue() : (document.getElementById('editor-html')?.value || ''),
+            css_content:  this._cmCss  ? this._cmCss.getValue()  : (document.getElementById('editor-css')?.value  || ''),
+            is_published: document.getElementById('page-published')?.checked || false,
             allowed_labels
         };
         Loader.show();
@@ -1048,6 +1146,7 @@ tr:hover td { background: #f8fafc; }
             if (id) {
                 await API.pages.update(id, fields);
                 Loader.hide();
+                this._markClean();
                 Toast.success('Збережено');
                 Router.back();
             } else {
@@ -1225,14 +1324,48 @@ tr:hover td { background: #f8fafc; }
         } else {
             snippet = `<a href="att:${attId}" target="_blank" class="resource-link">📎 ${att.file_name}</a>\n`;
         }
-        const ta = document.getElementById('editor-html');
-        if (ta) {
-            ta.value = ta.value.trimEnd() + '\n' + snippet;
-            ta.selectionStart = ta.selectionEnd = ta.value.length;
-            this._savedCursor = { ta, start: ta.value.length, end: ta.value.length };
+        if (this._cmHtml) {
+            const doc = this._cmHtml.getDoc();
+            const last = doc.lastLine();
+            doc.replaceRange('\n' + snippet, { line: last, ch: doc.getLine(last).length });
+            this._cmHtml.scrollIntoView(null);
+            this._markDirty();
             this._updatePreview();
+        } else {
+            const ta = document.getElementById('editor-html');
+            if (ta) {
+                ta.value = ta.value.trimEnd() + '\n' + snippet;
+                ta.selectionStart = ta.selectionEnd = ta.value.length;
+                this._savedCursor = { ta, start: ta.value.length, end: ta.value.length };
+                this._updatePreview();
+            }
         }
         Toast.success('Посилання вставлено');
+    },
+
+    // ── Split panel resize ────────────────────────────────────────
+    _startResize(e) {
+        e.preventDefault();
+        const split     = document.getElementById('col-split');
+        const codePanel = document.getElementById('col-code-panel');
+        if (!split || !codePanel) return;
+        const startX = e.clientX;
+        const startW = codePanel.getBoundingClientRect().width;
+        const totalW = split.getBoundingClientRect().width;
+
+        const onMove = ev => {
+            const newW = Math.max(180, Math.min(startW + ev.clientX - startX, totalW - 190));
+            codePanel.style.width = newW + 'px';
+            localStorage.setItem('col_split_w', newW + 'px');
+            this._cmHtml?.refresh();
+            this._cmCss?.refresh();
+        };
+        const onUp = () => {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
     },
 
     // Resolve att:UUID → real signed URLs before rendering

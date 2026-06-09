@@ -104,30 +104,42 @@ const ResourcesPage = {
                 .dtab:hover{color:var(--text-primary);background:var(--bg-raised)}
                 .dtab.active{color:var(--primary);background:rgba(99,102,241,.12);font-weight:700}
                 .dtab.active .dtab-ic{background:rgba(99,102,241,.18);color:var(--primary)}
-                .dtab-ic{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:.78rem;background:var(--bg-base);transition:all .15s;flex-shrink:0}
+                .dtab-ic{width:30px;height:30px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:1rem;background:var(--bg-base);transition:all .15s;flex-shrink:0}
+                .dtab-ic-registry{background:rgba(99,102,241,.12);color:#6366f1}
+                .dtab-ic-branch{background:rgba(16,185,129,.12);color:#10b981}
+                .dtab-ic-npa{background:rgba(245,158,11,.12);color:#f59e0b}
+                .dtab-ic-nakaz{background:rgba(59,130,246,.12);color:#3b82f6}
+                .dtab-ic-rozp{background:rgba(168,85,247,.12);color:#a855f7}
+                .dtab-ic-all{background:rgba(107,114,128,.12);color:#6b7280}
+                .dtab-ic-status{background:rgba(20,184,166,.12);color:#14b8a6}
                 .dtab-red{color:#ef4444!important}
                 .dtab-red .dtab-ic{background:rgba(239,68,68,.12);color:#ef4444}
                 .dtab-red:hover{background:rgba(239,68,68,.07)!important}
                 .dtab-red.active{color:#ef4444!important;background:rgba(239,68,68,.13)!important;font-weight:700}
                 .dtab-red.active .dtab-ic{background:rgba(239,68,68,.22)!important;color:#ef4444!important}
                 .dtab-status{margin-left:auto}
+                .res-ic-wrap{position:relative;flex-shrink:0}
+                .res-ack-dot{position:absolute;top:-3px;right:-3px;width:9px;height:9px;border-radius:50%;border:2px solid var(--bg-surface)}
+                .res-ack-dot.res-unread{background:#ef4444;box-shadow:0 0 0 0 rgba(239,68,68,.6);animation:res-pulse 1.4s ease-in-out infinite}
+                .res-ack-dot.res-read{background:#10b981}
+                @keyframes res-pulse{0%{box-shadow:0 0 0 0 rgba(239,68,68,.6)}70%{box-shadow:0 0 0 5px rgba(239,68,68,0)}100%{box-shadow:0 0 0 0 rgba(239,68,68,0)}}
                 </style>
                 <div id="docs-tabs-bar" class="dtab-bar">
-                    <button id="docs-tab-registry" class="dtab active" onclick="ResourcesPage.switchTab('registry',this)"><span class="dtab-ic">📋</span>Реєстри</button>
+                    <button id="docs-tab-registry" class="dtab active" onclick="ResourcesPage.switchTab('registry',this)"><span class="dtab-ic dtab-ic-registry"><i class="fa-solid fa-table-list"></i></span>Реєстри</button>
                     <div class="dtab-sep"></div>
-                    <button id="docs-tab-red-folder" class="dtab dtab-red" onclick="ResourcesPage.switchTab('red-folder',this)"><span class="dtab-ic"><i class="fa-solid fa-folder" style="color:#ef4444"></i></span>Червона папка</button>
+                    <button id="docs-tab-red-folder" class="dtab dtab-red" onclick="ResourcesPage.switchTab('red-folder',this)"><span class="dtab-ic"><i class="fa-solid fa-folder"></i></span>Червона папка</button>
                     <div class="dtab-sep"></div>
-                    <button id="docs-tab-branch" class="dtab" onclick="ResourcesPage.switchTab('branch',this)"><span class="dtab-ic">⚖️</span>Куточок споживача</button>
+                    <button id="docs-tab-branch" class="dtab" onclick="ResourcesPage.switchTab('branch',this)"><span class="dtab-ic dtab-ic-branch"><i class="fa-solid fa-scale-balanced"></i></span>Куточок споживача</button>
                     <div class="dtab-sep"></div>
-                    <button id="docs-cat-npa" class="dtab" onclick="ResourcesPage._setCatFilter('Список НПА',this)"><span class="dtab-ic">📜</span>Список НПА</button>
+                    <button id="docs-cat-npa" class="dtab" onclick="ResourcesPage._setCatFilter('Список НПА',this)"><span class="dtab-ic dtab-ic-npa"><i class="fa-solid fa-scroll"></i></span>Список НПА</button>
                     <div class="dtab-sep"></div>
-                    <button id="docs-cat-nakaz" class="dtab" onclick="ResourcesPage._setCatFilter('Наказ',this)"><span class="dtab-ic">📄</span>Накази</button>
+                    <button id="docs-cat-nakaz" class="dtab" onclick="ResourcesPage._setCatFilter('Наказ',this)"><span class="dtab-ic dtab-ic-nakaz"><i class="fa-solid fa-file-lines"></i></span>Накази</button>
                     <div class="dtab-sep"></div>
-                    <button id="docs-cat-rozp" class="dtab" onclick="ResourcesPage._setCatFilter('Розпорядження',this)"><span class="dtab-ic">📄</span>Розпорядження</button>
+                    <button id="docs-cat-rozp" class="dtab" onclick="ResourcesPage._setCatFilter('Розпорядження',this)"><span class="dtab-ic dtab-ic-rozp"><i class="fa-solid fa-file-contract"></i></span>Розпорядження</button>
                     <div class="dtab-sep"></div>
-                    <button id="docs-tab-list" class="dtab" onclick="ResourcesPage.switchTabList(this)"><span class="dtab-ic">🗂️</span>Всі</button>
+                    <button id="docs-tab-list" class="dtab" onclick="ResourcesPage.switchTabList(this)"><span class="dtab-ic dtab-ic-all"><i class="fa-solid fa-layer-group"></i></span>Всі</button>
                     <div id="docs-cat-chips" style="display:none"></div>
-                    ${isManager ? '<button id="docs-tab-status" class="dtab dtab-status" onclick="ResourcesPage.switchTab(\'status\',this)"><span class="dtab-ic">📊</span>Статус</button>' : ''}
+                    ${isManager ? '<button id="docs-tab-status" class="dtab dtab-status" onclick="ResourcesPage.switchTab(\'status\',this)"><span class="dtab-ic dtab-ic-status"><i class="fa-solid fa-chart-bar"></i></span>Статус</button>' : ''}
                 </div>
                 <div id="docs-tab-content">
                     <div id="resource-list" class="resource-list-docs"></div>
@@ -139,8 +151,16 @@ const ResourcesPage = {
             const restoreTab = this._initTab || 'registry';
             this._activeTab = ''; // скидаємо щоб switchTab не вийшов достроково
             if (restoreTab === 'list') {
-                if (this._initCat) this._category = this._initCat;
-                await this.load(true);
+                const savedCat = this._initCat;
+                const tabListBtn = document.getElementById('docs-tab-list');
+                this.switchTab('list', tabListBtn, { skipLoad: true });
+                if (savedCat) {
+                    this._category = savedCat;
+                    const fixedCatMap = { 'Список НПА': 'docs-cat-npa', 'Наказ': 'docs-cat-nakaz', 'Розпорядження': 'docs-cat-rozp' };
+                    const fixedBtn = fixedCatMap[savedCat] ? document.getElementById(fixedCatMap[savedCat]) : null;
+                    this._highlightCatBtn(fixedBtn, savedCat);
+                }
+                await this.load();
             } else {
                 const tabBtn = document.getElementById(`docs-tab-${restoreTab}`);
                 if (tabBtn) this.switchTab(restoreTab, tabBtn);
@@ -1237,7 +1257,6 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
             const dlStatus = this._myDownloads[resource.id]; // { at, version } | null
             const dlAt = dlStatus?.at;
             const isNewVersion = dlStatus && resource.doc_version > (dlStatus.version || 1);
-            const openedAt = localStorage.getItem(`doc_opened_${resource.id}`);
 
             let statusBadge;
             if (resource.is_tracked_download) {
@@ -1245,14 +1264,14 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
                     statusBadge = `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.75rem;color:#10b981;font-weight:500">✅ ${this._ackLabel()} ${Fmt.dateShort(dlAt)}</span>`;
                 } else if (dlAt && isNewVersion) {
                     statusBadge = `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.75rem;color:#d97706;font-weight:500">🔄 Нова версія — потрібне повторне ознайомлення</span>`;
-                } else if (openedAt) {
-                    statusBadge = `<span style="font-size:.75rem;color:var(--text-muted)">Не ознайомлено · відкрито ${Fmt.dateShort(openedAt)}</span>`;
+                } else if (dlAt) {
+                    statusBadge = `<span style="font-size:.75rem;color:var(--text-muted)">Не ознайомлено · відкрито ${Fmt.dateShort(dlAt)}</span>`;
                 } else {
                     statusBadge = `<span style="font-size:.75rem;color:var(--text-muted)">Не ознайомлено</span>`;
                 }
             } else {
-                statusBadge = openedAt
-                    ? `<span style="font-size:.75rem;color:var(--text-muted)">📖 Відкрито ${Fmt.dateShort(openedAt)}</span>`
+                statusBadge = dlAt
+                    ? `<span style="font-size:.75rem;color:var(--text-muted)">📖 Відкрито ${Fmt.dateShort(dlAt)}</span>`
                     : '';
             }
 
@@ -1262,11 +1281,15 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
                 ? (dlAt && !isNewVersion ? 'doc-acked' : 'doc-needs-ack')
                 : '';
 
+            const ackDotClass = (dlAt && !isNewVersion) ? 'res-read' : 'res-unread';
+            const ackDotTitle = (dlAt && !isNewVersion) ? 'Ознайомлено' : (isNewVersion ? 'Нова версія — потрібне повторне ознайомлення' : 'Не ознайомлено');
+            const ackDot = `<span class="res-ack-dot ${ackDotClass}" title="${ackDotTitle}" data-doc-dot="${resource.id}"></span>`;
+
             const typeColor = { pdf:'#ef4444', video:'#2563eb', scorm:'#f59e0b', link:'#06b6d4', file:'#6366f1', document:'#10b981', image:'#ec4899' };
             const tc = typeColor[resource.type||'file'] || '#6366f1';
             return `
                 <div class="resource-item ${docClass}" data-id="${resource.id}" onclick="ResourcesPage.openViewer('${resource.id}')" style="cursor:pointer;border-left-color:${tc}">
-                    <div class="resource-icon ${resource.type || 'file'}">${icon}</div>
+                    <div class="res-ic-wrap"><div class="resource-icon ${resource.type || 'file'}">${icon}</div>${ackDot}</div>
                     <div class="resource-info">
                         <div class="resource-title">${this._highlight(resource.title, this._search)}</div>
                         ${resource.description ? `<div style="font-size:.8rem;color:var(--text-secondary);margin-top:.2rem;white-space:normal;word-break:break-word;line-height:1.5">${this._highlight(resource.description, this._search)}</div>` : ''}
@@ -1357,13 +1380,14 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
 
     openViewer(id) {
         if (this._view === 'docs') {
-            localStorage.setItem(`doc_opened_${id}`, new Date().toISOString());
+            API.documentDownloads.track(id).catch(() => {});
+            if (!this._myDownloads[id]) this._myDownloads[id] = { at: new Date().toISOString(), version: 1 };
         }
         const from = this._view === 'admin' ? 'resources' : this._view === 'docs' ? 'documents' : 'knowledge-base';
         let route = `resource/${id}?from=${from}`;
         if (this._view === 'docs') {
             const tab = this._activeTab || 'list';
-            if (tab !== 'list') route += `&tab=${tab}`;
+            route += `&tab=${tab}`;
             if (this._category) route += `&cat=${encodeURIComponent(this._category)}`;
         }
         Router.go(route);
@@ -2003,14 +2027,32 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
 
 const ResourceViewPage = {
 
+    _from: null, _tab: null, _cat: null,
+
     _goBack() {
-        Router.back();
+        const f = this._from;
+        if (f === 'documents') {
+            let route = 'documents';
+            if (this._tab) route += `?tab=${this._tab}`;
+            if (this._cat) route += `${this._tab ? '&' : '?'}cat=${encodeURIComponent(this._cat)}`;
+            Router.go(route);
+        } else if (f === 'resources') {
+            Router.go('admin?tab=resources');
+        } else if (f === 'knowledge-base') {
+            Router.go('knowledge-base');
+        } else {
+            Router.back();
+        }
     },
 
-    async init(container, { id, from } = {}) {
+    async init(container, { id, from, tab, cat } = {}) {
         if (!id) { Router.back(); return; }
+        this._from = from || null;
+        this._tab  = tab  || null;
+        this._cat  = cat  || null;
 
-        UI.setBreadcrumb([{ label: 'Перегляд ресурсу' }]);
+        const backLabel = from === 'documents' ? 'Документи' : from === 'knowledge-base' ? 'База знань' : from === 'resources' ? 'Адміністрування' : 'Назад';
+        UI.setBreadcrumb([{ label: backLabel, onClick: () => ResourceViewPage._goBack() }, { label: 'Перегляд' }]);
 
         container.innerHTML = `
             <div style="display:flex;align-items:center;justify-content:center;min-height:300px">

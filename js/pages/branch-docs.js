@@ -5,6 +5,7 @@
 const BranchDocsPage = {
 
     _blocks: [],  // loaded from DB
+    _ackMap: {},  // resourceId -> { at, version }
 
     _injectStyles() {
         if (document.getElementById('bd-styles')) return;
@@ -41,6 +42,10 @@ const BranchDocsPage = {
             .bd-no-docs { text-align: center; padding: 3rem 1rem; color: var(--text-muted); }
             .bd-inp { width:100%;padding:.55rem .8rem;border-radius:var(--radius-md);border:1px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.88rem;font-family:inherit;outline:none;box-sizing:border-box }
             .bd-inp:focus { border-color: var(--primary); }
+            .bd-ack-dot { width:9px;height:9px;border-radius:50%;flex-shrink:0;display:inline-block;vertical-align:middle;margin-right:.4rem }
+            .bd-ack-dot.bd-unread { background:#ef4444;box-shadow:0 0 0 0 rgba(239,68,68,.6);animation:bd-pulse 1.4s ease-in-out infinite }
+            .bd-ack-dot.bd-read { background:#10b981 }
+            @keyframes bd-pulse { 0%{box-shadow:0 0 0 0 rgba(239,68,68,.6)}70%{box-shadow:0 0 0 6px rgba(239,68,68,0)}100%{box-shadow:0 0 0 0 rgba(239,68,68,0)} }
         `;
         document.head.appendChild(s);
     },
@@ -67,6 +72,10 @@ const BranchDocsPage = {
                 if (!d.dovirenost_id) return true;
                 return myDovIds && myDovIds.has(d.dovirenost_id);
             });
+            const allDocIds = visibleDocs.map(d => d.id).filter(Boolean);
+            this._ackMap = allDocIds.length
+                ? await API.documentDownloads.getMyLatest(allDocIds).catch(() => ({}))
+                : {};
             this._render(visibleDocs, canManage);
         } catch(e) {
             const el = document.getElementById('bd-content');
@@ -115,6 +124,10 @@ const BranchDocsPage = {
                 if (!d.dovirenost_id) return true;
                 return myDovIds && myDovIds.has(d.dovirenost_id);
             });
+            const allDocIds = visibleDocs.map(d => d.id).filter(Boolean);
+            this._ackMap = allDocIds.length
+                ? await API.documentDownloads.getMyLatest(allDocIds).catch(() => ({}))
+                : {};
             this._render(visibleDocs, canManage);
         } catch(e) {
             document.getElementById('bd-content').innerHTML = `<div class="bd-no-docs"><i class="fa-solid fa-triangle-exclamation"></i> ${Fmt.esc(e.message)}</div>`;
@@ -146,13 +159,17 @@ const BranchDocsPage = {
                 </td>
                 <td class="bd-docs" style="width:220px">
                     <div class="bd-doc-list">
-                        ${blockDocs.length ? blockDocs.map(d => `
+                        ${blockDocs.length ? blockDocs.map(d => {
+                            const acked = !!this._ackMap[d.id];
+                            const dot = `<span class="bd-ack-dot ${acked ? 'bd-read' : 'bd-unread'}" data-doc-dot="${d.id}" title="${acked ? 'Ознайомлено' : 'Не ознайомлено'}"></span>`;
+                            return `
                             <div class="bd-doc-item">
                                 <div class="bd-doc-main">
-                                    ${d.dovirenosti?.name ? `<button class="bd-tov-badge" data-path="${Fmt.esc(d.storage_path||'')}" onclick="BranchDocsPage._openDoc(this.dataset.path)"><i class="fa-solid fa-file-pdf" style="margin-right:.3rem;font-size:.72rem"></i>${Fmt.esc(d.dovirenosti.name)}</button>` : ''}
+                                    ${d.dovirenosti?.name ? `<button class="bd-tov-badge" data-path="${Fmt.esc(d.storage_path||'')}" data-id="${d.id}" onclick="BranchDocsPage._openDoc(this.dataset.path,this.dataset.id)">${dot}<i class="fa-solid fa-file-pdf" style="margin-right:.3rem;font-size:.9rem;color:#ef4444"></i>${Fmt.esc(d.dovirenosti.name)}</button>` : ''}
                                 </div>
                                 ${canManage ? `<button class="bd-action-btn danger" onclick="BranchDocsPage._deleteDoc('${d.id}')" title="Видалити файл"><i class="fa-solid fa-trash"></i></button>` : ''}
-                            </div>`).join('') : `<span class="bd-empty-doc">Документ не завантажено</span>`}
+                            </div>`;
+                        }).join('') : `<span class="bd-empty-doc">Документ не завантажено</span>`}
                         ${canManage ? `<button class="bd-action-btn" onclick="BranchDocsPage._uploadModal(${b.number},${JSON.stringify(b.title).replace(/"/g,'&quot;')})"><i class="fa-solid fa-plus"></i> Завантажити</button>` : ''}
                     </div>
                 </td>
@@ -282,11 +299,17 @@ const BranchDocsPage = {
 
     // ── Document actions ──────────────────────────────────────────────
 
-    async _openDoc(storagePath) {
+    async _openDoc(storagePath, resourceId) {
         try {
             Loader.show();
             const url = await API.resources.getSignedUrl(storagePath);
             window.open(url, '_blank', 'noopener,noreferrer');
+            if (resourceId) {
+                API.documentDownloads.track(resourceId).catch(() => {});
+                this._ackMap[resourceId] = { at: new Date().toISOString() };
+                const dot = document.querySelector(`[data-doc-dot="${resourceId}"]`);
+                if (dot) { dot.classList.remove('bd-unread'); dot.classList.add('bd-read'); dot.title = 'Ознайомлено'; }
+            }
         } catch(e) { Toast.error('Помилка', e.message); } finally { Loader.hide(); }
     },
 

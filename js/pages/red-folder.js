@@ -7,6 +7,7 @@ const RedFolderPage = {
     _items: [],
     _docs: {},   // itemId -> resource[]
     _pages: [],  // available Collections pages
+    _ackMap: {}, // resourceId -> { at, version }
 
     _iconOptions: [
         { icon: 'fa-scale-balanced', label: 'Юристи',         color: '#6366f1' },
@@ -79,6 +80,10 @@ const RedFolderPage = {
             .rf-icon-opt { display: inline-flex; align-items: center; gap: .4rem; padding: .3rem .65rem; border-radius: var(--radius-md); border: 1.5px solid var(--border); background: var(--bg-raised); cursor: pointer; font-size: .75rem; font-family: inherit; color: var(--text-secondary); transition: all .15s; }
             .rf-icon-opt:hover { border-color: var(--ic); color: var(--text-primary); }
             .rf-icon-opt-active { border-color: var(--ic) !important; background: color-mix(in srgb,var(--ic) 10%,transparent); color: var(--text-primary) !important; }
+            .rf-ack-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; display: inline-block; vertical-align: middle; margin-right: .4rem; }
+            .rf-ack-dot.rf-unread { background: #ef4444; box-shadow: 0 0 0 0 rgba(239,68,68,.6); animation: rf-pulse 1.4s ease-in-out infinite; }
+            .rf-ack-dot.rf-read { background: #10b981; }
+            @keyframes rf-pulse { 0% { box-shadow: 0 0 0 0 rgba(239,68,68,.6); } 70% { box-shadow: 0 0 0 6px rgba(239,68,68,0); } 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); } }
         `;
         document.head.appendChild(s);
     },
@@ -129,6 +134,10 @@ const RedFolderPage = {
                 if (!this._docs[d.red_folder_item_id]) this._docs[d.red_folder_item_id] = [];
                 this._docs[d.red_folder_item_id].push(d);
             });
+            const allDocIds = visibleDocs.map(d => d.id).filter(Boolean);
+            this._ackMap = allDocIds.length
+                ? await API.documentDownloads.getMyLatest(allDocIds).catch(() => ({}))
+                : {};
             this._renderTable();
         } catch (e) {
             const el = document.getElementById('rf-content');
@@ -159,15 +168,19 @@ const RedFolderPage = {
                     </button>`).join('')}
                    </div>`
                 : `<div class="rf-doc-list">
-                    ${itemDocs.map(d => `
+                    ${itemDocs.map(d => {
+                        const acked = !!this._ackMap[d.id];
+                        const dot = `<span class="rf-ack-dot ${acked ? 'rf-read' : 'rf-unread'}" data-doc-dot="${d.id}" title="${acked ? 'Ознайомлено' : 'Не ознайомлено'}"></span>`;
+                        return `
                         <div class="rf-doc-item">
-                            <button class="rf-doc-link" data-path="${Fmt.esc(d.storage_path||'')}" onclick="RedFolderPage._openDoc(this.dataset.path)">
-                                ${d.dovirenosti?.name ? Fmt.esc(d.dovirenosti.name) : `<i class="fa-solid fa-file-pdf" style="margin-right:.3rem;font-size:.72rem"></i>${Fmt.esc(d.title)}`}
+                            <button class="rf-doc-link" data-path="${Fmt.esc(d.storage_path||'')}" data-id="${d.id}" onclick="RedFolderPage._openDoc(this.dataset.path, this.dataset.id)">
+                                ${dot}${d.dovirenosti?.name ? Fmt.esc(d.dovirenosti.name) : `<i class="fa-solid fa-file-pdf" style="margin-right:.4rem;font-size:1rem;color:#ef4444;vertical-align:middle"></i>${Fmt.esc(d.title)}`}
                             </button>
                             ${canManage ? `
                                 <button class="rf-doc-edit" onclick="RedFolderPage._editDocModal('${d.id}')" title="Редагувати"><i class="fa-solid fa-pen"></i></button>
                                 <button class="rf-doc-del" onclick="RedFolderPage._deleteDoc('${d.id}')" title="Видалити файл"><i class="fa-solid fa-trash"></i></button>` : ''}
-                        </div>`).join('')}
+                        </div>`;
+                    }).join('')}
                     ${canManage ? `<button class="rf-upload-btn" onclick="RedFolderPage._uploadModal('${item.id}',${JSON.stringify(item.title).replace(/"/g,'&quot;')})"><i class="fa-solid fa-plus"></i> Завантажити</button>` : ''}
                    </div>`;
             return `
@@ -372,11 +385,17 @@ const RedFolderPage = {
         }
     },
 
-    async _openDoc(storagePath) {
+    async _openDoc(storagePath, resourceId) {
         try {
             Loader.show();
             const url = await API.resources.getSignedUrl(storagePath);
             window.open(url, '_blank', 'noopener,noreferrer');
+            if (resourceId) {
+                API.documentDownloads.track(resourceId).catch(() => {});
+                this._ackMap[resourceId] = { at: new Date().toISOString() };
+                const dot = document.querySelector(`[data-doc-dot="${resourceId}"]`);
+                if (dot) { dot.classList.remove('rf-unread'); dot.classList.add('rf-read'); dot.title = 'Ознайомлено'; }
+            }
         } catch (e) {
             Toast.error('Помилка', e.message);
         } finally {

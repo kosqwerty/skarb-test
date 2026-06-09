@@ -9,6 +9,7 @@ const RegistryPage = {
     _sections: [],   // registry_sections rows
     _canManage: false,
     _allDovs:  [],
+    _ackMap:   {},   // resourceId -> { at, version }
 
     async renderInTab(area) {
         if (!area) return;
@@ -36,11 +37,23 @@ const RegistryPage = {
                 const myDovIds = new Set((myDovs || []).map(d => d.id));
                 this._sections = allSections.filter(s => !s.dovirenost_id || myDovIds.has(s.dovirenost_id));
             }
+
+            const resIds = docs.map(d => d.resource_id).filter(Boolean);
+            this._ackMap = resIds.length
+                ? await API.documentDownloads.getMyLatest(resIds).catch(() => ({}))
+                : {};
         } catch (e) {
             area.innerHTML = `<div class="callout danger">Помилка завантаження реєстрів: ${Fmt.esc(e.message)}</div>`;
             return;
         }
         this._render(area);
+
+        // Restore open accordions after returning from document view
+        const savedSecs = sessionStorage.getItem('rg_open_secs');
+        if (savedSecs) {
+            try { JSON.parse(savedSecs).forEach(id => document.getElementById(id)?.classList.add('open')); } catch(_) {}
+            sessionStorage.removeItem('rg_open_secs');
+        }
     },
 
     // ── Спільна функція побудови таблиці тем ─────────────────────────
@@ -91,11 +104,13 @@ const RegistryPage = {
                         const idx = list.indexOf(entry);
                         const isFirst = idx === 0;
                         const isLast  = idx === list.length - 1;
+                        const acked = !!this._ackMap[entry.resource_id];
+                        const dot = `<span class="rg-ack-dot ${acked ? 'rg-read' : 'rg-unread'}" title="${acked ? 'Ознайомлено' : 'Не ознайомлено'}"></span>`;
                         return `<td>
                             <div class="rg-doc-row">
                                 <span class="rg-doc-num">${num}.</span>
                                 <div style="flex:1;min-width:0">
-                                    <span class="rg-doc-link" onclick="Router.go('resource/${entry.resource_id}?from=documents')">${Fmt.esc(entry.resource?.title || '—')}</span>
+                                    <span class="rg-doc-link" onclick="RegistryPage._openDoc('${entry.resource_id}')">${dot}${Fmt.esc(entry.resource?.title || '—')}</span>
                                     ${desc ? `<div style="font-size:.82rem;color:var(--text-muted);margin-top:.15rem;line-height:1.4;word-break:break-word;white-space:normal">${Fmt.esc(desc)}</div>` : ''}
                                 </div>
                                 ${canManage ? `
@@ -193,6 +208,10 @@ const RegistryPage = {
             .rg-sec .rg-table tr:last-child td{border-bottom:none}
             .rg-sections-empty{text-align:center;padding:2rem 1rem;color:var(--text-muted);font-size:.85rem;border:1px dashed var(--border);border-radius:var(--radius-xl);margin-top:1.5rem}
             .rg-sec-dov-badge{font-size:.68rem;color:var(--text-muted);background:var(--bg-raised);border:1px solid var(--border);border-radius:20px;padding:.1rem .45rem;flex-shrink:0;white-space:nowrap}
+            .rg-ack-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;display:inline-block;vertical-align:middle;margin-right:.35rem;margin-top:-.1em}
+            .rg-ack-dot.rg-unread{background:#ef4444;box-shadow:0 0 0 0 rgba(239,68,68,.6);animation:rg-pulse 1.4s ease-in-out infinite}
+            .rg-ack-dot.rg-read{background:#10b981}
+            @keyframes rg-pulse{0%{box-shadow:0 0 0 0 rgba(239,68,68,.6)}70%{box-shadow:0 0 0 5px rgba(239,68,68,0)}100%{box-shadow:0 0 0 0 rgba(239,68,68,0)}}
         </style>`;
 
         // ── Теми без розділу (верхня таблиця) — прихована ──────────
@@ -261,6 +280,13 @@ const RegistryPage = {
     _toggleSec(id) {
         const el = document.getElementById(`rg-sec-${id}`);
         if (el) el.classList.toggle('open');
+    },
+
+    _openDoc(resourceId) {
+        const openSecs = [...document.querySelectorAll('.rg-sec.open')].map(el => el.id);
+        if (openSecs.length) sessionStorage.setItem('rg_open_secs', JSON.stringify(openSecs));
+        API.documentDownloads.track(resourceId).catch(() => {});
+        Router.go(`resource/${resourceId}?from=documents&tab=registry`);
     },
 
     async _saveSecDesc(id, value) {

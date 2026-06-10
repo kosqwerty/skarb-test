@@ -601,8 +601,8 @@ const UI = {
         }
         if (role === 'owner' || role === 'admin') {
             return [
-                { title: 'Навчання',    items: [ ...contentItems, collectionsItem ] },
-                { title: 'Управління',  items: [ analyticsItem, schedulerItem, adminItem ] },
+                { title: 'Навчання',    items: contentItems },
+                { title: 'Управління',  items: [ analyticsItem, collectionsItem, schedulerItem, adminItem ] },
                 { title: 'Особисте',    items: [ contactsItem, bmItem ] }
             ];
         }

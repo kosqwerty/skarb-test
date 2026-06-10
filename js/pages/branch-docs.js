@@ -8,6 +8,11 @@ const BranchDocsPage = {
     _byBlock: {},        // blockNumber -> resource[]
     _ackMap: {},
     _selectedBlock: null,
+    _pages: [],
+    _seeAll: true,
+    _myDovIds: null,
+    _pageDovMap: {},
+    _dovNameMap: {},
 
     _iconOptions: [
         { icon: 'fa-scale-balanced', label: 'Юристи',         color: '#6366f1' },
@@ -66,6 +71,12 @@ const BranchDocsPage = {
             .bd-content-add-btn:hover { border-color: #6366f1; color: #6366f1; background: rgba(99,102,241,.05); }
             .bd-no-selection { display: flex; align-items: center; justify-content: center; height: 100%; padding: 3rem; color: var(--text-muted); font-size: .88rem; font-style: italic; }
             .bd-empty-doc { color: var(--text-muted); font-size: .82rem; font-style: italic; padding: .25rem 0; }
+            .bd-collection-card { display: flex; align-items: center; gap: .6rem; padding: .6rem .85rem; background: var(--bg-raised); border: 1px solid var(--border); border-radius: var(--radius-md); cursor: pointer; transition: border-color var(--transition), box-shadow var(--transition); }
+            .bd-collection-card:hover { border-color: #6366f1; box-shadow: 0 2px 8px rgba(99,102,241,.15); }
+            .bd-collection-icon { width: 28px; height: 28px; border-radius: 6px; background: rgba(99,102,241,.12); color: #6366f1; display: flex; align-items: center; justify-content: center; font-size: .75rem; flex-shrink: 0; }
+            .bd-collection-title { font-size: .88rem; font-weight: 500; color: var(--text-primary); }
+            .bd-page-chk-row { display: flex; align-items: center; gap: .5rem; padding: .3rem .4rem; border-radius: 5px; cursor: pointer; font-size: .85rem; color: var(--text-primary); transition: background var(--transition); }
+            .bd-page-chk-row:hover { background: var(--bg-hover); }
 
             /* ── Doc cards ────────────────────────────────────────── */
             .bd-doc-card { border: 1px solid var(--border); border-radius: 8px; padding: .6rem .85rem; display: flex; align-items: center; gap: .5rem; cursor: pointer; transition: border-color .13s, background .13s; background: var(--bg-raised); }
@@ -104,13 +115,26 @@ const BranchDocsPage = {
         const seeAll = AppState.isAdmin() || AppState.isManager() || AppState.isSmm();
         area.innerHTML = `<div id="bd-content" style="padding:.25rem 0"><div style="text-align:center;padding:3rem 1rem;color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin"></i> Завантаження...</div></div>`;
         try {
-            const [blocks, docs, myDovs] = await Promise.all([
+            const [blocks, docs, myDovs, pages, pageDovs, allDov] = await Promise.all([
                 API.branchDocBlocks.getAll(),
                 API.resources.getBranchDocs(null),
-                seeAll ? Promise.resolve(null) : API.dovirenosti.getForProfile(AppState.user.id).catch(() => [])
+                seeAll ? Promise.resolve(null) : API.dovirenosti.getForProfile(AppState.user.id).catch(() => []),
+                API.pages.getAll().catch(() => []),
+                API.pageDovirenosti.getAll().catch(() => []),
+                API.dovirenosti.getAll().catch(() => [])
             ]);
             this._blocks = blocks;
+            this._pages = pages;
+            this._seeAll = seeAll;
             const myDovIds = myDovs ? new Set(myDovs.map(d => d.id)) : null;
+            this._myDovIds = myDovIds;
+            this._dovNameMap = {};
+            for (const d of allDov) this._dovNameMap[d.id] = d.name;
+            this._pageDovMap = {};
+            for (const r of pageDovs) {
+                if (!this._pageDovMap[r.page_id]) this._pageDovMap[r.page_id] = [];
+                this._pageDovMap[r.page_id].push(r.dovirenost_id);
+            }
             const visibleDocs = seeAll ? docs : docs.filter(d => !d.dovirenost_id || (myDovIds && myDovIds.has(d.dovirenost_id)));
             this._byBlock = {};
             visibleDocs.forEach(d => {
@@ -158,13 +182,26 @@ const BranchDocsPage = {
         </div>`;
         try {
             Loader.show();
-            const [blocks, docs, myDovs] = await Promise.all([
+            const [blocks, docs, myDovs, pages, pageDovs, allDov] = await Promise.all([
                 API.branchDocBlocks.getAll(),
                 API.resources.getBranchDocs(null),
-                seeAll ? Promise.resolve(null) : API.dovirenosti.getForProfile(AppState.user.id).catch(() => [])
+                seeAll ? Promise.resolve(null) : API.dovirenosti.getForProfile(AppState.user.id).catch(() => []),
+                API.pages.getAll().catch(() => []),
+                API.pageDovirenosti.getAll().catch(() => []),
+                API.dovirenosti.getAll().catch(() => [])
             ]);
             this._blocks = blocks;
+            this._pages = pages;
+            this._seeAll = seeAll;
             const myDovIds = myDovs ? new Set(myDovs.map(d => d.id)) : null;
+            this._myDovIds = myDovIds;
+            this._dovNameMap = {};
+            for (const d of allDov) this._dovNameMap[d.id] = d.name;
+            this._pageDovMap = {};
+            for (const r of pageDovs) {
+                if (!this._pageDovMap[r.page_id]) this._pageDovMap[r.page_id] = [];
+                this._pageDovMap[r.page_id].push(r.dovirenost_id);
+            }
             const visibleDocs = seeAll ? docs : docs.filter(d => !d.dovirenost_id || (myDovIds && myDovIds.has(d.dovirenost_id)));
             this._byBlock = {};
             visibleDocs.forEach(d => {
@@ -245,6 +282,15 @@ const BranchDocsPage = {
 
         const ico = b.icon && b.icon !== 'fa-circle' ? this._iconOptions.find(o => o.icon === b.icon) : null;
         const blockDocs = this._byBlock[b.number] || [];
+        const pageIds = b.page_ids || [];
+        const linkedPages = pageIds.map(pid => this._pages.find(p => p.id === pid)).filter(p => {
+            if (!p) return false;
+            if (this._seeAll) return true;
+            if (!p.is_published) return false;
+            const dovReqs = this._pageDovMap?.[p.id] || [];
+            if (!dovReqs.length) return true;
+            return this._myDovIds && dovReqs.some(id => this._myDovIds.has(id));
+        });
 
         const deptHtml = b.dept ? `
         <div class="bd-content-dept">
@@ -255,7 +301,18 @@ const BranchDocsPage = {
         </div>` : '';
 
         let docsHtml = '';
-        if (blockDocs.length) {
+        if (linkedPages.length) {
+            docsHtml = linkedPages.map(lp => {
+                const dovIds = this._pageDovMap?.[lp.id] || [];
+                const dovNames = dovIds.map(id => this._dovNameMap?.[id]).filter(Boolean);
+                const label = dovNames.length ? dovNames.join(', ') : lp.title;
+                return `
+                <div class="bd-collection-card" onclick="Router.go('collections/${lp.id}')">
+                    <div class="bd-collection-icon"><i class="fa-solid fa-arrow-up-right-from-square"></i></div>
+                    <span class="bd-collection-title">${Fmt.esc(label)}</span>
+                </div>`;
+            }).join('');
+        } else if (blockDocs.length) {
             docsHtml = blockDocs.map(d => {
                 const acked = !!this._ackMap[d.id];
                 const label = d.dovirenosti?.name ? Fmt.esc(d.dovirenosti.name) : Fmt.esc(d.title);
@@ -281,7 +338,7 @@ const BranchDocsPage = {
                 <div class="bd-content-docs-header">
                     <i class="fa-solid fa-file-lines" style="color:#6366f1"></i>
                     Документи
-                    ${canManage ? `<button class="bd-content-add-btn" onclick="BranchDocsPage._uploadModal(${b.number},${JSON.stringify(b.title).replace(/"/g,'&quot;')})"><i class="fa-solid fa-plus"></i> Завантажити</button>` : ''}
+                    ${canManage && !linkedPages.length ? `<button class="bd-content-add-btn" onclick="BranchDocsPage._uploadModal(${b.number},${JSON.stringify(b.title).replace(/"/g,'&quot;')})"><i class="fa-solid fa-plus"></i> Завантажити</button>` : ''}
                 </div>
                 <div style="display:flex;flex-direction:column;gap:.4rem;margin-top:.55rem">${docsHtml}</div>
             </div>
@@ -312,6 +369,15 @@ const BranchDocsPage = {
                 <span>${o.label}</span>
             </button>`).join('');
 
+        const curPageIds = new Set(b?.page_ids || []);
+        const pageCheckboxes = this._pages.length
+            ? this._pages.filter(p => p.is_published || AppState.isAdmin()).map(p => `
+                <label class="bd-page-chk-row">
+                    <input type="checkbox" class="bd-page-chk" value="${p.id}" ${curPageIds.has(p.id) ? 'checked' : ''}>
+                    <span>${Fmt.esc(p.title)}</span>
+                </label>`).join('')
+            : `<div style="font-size:.82rem;color:var(--text-muted);padding:.4rem 0">Немає доступних колекцій</div>`;
+
         Modal.open({
             title: b ? 'Редагувати блок' : 'Додати рядок',
             size: 'lg',
@@ -336,6 +402,15 @@ const BranchDocsPage = {
                     <label style="display:block;font-size:.78rem;font-weight:600;color:var(--text-secondary);margin-bottom:.35rem">Назва блоку <span style="color:var(--danger)">*</span></label>
                     <textarea id="bd-bl-title" class="bd-inp" rows="3" placeholder="Назва блоку відповідно до законодавства...">${Fmt.esc(b?.title || '')}</textarea>
                 </div>
+                <div>
+                    <label style="display:block;font-size:.78rem;font-weight:600;color:var(--text-secondary);margin-bottom:.35rem">
+                        Сторінки-колекції
+                        <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted)">— замість завантаження файлів</span>
+                    </label>
+                    <div style="border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-raised);max-height:150px;overflow-y:auto;padding:.3rem .5rem">
+                        ${pageCheckboxes}
+                    </div>
+                </div>
             </div>`,
             footer: `<button class="btn btn-primary" onclick="BranchDocsPage._saveBlock(${JSON.stringify(id || null).replace(/"/g,'&quot;')})"><i class="fa-solid fa-floppy-disk"></i> Зберегти</button>
                      <button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>`
@@ -353,14 +428,15 @@ const BranchDocsPage = {
         const title  = document.getElementById('bd-bl-title')?.value.trim();
         const dept   = document.getElementById('bd-bl-dept')?.value.trim() || null;
         const icon   = document.getElementById('bd-bl-icon')?.value || null;
+        const page_ids = Array.from(document.querySelectorAll('.bd-page-chk:checked')).map(c => c.value);
         if (!title || !number) { Toast.warning('Заповніть обов\'язкові поля'); return; }
         try {
             Loader.show();
             if (id) {
-                await API.branchDocBlocks.update(id, { number, title, dept, icon, order_index: number });
+                await API.branchDocBlocks.update(id, { number, title, dept, icon, order_index: number, page_ids });
                 if (!this._selectedBlock) this._selectedBlock = id;
             } else {
-                await API.branchDocBlocks.create({ number, title, dept, icon, order_index: number });
+                await API.branchDocBlocks.create({ number, title, dept, icon, order_index: number, page_ids });
             }
             Modal.close();
             Toast.success(id ? 'Блок оновлено' : 'Блок додано');
@@ -381,13 +457,23 @@ const BranchDocsPage = {
 
     async _reload(canManage) {
         const seeAll = AppState.isAdmin() || AppState.isManager() || AppState.isSmm();
-        const [blocks, docs, myDovs] = await Promise.all([
+        const [blocks, docs, myDovs, pages, pageDovs] = await Promise.all([
             API.branchDocBlocks.getAll(),
             API.resources.getBranchDocs(null),
-            seeAll ? Promise.resolve(null) : API.dovirenosti.getForProfile(AppState.user.id).catch(() => [])
+            seeAll ? Promise.resolve(null) : API.dovirenosti.getForProfile(AppState.user.id).catch(() => []),
+            API.pages.getAll().catch(() => []),
+            seeAll ? Promise.resolve([]) : API.pageDovirenosti.getAll().catch(() => [])
         ]);
         this._blocks = blocks;
+        this._pages = pages;
+        this._seeAll = seeAll;
         const myDovIds = myDovs ? new Set(myDovs.map(d => d.id)) : null;
+        this._myDovIds = myDovIds;
+        this._pageDovMap = {};
+        for (const r of pageDovs) {
+            if (!this._pageDovMap[r.page_id]) this._pageDovMap[r.page_id] = [];
+            this._pageDovMap[r.page_id].push(r.dovirenost_id);
+        }
         const visibleDocs = seeAll ? docs : docs.filter(d => !d.dovirenost_id || (myDovIds && myDovIds.has(d.dovirenost_id)));
         this._byBlock = {};
         visibleDocs.forEach(d => {

@@ -1093,6 +1093,32 @@ const API = {
         }
     },
 
+    // ── Page Dovirenosti ─────────────────────────────────────────────
+    pageDovirenosti: {
+        async get(pageId) {
+            const { data, error } = await supabase
+                .from('page_dovirenosti')
+                .select('dovirenost_id')
+                .eq('page_id', pageId);
+            if (error) throw error;
+            return (data || []).map(r => r.dovirenost_id);
+        },
+        async set(pageId, dovIds) {
+            await supabase.from('page_dovirenosti').delete().eq('page_id', pageId);
+            if (!dovIds.length) return;
+            const rows = dovIds.map(id => ({ page_id: pageId, dovirenost_id: id }));
+            const { error } = await supabase.from('page_dovirenosti').insert(rows);
+            if (error) throw error;
+        },
+        async getAll() {
+            const { data, error } = await supabase
+                .from('page_dovirenosti')
+                .select('page_id, dovirenost_id');
+            if (error) throw error;
+            return data || [];
+        }
+    },
+
     // ── Page Attachments ─────────────────────────────────────────────
     pageAttachments: {
         async getAll(pageId) {

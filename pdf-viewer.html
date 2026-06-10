@@ -204,6 +204,9 @@ const canDownload = params.get('download') === '1';
 document.getElementById('toolbar-title').textContent = title;
 document.title = title;
 
+// Clean up address bar — keep only the title, hide signed URL
+history.replaceState(null, '', '/pdf-viewer.html' + (title ? '?title=' + encodeURIComponent(title) : ''));
+
 if (!fileUrl) {
   document.getElementById('viewer-wrap').innerHTML = '<div id="error-msg">Файл не вказано.</div>';
   throw new Error('No file param');

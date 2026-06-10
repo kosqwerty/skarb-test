@@ -9,6 +9,7 @@ const RedFolderPage = {
     _pages: [],          // available Collections pages
     _ackMap: {},         // resourceId -> { at, version }
     _selectedItem: null, // currently selected item id
+    _dovNameMap: {},
 
     _iconOptions: [
         { icon: 'fa-scale-balanced', label: 'Юристи',         color: '#6366f1' },
@@ -139,17 +140,30 @@ const RedFolderPage = {
         try {
             const canManage = AppState.isAdmin() && !AppState.isPreviewing();
             const seeAll = AppState.isAdmin() || AppState.isManager() || AppState.isSmm();
-            const [items, docs, myDovs, pages] = await Promise.all([
+            const [items, docs, myDovs, pages, pageDovs, allDov] = await Promise.all([
                 API.redFolderItems.getAll(),
                 API.resources.getRedFolderDocs().catch(() => []),
                 seeAll ? Promise.resolve(null) : API.dovirenosti.getForProfile(AppState.user.id).catch(() => []),
-                API.pages.getAll().catch(() => [])
+                API.pages.getAll().catch(() => []),
+                API.pageDovirenosti.getAll().catch(() => []),
+                API.dovirenosti.getAll().catch(() => [])
             ]);
             this._pages = pages;
             this._items = items;
             this._docs = {};
+            this._seeAll = seeAll;
 
             const myDovIds = myDovs ? new Set(myDovs.map(d => d.id)) : null;
+            this._myDovIds = myDovIds;
+
+            this._dovNameMap = {};
+            for (const d of allDov) this._dovNameMap[d.id] = d.name;
+
+            this._pageDovMap = {};
+            for (const r of pageDovs) {
+                if (!this._pageDovMap[r.page_id]) this._pageDovMap[r.page_id] = [];
+                this._pageDovMap[r.page_id].push(r.dovirenost_id);
+            }
             const visibleDocs = seeAll ? docs : docs.filter(d => {
                 if (!d.dovirenost_id) return true;
                 return myDovIds && myDovIds.has(d.dovirenost_id);
@@ -240,7 +254,14 @@ const RedFolderPage = {
 
         const ico = item.icon && item.icon !== 'fa-circle' ? this._iconOptions.find(o => o.icon === item.icon) : null;
         const pageIds = item.page_ids != null ? item.page_ids : (item.page_id ? [item.page_id] : []);
-        const linkedPages = pageIds.map(pid => this._pages.find(p => p.id === pid)).filter(Boolean);
+        const linkedPages = pageIds.map(pid => this._pages.find(p => p.id === pid)).filter(p => {
+            if (!p) return false;
+            if (this._seeAll) return true;
+            if (!p.is_published) return false;
+            const dovReqs = this._pageDovMap?.[p.id] || [];
+            if (!dovReqs.length) return true;
+            return this._myDovIds && dovReqs.some(id => this._myDovIds.has(id));
+        });
         const itemDocs = this._docs[item.id] || [];
 
         const respHtml = item.responsible ? `
@@ -253,11 +274,16 @@ const RedFolderPage = {
 
         let docsHtml = '';
         if (linkedPages.length) {
-            docsHtml = linkedPages.map(lp => `
-            <div class="rf-collection-card" onclick="Router.go('collections/${lp.id}')">
-                <div class="rf-collection-icon"><i class="fa-solid fa-arrow-up-right-from-square"></i></div>
-                <span class="rf-collection-title">${Fmt.esc(lp.title)}</span>
-            </div>`).join('');
+            docsHtml = linkedPages.map(lp => {
+                const dovIds = this._pageDovMap?.[lp.id] || [];
+                const dovNames = dovIds.map(id => this._dovNameMap?.[id]).filter(Boolean);
+                const label = dovNames.length ? dovNames.join(', ') : lp.title;
+                return `
+                <div class="rf-collection-card" onclick="Router.go('collections/${lp.id}')">
+                    <div class="rf-collection-icon"><i class="fa-solid fa-arrow-up-right-from-square"></i></div>
+                    <span class="rf-collection-title">${Fmt.esc(label)}</span>
+                </div>`;
+            }).join('');
         } else if (itemDocs.length) {
             docsHtml = itemDocs.map(d => {
                 const acked = !!this._ackMap[d.id];

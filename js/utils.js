@@ -576,11 +576,11 @@ const UI = {
             expertItem,
             // { icon: '<img src="/news.png" style="width:18px;height:18px;object-fit:contain;display:inline-block;vertical-align:middle;filter:none">', label: 'Новини',  route: 'news' }
         ];
+        const collectionsItem = { icon: '<i class="fa-solid fa-wand-magic-sparkles" style="background:linear-gradient(135deg,#818cf8,#c084fc);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-size:1rem"></i>', label: 'Сторінки', route: 'collections' };
         const contentItems = [
             ...common,
             { icon: '<i class="fa-solid fa-folder-open"   style="color:#C9A227"></i>',  label: 'База знань',        route: 'knowledge-base' },
             { icon: '<i class="fa-solid fa-file-lines"    style="color:#f87171"></i>',  label: 'Документи',         route: 'documents', badgeId: 'nav-doc-badge' },
-{ icon: '<i class="fa-solid fa-wand-magic-sparkles" style="background:linear-gradient(135deg,#818cf8,#c084fc);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-size:1rem"></i>', label: 'Меню порталу', route: 'collections' }
         ];
         const ntfItem      = { icon: '<i class="fa-solid fa-bell"         style="color:#C9A227"></i>', label: 'Сповіщення', route: 'notifications', badgeId: 'nav-ntf-badge' };
         const contactsItem = { icon: '<i class="fa-solid fa-address-book" style="color:#059669"></i>', label: 'Контакти',   route: 'contacts' };
@@ -601,7 +601,7 @@ const UI = {
         }
         if (role === 'owner' || role === 'admin') {
             return [
-                { title: 'Навчання',    items: contentItems },
+                { title: 'Навчання',    items: [ ...contentItems, collectionsItem ] },
                 { title: 'Управління',  items: [ analyticsItem, schedulerItem, adminItem ] },
                 { title: 'Особисте',    items: [ contactsItem, bmItem ] }
             ];

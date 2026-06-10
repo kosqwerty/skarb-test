@@ -21,10 +21,10 @@ const CollectionsPage = {
         }
         this._pageTrail  = [];
         this._currentPage = null;
-        UI.setBreadcrumb([{ label: 'Меню порталу' }]);
+        UI.setBreadcrumb([{ label: 'Сторінки' }]);
 
-        // Звичайний юзер → одразу відкриває головну сторінку
-        if (!AppState.isStaff()) {
+        // Не-адмін → одразу відкриває головну сторінку
+        if (!AppState.isAdmin()) {
             container.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
             try {
                 const pages = await API.pages.getAll();
@@ -44,7 +44,7 @@ const CollectionsPage = {
         container.innerHTML = `
             <div class="page-header">
                 <div class="page-title">
-                    <h1>🪄 Меню порталу</h1>
+                    <h1>📄 Сторінки</h1>
                     <p>Власні HTML-сторінки з довільним стилем та посиланнями.</p>
                 </div>
                 <div class="page-actions">
@@ -62,13 +62,32 @@ const CollectionsPage = {
         try {
             const pages = await API.pages.getAll();
             const userLabel = AppState.profile?.label;
-            const visible = AppState.isStaff()
-                ? pages
-                : pages.filter(p => {
+            let visible;
+            if (AppState.isStaff()) {
+                visible = pages;
+            } else {
+                const [pageDovs, myDovObjs] = await Promise.all([
+                    API.pageDovirenosti.getAll().catch(() => []),
+                    API.dovirenosti.getForProfile(AppState.user.id).catch(() => [])
+                ]);
+                const myDovIds = new Set(myDovObjs.map(d => d.id));
+                const pageDovMap = {};
+                for (const r of pageDovs) {
+                    if (!pageDovMap[r.page_id]) pageDovMap[r.page_id] = [];
+                    pageDovMap[r.page_id].push(r.dovirenost_id);
+                }
+                visible = pages.filter(p => {
                     if (!p.is_published) return false;
-                    if (!p.allowed_labels?.length) return true;
-                    return userLabel && p.allowed_labels.includes(userLabel);
+                    if (p.allowed_labels?.length) {
+                        if (!userLabel || !p.allowed_labels.includes(userLabel)) return false;
+                    }
+                    const pageDovReqs = pageDovMap[p.id] || [];
+                    if (pageDovReqs.length) {
+                        if (!pageDovReqs.some(id => myDovIds.has(id))) return false;
+                    }
+                    return true;
                 });
+            }
             if (!visible.length) {
                 el.innerHTML = `
                     <div class="empty-state">
@@ -120,7 +139,10 @@ const CollectionsPage = {
                  onmouseenter="this.style.borderColor='var(--primary)';this.style.boxShadow='var(--shadow-md)'"
                  onmouseleave="this.style.borderColor='var(--border)';this.style.boxShadow='none'">
                 <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:.5rem;margin-bottom:.75rem">
-                    <span style="font-size:1.75rem">🪄</span>
+                    <div style="display:flex;gap:4px;flex-shrink:0">
+                        <span style="font-size:.62rem;font-weight:700;padding:3px 6px;border-radius:4px;background:rgba(249,115,22,.12);color:#f97316;border:1px solid rgba(249,115,22,.25);font-family:'Courier New',monospace;letter-spacing:.01em">HTML</span>
+                        <span style="font-size:.62rem;font-weight:700;padding:3px 6px;border-radius:4px;background:rgba(59,130,246,.12);color:#3b82f6;border:1px solid rgba(59,130,246,.25);font-family:'Courier New',monospace;letter-spacing:.01em">CSS</span>
+                    </div>
                     <div style="display:flex;align-items:center;gap:.4rem" onclick="event.stopPropagation()">
                         <button class="res-star-btn${Bookmarks.isBookmarked('collections/'+p.id) ? ' active' : ''}"
                             data-bm-route="collections/${p.id}"
@@ -157,18 +179,35 @@ const CollectionsPage = {
                 Router.go('collections');
                 return;
             }
-            // Label-based access check
-            if (!AppState.isStaff() && page.allowed_labels?.length) {
+            // Label-based and dovirenost-based access check
+            if (!AppState.isStaff()) {
                 const userLabel = AppState.profile?.label;
-                if (!userLabel || !page.allowed_labels.includes(userLabel)) {
-                    container.innerHTML = `
-                        <div class="empty-state">
-                            <div class="empty-icon">🔒</div>
-                            <h3>Доступ обмежено</h3>
-                            <p style="color:var(--text-muted)">Ця сторінка доступна лише для певних груп користувачів</p>
-                            <button class="btn btn-primary" onclick="Router.back()" style="display:inline-flex;align-items:center;gap:.35rem;margin-top:1rem"><i class="fa-solid fa-angle-left"></i> Назад</button>
-                        </div>`;
-                    return;
+                if (page.allowed_labels?.length) {
+                    if (!userLabel || !page.allowed_labels.includes(userLabel)) {
+                        container.innerHTML = `
+                            <div class="empty-state">
+                                <div class="empty-icon">🔒</div>
+                                <h3>Доступ обмежено</h3>
+                                <p style="color:var(--text-muted)">Ця сторінка доступна лише для певних груп користувачів</p>
+                                <button class="btn btn-primary" onclick="Router.back()" style="display:inline-flex;align-items:center;gap:.35rem;margin-top:1rem"><i class="fa-solid fa-angle-left"></i> Назад</button>
+                            </div>`;
+                        return;
+                    }
+                }
+                const pageDovIds = await API.pageDovirenosti.get(id).catch(() => []);
+                if (pageDovIds.length) {
+                    const myDovs = await API.dovirenosti.getForProfile(AppState.user.id).catch(() => []);
+                    const myDovIds = new Set(myDovs.map(d => d.id));
+                    if (!pageDovIds.some(dId => myDovIds.has(dId))) {
+                        container.innerHTML = `
+                            <div class="empty-state">
+                                <div class="empty-icon">🔒</div>
+                                <h3>Доступ обмежено</h3>
+                                <p style="color:var(--text-muted)">Ця сторінка доступна лише для певних довіреностей</p>
+                                <button class="btn btn-primary" onclick="Router.back()" style="display:inline-flex;align-items:center;gap:.35rem;margin-top:1rem"><i class="fa-solid fa-angle-left"></i> Назад</button>
+                            </div>`;
+                        return;
+                    }
                 }
             }
             this._currentPage = { id: page.id, label: page.title };
@@ -456,29 +495,34 @@ document.addEventListener('click', function(e) {
         this._savedCursor   = null;
         const editHash = '#/' + (id ? `collections/${id}/edit` : 'collections/new');
         if (location.hash !== editHash) history.pushState(null, '', editHash);
-        let page = null, attachments = [], groups = [];
+        let page = null, attachments = [], groups = [], allDov = [], selectedDovIds = [];
         Loader.show();
         try {
-            const fetches = [API.accessGroups.getAll().catch(() => [])];
-            if (id) fetches.push(API.pages.getById(id), API.pageAttachments.getAll(id));
+            const fetches = [
+                API.accessGroups.getAll().catch(() => []),
+                API.dovirenosti.getAll().catch(() => [])
+            ];
+            if (id) fetches.push(API.pages.getById(id), API.pageAttachments.getAll(id), API.pageDovirenosti.get(id).catch(() => []));
             const results = await Promise.all(fetches);
             groups      = results[0];
-            if (id) { page = results[1]; attachments = results[2]; }
+            allDov      = results[1];
+            if (id) { page = results[2]; attachments = results[3]; selectedDovIds = results[4]; }
         }
         catch (e) { Toast.error('Помилка', e.message); Loader.hide(); return; }
         finally { Loader.hide(); }
 
         const container = document.getElementById('page-content');
         UI.setBreadcrumb([
-            { label: 'Меню порталу', link: 'collections' },
+            { label: 'Сторінки', link: 'collections' },
             { label: id ? 'Редагувати' : 'Нова сторінка' }
         ]);
-        container.innerHTML = this._editorHtml(page, groups);
+        this._allDov = allDov;
+        container.innerHTML = this._editorHtml(page, groups, allDov, selectedDovIds);
         this._initEditor(page);
         this._renderAttachmentGrid(attachments);
     },
 
-    _editorHtml(page, groups = []) {
+    _editorHtml(page, groups = [], allDov = [], selectedDovIds = []) {
         const selectedLabels = page?.allowed_labels || [];
         const groupNames = groups.map(g => g.name).sort();
         const tagPickerHtml = `
@@ -512,21 +556,63 @@ document.addEventListener('click', function(e) {
                     </div>
                 </div>
             </div>`;
+
+        const dovNames = allDov.map(d => ({ id: d.id, name: d.name }));
+        const dovSelectedNames = dovNames.filter(d => selectedDovIds.includes(d.id)).map(d => d.name);
+        const dovPickerHtml = `
+            <div style="display:flex;flex-direction:column;gap:4px" title="Обмежити доступ по довіреностях. Порожньо = доступно всім.">
+                <div style="display:flex;align-items:center;gap:.4rem;min-width:160px;max-width:260px;padding:4px 8px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-raised);cursor:pointer"
+                     id="col-dov-box" onclick="CollectionsPage._toggleDovDropdown()">
+                    <span style="font-size:.8rem;color:var(--text-muted);white-space:nowrap;flex-shrink:0">📋 Довіреності:</span>
+                    <span id="col-dov-preview" style="font-size:.8rem;color:var(--text-primary);flex:1;min-width:40px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                        ${dovSelectedNames.length ? dovSelectedNames.map(n => Fmt.esc(n)).join(', ') : 'Без обмежень'}
+                    </span>
+                    <span style="font-size:.65rem;color:var(--text-muted)">▾</span>
+                </div>
+                <div id="col-dov-dropdown" style="display:none;position:absolute;z-index:200;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-lg);padding:.5rem;min-width:200px;max-width:300px;max-height:260px;overflow-y:auto">
+                    ${!dovNames.length
+                        ? `<div style="font-size:.8rem;color:var(--text-muted);padding:.25rem .5rem">Довіреності не знайдено</div>`
+                        : dovNames.map(d => `
+                        <label style="display:flex;align-items:center;gap:.5rem;padding:.35rem .5rem;border-radius:6px;cursor:pointer;font-size:.85rem;transition:background var(--transition)"
+                               onmouseenter="this.style.background='var(--bg-hover)'" onmouseleave="this.style.background=''">
+                            <input type="checkbox" name="col-dov" value="${d.id}"
+                                   ${selectedDovIds.includes(d.id) ? 'checked' : ''}
+                                   onchange="CollectionsPage._onDovChange()">
+                            <span>${Fmt.esc(d.name)}</span>
+                        </label>`).join('')}
+                    <div style="border-top:1px solid var(--border);margin-top:.35rem;padding-top:.35rem">
+                        <label style="display:flex;align-items:center;gap:.5rem;padding:.25rem .5rem;border-radius:6px;cursor:pointer;font-size:.8rem;color:var(--text-muted)"
+                               onmouseenter="this.style.background='var(--bg-hover)'" onmouseleave="this.style.background=''">
+                            <input type="checkbox" id="col-dov-all" ${!selectedDovIds.length ? 'checked' : ''}
+                                   onchange="CollectionsPage._clearAllDovs()">
+                            <span>Без обмежень (всі)</span>
+                        </label>
+                    </div>
+                </div>
+            </div>`;
+
         return `
         <div style="display:flex;flex-direction:column;height:calc(100vh - 120px);gap:0">
 
             <!-- Top bar -->
-            <div style="display:flex;align-items:center;gap:.75rem;padding:.75rem 1rem;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);margin-bottom:.75rem;flex-wrap:wrap">
-                <button class="btn btn-ghost btn-sm" onclick="Router.back()" style="display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i> Назад</button>
-                <input id="page-title-input" type="text" value="${Fmt.esc(page?.title || '')}" placeholder="Назва сторінки..."
-                       style="flex:1;min-width:160px;font-size:1rem;font-weight:600;border:none;background:transparent;color:var(--text-primary);outline:none">
-                <label style="display:flex;align-items:center;gap:.4rem;font-size:.85rem;color:var(--text-secondary);cursor:pointer;flex-shrink:0">
-                    <input type="checkbox" id="page-published" ${page?.is_published ? 'checked' : ''}>
-                    Опублікувати
-                </label>
-                <div style="position:relative;flex-shrink:0">${tagPickerHtml}</div>
-                <button class="btn btn-ghost btn-sm" onclick="CollectionsPage._insertResourceLink()">+ Ресурс</button>
-                <button id="col-save-btn" class="btn btn-primary btn-sm" onclick="CollectionsPage.savePage('${page?.id || ''}')"><i class="fa-regular fa-floppy-disk"></i> Зберегти</button>
+            <div style="display:flex;flex-direction:column;gap:.5rem;padding:.75rem 1rem;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);margin-bottom:.75rem">
+                <!-- Row 1: back, title, save -->
+                <div style="display:flex;align-items:center;gap:.75rem">
+                    <button class="btn btn-ghost btn-sm" onclick="Router.back()" style="display:inline-flex;align-items:center;gap:.35rem;flex-shrink:0"><i class="fa-solid fa-angle-left"></i> Назад</button>
+                    <input id="page-title-input" type="text" value="${Fmt.esc(page?.title || '')}" placeholder="Назва сторінки..."
+                           style="flex:1;min-width:120px;font-size:1rem;font-weight:600;border:none;background:transparent;color:var(--text-primary);outline:none">
+                    <button id="col-save-btn" class="btn btn-primary btn-sm" onclick="CollectionsPage.savePage('${page?.id || ''}')"><i class="fa-regular fa-floppy-disk"></i> Зберегти</button>
+                </div>
+                <!-- Row 2: publish, access pickers, resource button -->
+                <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:.5rem">
+                    <label style="display:flex;align-items:center;gap:.4rem;font-size:.85rem;color:var(--text-secondary);cursor:pointer;flex-shrink:0">
+                        <input type="checkbox" id="page-published" ${page?.is_published ? 'checked' : ''}>
+                        Опублікувати
+                    </label>
+                    <div style="position:relative;flex-shrink:0">${tagPickerHtml}</div>
+                    <div style="position:relative;flex-shrink:0">${dovPickerHtml}</div>
+                    <button class="btn btn-ghost btn-sm" style="margin-left:auto;flex-shrink:0" onclick="CollectionsPage._insertResourceLink()">+ Ресурс</button>
+                </div>
             </div>
 
             <style>
@@ -1157,11 +1243,59 @@ tr:hover td { background: #f8fafc; }
         return [...document.querySelectorAll('input[name="col-group"]:checked')].map(c => c.value);
     },
 
+    // ── Dov picker ────────────────────────────────────────────────
+    _toggleDovDropdown() {
+        const dd = document.getElementById('col-dov-dropdown');
+        if (!dd) return;
+        const isOpen = dd.style.display !== 'none';
+        dd.style.display = isOpen ? 'none' : 'block';
+        if (!isOpen) {
+            setTimeout(() => {
+                document.addEventListener('click', function closeDD(e) {
+                    if (!e.target.closest('#col-dov-dropdown') && !e.target.closest('#col-dov-box')) {
+                        const d = document.getElementById('col-dov-dropdown');
+                        if (d) d.style.display = 'none';
+                        document.removeEventListener('click', closeDD);
+                    }
+                });
+            }, 0);
+        }
+    },
+
+    _onDovChange() {
+        const checks = [...document.querySelectorAll('input[name="col-dov"]:checked')];
+        const allChk = document.getElementById('col-dov-all');
+        if (allChk) allChk.checked = checks.length === 0;
+        const preview = document.getElementById('col-dov-preview');
+        if (preview) {
+            if (!checks.length) {
+                preview.textContent = 'Без обмежень';
+            } else {
+                const allDov = this._allDov || [];
+                const names = checks.map(c => allDov.find(d => d.id === c.value)?.name || c.value);
+                preview.textContent = names.join(', ');
+            }
+        }
+    },
+
+    _clearAllDovs() {
+        document.querySelectorAll('input[name="col-dov"]').forEach(c => c.checked = false);
+        const preview = document.getElementById('col-dov-preview');
+        if (preview) preview.textContent = 'Без обмежень';
+        const allChk = document.getElementById('col-dov-all');
+        if (allChk) allChk.checked = true;
+    },
+
+    _getSelectedDovIds() {
+        return [...document.querySelectorAll('input[name="col-dov"]:checked')].map(c => c.value);
+    },
+
     // ── Save ──────────────────────────────────────────────────────
     async savePage(id) {
         const title = document.getElementById('page-title-input')?.value.trim();
         if (!title) { Toast.error('Помилка', 'Вкажіть назву сторінки'); return; }
         const allowed_labels = this._getSelectedLabels();
+        const dovIds = this._getSelectedDovIds();
         const fields = {
             title,
             html_content: this._cmHtml ? this._cmHtml.getValue() : (document.getElementById('editor-html')?.value || ''),
@@ -1173,12 +1307,14 @@ tr:hover td { background: #f8fafc; }
         try {
             if (id) {
                 await API.pages.update(id, fields);
+                await API.pageDovirenosti.set(id, dovIds);
                 Loader.hide();
                 this._markClean();
                 Toast.success('Збережено');
                 Router.back();
             } else {
                 const created = await API.pages.create(fields);
+                await API.pageDovirenosti.set(created.id, dovIds);
                 Loader.hide();
                 Toast.success('Сторінку створено — можна додати файли');
                 await this.openEditor(created.id);

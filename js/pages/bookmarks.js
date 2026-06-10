@@ -104,7 +104,7 @@ const Bookmarks = {
         try {
             const added = await this.toggle({
                 type: 'collection', route: `collections/${id}`,
-                title, icon: '<i class="fa-solid fa-wand-magic-sparkles"></i>', subtitle: 'Меню порталу'
+                title, icon: '<i class="fa-solid fa-wand-magic-sparkles"></i>', subtitle: 'Сторінки'
             });
             Toast[added ? 'success' : 'info'](added ? 'Додано до закладок' : 'Закладку видалено', title);
         } catch (e) { Toast.error('Помилка', e.message); }

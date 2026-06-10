@@ -49,8 +49,8 @@ const RedFolderPage = {
             .rf-item-title-row { display: flex; align-items: center; gap: .4rem; font-weight: 600; line-height: 1.4; font-size: .84rem; }
             .rf-item-btn.active .rf-item-title-row { color: #ef4444; font-weight: 700; }
             .rf-item-responsible { font-size: .73rem; color: var(--text-muted); display: flex; align-items: center; gap: .3rem; }
-            .rf-item-actions { display: flex; gap: 3px; opacity: 0; transition: opacity .15s; }
-            .rf-item-btn:hover .rf-item-actions { opacity: 1; }
+            .rf-item-actions { display: flex; gap: 3px; opacity: 0; pointer-events: none; transition: opacity .15s; }
+            .rf-item-btn:hover .rf-item-actions { opacity: 1; pointer-events: auto; }
             .rf-item-dot-wrap { display: flex; flex-shrink: 0; margin-top: .35rem; }
             .rf-ibtn-dot { width: 8px; height: 8px; border-radius: 50%; }
             .rf-ibtn-dot.unread { background: #ef4444; animation: rf-pulse 1.4s ease-in-out infinite; }
@@ -75,8 +75,8 @@ const RedFolderPage = {
             .rf-doc-card-icon { width: 28px; height: 28px; border-radius: 7px; background: rgba(239,68,68,.1); color: #ef4444; display: flex; align-items: center; justify-content: center; font-size: .85rem; flex-shrink: 0; }
             .rf-doc-card-title { flex: 1; min-width: 0; font-size: .84rem; color: var(--text-primary); font-weight: 500; line-height: 1.4; word-break: break-word; }
             .rf-doc-card:hover .rf-doc-card-title { color: #ef4444; }
-            .rf-doc-card-actions { display: flex; gap: 2px; flex-shrink: 0; opacity: 0; transition: opacity .15s; }
-            .rf-doc-card:hover .rf-doc-card-actions { opacity: 1; }
+            .rf-doc-card-actions { display: flex; gap: 2px; flex-shrink: 0; opacity: 0; pointer-events: none; transition: opacity .15s; }
+            .rf-doc-card:hover .rf-doc-card-actions { opacity: 1; pointer-events: auto; }
             .rf-collection-card { border: 1px solid var(--border); border-radius: 8px; padding: .6rem .85rem; display: flex; align-items: center; gap: .5rem; cursor: pointer; transition: border-color .13s, background .13s; background: var(--bg-raised); }
             .rf-collection-card:hover { border-color: #ef4444; background: rgba(239,68,68,.05); }
             .rf-collection-icon { width: 28px; height: 28px; border-radius: 7px; background: rgba(99,102,241,.1); color: var(--primary); display: flex; align-items: center; justify-content: center; font-size: .85rem; flex-shrink: 0; }

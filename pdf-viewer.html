@@ -7,199 +7,205 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
 
 body {
-  background: #525659;
+  background: #404040;
   color: #fff;
   font-family: Arial, sans-serif;
   user-select: none;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ── Toolbar ── */
 #toolbar {
-  position: fixed;
-  top: 0; left: 0; right: 0;
-  height: 44px;
-  background: #3c3f41;
+  height: 48px;
+  background: #323639;
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 0 10px;
-  z-index: 200;
-  box-shadow: 0 2px 6px rgba(0,0,0,.5);
-}
-
-.tb-sep {
-  width: 1px;
-  height: 24px;
-  background: #555;
-  margin: 0 4px;
-}
-
-.tb-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  background: transparent;
-  border: none;
-  border-radius: 4px;
-  color: #ddd;
-  cursor: pointer;
-  font-size: 16px;
-  transition: background .15s;
+  padding: 0 12px;
   flex-shrink: 0;
-}
-.tb-btn:hover:not(:disabled) { background: #555; color: #fff; }
-.tb-btn:disabled { opacity: .35; cursor: default; }
-
-#page-input {
-  width: 42px;
-  text-align: center;
-  background: #525659;
-  border: 1px solid #666;
-  border-radius: 4px;
-  color: #fff;
-  font-size: 13px;
-  padding: 3px 4px;
-  outline: none;
-}
-#page-input:focus { border-color: #aaa; }
-
-#page-total {
-  font-size: 13px;
-  color: #aaa;
-  white-space: nowrap;
-}
-
-#zoom-select {
-  background: #525659;
-  border: 1px solid #666;
-  border-radius: 3px;
-  color: #fff;
-  font-size: 13px;
-  padding: 3px 6px;
-  outline: none;
-  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,.5);
+  z-index: 10;
 }
 
 #toolbar-title {
-  flex: 1;
   font-size: 13px;
-  color: #ccc;
+  font-weight: 600;
+  color: #e2e8f0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  padding: 0 8px;
+  max-width: 260px;
+  flex-shrink: 0;
+}
+
+.tb-sep { width: 1px; height: 26px; background: rgba(255,255,255,.15); margin: 0 6px; flex-shrink: 0; }
+
+.tb-center { display: flex; align-items: center; gap: 4px; flex: 1; justify-content: center; }
+
+.tb-right { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+
+.tb-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px;
+  background: transparent; border: none; border-radius: 6px;
+  color: #c8cfd7; cursor: pointer; font-size: 15px;
+  transition: background .13s, color .13s; flex-shrink: 0;
+}
+.tb-btn svg { width: 18px; height: 18px; }
+.tb-btn:hover:not(:disabled) { background: rgba(255,255,255,.12); color: #fff; }
+.tb-btn:disabled { opacity: .3; cursor: default; }
+
+#page-input {
+  width: 44px; text-align: center;
+  background: #525659; border: 1px solid #666; border-radius: 5px;
+  color: #fff; font-size: 13px; padding: 4px; outline: none;
+}
+#page-input:focus { border-color: #94a3b8; }
+#page-total { font-size: 13px; color: #94a3b8; white-space: nowrap; }
+
+#zoom-val {
+  width: 62px; text-align: center;
+  background: #525659; border: 1px solid #666; border-radius: 5px;
+  color: #fff; font-size: 13px; padding: 4px; outline: none;
 }
 
 #download-btn {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  background: #3b82f6;
-  border: none;
-  border-radius: 5px;
-  color: #fff;
-  font-size: 13px;
-  padding: 5px 12px;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: background .15s;
+  display: inline-flex; align-items: center; gap: 5px;
+  background: #3b82f6; border: none; border-radius: 6px;
+  color: #fff; font-size: 13px; font-weight: 600;
+  padding: 6px 14px; cursor: pointer; flex-shrink: 0; transition: background .15s;
 }
 #download-btn:hover { background: #2563eb; }
 
-/* ── Viewer ── */
-#viewer-wrap {
-  margin-top: 44px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 20px 16px 40px;
-  gap: 12px;
+/* ── Body layout ── */
+#body-wrap { display: flex; flex: 1; min-height: 0; }
+
+/* ── Thumbnail sidebar ── */
+#thumb-panel {
+  width: 168px; flex-shrink: 0;
+  background: #2b2d30;
+  border-right: 1px solid rgba(255,255,255,.08);
+  overflow-y: auto; overflow-x: hidden;
+  display: flex; flex-direction: column;
+  align-items: center; gap: 8px;
+  padding: 12px 8px;
+}
+#thumb-panel::-webkit-scrollbar { width: 5px; }
+#thumb-panel::-webkit-scrollbar-track { background: transparent; }
+#thumb-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,.2); border-radius: 3px; }
+
+.thumb-item {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  cursor: pointer; width: 100%;
+}
+.thumb-canvas-wrap {
+  border: 2px solid transparent; border-radius: 4px; overflow: hidden;
+  transition: border-color .13s; box-shadow: 0 2px 6px rgba(0,0,0,.4);
+  line-height: 0;
+}
+.thumb-canvas-wrap:hover { border-color: rgba(148,163,184,.5); }
+.thumb-canvas-wrap.active { border-color: #3b82f6; }
+.thumb-num {
+  font-size: 11px; color: #94a3b8;
 }
 
-.page-wrap {
-  position: relative;
-  box-shadow: 0 4px 20px rgba(0,0,0,.6);
+/* ── Main viewer ── */
+#viewer-wrap {
+  flex: 1; overflow-y: auto; overflow-x: auto;
+  display: flex; flex-direction: column;
+  align-items: center; padding: 20px 20px 40px;
+  gap: 14px; background: #525659;
 }
+#viewer-wrap::-webkit-scrollbar { width: 8px; }
+#viewer-wrap::-webkit-scrollbar-track { background: rgba(0,0,0,.2); }
+#viewer-wrap::-webkit-scrollbar-thumb { background: rgba(255,255,255,.25); border-radius: 4px; }
+
+.page-wrap { position: relative; box-shadow: 0 4px 24px rgba(0,0,0,.6); line-height: 0; }
 canvas { display: block; }
 
-#error-msg {
-  margin-top: 120px;
-  text-align: center;
-  color: #f87171;
-  font-size: 15px;
-  line-height: 1.6;
-}
-
-#loading-msg {
-  margin-top: 120px;
-  text-align: center;
-  color: #aaa;
-  font-size: 14px;
-}
+#loading-msg { margin-top: 80px; text-align: center; color: #94a3b8; font-size: 14px; }
+#error-msg   { margin-top: 80px; text-align: center; color: #f87171; font-size: 14px; line-height: 1.7; }
 </style>
 </head>
 <body>
 
+<!-- Toolbar -->
 <div id="toolbar">
-  <!-- Навігація по сторінках -->
-  <button class="tb-btn" id="btn-first"  title="Перша сторінка">⏮</button>
-  <button class="tb-btn" id="btn-prev"   title="Попередня (←)">‹</button>
-  <input  id="page-input" type="number" min="1" value="1" title="Номер сторінки">
-  <span   id="page-total" style="font-size:13px;color:#aaa">/ —</span>
-  <button class="tb-btn" id="btn-next"   title="Наступна (→)">›</button>
-  <button class="tb-btn" id="btn-last"   title="Остання сторінка">⏭</button>
+  <span id="toolbar-title"></span>
 
   <div class="tb-sep"></div>
 
-  <!-- Масштаб -->
-  <button class="tb-btn" id="btn-zoom-out" title="Зменшити (-)">−</button>
-  <select id="zoom-select" title="Масштаб">
-    <option value="0.5">50%</option>
-    <option value="0.75">75%</option>
-    <option value="1">100%</option>
-    <option value="1.25">125%</option>
-    <option value="1.5">150%</option>
-    <option value="2">200%</option>
-    <option value="fit" selected>По ширині</option>
-  </select>
-  <button class="tb-btn" id="btn-zoom-in"  title="Збільшити (+)">+</button>
+  <!-- Page nav (center) -->
+  <div class="tb-center">
+    <button class="tb-btn" id="btn-first" title="Перша сторінка">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>
+    </button>
+    <button class="tb-btn" id="btn-prev" title="Попередня (←)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+    <input id="page-input" type="number" min="1" value="1" title="Номер сторінки">
+    <span id="page-total" style="font-size:13px;color:#94a3b8">/ —</span>
+    <button class="tb-btn" id="btn-next" title="Наступна (→)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+    </button>
+    <button class="tb-btn" id="btn-last" title="Остання сторінка">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
+    </button>
 
-  <div class="tb-sep"></div>
+    <div class="tb-sep"></div>
 
-  <!-- Поворот -->
-  <button class="tb-btn" id="btn-rot-l" title="Повернути ліворуч">↺</button>
-  <button class="tb-btn" id="btn-rot-r" title="Повернути праворуч">↻</button>
+    <!-- Zoom -->
+    <button class="tb-btn" id="btn-zoom-out" title="Зменшити (-)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+    </button>
+    <input id="zoom-val" type="text" value="100%" title="Масштаб (клік — по ширині)" style="cursor:pointer" onclick="setScale('fit')">
+    <button class="tb-btn" id="btn-zoom-in" title="Збільшити (+)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+    </button>
 
-  <div class="tb-sep"></div>
+    <div class="tb-sep"></div>
 
-  <!-- Назва + кнопка завантаження -->
-  <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;overflow:hidden;justify-content:flex-start">
-    <div id="toolbar-title" style="flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
-    <button id="download-btn" style="display:none;flex-shrink:0" title="Завантажити PDF">
-      ⬇ Завантажити
+    <!-- Rotate -->
+    <button class="tb-btn" id="btn-rot-l" title="Повернути ліворуч">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-5"/></svg>
+    </button>
+    <button class="tb-btn" id="btn-rot-r" title="Повернути праворуч">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.49-5"/></svg>
+    </button>
+  </div>
+
+  <!-- Right: download -->
+  <div class="tb-right">
+    <button id="download-btn" style="display:none">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Завантажити
     </button>
   </div>
 </div>
 
-<div id="viewer-wrap">
-  <div id="loading-msg">Завантаження PDF…</div>
+<!-- Body -->
+<div id="body-wrap">
+  <div id="thumb-panel"></div>
+  <div id="viewer-wrap">
+    <div id="loading-msg">Завантаження PDF…</div>
+  </div>
 </div>
 
 <script>
-const params     = new URLSearchParams(location.search);
-const fileUrl    = params.get('file');
-const title      = params.get('title') || 'PDF';
+const params      = new URLSearchParams(location.search);
+const fileUrl     = params.get('file');
+const title       = params.get('title') || 'PDF';
 const canDownload = params.get('download') === '1';
 
 document.getElementById('toolbar-title').textContent = title;
+document.title = title;
 
 if (!fileUrl) {
-  document.getElementById('viewer-wrap').innerHTML =
-    '<div id="error-msg">Файл не вказано.</div>';
+  document.getElementById('viewer-wrap').innerHTML = '<div id="error-msg">Файл не вказано.</div>';
   throw new Error('No file param');
 }
 
@@ -207,44 +213,66 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
 // ── State ──────────────────────────────────────────────────────────────────
-let pdfDoc     = null;
-let totalPages = 0;
+let pdfDoc      = null;
+let totalPages  = 0;
 let currentPage = 1;
-let scale      = 'fit';
-let rotation   = 0;
-let rendering  = false;
+let scale       = 1;
+let rotation    = 0;
+let rendering   = false;
 
 const SCALE_STEP = 0.25;
 const SCALE_MIN  = 0.25;
 const SCALE_MAX  = 4.0;
+const THUMB_W    = 128;
 
-// ── DOM refs ───────────────────────────────────────────────────────────────
-const wrap       = document.getElementById('viewer-wrap');
-const pageInput  = document.getElementById('page-input');
-const pageTotal  = document.getElementById('page-total');
-const zoomSelect = document.getElementById('zoom-select');
+// ── DOM ───────────────────────────────────────────────────────────────────
+const wrap      = document.getElementById('viewer-wrap');
+const thumbPanel = document.getElementById('thumb-panel');
+const pageInput = document.getElementById('page-input');
+const pageTotal = document.getElementById('page-total');
+const zoomVal   = document.getElementById('zoom-val');
 
-// ── Render ─────────────────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────
+function getEffectiveScale(page) {
+  if (scale !== 'fit') return scale;
+  const vp = page.getViewport({ scale: 1, rotation });
+  return (wrap.clientWidth - 48) / vp.width;
+}
+
+function updateZoomDisplay() {
+  if (scale === 'fit') { zoomVal.value = 'По ширині'; return; }
+  zoomVal.value = Math.round(scale * 100) + '%';
+}
+
+function updateNav() {
+  document.getElementById('btn-first').disabled = currentPage <= 1;
+  document.getElementById('btn-prev').disabled  = currentPage <= 1;
+  document.getElementById('btn-next').disabled  = currentPage >= totalPages;
+  document.getElementById('btn-last').disabled  = currentPage >= totalPages;
+  pageInput.value = currentPage;
+  thumbPanel.querySelectorAll('.thumb-canvas-wrap').forEach((el, i) => {
+    el.classList.toggle('active', i + 1 === currentPage);
+  });
+}
+
+// ── Render main pages ──────────────────────────────────────────────────────
 async function renderAll() {
   if (!pdfDoc || rendering) return;
   rendering = true;
-
   wrap.innerHTML = '';
 
   for (let i = 1; i <= totalPages; i++) {
-    const page     = await pdfDoc.getPage(i);
-    const effectiveScale = scale === 'fit'
-      ? (wrap.clientWidth - 40) / page.getViewport({ scale: 1, rotation }).width
-      : scale;
-    const viewport = page.getViewport({ scale: effectiveScale, rotation });
+    const page      = await pdfDoc.getPage(i);
+    const effScale  = getEffectiveScale(page);
+    const viewport  = page.getViewport({ scale: effScale, rotation });
 
-    const pageWrap = document.createElement('div');
+    const pageWrap  = document.createElement('div');
     pageWrap.className = 'page-wrap';
     pageWrap.dataset.page = i;
 
-    const canvas  = document.createElement('canvas');
-    canvas.width  = viewport.width;
-    canvas.height = viewport.height;
+    const canvas   = document.createElement('canvas');
+    canvas.width   = viewport.width;
+    canvas.height  = viewport.height;
     pageWrap.appendChild(canvas);
     wrap.appendChild(pageWrap);
 
@@ -256,6 +284,41 @@ async function renderAll() {
   scrollToPage(currentPage, false);
 }
 
+// ── Render thumbnails ──────────────────────────────────────────────────────
+async function renderThumbs() {
+  thumbPanel.innerHTML = '';
+  for (let i = 1; i <= totalPages; i++) {
+    const page     = await pdfDoc.getPage(i);
+    const viewport = page.getViewport({ scale: 1, rotation: 0 });
+    const ts       = THUMB_W / viewport.width;
+    const tvp      = page.getViewport({ scale: ts, rotation: 0 });
+
+    const item     = document.createElement('div');
+    item.className = 'thumb-item';
+    item.dataset.page = i;
+
+    const wrap2 = document.createElement('div');
+    wrap2.className = 'thumb-canvas-wrap' + (i === 1 ? ' active' : '');
+
+    const canvas  = document.createElement('canvas');
+    canvas.width  = tvp.width;
+    canvas.height = tvp.height;
+    canvas.style.display = 'block';
+
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport: tvp }).promise;
+
+    wrap2.appendChild(canvas);
+    const num = document.createElement('span');
+    num.className = 'thumb-num';
+    num.textContent = i;
+
+    item.appendChild(wrap2);
+    item.appendChild(num);
+    item.addEventListener('click', () => goTo(i));
+    thumbPanel.appendChild(item);
+  }
+}
+
 // ── Navigation ─────────────────────────────────────────────────────────────
 function scrollToPage(num, smooth = true) {
   const el = wrap.querySelector(`[data-page="${num}"]`);
@@ -265,36 +328,20 @@ function scrollToPage(num, smooth = true) {
 function goTo(num) {
   num = Math.max(1, Math.min(totalPages, num));
   currentPage = num;
-  pageInput.value = num;
-  scrollToPage(num);
   updateNav();
+  scrollToPage(num);
   if (num === totalPages) setTimeout(notifyScrollEnd, 600);
-}
-
-function updateNav() {
-  document.getElementById('btn-first').disabled = currentPage <= 1;
-  document.getElementById('btn-prev').disabled  = currentPage <= 1;
-  document.getElementById('btn-next').disabled  = currentPage >= totalPages;
-  document.getElementById('btn-last').disabled  = currentPage >= totalPages;
 }
 
 // ── Zoom ───────────────────────────────────────────────────────────────────
 function setScale(val) {
-  if (val === 'fit') {
-    scale = 'fit';
-    zoomSelect.value = 'fit';
-  } else {
-    scale = Math.max(SCALE_MIN, Math.min(SCALE_MAX, parseFloat(val)));
-    // sync select if matches option
-    const opt = [...zoomSelect.options].find(o => parseFloat(o.value) === scale);
-    zoomSelect.value = opt ? opt.value : zoomSelect.value;
-  }
+  scale = val === 'fit' ? 'fit' : Math.max(SCALE_MIN, Math.min(SCALE_MAX, parseFloat(val)));
+  updateZoomDisplay();
   renderAll();
 }
 
 // ── Scroll → page tracker ──────────────────────────────────────────────────
 let scrollEndSent = false;
-
 function notifyScrollEnd() {
   if (scrollEndSent) return;
   scrollEndSent = true;
@@ -305,11 +352,7 @@ const io = new IntersectionObserver(entries => {
   entries.forEach(e => {
     if (e.isIntersecting && e.intersectionRatio >= 0.1) {
       const p = parseInt(e.target.dataset.page);
-      if (p !== currentPage) {
-        currentPage = p;
-        pageInput.value = p;
-        updateNav();
-      }
+      if (p !== currentPage) { currentPage = p; updateNav(); }
       if (p === totalPages) notifyScrollEnd();
     }
   });
@@ -328,60 +371,76 @@ async function loadPDF() {
   try {
     pdfDoc     = await pdfjsLib.getDocument(fileUrl).promise;
     totalPages = pdfDoc.numPages;
-    pageTotal.textContent  = '/ ' + totalPages;
-    pageInput.max          = totalPages;
+    pageTotal.textContent = '/ ' + totalPages;
+    pageInput.max         = totalPages;
 
     await renderAll();
     observePages();
+    renderThumbs(); // async, no await — loads in background
 
     document.getElementById('loading-msg')?.remove();
 
-    document.getElementById('download-btn').style.display = 'none';
+    if (canDownload) {
+      const btn = document.getElementById('download-btn');
+      btn.style.display = 'inline-flex';
+      btn.addEventListener('click', async () => {
+        try {
+          btn.disabled = true;
+          btn.textContent = 'Завантаження…';
+          const res  = await fetch(fileUrl);
+          const blob = await res.blob();
+          const url  = URL.createObjectURL(blob);
+          const a    = document.createElement('a');
+          a.href     = url;
+          a.download = title.endsWith('.pdf') ? title : title + '.pdf';
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(url), 2000);
+        } catch(e) {
+          alert('Помилка завантаження: ' + e.message);
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Завантажити';
+        }
+      });
+    }
   } catch (e) {
     wrap.innerHTML = `<div id="error-msg">Помилка завантаження PDF:<br>${e.message}</div>`;
   }
 }
 
-// ── Toolbar events ─────────────────────────────────────────────────────────
-document.getElementById('btn-first') .addEventListener('click', () => goTo(1));
-document.getElementById('btn-prev')  .addEventListener('click', () => goTo(currentPage - 1));
-document.getElementById('btn-next')  .addEventListener('click', () => goTo(currentPage + 1));
-document.getElementById('btn-last')  .addEventListener('click', () => goTo(totalPages));
+// ── Events ─────────────────────────────────────────────────────────────────
+document.getElementById('btn-first').addEventListener('click', () => goTo(1));
+document.getElementById('btn-prev') .addEventListener('click', () => goTo(currentPage - 1));
+document.getElementById('btn-next') .addEventListener('click', () => goTo(currentPage + 1));
+document.getElementById('btn-last') .addEventListener('click', () => goTo(totalPages));
 
-pageInput.addEventListener('change', () => goTo(parseInt(pageInput.value) || 1));
+pageInput.addEventListener('change',  () => goTo(parseInt(pageInput.value) || 1));
 pageInput.addEventListener('keydown', e => { if (e.key === 'Enter') goTo(parseInt(pageInput.value) || 1); });
 
-document.getElementById('btn-zoom-out').addEventListener('click', () => {
-  if (scale === 'fit') scale = 1.0;
-  setScale(scale - SCALE_STEP);
-});
-document.getElementById('btn-zoom-in').addEventListener('click', () => {
-  if (scale === 'fit') scale = 1.0;
-  setScale(scale + SCALE_STEP);
-});
-zoomSelect.addEventListener('change', () => setScale(zoomSelect.value));
+document.getElementById('btn-zoom-out').addEventListener('click', () =>
+  setScale(scale === 'fit' ? 0.75 : scale - SCALE_STEP));
+document.getElementById('btn-zoom-in').addEventListener('click', () =>
+  setScale(scale === 'fit' ? 1.25 : scale + SCALE_STEP));
 
 document.getElementById('btn-rot-l').addEventListener('click', () => { rotation = (rotation - 90 + 360) % 360; renderAll(); });
-document.getElementById('btn-rot-r').addEventListener('click', () => { rotation = (rotation + 90) % 360;         renderAll(); });
+document.getElementById('btn-rot-r').addEventListener('click', () => { rotation = (rotation + 90) % 360; renderAll(); });
 
-// ── Keyboard shortcuts ─────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {
   if (document.activeElement === pageInput) return;
-  if (e.key === 'ArrowRight' || e.key === 'ArrowDown')  goTo(currentPage + 1);
-  if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')    goTo(currentPage - 1);
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') goTo(currentPage + 1);
+  if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   goTo(currentPage - 1);
   if (e.key === 'Home') goTo(1);
   if (e.key === 'End')  goTo(totalPages);
   if (e.key === '+' || e.key === '=') { e.preventDefault(); setScale((scale === 'fit' ? 1 : scale) + SCALE_STEP); }
   if (e.key === '-')                  { e.preventDefault(); setScale((scale === 'fit' ? 1 : scale) - SCALE_STEP); }
-
-  if (!canDownload) {
-    if (e.ctrlKey && ['s','p','u'].includes(e.key.toLowerCase())) e.preventDefault();
-  }
+  if (!canDownload && e.ctrlKey && ['s','p','u'].includes(e.key.toLowerCase())) e.preventDefault();
 });
 
 if (!canDownload) {
   document.addEventListener('contextmenu', e => e.preventDefault());
 }
+
+window.addEventListener('resize', () => { if (scale === 'fit') renderAll(); });
 
 loadPDF();
 </script>

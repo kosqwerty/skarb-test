@@ -202,48 +202,75 @@ const CollectionsPage = {
                     onmouseenter="this.style.background='var(--bg-hover)';this.style.borderColor='var(--primary)'"
                     onmouseleave="this.style.background='var(--bg-raised)';this.style.borderColor='var(--border)'"><i class="fa-solid fa-pen"></i></button>` : '';
 
-        const infoPanel = AppState.isStaff() ? `
-            <div style="flex-shrink:0;width:330px">
-                <div style="background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden">
-                    <div style="padding:.75rem 1.1rem;background:var(--bg-raised);border-bottom:1px solid var(--border)">
-                        <span style="font-weight:700;font-size:.8rem;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted)">
-                            <i class="fa-solid fa-circle-info" style="margin-right:.4rem;color:var(--primary)"></i>Інформація
-                        </span>
+        const infoPanelInner = AppState.isStaff() ? `
+            <div style="background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:.75rem">
+                <div style="padding:.75rem 1.1rem;background:var(--bg-raised);border-bottom:1px solid var(--border)">
+                    <span style="font-weight:700;font-size:.8rem;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted)">
+                        <i class="fa-solid fa-circle-info" style="margin-right:.4rem;color:var(--primary)"></i>Інформація
+                    </span>
+                </div>
+                <div style="padding:.9rem 1.1rem;display:flex;flex-direction:column;gap:0">
+                    <div style="padding:.75rem 0">
+                        <div style="display:flex;align-items:center;gap:.4rem;color:var(--text-muted);font-size:.78rem;margin-bottom:.35rem">
+                            <i class="fa-regular fa-clock" style="font-size:.8rem"></i> Створено
+                        </div>
+                        <div style="color:var(--text-primary);font-weight:600;font-size:.92rem;line-height:1.3">${Fmt.esc(page.creator?.full_name || '—')}</div>
+                        <div style="color:var(--text-muted);font-size:.83rem;margin-top:.15rem">${page.created_at ? Fmt.datetime(page.created_at) : '—'}</div>
                     </div>
-                    <div style="padding:.9rem 1.1rem;display:flex;flex-direction:column;gap:0">
-                        <div style="padding:.75rem 0">
-                            <div style="display:flex;align-items:center;gap:.4rem;color:var(--text-muted);font-size:.78rem;margin-bottom:.35rem">
-                                <i class="fa-regular fa-clock" style="font-size:.8rem"></i> Створено
-                            </div>
-                            <div style="color:var(--text-primary);font-weight:600;font-size:.92rem;line-height:1.3">${Fmt.esc(page.creator?.full_name || '—')}</div>
-                            <div style="color:var(--text-muted);font-size:.83rem;margin-top:.15rem">${page.created_at ? Fmt.datetime(page.created_at) : '—'}</div>
+                    <div style="border-top:1px solid var(--border);padding:.75rem 0">
+                        <div style="display:flex;align-items:center;gap:.4rem;color:var(--text-muted);font-size:.78rem;margin-bottom:.35rem">
+                            <i class="fa-solid fa-pen-to-square" style="font-size:.8rem"></i> Остання редакція
                         </div>
-                        <div style="border-top:1px solid var(--border);padding:.75rem 0">
-                            <div style="display:flex;align-items:center;gap:.4rem;color:var(--text-muted);font-size:.78rem;margin-bottom:.35rem">
-                                <i class="fa-solid fa-pen-to-square" style="font-size:.8rem"></i> Остання редакція
-                            </div>
-                            ${(() => {
-                                const wasEdited = page.updated_by != null ||
-                                    (page.updated_at && page.created_at &&
-                                    Math.abs(new Date(page.updated_at) - new Date(page.created_at)) > 2000);
-                                if (!wasEdited) return `<div style="color:var(--text-muted);font-size:.85rem;font-style:italic">Не редагувалась</div>`;
-                                return `${page.updater?.full_name
-                                    ? `<div style="color:var(--text-primary);font-weight:600;font-size:.92rem;line-height:1.3">${Fmt.esc(page.updater.full_name)}</div>`
-                                    : `<div style="color:var(--text-muted);font-size:.85rem">—</div>`}
-                                <div style="color:var(--text-muted);font-size:.83rem;margin-top:.15rem">${Fmt.datetime(page.updated_at)}</div>`;
-                            })()}
+                        ${(() => {
+                            const wasEdited = page.updated_by != null ||
+                                (page.updated_at && page.created_at &&
+                                Math.abs(new Date(page.updated_at) - new Date(page.created_at)) > 2000);
+                            if (!wasEdited) return `<div style="color:var(--text-muted);font-size:.85rem;font-style:italic">Не редагувалась</div>`;
+                            return `${page.updater?.full_name
+                                ? `<div style="color:var(--text-primary);font-weight:600;font-size:.92rem;line-height:1.3">${Fmt.esc(page.updater.full_name)}</div>`
+                                : `<div style="color:var(--text-muted);font-size:.85rem">—</div>`}
+                            <div style="color:var(--text-muted);font-size:.83rem;margin-top:.15rem">${Fmt.datetime(page.updated_at)}</div>`;
+                        })()}
+                    </div>
+                    <div style="border-top:1px solid var(--border);padding:.75rem 0 .25rem">
+                        <div style="display:flex;align-items:center;gap:.4rem;color:var(--text-muted);font-size:.78rem;margin-bottom:.5rem">
+                            <i class="fa-solid fa-tag" style="font-size:.8rem"></i> Статус
                         </div>
-                        <div style="border-top:1px solid var(--border);padding:.75rem 0 .25rem">
-                            <div style="display:flex;align-items:center;gap:.4rem;color:var(--text-muted);font-size:.78rem;margin-bottom:.5rem">
-                                <i class="fa-solid fa-tag" style="font-size:.8rem"></i> Статус
-                            </div>
-                            ${page.is_published
-                                ? `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.83rem;padding:3px 10px;border-radius:20px;background:rgba(16,185,129,.12);color:#10b981;border:1px solid rgba(16,185,129,.25);font-weight:500"><i class="fa-solid fa-circle" style="font-size:.45rem"></i>Опубліковано</span>`
-                                : `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.83rem;padding:3px 10px;border-radius:20px;background:var(--bg-raised);color:var(--text-muted);border:1px solid var(--border);font-weight:500"><i class="fa-solid fa-circle" style="font-size:.45rem"></i>Чернетка</span>`}
-                        </div>
+                        ${page.is_published
+                            ? `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.83rem;padding:3px 10px;border-radius:20px;background:rgba(16,185,129,.12);color:#10b981;border:1px solid rgba(16,185,129,.25);font-weight:500"><i class="fa-solid fa-circle" style="font-size:.45rem"></i>Опубліковано</span>`
+                            : `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.83rem;padding:3px 10px;border-radius:20px;background:var(--bg-raised);color:var(--text-muted);border:1px solid var(--border);font-weight:500"><i class="fa-solid fa-circle" style="font-size:.45rem"></i>Чернетка</span>`}
                     </div>
                 </div>
             </div>` : '';
+
+        const errAccordion = `
+            <div style="border:1.5px solid rgba(245,158,11,.35);border-radius:var(--radius-lg);overflow:hidden;box-shadow:0 2px 8px rgba(245,158,11,.08)">
+                <button onclick="CollectionsPage._toggleErrAccordion()"
+                        style="width:100%;display:flex;align-items:center;gap:.6rem;padding:.65rem 1rem;background:rgba(245,158,11,.07);border:none;cursor:pointer;color:var(--text-secondary);font-size:.83rem;font-family:inherit;text-align:left;transition:background var(--transition)"
+                        onmouseenter="this.style.background='rgba(245,158,11,.13)'" onmouseleave="this.style.background='rgba(245,158,11,.07)'">
+                    <i class="fa-regular fa-flag" style="color:#f59e0b;font-size:.8rem"></i>
+                    <span style="flex:1;color:var(--text-primary);font-weight:500">Знайшли помилку?</span>
+                    <i id="col-err-chevron" class="fa-solid fa-chevron-down" style="font-size:.7rem;color:#f59e0b;transition:transform .2s"></i>
+                </button>
+                <div id="col-err-body" style="display:none;padding:.85rem 1rem;background:var(--bg-surface);border-top:1.5px solid rgba(245,158,11,.25)">
+                    <textarea id="col-err-text" rows="3" placeholder="Опишіть помилку або неточність…"
+                              style="width:100%;resize:vertical;min-height:72px;padding:.55rem .75rem;border:1px solid rgba(245,158,11,.3);border-radius:var(--radius-md);background:var(--bg-raised);color:var(--text-primary);font-size:.85rem;font-family:inherit;outline:none;box-sizing:border-box"
+                              onfocus="this.style.borderColor='#f59e0b'" onblur="this.style.borderColor='rgba(245,158,11,.3)'"></textarea>
+                    <div style="display:flex;justify-content:flex-end;margin-top:.5rem">
+                        <button class="btn btn-sm" id="col-err-submit"
+                                style="background:#f59e0b;color:#fff;border:none"
+                                onclick="CollectionsPage._submitErrReport('${page.id}',${JSON.stringify(page.title||'').replace(/"/g,'&quot;')})">
+                            <i class="fa-solid fa-paper-plane"></i> Надіслати
+                        </button>
+                    </div>
+                </div>
+            </div>`;
+
+        const rightPanel = `
+            <div style="flex-shrink:0;width:330px">
+                ${infoPanelInner}
+                ${errAccordion}
+            </div>`;
 
         container.innerHTML = `
             <div style="display:flex;flex-direction:column;gap:1rem">
@@ -261,9 +288,9 @@ const CollectionsPage = {
                 <div style="display:flex;gap:1.25rem;align-items:flex-start">
                     <div id="page-rendered" style="flex:1;min-width:0;padding-bottom:3rem">
                         <iframe id="page-iframe" style="width:100%;border:none;display:block" scrolling="no"
-                                sandbox="allow-scripts allow-forms allow-popups allow-top-navigation-by-user-activation allow-same-origin"></iframe>
+                                sandbox="allow-scripts allow-forms allow-popups allow-top-navigation-by-user-activation allow-same-origin allow-downloads"></iframe>
                     </div>
-                    ${infoPanel}
+                    ${rightPanel}
                 </div>
             </div>`;
 
@@ -389,6 +416,7 @@ document.addEventListener('click', function(e) {
     _editingPageId:       null,
     _attachments:         [],
     _savedCursor:         null,
+    _errLastSent:         0,
     _previewTimer:        null,
     _cmHtml:              null,
     _cmCss:               null,
@@ -1341,6 +1369,55 @@ tr:hover td { background: #f8fafc; }
             }
         }
         Toast.success('Посилання вставлено');
+    },
+
+    // ── Error report accordion ────────────────────────────────────
+    _toggleErrAccordion() {
+        const body    = document.getElementById('col-err-body');
+        const chevron = document.getElementById('col-err-chevron');
+        if (!body) return;
+        const open = body.style.display === 'none';
+        body.style.display    = open ? 'block' : 'none';
+        if (chevron) chevron.style.transform = open ? 'rotate(180deg)' : '';
+        if (open) document.getElementById('col-err-text')?.focus();
+    },
+
+    async _submitErrReport(pageId, pageTitle) {
+        const text = document.getElementById('col-err-text')?.value.trim();
+        if (!text) { Toast.warning('Опишіть помилку перед надсиланням'); return; }
+        const now = Date.now();
+        const cooldown = 60000;
+        if (now - this._errLastSent < cooldown) {
+            const sec = Math.ceil((cooldown - (now - this._errLastSent)) / 1000);
+            Toast.warning('Зачекайте', `Наступне повідомлення можна надіслати через ${sec} сек.`);
+            return;
+        }
+        const btn = document.getElementById('col-err-submit');
+        if (btn) btn.disabled = true;
+        try {
+            const { data: admins } = await supabase.from('profiles')
+                .select('id').eq('is_active', true).in('role', ['owner', 'admin']);
+            const adminIds = (admins || []).map(a => a.id);
+            if (!adminIds.length) { Toast.info('Адміністраторів не знайдено'); return; }
+            const sender  = AppState.profile?.full_name || 'Користувач';
+            const link    = `collections/${pageId}`;
+            await Promise.all(adminIds.map(uid =>
+                API.notifications.create({
+                    user_id: uid,
+                    title:   `⚠️ Помилка на сторінці «${pageTitle}»`,
+                    message: `${sender}: ${text}`,
+                    type:    'general',
+                    link
+                })
+            ));
+            this._errLastSent = Date.now();
+            Toast.success('Повідомлення надіслано адміністратору');
+            const body = document.getElementById('col-err-body');
+            if (body) body.innerHTML = `<p style="font-size:.85rem;color:var(--text-secondary);padding:.25rem 0">✅ Дякуємо! Адміністратор отримав ваше повідомлення.</p>`;
+        } catch(e) {
+            Toast.error('Помилка', e.message);
+            if (btn) btn.disabled = false;
+        }
     },
 
     // ── Split panel resize ────────────────────────────────────────

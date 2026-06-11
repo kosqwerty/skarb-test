@@ -1642,6 +1642,7 @@ body.light-theme .logo-icon .logo-dark  { display: none; }
     border-radius: var(--radius-md);
     color: rgba(255,255,255,.7);
     cursor: pointer;
+    text-decoration: none;
     transition: background 0.35s cubic-bezier(.4,0,.2,1),
                 color 0.35s cubic-bezier(.4,0,.2,1),
                 border-radius 0.35s cubic-bezier(.4,0,.2,1),

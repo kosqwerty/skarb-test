@@ -78,6 +78,9 @@ const RedFolderPage = {
             .rf-doc-card:hover .rf-doc-card-title { color: #ef4444; }
             .rf-doc-card-actions { display: flex; gap: 2px; flex-shrink: 0; opacity: 0; pointer-events: none; transition: opacity .15s; }
             .rf-doc-card:hover .rf-doc-card-actions { opacity: 1; pointer-events: auto; }
+            .rf-tov-block { border: 1px solid rgba(239,68,68,.2); border-radius: var(--radius-md); background: rgba(239,68,68,.04); padding: .75rem 1rem; margin-bottom: .1rem; }
+            .rf-tov-label { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #ef4444; margin-bottom: .45rem; display: flex; align-items: center; gap: .35rem; }
+            .rf-tov-text { font-size: .875rem; color: var(--text-primary); white-space: pre-wrap; line-height: 1.65; word-break: break-word; }
             .rf-collection-card { border: 1px solid var(--border); border-radius: 8px; padding: .6rem .85rem; display: flex; align-items: center; gap: .5rem; cursor: pointer; transition: border-color .13s, background .13s; background: var(--bg-raised); }
             .rf-collection-card:hover { border-color: #ef4444; background: rgba(239,68,68,.05); }
             .rf-collection-icon { width: 28px; height: 28px; border-radius: 7px; background: rgba(99,102,241,.1); color: var(--primary); display: flex; align-items: center; justify-content: center; font-size: .85rem; flex-shrink: 0; }
@@ -303,9 +306,16 @@ const RedFolderPage = {
             docsHtml = `<div class="rf-empty-docs">— документів немає —</div>`;
         }
 
+        const tovHtml = item.tov_text ? `
+        <div class="rf-tov-block">
+            <div class="rf-tov-label"><i class="fa-solid fa-building-columns" style="font-size:.75rem"></i> ТОВ</div>
+            <div class="rf-tov-text">${Fmt.esc(item.tov_text)}</div>
+        </div>` : '';
+
         return `
         <div class="rf-content-inner">
             ${respHtml}
+            ${tovHtml}
             <div>
                 <div class="rf-content-docs-header">
                     <i class="fa-solid fa-file-lines" style="color:#ef4444"></i>
@@ -350,28 +360,82 @@ const RedFolderPage = {
             size: 'lg',
             body: `
             <input type="hidden" id="rf-inp-icon" value="${Fmt.esc(curIcon)}">
-            <div style="display:flex;flex-direction:column;gap:1.1rem">
-                <div>
-                    <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.4rem">Назва документу <span style="color:var(--danger)">*</span></div>
-                    <input id="rf-inp-title" class="rf-form-input" value="${item ? Fmt.esc(item.title) : ''}" placeholder="Введіть назву документу">
-                </div>
-                <div>
-                    <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.4rem">Відповідальний</div>
-                    <input id="rf-inp-responsible" class="rf-form-input" value="${item ? Fmt.esc(item.responsible || '') : ''}" placeholder="ПІБ або відділ">
-                </div>
-                <div>
-                    <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.4rem">
-                        Сторінки-колекції
-                        <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted)">— замість завантаження файлів</span>
+            <style>
+                .rf-modal-section { display:flex;flex-direction:column;gap:.65rem; }
+                .rf-modal-section-hdr { display:flex;align-items:center;gap:.55rem;padding:.55rem .75rem;border-radius:var(--radius-md);background:var(--bg-raised);border-left:3px solid #ef4444; }
+                .rf-modal-section-hdr i { color:#ef4444;font-size:.8rem;width:16px;text-align:center; }
+                .rf-modal-section-hdr span { font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-primary); }
+                .rf-modal-section-hdr small { margin-left:auto;font-size:.7rem;font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted); }
+                .rf-modal-divider { border:none;border-top:1px solid var(--border);margin:.1rem 0; }
+                .rf-modal-field { display:flex;flex-direction:column;gap:.35rem; }
+                .rf-modal-field-lbl { font-size:.72rem;font-weight:600;color:var(--text-muted);letter-spacing:.04em; }
+                .rf-modal-field-lbl .req { color:#ef4444; }
+            </style>
+            <div style="display:flex;flex-direction:column;gap:1rem">
+
+                <!-- §1 Основна інформація -->
+                <div class="rf-modal-section">
+                    <div class="rf-modal-section-hdr">
+                        <i class="fa-solid fa-file-lines"></i>
+                        <span>Основна інформація</span>
                     </div>
-                    <div style="border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-raised);max-height:150px;overflow-y:auto;padding:.3rem .5rem">
-                        ${pageCheckboxes}
+                    <div class="rf-modal-field">
+                        <label class="rf-modal-field-lbl">Назва документу <span class="req">*</span></label>
+                        <input id="rf-inp-title" class="rf-form-input" value="${item ? Fmt.esc(item.title) : ''}" placeholder="Введіть назву документу">
+                    </div>
+                    <div class="rf-modal-field">
+                        <label class="rf-modal-field-lbl">Відповідальний</label>
+                        <input id="rf-inp-responsible" class="rf-form-input" value="${item ? Fmt.esc(item.responsible || '') : ''}" placeholder="ПІБ або відділ">
                     </div>
                 </div>
-                <div>
-                    <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.4rem">Іконка відповідального</div>
-                    <div class="rf-icon-row">${iconPicker}</div>
+
+                <hr class="rf-modal-divider">
+
+                <!-- §2 Текст для ТОВ -->
+                <div class="rf-modal-section">
+                    <div class="rf-modal-section-hdr">
+                        <i class="fa-solid fa-building-columns"></i>
+                        <span>Текст для ТОВ</span>
+                        <small>без обмеження символів</small>
+                    </div>
+                    <div class="rf-modal-field">
+                        <textarea id="rf-inp-tov" class="rf-form-input" rows="5"
+                            placeholder="Введіть текст — зберігає переноси рядків…"
+                            style="resize:vertical;min-height:96px;font-family:inherit;font-size:.88rem;line-height:1.65">${item ? Fmt.esc(item.tov_text || '') : ''}</textarea>
+                    </div>
                 </div>
+
+                <hr class="rf-modal-divider">
+
+                <!-- §3 Пов'язані матеріали -->
+                <div class="rf-modal-section">
+                    <div class="rf-modal-section-hdr">
+                        <i class="fa-solid fa-link"></i>
+                        <span>Пов'язані матеріали</span>
+                        <small>замість завантаження файлів</small>
+                    </div>
+                    <div class="rf-modal-field">
+                        <label class="rf-modal-field-lbl">Сторінки-колекції</label>
+                        <div style="border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-raised);max-height:140px;overflow-y:auto;padding:.3rem .5rem">
+                            ${pageCheckboxes}
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="rf-modal-divider">
+
+                <!-- §4 Оформлення -->
+                <div class="rf-modal-section">
+                    <div class="rf-modal-section-hdr">
+                        <i class="fa-solid fa-palette"></i>
+                        <span>Оформлення</span>
+                    </div>
+                    <div class="rf-modal-field">
+                        <label class="rf-modal-field-lbl">Іконка відповідального</label>
+                        <div class="rf-icon-row">${iconPicker}</div>
+                    </div>
+                </div>
+
             </div>`,
             footer: `
                 <button class="btn btn-ghost btn-sm" onclick="Modal.close()">Скасувати</button>
@@ -393,8 +457,9 @@ const RedFolderPage = {
         const responsible = Dom.val('rf-inp-responsible').trim();
         const icon = document.getElementById('rf-inp-icon')?.value || null;
         const page_ids = Array.from(document.querySelectorAll('.rf-page-chk:checked')).map(c => c.value);
+        const tov_text = document.getElementById('rf-inp-tov')?.value.trim() || null;
         if (!title) { Toast.warning('Заповніть назву документу'); return; }
-        const fields = { title, responsible, icon: icon || null, page_ids };
+        const fields = { title, responsible, icon: icon || null, page_ids, tov_text };
         try {
             Loader.show();
             if (id) {
@@ -502,7 +567,10 @@ const RedFolderPage = {
         try {
             Loader.show();
             const url = await API.resources.getSignedUrl(storagePath);
-            window.open(url, '_blank', 'noopener,noreferrer');
+            const doc = Object.values(this._docs).flat().find(d => d.id === resourceId);
+            const title = doc?.title || storagePath.split('/').pop();
+            const viewerUrl = `pdf-viewer.html?file=${encodeURIComponent(url)}&title=${encodeURIComponent(title)}&download=1`;
+            window.open(viewerUrl, '_blank', 'noopener,noreferrer');
             if (resourceId) {
                 API.documentDownloads.track(resourceId).catch(() => {});
                 this._ackMap[resourceId] = { at: new Date().toISOString() };

@@ -494,7 +494,10 @@ const BranchDocsPage = {
         try {
             Loader.show();
             const url = await API.resources.getSignedUrl(storagePath);
-            window.open(url, '_blank', 'noopener,noreferrer');
+            const doc = Object.values(this._byBlock).flat().find(d => d.id === resourceId);
+            const title = doc?.title || storagePath.split('/').pop();
+            const viewerUrl = `pdf-viewer.html?file=${encodeURIComponent(url)}&title=${encodeURIComponent(title)}&download=1`;
+            window.open(viewerUrl, '_blank', 'noopener,noreferrer');
             if (resourceId) {
                 API.documentDownloads.track(resourceId).catch(() => {});
                 this._ackMap[resourceId] = { at: new Date().toISOString() };

@@ -157,7 +157,8 @@ const UI = {
                 ${visible.map(item => {
                     const isBlocked = blocked && !this._trustedAllowed.has(item.route);
                     return `
-                    <div class="nav-item${isBlocked ? ' nav-item-blocked' : ''}" data-route="${item.route}" data-label="${item.label}" onclick="Router.go('${item.route}')">
+                    <a class="nav-item${isBlocked ? ' nav-item-blocked' : ''}" data-route="${item.route}" data-label="${item.label}"
+                       href="#/${item.route}" ${isBlocked ? 'onclick="event.preventDefault()"' : ''}>
                         <span class="nav-icon">
                             ${item.icon}
                             ${item.badge ? `<span class="nav-badge nav-badge-dot">${item.badge}</span>` : ''}
@@ -166,7 +167,7 @@ const UI = {
                             ${isBlocked ? `<span class="nav-blocked-icon" title="Недоступно з цієї мережі"><i class="fa-solid fa-ban"></i></span>` : ''}
                         </span>
                         <span class="nav-label">${item.label}</span>
-                    </div>`;
+                    </a>`;
                 }).join('')}
             </div>`;
         }).join('');

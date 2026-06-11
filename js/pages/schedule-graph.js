@@ -546,12 +546,7 @@ const ScheduleGraphPage = {
                     <button class="sg-mnav" onclick="ScheduleGraphPage._nextMonth()">›</button>
                 </div>
                 ` : ''}
-                <button class="sg-tab sg-trash-tab ${this._tab==='trash'?'active':''}"
-                    onclick="ScheduleGraphPage._switchTab(${this._tab==='trash'?`'schedule'`:`'trash'`})">
-                    ${this._tab==='trash'
-                        ? `<i class="fa-solid fa-arrow-left"></i> Назад`
-                        : `<i class="fa-solid fa-trash"></i> Кошик${this._deletedLocations.length ? `<span class="sg-trash-badge">${this._deletedLocations.length}</span>` : ''}`}
-                </button>
+                ${this._tab==='trash' ? `<button class="sg-tab sg-trash-tab" onclick="ScheduleGraphPage._switchTab('schedule')"><i class="fa-solid fa-arrow-left"></i> Назад</button>` : ''}
             </div>
             ${this._tab === 'trash'
                 ? this._trashSection()
@@ -3287,37 +3282,54 @@ ${this._styles()}`;
         return `
 <div class="sg-section">
     <div class="sg-toolbar">
-        <div class="sg-legend">${legend}<button class="sg-types-mgr-btn" onclick="ScheduleGraphPage._showShiftTypesModal()" title="Налаштувати типи змін">⚙️</button></div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            <button class="sg-collapse-all-btn" title="Згорнути всі локації"
-                onclick="ScheduleGraphPage._collapseAllLocs()">▼ Згорнути всі</button>
-            <button class="sg-collapse-all-btn" title="Розгорнути всі локації"
-                onclick="ScheduleGraphPage._expandAllLocs()">▲ Розгорнути всі</button>
-            <button class="sg-mgr-help-btn" onclick="ScheduleGraphPage._showManagerHelpModal()">
-                🆘 Потрібна підміна${(() => {
-                    const cnt = Object.values(this._allEntries||{}).filter(e=>e.notes==='__needsub__').length;
-                    return cnt ? ` <span class="sg-cansub-badge">${cnt}</span>` : '';
-                })()}
-            </button>
-            <button class="sg-cansub-list-btn" onclick="ScheduleGraphPage._showCanSubModal()">
-                🙋 Можуть підмінити${(() => {
-                    const myUids = new Set([...(this._allAssignments||[]),...(this._assignments||[])].map(a=>a.user_id).filter(Boolean));
-                    const src = this._locId === 'all' ? (this._allEntries||{}) : (this._entries||{});
-                    const cnt = new Set(Object.values(src).filter(e=>e.notes==='__sub__'&&myUids.has(e.user_id)).map(e=>e.user_id)).size;
-                    return cnt ? ` <span class="sg-cansub-badge">${cnt}</span>` : '';
-                })()}
-            </button>
-            <button class="sg-subrep-btn" onclick="ScheduleGraphPage._showSubstReportModal()">
-                <i class="fa-solid fa-file-lines"></i> Звіт по підмінам
-            </button>
-            <button class="sg-viewers-btn" onclick="ScheduleGraphPage._showViewersModal()">
-                <i class="fa-solid fa-eye"></i> Доступ
-            </button>
-            <button class="sg-partners-btn${(this._pendingIncoming||[]).length?' sg-partners-btn--badge':''}"
-                onclick="ScheduleGraphPage._showPartnersModal()"
-                title="Спільний пошук замін з іншими керівниками">
-                🤝 ${this._blockName || 'БЛОК'}${(this._pendingIncoming||[]).length?` <span class="sg-partners-badge">${this._pendingIncoming.length}</span>`:''}
-            </button>
+        <div class="sg-tb-section">
+            <span class="sg-tb-label">Легенда</span>
+            <div class="sg-legend">${legend}<button class="sg-types-mgr-btn" onclick="ScheduleGraphPage._showShiftTypesModal()" title="Налаштувати типи змін">⚙️</button></div>
+        </div>
+        <div class="sg-tb-divider"></div>
+        <div class="sg-tb-section">
+            <span class="sg-tb-label">Вигляд</span>
+            <div style="display:flex;gap:6px">
+                <button class="sg-collapse-all-btn" title="Згорнути всі локації" onclick="ScheduleGraphPage._collapseAllLocs()">▼ Згорнути</button>
+                <button class="sg-collapse-all-btn" title="Розгорнути всі локації" onclick="ScheduleGraphPage._expandAllLocs()">▲ Розгорнути</button>
+            </div>
+        </div>
+        <div class="sg-tb-divider"></div>
+        <div class="sg-tb-section">
+            <span class="sg-tb-label">Підміни</span>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <button class="sg-mgr-help-btn" onclick="ScheduleGraphPage._showManagerHelpModal()">
+                    🆘 Потрібна${(() => {
+                        const cnt = Object.values(this._allEntries||{}).filter(e=>e.notes==='__needsub__').length;
+                        return cnt ? ` <span class="sg-cansub-badge">${cnt}</span>` : '';
+                    })()}
+                </button>
+                <button class="sg-cansub-list-btn" onclick="ScheduleGraphPage._showCanSubModal()">
+                    🙋 Можуть${(() => {
+                        const myUids = new Set([...(this._allAssignments||[]),...(this._assignments||[])].map(a=>a.user_id).filter(Boolean));
+                        const src = this._locId === 'all' ? (this._allEntries||{}) : (this._entries||{});
+                        const cnt = new Set(Object.values(src).filter(e=>e.notes==='__sub__'&&myUids.has(e.user_id)).map(e=>e.user_id)).size;
+                        return cnt ? ` <span class="sg-cansub-badge">${cnt}</span>` : '';
+                    })()}
+                </button>
+                <button class="sg-subrep-btn" onclick="ScheduleGraphPage._showSubstReportModal()">
+                    <i class="fa-solid fa-file-lines"></i> Звіт
+                </button>
+            </div>
+        </div>
+        <div class="sg-tb-divider"></div>
+        <div class="sg-tb-section">
+            <span class="sg-tb-label">Доступ</span>
+            <div style="display:flex;flex-direction:column;gap:5px">
+                <button class="sg-viewers-btn" onclick="ScheduleGraphPage._showViewersModal()">
+                    <i class="fa-solid fa-eye"></i> Доступ
+                </button>
+                <button class="sg-partners-btn${(this._pendingIncoming||[]).length?' sg-partners-btn--badge':''}"
+                    onclick="ScheduleGraphPage._showPartnersModal()"
+                    title="Спільний пошук замін з іншими керівниками">
+                    🤝 ${this._blockName || 'БЛОК'}${(this._pendingIncoming||[]).length?` <span class="sg-partners-badge">${this._pendingIncoming.length}</span>`:''}
+                </button>
+            </div>
         </div>
     </div>
     ${this._quickType ? `
@@ -4703,7 +4715,7 @@ ${this._styles()}`;
 
 /* Location sidebar */
 .sg-loc-sidebar {
-    width:var(--sg-sidebar-w,210px);flex-shrink:0;
+    width:var(--sg-sidebar-w,170px);flex-shrink:0;
     background:var(--bg-raised);border:1.5px solid var(--border);
     border-radius:16px;overflow:hidden;
     position:sticky;top:16px;
@@ -5310,10 +5322,22 @@ ${this._styles()}`;
 
 /* Toolbar */
 .sg-toolbar {
-    display:flex;align-items:center;justify-content:space-between;gap:12px;
-    padding:14px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap;
+    display:flex;align-items:center;gap:0;
+    padding:10px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap;
 }
-.sg-legend { display:flex;gap:8px;flex-wrap:wrap; }
+.sg-tb-section {
+    display:flex;flex-direction:column;gap:5px;padding:4px 14px;
+}
+.sg-tb-section:first-child { padding-left:4px; }
+.sg-tb-label {
+    font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;
+    color:var(--text-muted);white-space:nowrap;
+}
+.sg-tb-divider {
+    width:1px;background:var(--border);align-self:stretch;margin:4px 0;flex-shrink:0;
+}
+.sg-legend { display:flex;flex-wrap:wrap;gap:5px;align-items:center; }
+.sg-tb-section .sg-legend { display:grid;grid-template-columns:repeat(3,auto);gap:5px 8px;align-items:center; }
 .sg-leg-btn {
     display:inline-flex;align-items:center;gap:6px;
     padding:5px 12px;border-radius:20px;font-size:.78rem;font-weight:600;white-space:nowrap;

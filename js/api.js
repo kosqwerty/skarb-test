@@ -572,7 +572,7 @@ const API = {
 
         async getRedFolderDocs() {
             const { data, error } = await supabase.from('resources')
-                .select('id, title, red_folder_item_id, type, storage_path, dovirenost_id')
+                .select('id, title, red_folder_item_id, type, storage_path, dovirenost_id, doc_version')
                 .not('red_folder_item_id', 'is', null)
                 .order('created_at');
             if (error) throw error;
@@ -581,7 +581,7 @@ const API = {
 
         async getBranchDocs(dovirenostId) {
             let q = supabase.from('resources')
-                .select('id, title, display_block, type, storage_path, url, dovirenost_id, dovirenosti(id,name)')
+                .select('id, title, display_block, type, storage_path, url, dovirenost_id, doc_version, dovirenosti(id,name)')
                 .not('display_block', 'is', null)
                 .is('lesson_id', null)
                 .order('display_block');

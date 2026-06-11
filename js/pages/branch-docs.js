@@ -242,10 +242,14 @@ const BranchDocsPage = {
             const ico = b.icon && b.icon !== 'fa-circle' ? this._iconOptions.find(o => o.icon === b.icon) : null;
             const isActive = this._selectedBlock === b.id;
 
+            const hasPages = (b.page_ids || []).length > 0;
+            const _isAcked = d => { const a = this._ackMap[d.id]; return a && (a.version || 1) >= (d.doc_version || 1); };
             let dotHtml = '';
             if (blockDocs.length > 0) {
-                const unread = blockDocs.filter(d => !this._ackMap[d.id]).length;
+                const unread = blockDocs.filter(d => !_isAcked(d)).length;
                 dotHtml = `<div class="bd-item-dot-wrap"><span class="bd-ibtn-dot ${unread > 0 ? 'unread' : 'read'}" title="${unread > 0 ? `Непрочитано: ${unread}` : 'Всі прочитано'}"></span></div>`;
+            } else if (hasPages) {
+                dotHtml = `<div class="bd-item-dot-wrap"><span class="bd-ibtn-dot read" title="Є пов'язані сторінки"></span></div>`;
             } else {
                 dotHtml = `<div class="bd-item-dot-wrap"><span class="bd-ibtn-dot empty"></span></div>`;
             }
@@ -323,7 +327,7 @@ const BranchDocsPage = {
             }).join('');
         } else if (blockDocs.length) {
             docsHtml = blockDocs.map(d => {
-                const acked = !!this._ackMap[d.id];
+                const acked = (() => { const a = this._ackMap[d.id]; return a && (a.version || 1) >= (d.doc_version || 1); })();
                 const label = d.dovirenosti?.name ? Fmt.esc(d.dovirenosti.name) : Fmt.esc(d.title);
                 return `
                 <div class="bd-doc-card" onclick="BranchDocsPage._openDoc('${Fmt.esc(d.storage_path||'')}','${d.id}')">
@@ -571,15 +575,16 @@ const BranchDocsPage = {
             const viewerUrl = `pdf-viewer.html?file=${encodeURIComponent(url)}&title=${encodeURIComponent(title)}&download=1`;
             window.open(viewerUrl, '_blank', 'noopener,noreferrer');
             if (resourceId) {
-                API.documentDownloads.track(resourceId).catch(() => {});
-                this._ackMap[resourceId] = { at: new Date().toISOString() };
+                const docVersion = doc?.doc_version || 1;
+                API.documentDownloads.track(resourceId, { docVersion }).catch(() => {});
+                this._ackMap[resourceId] = { at: new Date().toISOString(), version: docVersion };
                 const dot = document.querySelector(`[data-doc-dot="${resourceId}"]`);
                 if (dot) { dot.classList.remove('bd-unread'); dot.classList.add('bd-read'); dot.title = 'Ознайомлено'; }
                 // Update sidebar dot
                 const block = Object.entries(this._byBlock).find(([, docs]) => docs.find(d => d.id === resourceId));
                 if (block) {
                     const [bNum, bDocs] = block;
-                    const anyUnread = bDocs.some(d => !this._ackMap[d.id]);
+                    const anyUnread = bDocs.some(d => { const a = this._ackMap[d.id]; return !a || (a.version || 1) < (d.doc_version || 1); });
                     const blk = this._blocks.find(b => b.number === parseInt(bNum));
                     if (blk) {
                         const sidebarDot = document.querySelector(`#bd-ibtn-${blk.id} .bd-ibtn-dot`);
@@ -718,10 +723,12 @@ const BranchDocsPage = {
                 const { error: upErr } = await supabase.storage.from('lesson-resources').upload(path, file);
                 if (upErr) throw upErr;
                 fields.storage_path = path;
+                const current = Object.values(this._byBlock).flat().find(d => d.id === id);
+                fields.doc_version = (current?.doc_version || 1) + 1;
             }
             await API.resources.update(id, fields);
             Modal.close();
-            Toast.success('Збережено');
+            Toast.success('Збережено', fields.doc_version ? `Версія оновлена до v${fields.doc_version}` : '');
             await this._reload(true);
         } catch(e) { Toast.error('Помилка', e.message); } finally { Loader.hide(); }
     }

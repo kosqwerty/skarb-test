@@ -213,9 +213,10 @@ const RedFolderPage = {
             const ico = item.icon && item.icon !== 'fa-circle' ? this._iconOptions.find(o => o.icon === item.icon) : null;
             const isActive = this._selectedItem === item.id;
 
+            const _isAcked = d => { const a = this._ackMap[d.id]; return a && (a.version || 1) >= (d.doc_version || 1); };
             let dotHtml = '';
             if (!hasPages && itemDocs.length > 0) {
-                const unread = itemDocs.filter(d => !this._ackMap[d.id]).length;
+                const unread = itemDocs.filter(d => !_isAcked(d)).length;
                 dotHtml = `<div class="rf-item-dot-wrap"><span class="rf-ibtn-dot ${unread > 0 ? 'unread' : 'read'}" title="${unread > 0 ? `Непрочитано: ${unread}` : 'Всі прочитано'}"></span></div>`;
             } else if (!hasPages) {
                 dotHtml = `<div class="rf-item-dot-wrap"><span class="rf-ibtn-dot empty"></span></div>`;
@@ -289,7 +290,7 @@ const RedFolderPage = {
             }).join('');
         } else if (itemDocs.length) {
             docsHtml = itemDocs.map(d => {
-                const acked = !!this._ackMap[d.id];
+                const acked = (() => { const a = this._ackMap[d.id]; return a && (a.version || 1) >= (d.doc_version || 1); })();
                 return `
                 <div class="rf-doc-card" onclick="RedFolderPage._openDoc('${Fmt.esc(d.storage_path||'')}','${d.id}')">
                     <span class="rf-ack-dot ${acked ? 'rf-read' : 'rf-unread'}" data-doc-dot="${d.id}" title="${acked ? 'Ознайомлено' : 'Не ознайомлено'}"></span>
@@ -572,15 +573,16 @@ const RedFolderPage = {
             const viewerUrl = `pdf-viewer.html?file=${encodeURIComponent(url)}&title=${encodeURIComponent(title)}&download=1`;
             window.open(viewerUrl, '_blank', 'noopener,noreferrer');
             if (resourceId) {
-                API.documentDownloads.track(resourceId).catch(() => {});
-                this._ackMap[resourceId] = { at: new Date().toISOString() };
+                const docVersion = doc?.doc_version || 1;
+                API.documentDownloads.track(resourceId, { docVersion }).catch(() => {});
+                this._ackMap[resourceId] = { at: new Date().toISOString(), version: docVersion };
                 const dot = document.querySelector(`[data-doc-dot="${resourceId}"]`);
                 if (dot) { dot.classList.remove('rf-unread'); dot.classList.add('rf-read'); dot.title = 'Ознайомлено'; }
                 // Update sidebar dot
                 const item = Object.entries(this._docs).find(([, docs]) => docs.find(d => d.id === resourceId));
                 if (item) {
                     const [iid, idocs] = item;
-                    const anyUnread = idocs.some(d => !this._ackMap[d.id]);
+                    const anyUnread = idocs.some(d => { const a = this._ackMap[d.id]; return !a || (a.version || 1) < (d.doc_version || 1); });
                     const sidebarDot = document.querySelector(`#rf-ibtn-${iid} .rf-ibtn-dot`);
                     if (sidebarDot) { sidebarDot.className = `rf-ibtn-dot ${anyUnread ? 'unread' : 'read'}`; }
                 }
@@ -663,10 +665,12 @@ const RedFolderPage = {
                 const { error: upErr } = await supabase.storage.from('lesson-resources').upload(path, file);
                 if (upErr) throw upErr;
                 fields.storage_path = path;
+                const current = Object.values(this._docs).flat().find(d => d.id === id);
+                fields.doc_version = (current?.doc_version || 1) + 1;
             }
             await API.resources.update(id, fields);
             Modal.close();
-            Toast.success('Збережено');
+            Toast.success('Збережено', fields.doc_version ? `Версія оновлена до v${fields.doc_version}` : '');
             await this._load();
         } catch (e) {
             Toast.error('Помилка', e.message);

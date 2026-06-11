@@ -323,6 +323,7 @@ const BranchDocsPage = {
                     <span class="bd-doc-card-title">${label}</span>
                     ${canManage ? `
                     <div class="bd-doc-card-actions" onclick="event.stopPropagation()">
+                        <button class="bd-ta-btn" title="Редагувати" onclick="BranchDocsPage._editDocModal('${d.id}')"><i class="fa-solid fa-pen"></i></button>
                         <button class="bd-ta-btn danger" title="Видалити" onclick="BranchDocsPage._deleteDoc('${d.id}')"><i class="fa-solid fa-trash"></i></button>
                     </div>` : ''}
                 </div>`;
@@ -585,6 +586,71 @@ const BranchDocsPage = {
             Loader.show();
             await API.resources.delete(id);
             Toast.success('Видалено');
+            await this._reload(true);
+        } catch(e) { Toast.error('Помилка', e.message); } finally { Loader.hide(); }
+    },
+
+    async _editDocModal(id) {
+        const allDocs = Object.values(this._byBlock).flat();
+        const doc = allDocs.find(d => d.id === id);
+        if (!doc) return;
+        const dovs = await API.dovirenosti.getAll().catch(() => []);
+        Modal.open({
+            title: '<i class="fa-solid fa-pen"></i> Редагувати документ',
+            size: 'lg',
+            body: `
+            <div style="display:flex;flex-direction:column;gap:1rem">
+                <div>
+                    <label style="display:block;font-size:.78rem;font-weight:600;color:var(--text-secondary);margin-bottom:.35rem">Назва документу <span style="color:var(--danger)">*</span></label>
+                    <input id="bd-ed-title" type="text" autocomplete="off" value="${Fmt.esc(doc.title)}"
+                        style="width:100%;padding:.55rem .8rem;border-radius:var(--radius-md);border:1px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.88rem;font-family:inherit;outline:none;box-sizing:border-box">
+                </div>
+                <div>
+                    <label style="display:block;font-size:.78rem;font-weight:600;color:var(--text-secondary);margin-bottom:.35rem">
+                        Довіреність (ТОВ)
+                        <span style="font-weight:400;color:var(--text-muted)">&nbsp;— залиш порожнім для всіх</span>
+                    </label>
+                    <select id="bd-ed-dovid" style="width:100%;padding:.55rem .8rem;border-radius:var(--radius-md);border:1px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.88rem;font-family:inherit;outline:none;box-sizing:border-box">
+                        <option value="">— для всіх підрозділів —</option>
+                        ${dovs.map(d => `<option value="${d.id}" ${doc.dovirenost_id === d.id ? 'selected' : ''}>${Fmt.esc(d.name)}</option>`).join('')}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-size:.78rem;font-weight:600;color:var(--text-secondary);margin-bottom:.35rem">Замінити файл <span style="font-weight:400;color:var(--text-muted)">&nbsp;— залиш порожнім щоб не змінювати</span></label>
+                    <div class="file-upload-frame">
+                        <label for="bd-ed-file" class="file-upload-area" id="bd-ed-area">
+                            <div class="file-upload-icon"><i class="fa-solid fa-file-arrow-up"></i></div>
+                            <div class="file-upload-label" id="bd-ed-label">Натисніть або перетягніть файл</div>
+                            <div class="file-upload-hint">PDF, DOC, DOCX</div>
+                            <input type="file" id="bd-ed-file" accept=".pdf,.doc,.docx" style="display:none"
+                                onchange="document.getElementById('bd-ed-label').textContent=this.files[0]?.name||'Натисніть або перетягніть файл'">
+                        </label>
+                    </div>
+                </div>
+            </div>`,
+            footer: `<button class="btn btn-primary btn-sm" onclick="BranchDocsPage._doEditDoc('${id}')"><i class="fa-solid fa-save"></i> Зберегти</button>
+                     <button class="btn btn-ghost btn-sm" onclick="Modal.close()">Скасувати</button>`
+        });
+    },
+
+    async _doEditDoc(id) {
+        const title = Dom.val('bd-ed-title').trim();
+        const dovirenost_id = Dom.val('bd-ed-dovid') || null;
+        const file = document.getElementById('bd-ed-file')?.files?.[0];
+        if (!title) { Toast.warning('Введіть назву'); return; }
+        try {
+            Loader.show();
+            const fields = { title, dovirenost_id };
+            if (file) {
+                const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+                const path = `branch-docs/${Date.now()}_${safeName}`;
+                const { error: upErr } = await supabase.storage.from('lesson-resources').upload(path, file);
+                if (upErr) throw upErr;
+                fields.storage_path = path;
+            }
+            await API.resources.update(id, fields);
+            Modal.close();
+            Toast.success('Збережено');
             await this._reload(true);
         } catch(e) { Toast.error('Помилка', e.message); } finally { Loader.hide(); }
     }

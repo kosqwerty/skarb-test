@@ -462,7 +462,7 @@ const BranchDocsPage = {
             API.resources.getBranchDocs(null),
             seeAll ? Promise.resolve(null) : API.dovirenosti.getForProfile(AppState.user.id).catch(() => []),
             API.pages.getAll().catch(() => []),
-            seeAll ? Promise.resolve([]) : API.pageDovirenosti.getAll().catch(() => [])
+            API.pageDovirenosti.getAll().catch(() => [])
         ]);
         this._blocks = blocks;
         this._pages = pages;

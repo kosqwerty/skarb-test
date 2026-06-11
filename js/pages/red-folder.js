@@ -308,7 +308,7 @@ const RedFolderPage = {
 
         const tovHtml = item.tov_text ? `
         <div class="rf-tov-block">
-            <div class="rf-tov-label"><i class="fa-solid fa-building-columns" style="font-size:.75rem"></i> ТОВ</div>
+            <div class="rf-tov-label"><i class="fa-solid fa-building-columns" style="font-size:.75rem"></i> Для ТОВ</div>
             <div class="rf-tov-text">${Fmt.esc(item.tov_text)}</div>
         </div>` : '';
 
@@ -391,11 +391,11 @@ const RedFolderPage = {
 
                 <hr class="rf-modal-divider">
 
-                <!-- §2 Текст для ТОВ -->
+                <!-- §2 Для ТОВ -->
                 <div class="rf-modal-section">
                     <div class="rf-modal-section-hdr">
                         <i class="fa-solid fa-building-columns"></i>
-                        <span>Текст для ТОВ</span>
+                        <span>Для ТОВ</span>
                         <small>без обмеження символів</small>
                     </div>
                     <div class="rf-modal-field">

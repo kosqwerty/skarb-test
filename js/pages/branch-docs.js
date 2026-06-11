@@ -65,6 +65,9 @@ const BranchDocsPage = {
             .bd-content-dept { display: flex; align-items: center; gap: .65rem; padding: .6rem .85rem; background: rgba(99,102,241,.06); border: 1px solid rgba(99,102,241,.15); border-radius: var(--radius-md); }
             .bd-content-dept-icon { width: 32px; height: 32px; border-radius: 8px; background: rgba(99,102,241,.12); display: flex; align-items: center; justify-content: center; font-size: .9rem; flex-shrink: 0; }
             .bd-content-dept-name { font-size: .88rem; font-weight: 600; color: var(--text-primary); flex: 1; }
+            .bd-tov-block { padding: .75rem 1rem; background: rgba(99,102,241,.05); border: 1px solid rgba(99,102,241,.15); border-radius: var(--radius-md); display: flex; flex-direction: column; gap: .4rem; }
+            .bd-tov-label { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #6366f1; display: flex; align-items: center; gap: .4rem; }
+            .bd-tov-text { font-size: .875rem; line-height: 1.65; color: var(--text-primary); white-space: pre-wrap; }
             .bd-content-docs-header { display: flex; align-items: center; gap: .5rem; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); padding-bottom: .5rem; border-bottom: 1px solid var(--border); }
             .bd-content-docs-header i { font-size: .8rem; }
             .bd-content-add-btn { margin-left: auto; display: inline-flex; align-items: center; gap: .3rem; padding: .2rem .6rem; border-radius: 5px; border: 1px dashed rgba(99,102,241,.4); background: transparent; color: rgba(99,102,241,.7); cursor: pointer; font-size: .72rem; font-weight: 600; transition: all .15s; font-family: inherit; white-space: nowrap; }
@@ -300,6 +303,12 @@ const BranchDocsPage = {
             <span class="bd-content-dept-name">${Fmt.esc(b.dept)}</span>
         </div>` : '';
 
+        const tovHtml = b.tov_text ? `
+        <div class="bd-tov-block">
+            <div class="bd-tov-label"><i class="fa-solid fa-building-columns"></i> Для ТОВ</div>
+            <div class="bd-tov-text">${Fmt.esc(b.tov_text)}</div>
+        </div>` : '';
+
         let docsHtml = '';
         if (linkedPages.length) {
             docsHtml = linkedPages.map(lp => {
@@ -335,6 +344,7 @@ const BranchDocsPage = {
         return `
         <div class="bd-content-inner">
             ${deptHtml}
+            ${tovHtml}
             <div>
                 <div class="bd-content-docs-header">
                     <i class="fa-solid fa-file-lines" style="color:#6366f1"></i>
@@ -380,42 +390,102 @@ const BranchDocsPage = {
             : `<div style="font-size:.82rem;color:var(--text-muted);padding:.4rem 0">Немає доступних колекцій</div>`;
 
         Modal.open({
-            title: b ? 'Редагувати блок' : 'Додати рядок',
+            title: b ? '<i class="fa-solid fa-pen" style="color:#6366f1;margin-right:.4rem"></i> Редагувати рядок' : '<i class="fa-solid fa-plus" style="color:#6366f1;margin-right:.4rem"></i> Додати рядок',
             size: 'lg',
             body: `
-            <input type="hidden" id="bd-bl-icon" value="${curIcon}">
+            <input type="hidden" id="bd-bl-icon" value="${Fmt.esc(curIcon)}">
+            <style>
+                .bd-modal-section { display:flex;flex-direction:column;gap:.65rem; }
+                .bd-modal-section-hdr { display:flex;align-items:center;gap:.55rem;padding:.55rem .75rem;border-radius:var(--radius-md);background:var(--bg-raised);border-left:3px solid #6366f1; }
+                .bd-modal-section-hdr i { color:#6366f1;font-size:.8rem;width:16px;text-align:center; }
+                .bd-modal-section-hdr span { font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-primary); }
+                .bd-modal-section-hdr small { margin-left:auto;font-size:.7rem;font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted); }
+                .bd-modal-divider { border:none;border-top:1px solid var(--border);margin:.1rem 0; }
+                .bd-modal-field { display:flex;flex-direction:column;gap:.35rem; }
+                .bd-modal-field-lbl { font-size:.72rem;font-weight:600;color:var(--text-muted);letter-spacing:.04em; }
+                .bd-modal-field-lbl .req { color:#ef4444; }
+                .bd-form-input { width:100%;padding:.55rem .8rem;border-radius:var(--radius-md);border:1px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.88rem;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color .15s; }
+                .bd-form-input:focus { border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,.12); }
+            </style>
             <div style="display:flex;flex-direction:column;gap:1rem">
-                <div style="display:grid;grid-template-columns:80px 1fr;gap:.75rem">
-                    <div>
-                        <label style="display:block;font-size:.78rem;font-weight:600;color:var(--text-secondary);margin-bottom:.35rem">№ <span style="color:var(--danger)">*</span></label>
-                        <input id="bd-bl-num" type="number" min="1" class="bd-inp" value="${b ? b.number : maxNum + 1}">
+
+                <!-- §1 Основна інформація -->
+                <div class="bd-modal-section">
+                    <div class="bd-modal-section-hdr">
+                        <i class="fa-solid fa-file-lines"></i>
+                        <span>Основна інформація</span>
                     </div>
-                    <div>
-                        <label style="display:block;font-size:.78rem;font-weight:600;color:var(--text-secondary);margin-bottom:.35rem">Відповідальний підрозділ</label>
-                        <input id="bd-bl-dept" class="bd-inp" placeholder="напр. юридичний відділ" value="${Fmt.esc(b?.dept || '')}">
+                    <div class="bd-modal-field">
+                        <label class="bd-modal-field-lbl">Назва документу <span class="req">*</span></label>
+                        <textarea id="bd-bl-title" class="bd-form-input" rows="3" placeholder="Назва блоку відповідно до законодавства…">${Fmt.esc(b?.title || '')}</textarea>
                     </div>
-                </div>
-                <div>
-                    <label style="display:block;font-size:.78rem;font-weight:600;color:var(--text-secondary);margin-bottom:.35rem">Іконка відповідального</label>
-                    <div class="bd-icon-row">${iconPicker}</div>
-                </div>
-                <div>
-                    <label style="display:block;font-size:.78rem;font-weight:600;color:var(--text-secondary);margin-bottom:.35rem">Назва блоку <span style="color:var(--danger)">*</span></label>
-                    <textarea id="bd-bl-title" class="bd-inp" rows="3" placeholder="Назва блоку відповідно до законодавства...">${Fmt.esc(b?.title || '')}</textarea>
-                </div>
-                <div>
-                    <label style="display:block;font-size:.78rem;font-weight:600;color:var(--text-secondary);margin-bottom:.35rem">
-                        Сторінки-колекції
-                        <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted)">— замість завантаження файлів</span>
-                    </label>
-                    <div style="border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-raised);max-height:150px;overflow-y:auto;padding:.3rem .5rem">
-                        ${pageCheckboxes}
+                    <div style="display:grid;grid-template-columns:80px 1fr;gap:.75rem">
+                        <div class="bd-modal-field">
+                            <label class="bd-modal-field-lbl">№ <span class="req">*</span></label>
+                            <input id="bd-bl-num" type="number" min="1" class="bd-form-input" value="${b ? b.number : maxNum + 1}">
+                        </div>
+                        <div class="bd-modal-field">
+                            <label class="bd-modal-field-lbl">Відповідальний</label>
+                            <input id="bd-bl-dept" class="bd-form-input" placeholder="напр. Юридичний відділ" value="${Fmt.esc(b?.dept || '')}">
+                        </div>
                     </div>
                 </div>
+
+                <hr class="bd-modal-divider">
+
+                <!-- §2 Для ТОВ -->
+                <div class="bd-modal-section">
+                    <div class="bd-modal-section-hdr">
+                        <i class="fa-solid fa-building-columns"></i>
+                        <span>Для ТОВ</span>
+                        <small>без обмеження символів</small>
+                    </div>
+                    <div class="bd-modal-field">
+                        <textarea id="bd-bl-tov" class="bd-form-input" rows="5"
+                            placeholder="Введіть текст — зберігає переноси рядків…"
+                            style="resize:vertical;min-height:96px;line-height:1.65">${Fmt.esc(b?.tov_text || '')}</textarea>
+                    </div>
+                </div>
+
+                <hr class="bd-modal-divider">
+
+                <!-- §3 Пов'язані матеріали -->
+                <div class="bd-modal-section">
+                    <div class="bd-modal-section-hdr">
+                        <i class="fa-solid fa-link"></i>
+                        <span>Пов'язані матеріали</span>
+                        <small>замість завантаження файлів</small>
+                    </div>
+                    <div class="bd-modal-field">
+                        <label class="bd-modal-field-lbl">Сторінки-колекції</label>
+                        <div style="border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-raised);max-height:140px;overflow-y:auto;padding:.3rem .5rem">
+                            ${pageCheckboxes}
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="bd-modal-divider">
+
+                <!-- §4 Оформлення -->
+                <div class="bd-modal-section">
+                    <div class="bd-modal-section-hdr">
+                        <i class="fa-solid fa-palette"></i>
+                        <span>Оформлення</span>
+                    </div>
+                    <div class="bd-modal-field">
+                        <label class="bd-modal-field-lbl">Іконка відповідального</label>
+                        <div class="bd-icon-row">${iconPicker}</div>
+                    </div>
+                </div>
+
             </div>`,
-            footer: `<button class="btn btn-primary" onclick="BranchDocsPage._saveBlock(${JSON.stringify(id || null).replace(/"/g,'&quot;')})"><i class="fa-solid fa-floppy-disk"></i> Зберегти</button>
-                     <button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>`
+            footer: `
+                <button class="btn btn-ghost btn-sm" onclick="Modal.close()">Скасувати</button>
+                <button class="btn btn-sm" style="background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;border:none;box-shadow:0 3px 10px rgba(99,102,241,.3)" onclick="BranchDocsPage._saveBlock(${JSON.stringify(id || null).replace(/"/g,'&quot;')})">
+                    <i class="fa-solid fa-check"></i> Зберегти
+                </button>`
         });
+        setTimeout(() => document.getElementById('bd-bl-title')?.focus(), 50);
     },
 
     _pickIcon(btn) {
@@ -425,19 +495,20 @@ const BranchDocsPage = {
     },
 
     async _saveBlock(id) {
-        const number = parseInt(document.getElementById('bd-bl-num')?.value);
-        const title  = document.getElementById('bd-bl-title')?.value.trim();
-        const dept   = document.getElementById('bd-bl-dept')?.value.trim() || null;
-        const icon   = document.getElementById('bd-bl-icon')?.value || null;
+        const number   = parseInt(document.getElementById('bd-bl-num')?.value);
+        const title    = document.getElementById('bd-bl-title')?.value.trim();
+        const dept     = document.getElementById('bd-bl-dept')?.value.trim() || null;
+        const icon     = document.getElementById('bd-bl-icon')?.value || null;
+        const tov_text = document.getElementById('bd-bl-tov')?.value.trim() || null;
         const page_ids = Array.from(document.querySelectorAll('.bd-page-chk:checked')).map(c => c.value);
         if (!title || !number) { Toast.warning('Заповніть обов\'язкові поля'); return; }
         try {
             Loader.show();
             if (id) {
-                await API.branchDocBlocks.update(id, { number, title, dept, icon, order_index: number, page_ids });
+                await API.branchDocBlocks.update(id, { number, title, dept, icon, tov_text, order_index: number, page_ids });
                 if (!this._selectedBlock) this._selectedBlock = id;
             } else {
-                await API.branchDocBlocks.create({ number, title, dept, icon, order_index: number, page_ids });
+                await API.branchDocBlocks.create({ number, title, dept, icon, tov_text, order_index: number, page_ids });
             }
             Modal.close();
             Toast.success(id ? 'Блок оновлено' : 'Блок додано');

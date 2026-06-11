@@ -1994,8 +1994,12 @@ tr:hover td { background: #f8fafc; }
             } catch(_) {}
         }));
 
-        return html.replace(/(?:href|src)="att:([0-9a-f-]{36})"/g, (match, id) =>
-            urlMap[id] ? match.replace(`att:${id}`, urlMap[id]) : match
-        );
+        return html.replace(/(?:href|src)="att:([0-9a-f-]{36})"/g, (match, id) => {
+            if (!urlMap[id]) return match;
+            const resolved = match.replace(`att:${id}`, urlMap[id]);
+            // href links must open in new tab so the iframe doesn't navigate away
+            // (navigation away destroys the JS context — sendSize(0) never fires, leaving +400px gap)
+            return match.startsWith('href=') ? `target="_blank" rel="noopener noreferrer" ${resolved}` : resolved;
+        });
     }
 };

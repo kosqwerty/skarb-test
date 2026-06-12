@@ -578,13 +578,32 @@ const API = {
             if (error) throw error;
             return data || [];
         },
+        async getRedFolderHeaderDocs() {
+            const { data, error } = await supabase.from('resources')
+                .select('id, title, type, storage_path, doc_version, tab_id, created_at, resource_dovirenosti(dovirenost_id)')
+                .eq('display_block', 'rf-top')
+                .is('lesson_id', null)
+                .order('created_at');
+            if (error) throw error;
+            return data || [];
+        },
+        async getBranchHeaderDocs() {
+            const { data, error } = await supabase.from('resources')
+                .select('id, title, type, storage_path, doc_version, created_at, resource_dovirenosti(dovirenost_id)')
+                .eq('display_block', 'bd-top')
+                .is('lesson_id', null)
+                .order('created_at');
+            if (error) throw error;
+            return data || [];
+        },
 
         async getBranchDocs(dovirenostId) {
             let q = supabase.from('resources')
                 .select('id, title, display_block, type, storage_path, url, dovirenost_id, doc_version, dovirenosti(id,name)')
                 .not('display_block', 'is', null)
+                .neq('display_block', 'rf-top')
                 .is('lesson_id', null)
-                .order('display_block');
+                .order('display_block', { ascending: true });
             // dovirenost_id filter added after migration v68 is applied
             // if (dovirenostId) q = q.or(`dovirenost_id.eq.${dovirenostId},dovirenost_id.is.null`);
             const { data, error } = await q;
@@ -1778,6 +1797,29 @@ const API = {
     },
 
     // ── Red Folder Items ──────────────────────────────────────────────
+    rfTabs: {
+        async getAll() {
+            const { data, error } = await supabase.from('rf_tabs')
+                .select('*').order('order_index').order('created_at');
+            if (error) throw error;
+            return data || [];
+        },
+        async create(title) {
+            const { data, error } = await supabase.from('rf_tabs')
+                .insert({ title, order_index: 0 }).select().single();
+            if (error) throw error;
+            return data;
+        },
+        async update(id, title) {
+            const { error } = await supabase.from('rf_tabs').update({ title }).eq('id', id);
+            if (error) throw error;
+        },
+        async remove(id) {
+            const { error } = await supabase.from('rf_tabs').delete().eq('id', id);
+            if (error) throw error;
+        }
+    },
+
     redFolderItems: {
         async getAll() {
             const { data, error } = await supabase.from('red_folder_items')

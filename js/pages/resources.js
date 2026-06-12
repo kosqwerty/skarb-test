@@ -19,6 +19,7 @@ const ResourcesPage = {
     _pendingResource: null,
     _pendingDownloadFile: false,
     _kbViewMode: localStorage.getItem('kb_view') || 'grid',
+    _docsViewMode: localStorage.getItem('docs_view') || 'list',
     _kbSort: 'newest',
     _kbTypeFilter: 'all',
     _kbAllItems: [],
@@ -467,7 +468,7 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
                     .dt-sec { border-bottom:1px solid var(--border) }
                     .dt-sec:last-child { border-bottom:none }
                     .dt-sec-title { padding:.5rem .85rem;font-size:.83rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);background:var(--bg-raised) }
-                    .dt-item { display:flex;align-items:center;gap:.45rem;padding:.42rem .85rem;font-size:.98rem;color:var(--text-secondary);cursor:pointer;border:none;background:transparent;width:100%;text-align:left;font-family:inherit;transition:background .1s,color .1s }
+                    .dt-item { display:flex;align-items:center;gap:.45rem;padding:.42rem .85rem;font-size:.82rem;color:var(--text-secondary);cursor:pointer;border:none;background:transparent;width:100%;text-align:left;font-family:inherit;transition:background .1s,color .1s }
                     .dt-item:hover { background:rgba(99,102,241,.07);color:var(--text-primary) }
                     .dt-item.active { background:rgba(99,102,241,.12);color:var(--primary);font-weight:600 }
                     .dt-item i { font-size:1.1rem;width:16px;text-align:center;flex-shrink:0 }
@@ -479,6 +480,10 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
                     .dt-reset { display:none;width:100%;padding:.5rem .85rem;font-size:.75rem;font-weight:600;color:#ef4444;background:transparent;border:none;border-top:1px solid var(--border);cursor:pointer;text-align:left;font-family:inherit;transition:background .1s }
                     .dt-reset:hover { background:rgba(239,68,68,.06) }
                     .dt-reset.visible { display:block }
+                    .docs-view-btn { display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:var(--radius-md);border:1px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;transition:all .15s;font-size:.85rem }
+                    .docs-view-btn:hover { border-color:var(--primary);color:var(--primary) }
+                    .docs-view-btn.active { background:var(--primary);border-color:var(--primary);color:#fff }
+                    .resource-list-docs-grid { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem }
                 `;
                 document.head.appendChild(st);
             }
@@ -500,8 +505,12 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
                                 <option value="name_az" ${this._docsSort==='name_az'?'selected':''}>A → Я назва</option>
                                 <option value="status_asc" ${this._docsSort==='status_asc'?'selected':''}>✅ Ознайомлені першими</option>
                             </select>
+                            <div style="display:flex;gap:.3rem">
+                                <button class="docs-view-btn${this._docsViewMode==='list'?' active':''}" title="Список" onclick="ResourcesPage._docsSetView('list',this)"><i class="fa-solid fa-list"></i></button>
+                                <button class="docs-view-btn${this._docsViewMode==='grid'?' active':''}" title="2 стовпці" onclick="ResourcesPage._docsSetView('grid',this)"><i class="fa-solid fa-table-columns"></i></button>
+                            </div>
                         </div>
-                        <div id="resource-list" class="resource-list-docs"></div>
+                        <div id="resource-list" class="${this._docsViewMode==='grid'?'resource-list-docs-grid':'resource-list-docs'}"></div>
                         <div id="resources-pagination" style="display:flex;justify-content:center;gap:.5rem;margin-top:1.5rem;margin-bottom:2rem"></div>
                     </div>
                 </div>`;
@@ -924,6 +933,15 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
     _docsSetSort(val) {
         this._docsSort = val;
         this.load();
+    },
+
+    _docsSetView(mode, btn) {
+        this._docsViewMode = mode;
+        localStorage.setItem('docs_view', mode);
+        document.querySelectorAll('.docs-view-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const list = document.getElementById('resource-list');
+        if (list) list.className = mode === 'grid' ? 'resource-list-docs-grid' : 'resource-list-docs';
     },
 
     _docsResetFilters() {
@@ -1374,7 +1392,7 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
                 filtered = this._sortDocs(filtered);
             }
 
-            if (this._view === 'docs') list.className = 'resource-list-docs';
+            if (this._view === 'docs') list.className = this._docsViewMode === 'grid' ? 'resource-list-docs-grid' : 'resource-list-docs';
             if (this._view === 'docs') {
                 const start = this._page * this._pageSize;
                 const pageItems = filtered.slice(start, start + this._pageSize);

@@ -13,6 +13,7 @@ const BranchDocsPage = {
     _myDovIds: null,
     _pageDovMap: {},
     _dovNameMap: {},
+    _headerDocs: [],     // top-level files above the split
 
     _iconOptions: [
         { icon: 'fa-scale-balanced', label: 'Юристи',         color: '#6366f1' },
@@ -43,14 +44,14 @@ const BranchDocsPage = {
             .bd-split-content { flex: 1; min-width: 0; max-width: 450px; overflow-y: auto; max-height: 600px; }
 
             /* ── Sidebar item buttons ─────────────────────────────── */
-            .bd-item-btn { display: flex; align-items: flex-start; gap: .55rem; padding: .7rem 1rem; cursor: pointer; border: none; background: transparent; text-align: left; color: var(--text-primary); border-bottom: 1px solid rgba(99,102,241,.1); font-family: inherit; font-size: .84rem; width: 100%; transition: background .12s; }
+            .bd-item-btn { display: flex; align-items: flex-start; gap: .55rem; padding: .7rem 1rem; cursor: pointer; border: none; background: transparent; text-align: left; color: var(--text-primary); border-bottom: 1px solid rgba(99,102,241,.1); font-family: inherit; font-size: .78rem; width: 100%; transition: background .12s; }
             .bd-item-btn:last-of-type { border-bottom: none; }
             .bd-item-btn:hover { background: rgba(99,102,241,.05); }
             .bd-item-btn.active { background: rgba(99,102,241,.1); }
             .bd-item-num { width: 22px; height: 22px; border-radius: 6px; flex-shrink: 0; background: var(--bg-surface); color: var(--text-muted); display: flex; align-items: center; justify-content: center; font-size: .7rem; font-weight: 800; margin-top: .1rem; border: 1px solid var(--border); transition: all .12s; }
             .bd-item-btn.active .bd-item-num { background: #6366f1; color: #fff; border-color: #6366f1; }
             .bd-item-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .3rem; }
-            .bd-item-title-row { display: flex; align-items: center; gap: .4rem; font-weight: 600; line-height: 1.4; font-size: .84rem; }
+            .bd-item-title-row { display: flex; align-items: center; gap: .4rem; font-weight: 600; line-height: 1.4; font-size: .78rem; }
             .bd-item-btn.active .bd-item-title-row { color: #6366f1; font-weight: 700; }
             .bd-item-actions { display: flex; gap: 3px; opacity: 0; transition: opacity .15s; }
             .bd-item-btn:hover .bd-item-actions { opacity: 1; }
@@ -74,6 +75,17 @@ const BranchDocsPage = {
             .bd-content-add-btn:hover { border-color: #6366f1; color: #6366f1; background: rgba(99,102,241,.05); }
             .bd-no-selection { display: flex; align-items: center; justify-content: center; height: 100%; padding: 3rem; color: var(--text-muted); font-size: .88rem; font-style: italic; }
             .bd-empty-doc { color: var(--text-muted); font-size: .82rem; font-style: italic; padding: .25rem 0; }
+            /* ── Header docs ─────────────────────────────────────────── */
+            .bd-hdr-zone { border: 1px solid rgba(99,102,241,.2); border-radius: var(--radius-xl); background: var(--bg-surface); padding: .9rem 1.1rem; margin-bottom: 1rem; display: flex; flex-direction: column; gap: .6rem; }
+            .bd-hdr-title { display: flex; align-items: center; gap: .5rem; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #6366f1; }
+            .bd-hdr-docs { display: flex; flex-wrap: wrap; gap: .5rem; }
+            .bd-hdr-doc-card { display: inline-flex; align-items: center; gap: .5rem; padding: .4rem .75rem; border: 1px solid rgba(99,102,241,.2); border-radius: var(--radius-md); background: var(--bg-raised); cursor: pointer; transition: border-color .13s, background .13s; font-size: .84rem; color: var(--text-primary); font-family: inherit; }
+            .bd-hdr-doc-card:hover { border-color: #6366f1; background: rgba(99,102,241,.05); color: #6366f1; }
+            .bd-hdr-doc-card-ico { width: 26px; height: 26px; border-radius: 6px; background: rgba(99,102,241,.1); color: #6366f1; display: flex; align-items: center; justify-content: center; font-size: .8rem; flex-shrink: 0; }
+            .bd-hdr-doc-card-actions { display: flex; gap: 2px; flex-shrink: 0; opacity: 0; pointer-events: none; transition: opacity .15s; margin-left: .25rem; }
+            .bd-hdr-doc-card:hover .bd-hdr-doc-card-actions { opacity: 1; pointer-events: auto; }
+            .bd-hdr-add-btn { display: inline-flex; align-items: center; gap: .35rem; padding: .35rem .75rem; border-radius: var(--radius-md); border: 1.5px dashed rgba(99,102,241,.35); background: transparent; color: rgba(99,102,241,.7); font-size: .8rem; cursor: pointer; transition: all .15s; font-family: inherit; }
+            .bd-hdr-add-btn:hover { border-color: #6366f1; color: #6366f1; background: rgba(99,102,241,.04); }
             .bd-collection-card { display: flex; align-items: center; gap: .6rem; padding: .6rem .85rem; background: var(--bg-raised); border: 1px solid var(--border); border-radius: var(--radius-md); cursor: pointer; transition: border-color var(--transition), box-shadow var(--transition); }
             .bd-collection-card:hover { border-color: #6366f1; box-shadow: 0 2px 8px rgba(99,102,241,.15); }
             .bd-collection-icon { width: 28px; height: 28px; border-radius: 6px; background: rgba(99,102,241,.12); color: #6366f1; display: flex; align-items: center; justify-content: center; font-size: .75rem; flex-shrink: 0; }
@@ -108,6 +120,13 @@ const BranchDocsPage = {
             .bd-icon-opt { display: inline-flex; align-items: center; gap: .4rem; padding: .3rem .65rem; border-radius: var(--radius-md); border: 1.5px solid var(--border); background: var(--bg-raised); cursor: pointer; font-size: .75rem; font-family: inherit; color: var(--text-secondary); transition: all .15s; }
             .bd-icon-opt:hover { border-color: var(--ic); color: var(--text-primary); }
             .bd-icon-opt-active { border-color: var(--ic) !important; background: color-mix(in srgb,var(--ic) 10%,transparent); color: var(--text-primary) !important; }
+            /* inline icon trigger (matches rf style) */
+            .bd-icon-trigger { flex-shrink:0; width:38px; height:38px; border-radius:var(--radius-md); border:1px solid var(--border); background:var(--bg-raised); cursor:pointer; display:flex;align-items:center;justify-content:center; font-size:1rem; transition:border-color .15s; position:relative; }
+            .bd-icon-trigger:hover { border-color:rgba(99,102,241,.4); }
+            .bd-icon-drop { position:absolute; top:calc(100% + 4px); left:0; z-index:200; background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--radius-md); box-shadow:0 6px 24px rgba(0,0,0,.18); padding:.4rem; display:grid; grid-template-columns:repeat(4,1fr); gap:.3rem; min-width:220px; }
+            .bd-icon-drop-opt { display:flex;flex-direction:column;align-items:center;gap:.15rem; padding:.35rem .3rem; border-radius:var(--radius-sm); border:1.5px solid transparent; background:transparent; cursor:pointer; font-size:.6rem; font-family:inherit; color:var(--text-secondary); transition:all .12s; }
+            .bd-icon-drop-opt:hover { background:var(--bg-raised); border-color:var(--ic); color:var(--text-primary); }
+            .bd-icon-drop-opt.active { background:color-mix(in srgb,var(--ic) 12%,transparent); border-color:var(--ic); color:var(--text-primary); }
         `;
         document.head.appendChild(s);
     },
@@ -118,14 +137,16 @@ const BranchDocsPage = {
         const seeAll = AppState.isAdmin() || AppState.isManager() || AppState.isSmm();
         area.innerHTML = `<div id="bd-content" style="padding:.25rem 0"><div style="text-align:center;padding:3rem 1rem;color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin"></i> Завантаження...</div></div>`;
         try {
-            const [blocks, docs, myDovs, pages, pageDovs, allDov] = await Promise.all([
+            const [blocks, docs, myDovs, pages, pageDovs, allDov, headerDocs] = await Promise.all([
                 API.branchDocBlocks.getAll(),
                 API.resources.getBranchDocs(null),
                 seeAll ? Promise.resolve(null) : API.dovirenosti.getForProfile(AppState.user.id).catch(() => []),
                 API.pages.getAll().catch(() => []),
                 API.pageDovirenosti.getAll().catch(() => []),
-                API.dovirenosti.getAll().catch(() => [])
+                API.dovirenosti.getAll().catch(() => []),
+                API.resources.getBranchHeaderDocs().catch(() => [])
             ]);
+            this._headerDocs = headerDocs;
             this._blocks = blocks;
             this._pages = pages;
             this._seeAll = seeAll;
@@ -274,12 +295,208 @@ const BranchDocsPage = {
         }).join('');
 
         el.innerHTML = `
+        ${this._buildHeaderZone(canManage)}
         <div class="bd-split">
             <div class="bd-split-sidebar">${sidebarHtml}</div>
             <div class="bd-split-content" id="bd-split-content">
                 ${this._buildBlockContent(this._selectedBlock, canManage)}
             </div>
         </div>`;
+    },
+
+    _buildHeaderZone(canManage) {
+        const seeAll = this._seeAll;
+        const myDovIds = this._myDovIds;
+        const docs = (this._headerDocs || []).filter(d => {
+            if (seeAll) return true;
+            const dovIds = (d.resource_dovirenosti || []).map(r => r.dovirenost_id);
+            if (!dovIds.length) return true;
+            return myDovIds && dovIds.some(id => myDovIds.has(id));
+        });
+        const docsHtml = docs.map(d => `
+            <div class="bd-hdr-doc-card" onclick="BranchDocsPage._hdrOpenDoc('${d.id}')">
+                <div class="bd-hdr-doc-card-ico"><i class="fa-solid fa-file-pdf"></i></div>
+                <span>${Fmt.esc(d.title)}</span>
+                ${canManage ? `<div class="bd-hdr-doc-card-actions" onclick="event.stopPropagation()">
+                    <button class="bd-ta-btn" title="Редагувати" onclick="BranchDocsPage._hdrEditModal('${d.id}')"><i class="fa-solid fa-pen"></i></button>
+                    <button class="bd-ta-btn danger" title="Видалити" onclick="BranchDocsPage._hdrDeleteDoc('${d.id}')"><i class="fa-solid fa-trash"></i></button>
+                </div>` : ''}
+            </div>`).join('');
+        if (!docs.length && !canManage) return '';
+        return `
+        <div class="bd-hdr-zone">
+            <div class="bd-hdr-title"><i class="fa-solid fa-paperclip"></i> Загальні документи</div>
+            <div class="bd-hdr-docs">
+                ${docsHtml}
+                ${canManage ? `<button class="bd-hdr-add-btn" onclick="BranchDocsPage._hdrUploadModal()"><i class="fa-solid fa-plus"></i> Додати файл</button>` : ''}
+            </div>
+        </div>`;
+    },
+
+    _hdrDovCheckboxes(allDov, selectedIds = []) {
+        if (!allDov.length) return '<div style="color:var(--text-muted);font-size:.8rem;padding:.2rem 0">Немає довіреностей</div>';
+        return allDov.map(d => `
+            <label class="rf-page-chk-row" style="gap:.5rem;padding:.25rem 0">
+                <input type="checkbox" class="bd-hdr-dov-chk" value="${d.id}" ${selectedIds.includes(d.id) ? 'checked' : ''} style="flex-shrink:0">
+                <span style="font-size:.82rem">${Fmt.esc(d.name)}</span>
+            </label>`).join('');
+    },
+
+    async _hdrUploadModal() {
+        Modal.open({
+            title: '<i class="fa-solid fa-paperclip" style="color:#6366f1;margin-right:.4rem"></i> Додати загальний файл',
+            size: 'lg',
+            body: `<div style="display:flex;flex-direction:column;gap:1rem">
+                <div>
+                    <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.4rem">Назва <span style="color:var(--danger)">*</span></div>
+                    <input id="bd-hdr-title" class="bd-form-input" placeholder="Наприклад: Інструкція з охорони праці">
+                </div>
+                <div>
+                    <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.4rem">
+                        Довіреності <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted)">— залиш порожнім для всіх</span>
+                    </div>
+                    <div style="border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-raised);max-height:130px;overflow-y:auto;padding:.3rem .5rem">
+                        ${this._hdrDovCheckboxes(Object.entries(this._dovNameMap).map(([id,name])=>({id,name})))}
+                    </div>
+                </div>
+                <div>
+                    <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.4rem">Файл <span style="color:var(--danger)">*</span></div>
+                    <div class="file-upload-frame">
+                        <label for="bd-hdr-file" class="file-upload-area">
+                            <div class="file-upload-icon"><i class="fa-solid fa-file-arrow-up"></i></div>
+                            <div class="file-upload-label" id="bd-hdr-label">Натисніть або перетягніть файл</div>
+                            <div class="file-upload-hint">PDF, DOC, DOCX</div>
+                            <input type="file" id="bd-hdr-file" accept=".pdf,.doc,.docx" style="display:none"
+                                onchange="(function(i){const t=document.getElementById('bd-hdr-title');const l=document.getElementById('bd-hdr-label');const f=i.files[0];if(f){if(!t.value)t.value=f.name.replace(/\\.[^.]+$/,'').replace(/[_-]+/g,' ').trim();l.textContent=f.name;}})(this)">
+                        </label>
+                    </div>
+                </div>
+            </div>`,
+            footer: `<button class="btn btn-sm" style="background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;border:none;box-shadow:0 3px 10px rgba(99,102,241,.3)" onclick="BranchDocsPage._hdrDoUpload()"><i class="fa-solid fa-upload"></i> Завантажити</button>
+                     <button class="btn btn-ghost btn-sm" onclick="Modal.close()">Скасувати</button>`
+        });
+        setTimeout(() => document.getElementById('bd-hdr-title')?.focus(), 50);
+    },
+
+    async _hdrDoUpload() {
+        const title = Dom.val('bd-hdr-title').trim();
+        const file = document.getElementById('bd-hdr-file')?.files?.[0];
+        const dovIds = Array.from(document.querySelectorAll('.bd-hdr-dov-chk:checked')).map(c => c.value);
+        if (!title) { Toast.warning('Введіть назву'); return; }
+        if (!file)  { Toast.warning('Оберіть файл'); return; }
+        try {
+            Loader.show();
+            const ext = file.name.slice(file.name.lastIndexOf('.'));
+            const safeName = file.name.slice(0, file.name.lastIndexOf('.')).replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_+/g, '_').slice(0, 40).replace(/_+$/, '') + ext;
+            const path = `branch-docs/header/${Date.now()}_${safeName}`;
+            const { error: upErr } = await supabase.storage.from('lesson-resources').upload(path, file);
+            if (upErr) throw upErr;
+            const res = await API.resources.create({ title, type: 'document', storage_path: path, display_block: 'bd-top' });
+            if (dovIds.length) await API.resources.setDovirenosti(res.id, dovIds);
+            Modal.close();
+            Toast.success('Файл додано');
+            await this._reload(AppState.isAdmin() && !AppState.isPreviewing());
+        } catch (e) {
+            Toast.error('Помилка', e.message);
+        } finally {
+            Loader.hide();
+        }
+    },
+
+    async _hdrEditModal(id) {
+        const doc = this._headerDocs.find(d => d.id === id);
+        if (!doc) return;
+        const curDovIds = (doc.resource_dovirenosti || []).map(r => r.dovirenost_id);
+        Modal.open({
+            title: '<i class="fa-solid fa-pen" style="color:#6366f1;margin-right:.4rem"></i> Редагувати файл',
+            size: 'lg',
+            body: `<div style="display:flex;flex-direction:column;gap:1rem">
+                <div>
+                    <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.4rem">Назва <span style="color:var(--danger)">*</span></div>
+                    <input id="bd-hdr-ed-title" class="bd-form-input" value="${Fmt.esc(doc.title)}">
+                </div>
+                <div>
+                    <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.4rem">
+                        Довіреності <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted)">— залиш порожнім для всіх</span>
+                    </div>
+                    <div style="border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-raised);max-height:130px;overflow-y:auto;padding:.3rem .5rem">
+                        ${this._hdrDovCheckboxes(Object.entries(this._dovNameMap).map(([id,name])=>({id,name})), curDovIds)}
+                    </div>
+                </div>
+                <div>
+                    <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.4rem">Замінити файл <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted)">— залиш порожнім щоб не змінювати</span></div>
+                    <div class="file-upload-frame">
+                        <label for="bd-hdr-ed-file" class="file-upload-area">
+                            <div class="file-upload-icon"><i class="fa-solid fa-file-arrow-up"></i></div>
+                            <div class="file-upload-label" id="bd-hdr-ed-label">Натисніть або перетягніть файл</div>
+                            <div class="file-upload-hint">PDF, DOC, DOCX</div>
+                            <input type="file" id="bd-hdr-ed-file" accept=".pdf,.doc,.docx" style="display:none"
+                                onchange="document.getElementById('bd-hdr-ed-label').textContent=this.files[0]?.name||'Натисніть або перетягніть файл'">
+                        </label>
+                    </div>
+                </div>
+            </div>`,
+            footer: `<button class="btn btn-sm" style="background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;border:none;box-shadow:0 3px 10px rgba(99,102,241,.3)" onclick="BranchDocsPage._hdrDoEdit('${id}')"><i class="fa-solid fa-check"></i> Зберегти</button>
+                     <button class="btn btn-ghost btn-sm" onclick="Modal.close()">Скасувати</button>`
+        });
+        setTimeout(() => document.getElementById('bd-hdr-ed-title')?.focus(), 50);
+    },
+
+    async _hdrDoEdit(id) {
+        const title = Dom.val('bd-hdr-ed-title').trim();
+        const file = document.getElementById('bd-hdr-ed-file')?.files?.[0];
+        const dovIds = Array.from(document.querySelectorAll('.bd-hdr-dov-chk:checked')).map(c => c.value);
+        if (!title) { Toast.warning('Введіть назву'); return; }
+        try {
+            Loader.show();
+            const fields = { title };
+            if (file) {
+                const ext = file.name.slice(file.name.lastIndexOf('.'));
+                const safeName = file.name.slice(0, file.name.lastIndexOf('.')).replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_+/g, '_').slice(0, 40).replace(/_+$/, '') + ext;
+                const path = `branch-docs/header/${Date.now()}_${safeName}`;
+                const { error: upErr } = await supabase.storage.from('lesson-resources').upload(path, file);
+                if (upErr) throw upErr;
+                fields.storage_path = path;
+            }
+            await API.resources.update(id, fields);
+            await API.resources.setDovirenosti(id, dovIds);
+            Modal.close();
+            Toast.success('Збережено');
+            await this._reload(AppState.isAdmin() && !AppState.isPreviewing());
+        } catch (e) {
+            Toast.error('Помилка', e.message);
+        } finally {
+            Loader.hide();
+        }
+    },
+
+    async _hdrDeleteDoc(id) {
+        if (!await Modal.confirm({ message: 'Видалити файл?', danger: true })) return;
+        try {
+            Loader.show();
+            await API.resources.delete(id);
+            Toast.success('Видалено');
+            await this._reload(AppState.isAdmin() && !AppState.isPreviewing());
+        } catch (e) {
+            Toast.error('Помилка', e.message);
+        } finally {
+            Loader.hide();
+        }
+    },
+
+    async _hdrOpenDoc(id) {
+        const doc = this._headerDocs.find(d => d.id === id);
+        if (!doc) return;
+        try {
+            Loader.show();
+            const url = await API.resources.getSignedUrl(doc.storage_path);
+            const viewerUrl = `pdf-viewer.html?file=${encodeURIComponent(url)}&title=${encodeURIComponent(doc.title)}&download=1`;
+            window.open(viewerUrl, '_blank', 'noopener,noreferrer');
+        } catch (e) {
+            Toast.error('Помилка', e.message);
+        } finally {
+            Loader.hide();
+        }
     },
 
     _buildBlockContent(blockId, canManage) {
@@ -372,116 +589,166 @@ const BranchDocsPage = {
 
     async _blockModal(id) {
         const b = id ? this._blocks.find(x => x.id === id) : null;
-        const maxNum = this._blocks.reduce((m, x) => Math.max(m, x.number), 0);
         const curIcon = b?.icon || '';
 
-        const iconPicker = this._iconOptions.map(o => `
-            <button type="button" class="bd-icon-opt${curIcon === o.icon ? ' bd-icon-opt-active' : ''}"
-                    data-icon="${o.icon}" title="${o.label}"
-                    onclick="BranchDocsPage._pickIcon(this)"
+        const curIconOpt = this._iconOptions.find(o => o.icon === curIcon);
+        const triggerInner = curIconOpt && curIconOpt.icon !== 'fa-circle'
+            ? `<i class="fa-solid ${curIconOpt.icon}" style="color:${curIconOpt.color}"></i>`
+            : `<i class="fa-regular fa-face-smile" style="color:var(--text-muted)"></i>`;
+        const dropOptions = this._iconOptions.map(o => `
+            <button type="button" class="bd-icon-drop-opt${curIcon === o.icon ? ' active' : ''}"
+                    data-icon="${o.icon}" title="${Fmt.esc(o.label)}"
+                    onclick="BranchDocsPage._pickIconDrop(this)"
                     style="--ic:${o.color}">
-                <i class="fa-solid ${o.icon}" style="color:${o.color}"></i>
-                <span>${o.label}</span>
+                <i class="fa-solid ${o.icon}" style="color:${o.color};font-size:.85rem"></i>
+                <span>${Fmt.esc(o.label)}</span>
             </button>`).join('');
 
         const curPageIds = new Set(b?.page_ids || []);
         const pageCheckboxes = this._pages.length
             ? this._pages.filter(p => p.is_published || AppState.isAdmin()).map(p => `
                 <label class="bd-page-chk-row">
-                    <input type="checkbox" class="bd-page-chk" value="${p.id}" ${curPageIds.has(p.id) ? 'checked' : ''}>
+                    <input type="checkbox" class="bd-page-chk" value="${p.id}" ${curPageIds.has(p.id) ? 'checked' : ''} onchange="BranchDocsPage._updateSelCount()">
                     <span>${Fmt.esc(p.title)}</span>
                 </label>`).join('')
             : `<div style="font-size:.82rem;color:var(--text-muted);padding:.4rem 0">Немає доступних колекцій</div>`;
 
+        const selCount = curPageIds.size;
         Modal.open({
-            title: b ? '<i class="fa-solid fa-pen" style="color:#6366f1;margin-right:.4rem"></i> Редагувати рядок' : '<i class="fa-solid fa-plus" style="color:#6366f1;margin-right:.4rem"></i> Додати рядок',
+            title: b ? 'Редагувати рядок' : 'Додати рядок',
             size: 'lg',
             body: `
             <input type="hidden" id="bd-bl-icon" value="${Fmt.esc(curIcon)}">
             <style>
-                .bd-modal-section { display:flex;flex-direction:column;gap:.65rem; }
-                .bd-modal-section-hdr { display:flex;align-items:center;gap:.55rem;padding:.55rem .75rem;border-radius:var(--radius-md);background:var(--bg-raised);border-left:3px solid #6366f1; }
-                .bd-modal-section-hdr i { color:#6366f1;font-size:.8rem;width:16px;text-align:center; }
-                .bd-modal-section-hdr span { font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-primary); }
-                .bd-modal-section-hdr small { margin-left:auto;font-size:.7rem;font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted); }
-                .bd-modal-divider { border:none;border-top:1px solid var(--border);margin:.1rem 0; }
-                .bd-modal-field { display:flex;flex-direction:column;gap:.35rem; }
-                .bd-modal-field-lbl { font-size:.72rem;font-weight:600;color:var(--text-muted);letter-spacing:.04em; }
-                .bd-modal-field-lbl .req { color:#ef4444; }
-                .bd-form-input { width:100%;padding:.55rem .8rem;border-radius:var(--radius-md);border:1px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.88rem;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color .15s; }
+                .bdm-wrap { display:grid;grid-template-columns:1fr 250px;gap:1rem;align-items:start; }
+                .bdm-form { display:flex;flex-direction:column;gap:.9rem; }
+                .bdm-sec { display:flex;flex-direction:column;gap:.6rem; }
+                .bdm-sec-hdr { display:flex;align-items:center;gap:.6rem;margin-bottom:.1rem; }
+                .bdm-ico { width:22px;height:22px;border-radius:6px;background:rgba(99,102,241,.12);color:#6366f1;font-size:.72rem;display:flex;align-items:center;justify-content:center;flex-shrink:0; }
+                .bdm-sec-title { font-size:.82rem;font-weight:700;color:var(--text-primary); }
+                .bdm-badge { margin-left:auto;font-size:.68rem;font-weight:600;padding:.15rem .5rem;border-radius:999px;background:var(--bg-raised);border:1px solid var(--border);color:var(--text-muted); }
+                .bdm-badge.sel { background:rgba(99,102,241,.1);border-color:rgba(99,102,241,.3);color:#6366f1; }
+                .bdm-sub { font-size:.75rem;color:var(--text-muted);line-height:1.4; }
+                .bdm-lbl { font-size:.72rem;font-weight:600;color:var(--text-muted);letter-spacing:.04em;margin-bottom:.25rem;display:block; }
+                .bdm-lbl .req { color:#ef4444; }
+                .bdm-counter { font-size:.68rem;color:var(--text-muted);text-align:right;margin-top:.15rem; }
+                .bd-form-input { width:100%;padding:.55rem .8rem;border-radius:var(--radius-md);border:1px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.88rem;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color .15s,box-shadow .15s; }
+                textarea.bd-form-input { resize:none;overflow:hidden; }
                 .bd-form-input:focus { border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,.12); }
+                .bdm-divider { border:none;border-top:1px solid var(--border);margin:0; }
+                .bdm-dept-wrap { display:grid;grid-template-columns:34px 1fr;gap:.35rem;align-items:center; }
+                .bdm-dept-clear { position:absolute;right:8px;top:50%;transform:translateY(-50%);border:none;background:transparent;color:var(--text-muted);cursor:pointer;font-size:.7rem;padding:2px 4px;border-radius:3px;line-height:1; }
+                .bdm-dept-clear:hover { color:var(--text-primary); }
+                .bdm-tips { display:flex;flex-direction:column;gap:.7rem; }
+                .bdm-tips-hdr { display:flex;align-items:center;gap:.45rem;font-size:.75rem;font-weight:700;color:var(--text-primary);padding-bottom:.5rem;border-bottom:1px solid var(--border); }
+                .bdm-tips-hdr i { color:#f59e0b; }
+                .bdm-tip { display:flex;flex-direction:column;gap:.15rem; }
+                .bdm-tip-title { font-size:.73rem;font-weight:600;color:var(--text-primary); }
+                .bdm-tip-text { font-size:.71rem;color:var(--text-muted);line-height:1.45; }
+                .bdm-info { margin-top:.5rem;padding:.55rem .7rem;border-radius:var(--radius-md);background:rgba(99,102,241,.06);border:1px solid rgba(99,102,241,.18);display:flex;align-items:flex-start;gap:.45rem; }
+                .bdm-info i { color:#6366f1;font-size:.75rem;margin-top:.1rem;flex-shrink:0; }
+                .bdm-info span { font-size:.71rem;color:var(--text-secondary);line-height:1.45; }
+                .bdm-search { display:flex;align-items:center;gap:.4rem;padding:.2rem .6rem;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-surface);margin-bottom:.35rem; }
+                .bdm-search i { color:var(--text-muted);font-size:.75rem;flex-shrink:0; }
+                .bdm-search input { border:none;background:transparent;outline:none;font-size:.82rem;color:var(--text-primary);font-family:inherit;width:100%;padding:.2rem 0; }
+                .bdm-chk-list { max-height:110px;overflow-y:auto; }
             </style>
-            <div style="display:flex;flex-direction:column;gap:1rem">
+            <div class="bdm-wrap">
+                <!-- ── Left: form ─────────────────────────── -->
+                <div class="bdm-form">
 
-                <!-- §1 Основна інформація -->
-                <div class="bd-modal-section">
-                    <div class="bd-modal-section-hdr">
-                        <i class="fa-solid fa-file-lines"></i>
-                        <span>Основна інформація</span>
-                    </div>
-                    <div class="bd-modal-field">
-                        <label class="bd-modal-field-lbl">Назва документу <span class="req">*</span></label>
-                        <textarea id="bd-bl-title" class="bd-form-input" rows="3" placeholder="Назва блоку відповідно до законодавства…">${Fmt.esc(b?.title || '')}</textarea>
-                    </div>
-                    <div style="display:grid;grid-template-columns:80px 1fr;gap:.75rem">
-                        <div class="bd-modal-field">
-                            <label class="bd-modal-field-lbl">№ <span class="req">*</span></label>
-                            <input id="bd-bl-num" type="number" min="1" class="bd-form-input" value="${b ? b.number : maxNum + 1}">
+                    <!-- §1 Основна інформація -->
+                    <div class="bdm-sec">
+                        <div class="bdm-sec-hdr">
+                            <span class="bdm-ico"><i class="fa-solid fa-file-lines"></i></span>
+                            <span class="bdm-sec-title">Основна інформація</span>
                         </div>
-                        <div class="bd-modal-field">
-                            <label class="bd-modal-field-lbl">Відповідальний</label>
-                            <input id="bd-bl-dept" class="bd-form-input" placeholder="напр. Юридичний відділ" value="${Fmt.esc(b?.dept || '')}">
+                        <div>
+                            <label class="bdm-lbl">Назва документа <span class="req">*</span></label>
+                            <textarea id="bd-bl-title" class="bd-form-input" rows="1" maxlength="255"
+                                placeholder="Назва блоку відповідно до законодавства…"
+                                oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px';const c=document.getElementById('bd-title-cnt');if(c)c.textContent=this.value.length+' / 255'">${Fmt.esc(b?.title || '')}</textarea>
+                            <div class="bdm-counter" id="bd-title-cnt">${(b?.title||'').length} / 255</div>
                         </div>
-                    </div>
-                </div>
-
-                <hr class="bd-modal-divider">
-
-                <!-- §2 Для ТОВ -->
-                <div class="bd-modal-section">
-                    <div class="bd-modal-section-hdr">
-                        <i class="fa-solid fa-building-columns"></i>
-                        <span>Для ТОВ</span>
-                        <small>без обмеження символів</small>
-                    </div>
-                    <div class="bd-modal-field">
-                        <textarea id="bd-bl-tov" class="bd-form-input" rows="5"
-                            placeholder="Введіть текст — зберігає переноси рядків…"
-                            style="resize:vertical;min-height:96px;line-height:1.65">${Fmt.esc(b?.tov_text || '')}</textarea>
-                    </div>
-                </div>
-
-                <hr class="bd-modal-divider">
-
-                <!-- §3 Пов'язані матеріали -->
-                <div class="bd-modal-section">
-                    <div class="bd-modal-section-hdr">
-                        <i class="fa-solid fa-link"></i>
-                        <span>Пов'язані матеріали</span>
-                        <small>замість завантаження файлів</small>
-                    </div>
-                    <div class="bd-modal-field">
-                        <label class="bd-modal-field-lbl">Сторінки-колекції</label>
-                        <div style="border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-raised);max-height:140px;overflow-y:auto;padding:.3rem .5rem">
-                            ${pageCheckboxes}
+                        <div>
+                            <label class="bdm-lbl">Відповідальний</label>
+                            <div class="bdm-dept-wrap">
+                                <div class="bd-icon-trigger" id="bd-icon-trigger" onclick="BranchDocsPage._toggleIconDrop()">
+                                    ${triggerInner}
+                                    <div class="bd-icon-drop" id="bd-icon-drop" style="display:none" onclick="event.stopPropagation()">
+                                        ${dropOptions}
+                                    </div>
+                                </div>
+                                <div style="position:relative">
+                                    <input id="bd-bl-dept" class="bd-form-input" placeholder="ПІБ або відділ" value="${Fmt.esc(b?.dept || '')}" style="padding-right:28px">
+                                    <button type="button" class="bdm-dept-clear" onclick="document.getElementById('bd-bl-dept').value=''" title="Очистити"><i class="fa-solid fa-xmark"></i></button>
+                                </div>
+                            </div>
                         </div>
                     </div>
+
+                    <hr class="bdm-divider">
+
+                    <!-- §2 Коментар -->
+                    <div class="bdm-sec">
+                        <div class="bdm-sec-hdr">
+                            <span class="bdm-ico"><i class="fa-solid fa-comment"></i></span>
+                            <span class="bdm-sec-title">Коментар</span>
+                            <span class="bdm-badge">Необов'язково</span>
+                        </div>
+                        <div class="bdm-sub">Додайте текст або коментар для зазначених отримувачів</div>
+                        <div>
+                            <textarea id="bd-bl-tov" class="bd-form-input" rows="1" maxlength="1000"
+                                placeholder="Введіть текст — зберігає переноси рядків…"
+                                oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px';const c=document.getElementById('bd-tov-cnt');if(c)c.textContent=this.value.length+' / 1000'"
+                                style="font-family:inherit;font-size:.88rem;line-height:1.65">${Fmt.esc(b?.tov_text || '')}</textarea>
+                            <div class="bdm-counter" id="bd-tov-cnt">${(b?.tov_text||'').length} / 1000</div>
+                        </div>
+                    </div>
+
+                    <hr class="bdm-divider">
+
+                    <!-- §3 Пов'язані матеріали -->
+                    <div class="bdm-sec">
+                        <div class="bdm-sec-hdr">
+                            <span class="bdm-ico"><i class="fa-solid fa-link"></i></span>
+                            <span class="bdm-sec-title">Пов'язані матеріали</span>
+                            <span class="bdm-badge sel" id="bd-sel-cnt">${selCount} вибрано</span>
+                        </div>
+                        <div class="bdm-sub">Позначте сторінки-колекції, до яких належить цей документ</div>
+                        <div>
+                            <div class="bdm-search">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                                <input type="text" placeholder="Пошук сторінок-колекцій" oninput="BranchDocsPage._filterPages(this.value)">
+                            </div>
+                            <div class="bdm-chk-list" id="bd-chk-list">
+                                ${pageCheckboxes}
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
 
-                <hr class="bd-modal-divider">
-
-                <!-- §4 Оформлення -->
-                <div class="bd-modal-section">
-                    <div class="bd-modal-section-hdr">
-                        <i class="fa-solid fa-palette"></i>
-                        <span>Оформлення</span>
+                <!-- ── Right: tips ────────────────────────── -->
+                <div class="bdm-tips">
+                    <div class="bdm-tips-hdr"><i class="fa-solid fa-lightbulb"></i> Поради</div>
+                    <div class="bdm-tip">
+                        <div class="bdm-tip-title">Назва документа</div>
+                        <div class="bdm-tip-text">Вкажіть повну та точну назву документа для зручного пошуку.</div>
                     </div>
-                    <div class="bd-modal-field">
-                        <label class="bd-modal-field-lbl">Іконка відповідального</label>
-                        <div class="bd-icon-row">${iconPicker}</div>
+                    <div class="bdm-tip">
+                        <div class="bdm-tip-title">Для кого</div>
+                        <div class="bdm-tip-text">Додайте пояснення або примітки для отримувачів (за потреби).</div>
+                    </div>
+                    <div class="bdm-tip">
+                        <div class="bdm-tip-title">Пов'язані матеріали</div>
+                        <div class="bdm-tip-text">Оберіть сторінки-колекції, до яких відноситься цей документ.</div>
+                    </div>
+                    <div class="bdm-info">
+                        <i class="fa-solid fa-circle-info"></i>
+                        <span><strong>Інформація</strong><br>Зміни буде збережено одразу після натискання "Зберегти".</span>
                     </div>
                 </div>
-
             </div>`,
             footer: `
                 <button class="btn btn-ghost btn-sm" onclick="Modal.close()">Скасувати</button>
@@ -489,30 +756,79 @@ const BranchDocsPage = {
                     <i class="fa-solid fa-check"></i> Зберегти
                 </button>`
         });
-        setTimeout(() => document.getElementById('bd-bl-title')?.focus(), 50);
+        setTimeout(() => {
+            ['bd-bl-title','bd-bl-tov'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; }
+            });
+            document.getElementById('bd-bl-title')?.focus();
+        }, 50);
     },
 
-    _pickIcon(btn) {
-        document.querySelectorAll('.bd-icon-opt').forEach(b => b.classList.remove('bd-icon-opt-active'));
-        btn.classList.add('bd-icon-opt-active');
-        document.getElementById('bd-bl-icon').value = btn.dataset.icon;
+    _toggleIconDrop() {
+        const drop = document.getElementById('bd-icon-drop');
+        if (!drop) return;
+        const open = drop.style.display === 'none';
+        drop.style.display = open ? 'grid' : 'none';
+        if (open) {
+            const close = e => {
+                if (!document.getElementById('bd-icon-trigger')?.contains(e.target)) {
+                    drop.style.display = 'none';
+                    document.removeEventListener('click', close);
+                }
+            };
+            setTimeout(() => document.addEventListener('click', close), 0);
+        }
+    },
+
+    _pickIconDrop(btn) {
+        const icon = btn.dataset.icon;
+        document.getElementById('bd-bl-icon').value = icon;
+        document.querySelectorAll('.bd-icon-drop-opt').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const opt = this._iconOptions.find(o => o.icon === icon);
+        const trigger = document.getElementById('bd-icon-trigger');
+        if (trigger && opt) {
+            const inner = opt.icon !== 'fa-circle'
+                ? `<i class="fa-solid ${opt.icon}" style="color:${opt.color}"></i>`
+                : `<i class="fa-regular fa-face-smile" style="color:var(--text-muted)"></i>`;
+            trigger.innerHTML = inner + trigger.querySelector('#bd-icon-drop').outerHTML;
+        }
+        document.getElementById('bd-icon-drop').style.display = 'none';
+    },
+
+    _filterPages(q) {
+        const list = document.getElementById('bd-chk-list');
+        if (!list) return;
+        const term = q.toLowerCase();
+        list.querySelectorAll('.bd-page-chk-row').forEach(row => {
+            const text = row.querySelector('span')?.textContent.toLowerCase() || '';
+            row.style.display = text.includes(term) ? '' : 'none';
+        });
+    },
+
+    _updateSelCount() {
+        const cnt = document.querySelectorAll('.bd-page-chk:checked').length;
+        const el = document.getElementById('bd-sel-cnt');
+        if (el) el.textContent = `${cnt} вибрано`;
     },
 
     async _saveBlock(id) {
-        const number   = parseInt(document.getElementById('bd-bl-num')?.value);
         const title    = document.getElementById('bd-bl-title')?.value.trim();
         const dept     = document.getElementById('bd-bl-dept')?.value.trim() || null;
         const icon     = document.getElementById('bd-bl-icon')?.value || null;
         const tov_text = document.getElementById('bd-bl-tov')?.value.trim() || null;
         const page_ids = Array.from(document.querySelectorAll('.bd-page-chk:checked')).map(c => c.value);
-        if (!title || !number) { Toast.warning('Заповніть обов\'язкові поля'); return; }
+        if (!title) { Toast.warning('Введіть назву'); return; }
         try {
             Loader.show();
             if (id) {
-                await API.branchDocBlocks.update(id, { number, title, dept, icon, tov_text, order_index: number, page_ids });
+                const cur = this._blocks.find(x => x.id === id);
+                await API.branchDocBlocks.update(id, { number: cur?.number, title, dept, icon, tov_text, order_index: cur?.number, page_ids });
                 if (!this._selectedBlock) this._selectedBlock = id;
             } else {
-                await API.branchDocBlocks.create({ number, title, dept, icon, tov_text, order_index: number, page_ids });
+                const maxNum = this._blocks.reduce((m, x) => Math.max(m, x.number), 0);
+                await API.branchDocBlocks.create({ number: maxNum + 1, title, dept, icon, tov_text, order_index: maxNum + 1, page_ids });
             }
             Modal.close();
             Toast.success(id ? 'Блок оновлено' : 'Блок додано');
@@ -533,13 +849,15 @@ const BranchDocsPage = {
 
     async _reload(canManage) {
         const seeAll = AppState.isAdmin() || AppState.isManager() || AppState.isSmm();
-        const [blocks, docs, myDovs, pages, pageDovs] = await Promise.all([
+        const [blocks, docs, myDovs, pages, pageDovs, headerDocs] = await Promise.all([
             API.branchDocBlocks.getAll(),
             API.resources.getBranchDocs(null),
             seeAll ? Promise.resolve(null) : API.dovirenosti.getForProfile(AppState.user.id).catch(() => []),
             API.pages.getAll().catch(() => []),
-            API.pageDovirenosti.getAll().catch(() => [])
+            API.pageDovirenosti.getAll().catch(() => []),
+            API.resources.getBranchHeaderDocs().catch(() => [])
         ]);
+        this._headerDocs = headerDocs;
         this._blocks = blocks;
         this._pages = pages;
         this._seeAll = seeAll;

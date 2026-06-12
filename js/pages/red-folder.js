@@ -125,9 +125,9 @@ const RedFolderPage = {
 
             /* ── Tab bar ──────────────────────────────────────────── */
             .rf-tab-bar { display: flex; align-items: center; gap: .35rem; margin-bottom: 1.1rem; flex-wrap: wrap; }
-            .rf-tab { display: inline-flex; align-items: center; gap: .45rem; padding: .4rem .9rem; border-radius: var(--radius-md); border: 1.5px solid transparent; font-size: .83rem; font-weight: 500; cursor: pointer; font-family: inherit; transition: filter .15s, box-shadow .15s, font-weight .1s; white-space: nowrap; }
-            .rf-tab:hover { filter: brightness(1.08); }
-            .rf-tab.active { font-weight: 700; box-shadow: 0 2px 10px rgba(0,0,0,.12); }
+            .rf-tab { display: inline-flex; align-items: center; gap: .45rem; padding: .35rem .75rem; border-radius: var(--radius-md); border: 1.5px solid transparent; font-size: .78rem; font-weight: 500; cursor: pointer; font-family: inherit; transition: opacity .15s, box-shadow .15s, font-size .15s, padding .15s, font-weight .1s; white-space: nowrap; opacity: .55; }
+            .rf-tab:hover { opacity: .8; }
+            .rf-tab.active { font-size: .85rem; font-weight: 700; padding: .4rem .9rem; opacity: 1; box-shadow: 0 2px 10px rgba(0,0,0,.15); }
             .rf-tab-actions { display: inline-flex; gap: 2px; margin-left: .15rem; opacity: 0; pointer-events: none; transition: opacity .12s; }
             .rf-tab:hover .rf-tab-actions, .rf-tab.active .rf-tab-actions { opacity: 1; pointer-events: auto; }
             .rf-tab-act-btn { width: 16px; height: 16px; border-radius: 3px; border: none; background: transparent; color: inherit; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: .58rem; padding: 0; opacity: .7; transition: opacity .12s; }

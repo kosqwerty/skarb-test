@@ -517,7 +517,6 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
             if (!skipLoad) this.load();
         } else if (tab === 'branch') {
             content.innerHTML = `
-                ${AppState.isAdmin() ? '<div style="margin-bottom:.75rem"><button class="btn btn-primary" onclick="BranchDocsPage._blockModal()"><i class="fa-solid fa-plus"></i> Додати рядок</button></div>' : ''}
                 <div id="bd-tab-area" style="width:1000px"></div>`;
             BranchDocsPage.renderInTab(document.getElementById('bd-tab-area'));
         } else if (tab === 'red-folder') {

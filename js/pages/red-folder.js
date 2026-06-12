@@ -50,7 +50,7 @@ const RedFolderPage = {
 
             /* ── Split panel ──────────────────────────────────────── */
             .rf-split { display: flex; border: 1px solid rgba(239,68,68,.2); border-radius: var(--radius-xl); overflow: hidden; background: var(--bg-surface); box-shadow: 0 2px 16px rgba(239,68,68,.07); min-height: 280px; }
-            .rf-split-sidebar { width: 550px; flex-shrink: 0; border-right: 1px solid rgba(239,68,68,.15); display: flex; flex-direction: column; overflow-y: auto; max-height: 600px; background: var(--bg-raised); }
+            .rf-split-sidebar { width: 550px; flex-shrink: 0; border-right: 1px solid rgba(239,68,68,.15); display: flex; flex-direction: column; overflow-y: auto; background: var(--bg-raised); }
             .rf-split-content { flex: 1; min-width: 0; max-width: 450px; overflow-y: auto; max-height: 600px; }
 
             /* ── Sidebar item buttons ─────────────────────────────── */
@@ -134,6 +134,7 @@ const RedFolderPage = {
             .rf-tab-add { border-style: dashed !important; background: transparent !important; color: var(--text-muted) !important; }
             .rf-tab-add:hover { color: var(--text-primary) !important; border-color: var(--border) !important; }
             .rf-tab-bar-right { margin-left: auto; }
+            .rf-tab-sep { width: 1px; height: 20px; background: var(--border); flex-shrink: 0; margin: 0 .1rem; }
 
             /* ── Modal form ───────────────────────────────────────── */
             .rf-form { display: flex; flex-direction: column; gap: .9rem; }
@@ -255,7 +256,7 @@ const RedFolderPage = {
                 <i class="fa-solid fa-folder" style="font-size:.75rem"></i>
                 ${Fmt.esc(t.title)}
                 ${actBtns}
-            </button>`;
+            </button>${idx < this._tabs.length - 1 ? '<span class="rf-tab-sep"></span>' : ''}`;
         }).join('');
         const addBtn = canManage
             ? `<button class="rf-tab rf-tab-add rf-tab-bar-right" onclick="RedFolderPage._addTabModal()"><i class="fa-solid fa-plus" style="font-size:.7rem"></i> Додати вкладку</button>`
@@ -314,6 +315,8 @@ const RedFolderPage = {
                     </div>
                     ${canManage ? `
                     <div class="rf-item-actions" onclick="event.stopPropagation()">
+                        <button class="rf-ta-btn" title="Вгору" onclick="RedFolderPage._moveItem('${item.id}',-1)" ${idx === 0 ? 'disabled style="opacity:.3;cursor:default"' : ''}><i class="fa-solid fa-chevron-up"></i></button>
+                        <button class="rf-ta-btn" title="Вниз" onclick="RedFolderPage._moveItem('${item.id}',1)" ${idx === visibleItems.length - 1 ? 'disabled style="opacity:.3;cursor:default"' : ''}><i class="fa-solid fa-chevron-down"></i></button>
                         <button class="rf-ta-btn" title="Редагувати" onclick="RedFolderPage._openModal('${item.id}')"><i class="fa-solid fa-pen"></i></button>
                         <button class="rf-ta-btn danger" title="Видалити" onclick="RedFolderPage._delete('${item.id}')"><i class="fa-solid fa-trash"></i></button>
                     </div>` : ''}
@@ -577,11 +580,12 @@ const RedFolderPage = {
         } else if (itemDocs.length) {
             docsHtml = itemDocs.map(d => {
                 const acked = (() => { const a = this._ackMap[d.id]; return a && (a.version || 1) >= (d.doc_version || 1); })();
+                const docLabel = (d.dovirenost_id && this._dovNameMap?.[d.dovirenost_id]) || d.title;
                 return `
                 <div class="rf-doc-card" onclick="RedFolderPage._openDoc('${Fmt.esc(d.storage_path||'')}','${d.id}')">
                     <span class="rf-ack-dot ${acked ? 'rf-read' : 'rf-unread'}" data-doc-dot="${d.id}" title="${acked ? 'Ознайомлено' : 'Не ознайомлено'}"></span>
                     <div class="rf-doc-card-icon"><i class="fa-solid fa-file-pdf"></i></div>
-                    <span class="rf-doc-card-title">${Fmt.esc(d.title)}</span>
+                    <span class="rf-doc-card-title">${Fmt.esc(docLabel)}</span>
                     ${canManage ? `
                     <div class="rf-doc-card-actions" onclick="event.stopPropagation()">
                         <button class="rf-ta-btn" title="Редагувати" onclick="RedFolderPage._editDocModal('${d.id}')"><i class="fa-solid fa-pen"></i></button>
@@ -961,6 +965,30 @@ const RedFolderPage = {
             Toast.error('Помилка збереження', e.message);
         } finally {
             Loader.hide();
+        }
+    },
+
+    async _moveItem(id, dir) {
+        const visibleItems = this._tabs.length && this._selectedTab
+            ? this._items.filter(i => i.tab_id === this._selectedTab || i.tab_id == null)
+            : this._items;
+        const idx = visibleItems.findIndex(i => i.id === id);
+        const swapIdx = idx + dir;
+        if (idx < 0 || swapIdx < 0 || swapIdx >= visibleItems.length) return;
+        const a = visibleItems[idx];
+        const b = visibleItems[swapIdx];
+        const numA = a.number, numB = b.number;
+        const tmp = Math.max(...this._items.map(x => x.number)) + 9999;
+        try {
+            await API.redFolderItems.update(a.id, { number: tmp });
+            await API.redFolderItems.update(b.id, { number: numA });
+            await API.redFolderItems.update(a.id, { number: numB });
+            a.number = numB;
+            b.number = numA;
+            this._items.sort((x, y) => x.number - y.number);
+            this._render();
+        } catch (e) {
+            Toast.error('Помилка переміщення', e.message);
         }
     },
 

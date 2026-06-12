@@ -14,6 +14,19 @@ const BranchDocsPage = {
     _pageDovMap: {},
     _dovNameMap: {},
     _headerDocs: [],     // top-level files above the split
+    _tabs: [],           // bd_tabs rows
+    _selectedTab: null,  // currently selected tab id
+
+    _tabColors: [
+        { bg: 'rgba(239,68,68,.13)',   border: 'rgba(239,68,68,.45)',   text: '#ef4444'  },
+        { bg: 'rgba(99,102,241,.13)',  border: 'rgba(99,102,241,.45)',  text: '#6366f1'  },
+        { bg: 'rgba(16,185,129,.13)',  border: 'rgba(16,185,129,.45)',  text: '#10b981'  },
+        { bg: 'rgba(245,158,11,.13)',  border: 'rgba(245,158,11,.45)',  text: '#f59e0b'  },
+        { bg: 'rgba(14,165,233,.13)',  border: 'rgba(14,165,233,.45)',  text: '#0ea5e9'  },
+        { bg: 'rgba(168,85,247,.13)',  border: 'rgba(168,85,247,.45)',  text: '#a855f7'  },
+        { bg: 'rgba(236,72,153,.13)',  border: 'rgba(236,72,153,.45)',  text: '#ec4899'  },
+        { bg: 'rgba(20,184,166,.13)',  border: 'rgba(20,184,166,.45)',  text: '#14b8a6'  },
+    ],
 
     _iconOptions: [
         { icon: 'fa-scale-balanced', label: 'Юристи',         color: '#6366f1' },
@@ -40,7 +53,7 @@ const BranchDocsPage = {
 
             /* ── Split panel ──────────────────────────────────────── */
             .bd-split { display: flex; border: 1px solid rgba(99,102,241,.2); border-radius: var(--radius-xl); overflow: hidden; background: var(--bg-surface); box-shadow: 0 2px 16px rgba(99,102,241,.07); min-height: 280px; }
-            .bd-split-sidebar { width: 550px; flex-shrink: 0; border-right: 1px solid rgba(99,102,241,.15); display: flex; flex-direction: column; overflow-y: auto; max-height: 600px; background: var(--bg-raised); }
+            .bd-split-sidebar { width: 550px; flex-shrink: 0; border-right: 1px solid rgba(99,102,241,.15); display: flex; flex-direction: column; overflow-y: auto; background: var(--bg-raised); }
             .bd-split-content { flex: 1; min-width: 0; max-width: 450px; overflow-y: auto; max-height: 600px; }
 
             /* ── Sidebar item buttons ─────────────────────────────── */
@@ -127,6 +140,24 @@ const BranchDocsPage = {
             .bd-icon-drop-opt { display:flex;flex-direction:column;align-items:center;gap:.15rem; padding:.35rem .3rem; border-radius:var(--radius-sm); border:1.5px solid transparent; background:transparent; cursor:pointer; font-size:.6rem; font-family:inherit; color:var(--text-secondary); transition:all .12s; }
             .bd-icon-drop-opt:hover { background:var(--bg-raised); border-color:var(--ic); color:var(--text-primary); }
             .bd-icon-drop-opt.active { background:color-mix(in srgb,var(--ic) 12%,transparent); border-color:var(--ic); color:var(--text-primary); }
+
+            /* ── Shared input ─────────────────────────────────────── */
+            .bd-form-input-g { width:100%;padding:.55rem .8rem;border-radius:var(--radius-md);border:1px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.88rem;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color .15s,box-shadow .15s; }
+            .bd-form-input-g:focus { border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,.12); }
+
+            /* ── Tab bar ──────────────────────────────────────────── */
+            .bd-tab-bar { display: flex; align-items: center; gap: .35rem; margin-bottom: 1.1rem; flex-wrap: wrap; }
+            .bd-tab { display: inline-flex; align-items: center; gap: .45rem; padding: .4rem .9rem; border-radius: var(--radius-md); border: 1.5px solid transparent; font-size: .83rem; font-weight: 500; cursor: pointer; font-family: inherit; transition: filter .15s, box-shadow .15s, font-weight .1s; white-space: nowrap; }
+            .bd-tab:hover { filter: brightness(1.08); }
+            .bd-tab.active { font-weight: 700; box-shadow: 0 2px 10px rgba(0,0,0,.12); }
+            .bd-tab-actions { display: inline-flex; gap: 2px; margin-left: .15rem; opacity: 0; pointer-events: none; transition: opacity .12s; }
+            .bd-tab:hover .bd-tab-actions, .bd-tab.active .bd-tab-actions { opacity: 1; pointer-events: auto; }
+            .bd-tab-act-btn { width: 16px; height: 16px; border-radius: 3px; border: none; background: transparent; color: inherit; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: .58rem; padding: 0; opacity: .7; transition: opacity .12s; }
+            .bd-tab-act-btn:hover { opacity: 1; }
+            .bd-tab-add { border-style: dashed !important; background: transparent !important; color: var(--text-muted) !important; }
+            .bd-tab-add:hover { color: var(--text-primary) !important; border-color: var(--border) !important; }
+            .bd-tab-bar-right { margin-left: auto; }
+            .bd-tab-sep { width: 1px; height: 20px; background: var(--border); flex-shrink: 0; margin: 0 .1rem; }
         `;
         document.head.appendChild(s);
     },
@@ -137,16 +168,23 @@ const BranchDocsPage = {
         const seeAll = AppState.isAdmin() || AppState.isManager() || AppState.isSmm();
         area.innerHTML = `<div id="bd-content" style="padding:.25rem 0"><div style="text-align:center;padding:3rem 1rem;color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin"></i> Завантаження...</div></div>`;
         try {
-            const [blocks, docs, myDovs, pages, pageDovs, allDov, headerDocs] = await Promise.all([
+            const [blocks, docs, myDovs, pages, pageDovs, allDov, headerDocs, tabs] = await Promise.all([
                 API.branchDocBlocks.getAll(),
                 API.resources.getBranchDocs(null),
                 seeAll ? Promise.resolve(null) : API.dovirenosti.getForProfile(AppState.user.id).catch(() => []),
                 API.pages.getAll().catch(() => []),
                 API.pageDovirenosti.getAll().catch(() => []),
                 API.dovirenosti.getAll().catch(() => []),
-                API.resources.getBranchHeaderDocs().catch(() => [])
+                API.resources.getBranchHeaderDocs().catch(() => []),
+                API.bdTabs.getAll().catch(() => [])
             ]);
             this._headerDocs = headerDocs;
+            this._tabs = tabs;
+            if (this._tabs.length && !this._tabs.find(t => t.id === this._selectedTab)) {
+                this._selectedTab = this._tabs[0].id;
+            } else if (!this._tabs.length) {
+                this._selectedTab = null;
+            }
             this._blocks = blocks;
             this._pages = pages;
             this._seeAll = seeAll;
@@ -167,8 +205,11 @@ const BranchDocsPage = {
             });
             const allDocIds = visibleDocs.map(d => d.id).filter(Boolean);
             this._ackMap = allDocIds.length ? await API.documentDownloads.getMyLatest(allDocIds).catch(() => ({})) : {};
-            if (!this._selectedBlock || !this._blocks.find(b => b.id === this._selectedBlock)) {
-                this._selectedBlock = this._blocks[0]?.id || null;
+            const tabBlocks = this._tabs.length && this._selectedTab
+                ? this._blocks.filter(b => b.tab_id === this._selectedTab || b.tab_id == null)
+                : this._blocks;
+            if (!this._selectedBlock || !tabBlocks.find(b => b.id === this._selectedBlock)) {
+                this._selectedBlock = tabBlocks[0]?.id || null;
             }
             this._render(canManage);
         } catch(e) {
@@ -199,21 +240,27 @@ const BranchDocsPage = {
                 </div>
                 <div style="display:flex;gap:.5rem;align-items:center">
                     ${!canManage && userDovIds.length ? `<span class="bd-label-badge"><i class="fa-solid fa-tag"></i>${userDovIds.length} ТОВ</span>` : ''}
-                    ${canManage ? `<button class="btn btn-primary btn-sm" onclick="BranchDocsPage._blockModal()"><i class="fa-solid fa-plus"></i> Додати рядок</button>` : ''}
                 </div>
             </div>
             <div id="bd-content"><div style="text-align:center;padding:3rem 1rem;color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin"></i> Завантаження...</div></div>
         </div>`;
         try {
             Loader.show();
-            const [blocks, docs, myDovs, pages, pageDovs, allDov] = await Promise.all([
+            const [blocks, docs, myDovs, pages, pageDovs, allDov, tabs] = await Promise.all([
                 API.branchDocBlocks.getAll(),
                 API.resources.getBranchDocs(null),
                 seeAll ? Promise.resolve(null) : API.dovirenosti.getForProfile(AppState.user.id).catch(() => []),
                 API.pages.getAll().catch(() => []),
                 API.pageDovirenosti.getAll().catch(() => []),
-                API.dovirenosti.getAll().catch(() => [])
+                API.dovirenosti.getAll().catch(() => []),
+                API.bdTabs.getAll().catch(() => [])
             ]);
+            this._tabs = tabs;
+            if (this._tabs.length && !this._tabs.find(t => t.id === this._selectedTab)) {
+                this._selectedTab = this._tabs[0].id;
+            } else if (!this._tabs.length) {
+                this._selectedTab = null;
+            }
             this._blocks = blocks;
             this._pages = pages;
             this._seeAll = seeAll;
@@ -234,8 +281,11 @@ const BranchDocsPage = {
             });
             const allDocIds = visibleDocs.map(d => d.id).filter(Boolean);
             this._ackMap = allDocIds.length ? await API.documentDownloads.getMyLatest(allDocIds).catch(() => ({})) : {};
-            if (!this._selectedBlock || !this._blocks.find(b => b.id === this._selectedBlock)) {
-                this._selectedBlock = this._blocks[0]?.id || null;
+            const tabBlocks = this._tabs.length && this._selectedTab
+                ? this._blocks.filter(b => b.tab_id === this._selectedTab || b.tab_id == null)
+                : this._blocks;
+            if (!this._selectedBlock || !tabBlocks.find(b => b.id === this._selectedBlock)) {
+                this._selectedBlock = tabBlocks[0]?.id || null;
             }
             this._render(canManage);
         } catch(e) {
@@ -246,19 +296,51 @@ const BranchDocsPage = {
         }
     },
 
+    _buildTabBar(canManage) {
+        if (!this._tabs.length && !canManage) return '';
+        const tabsHtml = this._tabs.map((t, idx) => {
+            const isActive = this._selectedTab === t.id;
+            const c = this._tabColors[idx % this._tabColors.length];
+            const baseStyle = `background:${c.bg};border-color:${isActive ? c.border : 'transparent'};color:${c.text};`;
+            const actBtns = canManage ? `
+                <span class="bd-tab-actions" onclick="event.stopPropagation()">
+                    <button class="bd-tab-act-btn" title="Перейменувати" onclick="BranchDocsPage._renameTabModal('${t.id}')"><i class="fa-solid fa-pen"></i></button>
+                    <button class="bd-tab-act-btn" title="Видалити вкладку" onclick="BranchDocsPage._deleteTab('${t.id}')"><i class="fa-solid fa-xmark"></i></button>
+                </span>` : '';
+            return `<button class="bd-tab${isActive ? ' active' : ''}" style="${baseStyle}" onclick="BranchDocsPage._selectTab('${t.id}')">
+                <i class="fa-solid fa-folder" style="font-size:.75rem"></i>
+                ${Fmt.esc(t.title)}
+                ${actBtns}
+            </button>${idx < this._tabs.length - 1 ? '<span class="bd-tab-sep"></span>' : ''}`;
+        }).join('');
+        const addBtn = canManage
+            ? `<button class="bd-tab bd-tab-add bd-tab-bar-right" onclick="BranchDocsPage._addTabModal()"><i class="fa-solid fa-plus" style="font-size:.7rem"></i> Додати вкладку</button>`
+            : '';
+        return `<div class="bd-tab-bar">${tabsHtml}${addBtn}</div>`;
+    },
+
     _render(canManage) {
         const el = document.getElementById('bd-content');
         if (!el) return;
 
-        if (!this._blocks.length) {
-            el.innerHTML = `<div style="text-align:center;padding:3rem 1rem;color:var(--text-muted);font-size:.88rem">
+        const tabBar = this._buildTabBar(canManage);
+        const visibleBlocks = this._tabs.length && this._selectedTab
+            ? this._blocks.filter(b => b.tab_id === this._selectedTab || b.tab_id == null)
+            : this._blocks;
+
+        if (!visibleBlocks.length) {
+            el.innerHTML = `
+            ${tabBar}
+            ${this._buildHeaderZone(canManage)}
+            <div style="text-align:center;padding:3rem 1rem;color:var(--text-muted);font-size:.88rem">
                 <i class="fa-regular fa-folder-open" style="font-size:2rem;color:rgba(99,102,241,.3);display:block;margin-bottom:.5rem"></i>
-                Блоки не налаштовано
+                ${!this._blocks.length ? 'Блоки не налаштовано' : 'У цій вкладці немає рядків'}
+                ${canManage ? `<div style="margin-top:1rem"><button class="btn btn-primary btn-sm" onclick="BranchDocsPage._blockModal()"><i class="fa-solid fa-plus"></i> Додати рядок</button></div>` : ''}
             </div>`;
             return;
         }
 
-        const sidebarHtml = this._blocks.map(b => {
+        const sidebarHtml = visibleBlocks.map((b, idx) => {
             const blockDocs = this._byBlock[b.number] || [];
             const ico = b.icon && b.icon !== 'fa-circle' ? this._iconOptions.find(o => o.icon === b.icon) : null;
             const isActive = this._selectedBlock === b.id;
@@ -286,6 +368,8 @@ const BranchDocsPage = {
                     </div>
                     ${canManage ? `
                     <div class="bd-item-actions" onclick="event.stopPropagation()">
+                        <button class="bd-ta-btn" title="Вгору" onclick="BranchDocsPage._moveBlock('${b.id}',-1)" ${idx === 0 ? 'disabled style="opacity:.3;cursor:default"' : ''}><i class="fa-solid fa-chevron-up"></i></button>
+                        <button class="bd-ta-btn" title="Вниз" onclick="BranchDocsPage._moveBlock('${b.id}',1)" ${idx === visibleBlocks.length - 1 ? 'disabled style="opacity:.3;cursor:default"' : ''}><i class="fa-solid fa-chevron-down"></i></button>
                         <button class="bd-ta-btn" title="Редагувати" onclick="BranchDocsPage._blockModal('${b.id}')"><i class="fa-solid fa-pen"></i></button>
                         <button class="bd-ta-btn danger" title="Видалити" onclick="BranchDocsPage._deleteBlock('${b.id}')"><i class="fa-solid fa-trash"></i></button>
                     </div>` : ''}
@@ -295,9 +379,15 @@ const BranchDocsPage = {
         }).join('');
 
         el.innerHTML = `
+        ${tabBar}
         ${this._buildHeaderZone(canManage)}
         <div class="bd-split">
-            <div class="bd-split-sidebar">${sidebarHtml}</div>
+            <div class="bd-split-sidebar">
+                ${sidebarHtml}
+                ${canManage ? `<div style="padding:.6rem .75rem;border-top:1px solid rgba(99,102,241,.1)">
+                    <button class="btn btn-sm" style="width:100%;background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;border:none;box-shadow:0 2px 8px rgba(99,102,241,.25)" onclick="BranchDocsPage._blockModal()"><i class="fa-solid fa-plus"></i> Додати рядок</button>
+                </div>` : ''}
+            </div>
             <div class="bd-split-content" id="bd-split-content">
                 ${this._buildBlockContent(this._selectedBlock, canManage)}
             </div>
@@ -585,6 +675,93 @@ const BranchDocsPage = {
         if (content) content.innerHTML = this._buildBlockContent(id, AppState.isAdmin() && !AppState.isPreviewing());
     },
 
+    // ── Tab management ────────────────────────────────────────────────
+
+    _selectTab(id) {
+        this._selectedTab = id;
+        const visibleBlocks = this._blocks.filter(b => b.tab_id === id || b.tab_id == null);
+        this._selectedBlock = visibleBlocks[0]?.id || null;
+        this._render(AppState.isAdmin() && !AppState.isPreviewing());
+    },
+
+    _addTabModal() {
+        Modal.open({
+            title: '<i class="fa-solid fa-folder-plus" style="color:#6366f1;margin-right:.4rem"></i> Нова вкладка',
+            size: 'sm',
+            body: `<div>
+                <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.4rem">Назва вкладки <span style="color:var(--danger)">*</span></div>
+                <input id="bd-tab-name-inp" class="bd-form-input-g" placeholder="Наприклад: Безпека праці" autofocus>
+            </div>`,
+            footer: `<button class="btn btn-sm" style="background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;border:none" onclick="BranchDocsPage._doAddTab()"><i class="fa-solid fa-check"></i> Створити</button>
+                     <button class="btn btn-ghost btn-sm" onclick="Modal.close()">Скасувати</button>`
+        });
+        setTimeout(() => document.getElementById('bd-tab-name-inp')?.focus(), 50);
+    },
+
+    async _doAddTab() {
+        const title = Dom.val('bd-tab-name-inp').trim();
+        if (!title) { Toast.warning('Введіть назву'); return; }
+        try {
+            Loader.show();
+            const tab = await API.bdTabs.create(title);
+            this._selectedTab = tab.id;
+            Modal.close();
+            await this._reload(AppState.isAdmin() && !AppState.isPreviewing());
+        } catch (e) {
+            Toast.error('Помилка', e.message);
+        } finally {
+            Loader.hide();
+        }
+    },
+
+    _renameTabModal(id) {
+        const tab = this._tabs.find(t => t.id === id);
+        if (!tab) return;
+        Modal.open({
+            title: '<i class="fa-solid fa-pen" style="color:#6366f1;margin-right:.4rem"></i> Перейменувати вкладку',
+            size: 'sm',
+            body: `<div>
+                <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.4rem">Назва вкладки <span style="color:var(--danger)">*</span></div>
+                <input id="bd-tab-rename-inp" class="bd-form-input-g" value="${Fmt.esc(tab.title)}">
+            </div>`,
+            footer: `<button class="btn btn-sm" style="background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;border:none" onclick="BranchDocsPage._doRenameTab('${id}')"><i class="fa-solid fa-check"></i> Зберегти</button>
+                     <button class="btn btn-ghost btn-sm" onclick="Modal.close()">Скасувати</button>`
+        });
+        setTimeout(() => { const inp = document.getElementById('bd-tab-rename-inp'); if (inp) { inp.focus(); inp.select(); } }, 50);
+    },
+
+    async _doRenameTab(id) {
+        const title = Dom.val('bd-tab-rename-inp').trim();
+        if (!title) { Toast.warning('Введіть назву'); return; }
+        try {
+            Loader.show();
+            await API.bdTabs.update(id, title);
+            Modal.close();
+            await this._reload(AppState.isAdmin() && !AppState.isPreviewing());
+        } catch (e) {
+            Toast.error('Помилка', e.message);
+        } finally {
+            Loader.hide();
+        }
+    },
+
+    async _deleteTab(id) {
+        const tab = this._tabs.find(t => t.id === id);
+        if (!tab) return;
+        const ok = await Modal.confirm({ message: `Видалити вкладку «${Fmt.esc(tab.title)}»? Рядки залишаться, але більше не будуть прив'язані до цієї вкладки.`, danger: true });
+        if (!ok) return;
+        try {
+            Loader.show();
+            await API.bdTabs.remove(id);
+            if (this._selectedTab === id) this._selectedTab = null;
+            await this._reload(AppState.isAdmin() && !AppState.isPreviewing());
+        } catch (e) {
+            Toast.error('Помилка', e.message);
+        } finally {
+            Loader.hide();
+        }
+    },
+
     // ── Block CRUD ────────────────────────────────────────────────────
 
     async _blockModal(id) {
@@ -828,12 +1005,42 @@ const BranchDocsPage = {
                 if (!this._selectedBlock) this._selectedBlock = id;
             } else {
                 const maxNum = this._blocks.reduce((m, x) => Math.max(m, x.number), 0);
-                await API.branchDocBlocks.create({ number: maxNum + 1, title, dept, icon, tov_text, order_index: maxNum + 1, page_ids });
+                const tabId = this._selectedTab || null;
+                await API.branchDocBlocks.create({ number: maxNum + 1, title, dept, icon, tov_text, order_index: maxNum + 1, page_ids, tab_id: tabId });
             }
             Modal.close();
             Toast.success(id ? 'Блок оновлено' : 'Блок додано');
             await this._reload(true);
         } catch(e) { Toast.error('Помилка', e.message); } finally { Loader.hide(); }
+    },
+
+    async _moveBlock(id, dir) {
+        const visible = this._tabs.length && this._selectedTab
+            ? this._blocks.filter(b => b.tab_id === this._selectedTab || b.tab_id == null)
+            : this._blocks;
+        const idx = visible.findIndex(b => b.id === id);
+        const swapIdx = idx + dir;
+        if (idx < 0 || swapIdx < 0 || swapIdx >= visible.length) return;
+        const a = visible[idx];
+        const b = visible[swapIdx];
+        const numA = a.number, numB = b.number;
+        const tmp = Math.max(...this._blocks.map(x => x.number)) + 9999;
+        try {
+            await API.branchDocBlocks.update(a.id, { number: tmp });
+            await API.branchDocBlocks.update(b.id, { number: numA });
+            await API.branchDocBlocks.update(a.id, { number: numB });
+            // swap _byBlock keys so docs stay attached
+            const docsA = this._byBlock[numA];
+            const docsB = this._byBlock[numB];
+            if (docsA) this._byBlock[numB] = docsA; else delete this._byBlock[numB];
+            if (docsB) this._byBlock[numA] = docsB; else delete this._byBlock[numA];
+            a.number = numB;
+            b.number = numA;
+            this._blocks.sort((x, y) => x.number - y.number);
+            this._render(AppState.isAdmin() && !AppState.isPreviewing());
+        } catch (e) {
+            Toast.error('Помилка переміщення', e.message);
+        }
     },
 
     async _deleteBlock(id) {
@@ -849,15 +1056,22 @@ const BranchDocsPage = {
 
     async _reload(canManage) {
         const seeAll = AppState.isAdmin() || AppState.isManager() || AppState.isSmm();
-        const [blocks, docs, myDovs, pages, pageDovs, headerDocs] = await Promise.all([
+        const [blocks, docs, myDovs, pages, pageDovs, headerDocs, tabs] = await Promise.all([
             API.branchDocBlocks.getAll(),
             API.resources.getBranchDocs(null),
             seeAll ? Promise.resolve(null) : API.dovirenosti.getForProfile(AppState.user.id).catch(() => []),
             API.pages.getAll().catch(() => []),
             API.pageDovirenosti.getAll().catch(() => []),
-            API.resources.getBranchHeaderDocs().catch(() => [])
+            API.resources.getBranchHeaderDocs().catch(() => []),
+            API.bdTabs.getAll().catch(() => [])
         ]);
         this._headerDocs = headerDocs;
+        this._tabs = tabs;
+        if (this._tabs.length && !this._tabs.find(t => t.id === this._selectedTab)) {
+            this._selectedTab = this._tabs[0].id;
+        } else if (!this._tabs.length) {
+            this._selectedTab = null;
+        }
         this._blocks = blocks;
         this._pages = pages;
         this._seeAll = seeAll;
@@ -876,8 +1090,11 @@ const BranchDocsPage = {
         });
         const allDocIds = visibleDocs.map(d => d.id).filter(Boolean);
         this._ackMap = allDocIds.length ? await API.documentDownloads.getMyLatest(allDocIds).catch(() => ({})) : {};
-        if (!this._selectedBlock || !this._blocks.find(b => b.id === this._selectedBlock)) {
-            this._selectedBlock = this._blocks[0]?.id || null;
+        const tabBlocks = this._tabs.length && this._selectedTab
+            ? this._blocks.filter(b => b.tab_id === this._selectedTab || b.tab_id == null)
+            : this._blocks;
+        if (!this._selectedBlock || !tabBlocks.find(b => b.id === this._selectedBlock)) {
+            this._selectedBlock = tabBlocks[0]?.id || null;
         }
         this._render(canManage);
     },

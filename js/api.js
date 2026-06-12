@@ -1796,6 +1796,30 @@ const API = {
         }
     },
 
+    // ── Branch Doc Tabs ───────────────────────────────────────────────
+    bdTabs: {
+        async getAll() {
+            const { data, error } = await supabase.from('bd_tabs')
+                .select('*').order('order_index').order('created_at');
+            if (error) throw error;
+            return data || [];
+        },
+        async create(title) {
+            const { data, error } = await supabase.from('bd_tabs')
+                .insert({ title, order_index: 0 }).select().single();
+            if (error) throw error;
+            return data;
+        },
+        async update(id, title) {
+            const { error } = await supabase.from('bd_tabs').update({ title }).eq('id', id);
+            if (error) throw error;
+        },
+        async remove(id) {
+            const { error } = await supabase.from('bd_tabs').delete().eq('id', id);
+            if (error) throw error;
+        }
+    },
+
     // ── Red Folder Items ──────────────────────────────────────────────
     rfTabs: {
         async getAll() {

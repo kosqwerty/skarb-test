@@ -11,6 +11,19 @@ const RegistryPage = {
     _allDovs:  [],
     _ackMap:   {},            // resourceId -> { at, version }
     _selectedTopics: {},      // { sectionId -> itemId }
+    _selectedSection: null,   // currently active tab (section id)
+    _activeTabColor: null,
+
+    _tabColors: [
+        { bg: 'rgba(99,102,241,.13)',  border: 'rgba(99,102,241,.45)',  text: '#6366f1' },
+        { bg: 'rgba(16,185,129,.13)',  border: 'rgba(16,185,129,.45)',  text: '#10b981' },
+        { bg: 'rgba(245,158,11,.13)',  border: 'rgba(245,158,11,.45)',  text: '#f59e0b' },
+        { bg: 'rgba(14,165,233,.13)',  border: 'rgba(14,165,233,.45)',  text: '#0ea5e9' },
+        { bg: 'rgba(239,68,68,.13)',   border: 'rgba(239,68,68,.45)',   text: '#ef4444' },
+        { bg: 'rgba(168,85,247,.13)',  border: 'rgba(168,85,247,.45)',  text: '#a855f7' },
+        { bg: 'rgba(236,72,153,.13)',  border: 'rgba(236,72,153,.45)',  text: '#ec4899' },
+        { bg: 'rgba(20,184,166,.13)',  border: 'rgba(20,184,166,.45)',  text: '#14b8a6' },
+    ],
 
     async renderInTab(area) {
         if (!area) return;
@@ -47,19 +60,26 @@ const RegistryPage = {
             area.innerHTML = `<div class="callout danger">Помилка завантаження реєстрів: ${Fmt.esc(e.message)}</div>`;
             return;
         }
-        this._render(area);
-
-        // Restore open accordions after returning from document view
-        const savedSecs = sessionStorage.getItem('rg_open_secs');
-        if (savedSecs) {
-            try { JSON.parse(savedSecs).forEach(id => document.getElementById(id)?.classList.add('open')); } catch(_) {}
-            sessionStorage.removeItem('rg_open_secs');
+        // Restore selected section after returning from document view
+        const savedSec = sessionStorage.getItem('rg_selected_sec');
+        if (savedSec) {
+            sessionStorage.removeItem('rg_selected_sec');
+            if (this._sections.find(s => s.id === savedSec)) this._selectedSection = savedSec;
         }
+
+        this._render(area);
     },
 
     // ── Render ──────────────────────────────────────────────────────
     _render(area) {
         const canManage = this._canManage;
+
+        // Ensure valid selected section
+        if (this._sections.length && !this._sections.find(s => s.id === this._selectedSection)) {
+            this._selectedSection = this._sections[0].id;
+        } else if (!this._sections.length) {
+            this._selectedSection = null;
+        }
 
         // Ensure a valid topic is selected per section
         this._sections.forEach(sec => {
@@ -72,23 +92,25 @@ const RegistryPage = {
 
         const styles = `
         <style>
-            .rg-toolbar{display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem;flex-wrap:wrap}
-
-            /* ── Sections shell ──────────────────────────────────────── */
-            .rg-sections{display:flex;flex-direction:column;gap:.85rem;max-width:1400px}
-            .rg-sec{border:1px solid var(--border);border-radius:var(--radius-xl);background:var(--bg-surface);overflow:hidden}
-            .rg-sec-head{display:flex;align-items:center;gap:.6rem;padding:.7rem 1rem;background:var(--bg-raised);cursor:pointer;user-select:none;border-bottom:1px solid transparent;transition:border-color .15s,background .15s}
-            .rg-sec-head:hover{background:var(--bg-hover)}
-            .rg-sec.open .rg-sec-head{border-bottom-color:var(--border)}
-            .rg-sec-chevron{font-size:.9rem;color:var(--text-muted);transition:transform .2s;flex-shrink:0}
-            .rg-sec.open .rg-sec-chevron{transform:rotate(90deg)}
-            .rg-sec-icon{width:38px;height:38px;border-radius:10px;background:rgba(99,102,241,.12);color:var(--primary);display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0}
-            .rg-sec-title{font-size:.95rem;font-weight:700;color:var(--text-primary);flex:1;min-width:0}
-            .rg-sec-dov-badge{font-size:.68rem;color:var(--text-muted);background:var(--bg-base);border:1px solid var(--border);border-radius:20px;padding:.1rem .45rem;flex-shrink:0;white-space:nowrap}
-            .rg-sec-actions{display:flex;gap:.25rem;flex-shrink:0;opacity:0;transition:opacity .15s}
-            .rg-sec:hover .rg-sec-actions{opacity:1}
-            .rg-sec-body{display:none;flex-direction:column}
-            .rg-sec.open .rg-sec-body{display:flex}
+            /* ── Tab carousel ─────────────────────────────────────────── */
+            .rg-tab-carousel{display:flex;align-items:flex-end;gap:6px;position:relative;z-index:2;margin-bottom:-4px;width:1200px}
+            .rg-car-btn{flex-shrink:0;width:30px;height:30px;border-radius:50%;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.6rem;transition:all .2s;font-family:inherit;box-shadow:0 2px 6px rgba(0,0,0,.08);margin-bottom:6px}
+            .rg-car-btn:hover{background:var(--primary);color:#fff;border-color:var(--primary);box-shadow:0 3px 10px rgba(99,102,241,.3)}
+            .rg-tab-bar{flex:1;min-width:0;display:flex;align-items:flex-end;gap:5px;overflow-x:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent;padding-bottom:3px}
+            .rg-tab-bar::-webkit-scrollbar{height:3px}
+            .rg-tab-bar::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+            .rg-tab-bar::-webkit-scrollbar-track{background:transparent}
+            .rg-tab{display:inline-flex;align-items:center;gap:.45rem;padding:8px 16px;border-radius:12px 12px 0 0;border:1.5px solid;border-bottom:none;font-size:.8rem;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;opacity:1;margin-bottom:4px;transition:opacity .15s}
+            .rg-tab:hover{opacity:1}
+            .rg-tab.active{font-size:.88rem;padding:10px 20px;background:var(--bg-surface) !important;border-width:3px !important;border-bottom:3px solid var(--bg-surface) !important;margin-bottom:0}
+            .rg-tab-body{border:3px solid var(--border);border-radius:0 var(--radius-xl,18px) var(--radius-xl,18px) var(--radius-xl,18px);background:var(--bg-surface);overflow:hidden;width:1200px}
+            .rg-tab-actions{display:inline-flex;gap:2px;margin-left:.25rem;opacity:.45;pointer-events:auto;transition:opacity .12s}
+            .rg-tab:hover .rg-tab-actions,.rg-tab.active .rg-tab-actions{opacity:1}
+            .rg-tab-act-btn{width:16px;height:16px;border-radius:3px;border:none;background:transparent;color:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.58rem;padding:0;opacity:.7;transition:opacity .12s;font-family:inherit}
+            .rg-tab-act-btn:hover{opacity:1}
+            .rg-tab-add{border-style:dashed !important;background:transparent !important;color:var(--text-muted) !important;opacity:.7 !important;border-radius:10px 10px 0 0 !important}
+            .rg-tab-add:hover{color:var(--text-primary) !important;opacity:1 !important}
+            .rg-tab-bar-right{margin-left:auto}
 
             /* ── Description ────────────────────────────────────────── */
             .rg-sec-desc-wrap{padding:.7rem 1.1rem;border-bottom:1px solid var(--border);background:linear-gradient(135deg,rgba(99,102,241,.04) 0%,rgba(99,102,241,.01) 100%)}
@@ -98,8 +120,8 @@ const RegistryPage = {
 
             /* ── Split layout ───────────────────────────────────────── */
             .rg-split{display:flex;min-height:200px}
-            .rg-split-sidebar{width:260px;flex-shrink:0;border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;max-height:560px}
-            .rg-split-content{flex:1;min-width:0;overflow-y:auto;max-height:560px}
+            .rg-split-sidebar{width:300px;flex-shrink:0;border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto}
+            .rg-split-content{flex:1;min-width:0;overflow-y:auto}
 
             /* ── Sidebar topic buttons ──────────────────────────────── */
             .rg-topic-btn{display:flex;align-items:flex-start;gap:.5rem;padding:.65rem .9rem;cursor:pointer;border:none;background:transparent;text-align:left;color:var(--text-primary);border-bottom:1px solid var(--border);font-family:inherit;font-size:.84rem;line-height:1.4;width:100%;transition:background .12s;position:relative}
@@ -158,75 +180,112 @@ const RegistryPage = {
             .rg-ack-dot.rg-read{background:#10b981}
             @keyframes rg-pulse{0%{box-shadow:0 0 0 0 rgba(239,68,68,.6)}70%{box-shadow:0 0 0 5px rgba(239,68,68,0)}100%{box-shadow:0 0 0 0 rgba(239,68,68,0)}}
 
-            /* ── Empty / misc ────────────────────────────────────────── */
+            /* ── Empty ───────────────────────────────────────────────── */
             .rg-sections-empty{text-align:center;padding:2rem 1rem;color:var(--text-muted);font-size:.85rem;border:1px dashed var(--border);border-radius:var(--radius-xl)}
         </style>`;
 
-        let sectionsHtml = '';
-        if (this._sections.length) {
-            sectionsHtml = `<div class="rg-sections" id="rg-sections-list">` +
-                this._sections.map(sec => {
-                    const secItems = this._items.filter(i => i.section_id === sec.id);
-                    const dovName  = sec._dov?.name;
+        const tabBar = this._buildSectionTabBar(canManage);
+        const sec = this._sections.find(s => s.id === this._selectedSection);
 
-                    const sidebarItems = secItems.map((item, idx) =>
-                        this._buildTopicBtn(item, idx, sec.id, secItems, canManage)
-                    ).join('');
+        const tabBodyStyle = this._activeTabColor
+            ? `border-color:${this._activeTabColor.border};`
+            : '';
 
-                    return `
-                    <div class="rg-sec" id="rg-sec-${sec.id}">
-                        <div class="rg-sec-head" onclick="RegistryPage._toggleSec('${sec.id}')">
-                            <i class="fa-solid fa-chevron-right rg-sec-chevron"></i>
-                            <div class="rg-sec-icon"><i class="fa-solid fa-folder-open"></i></div>
-                            <span class="rg-sec-title">${Fmt.esc(sec.title)}</span>
-                            ${dovName ? `<span class="rg-sec-dov-badge"><i class="fa-solid fa-lock" style="font-size:.6rem;margin-right:.3rem"></i>Доступ тільки для: ${Fmt.esc(dovName)}</span>` : ''}
-                            ${canManage ? `
-                            <div class="rg-sec-actions" onclick="event.stopPropagation()">
-                                <button class="rg-ta-btn" title="Редагувати" onclick="RegistryPage._editSection('${sec.id}',${JSON.stringify(sec.title).replace(/"/g,'&quot;')},${JSON.stringify(sec.dovirenost_id||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-pen"></i></button>
-                                <button class="rg-ta-btn" title="Вгору" onclick="RegistryPage._moveSection('${sec.id}',-1)"><i class="fa-solid fa-arrow-up"></i></button>
-                                <button class="rg-ta-btn" title="Вниз" onclick="RegistryPage._moveSection('${sec.id}',1)"><i class="fa-solid fa-arrow-down"></i></button>
-                                <button class="rg-ta-btn danger" title="Видалити розділ" onclick="RegistryPage._deleteSection('${sec.id}',${JSON.stringify(sec.title).replace(/"/g,'&quot;')})"><i class="fa-solid fa-trash"></i></button>
-                            </div>` : ''}
-                        </div>
-                        <div class="rg-sec-body">
-                            ${sec.description || canManage ? `
-                            <div class="rg-sec-desc-wrap">
-                                ${canManage
-                                    ? `<textarea class="rg-sec-desc-input" id="rg-desc-${sec.id}"
-                                            placeholder="Опис розділу (необов'язково)..."
-                                            onblur="RegistryPage._saveSecDesc('${sec.id}',this.value)"
-                                        >${Fmt.esc(sec.description || '')}</textarea>`
-                                    : (sec.description ? `<p class="rg-sec-desc-text">${Fmt.esc(sec.description)}</p>` : '')}
-                            </div>` : ''}
-                            <div class="rg-split">
-                                <div class="rg-split-sidebar">
-                                    ${sidebarItems || `<div class="rg-split-empty-topics">Тем ще немає</div>`}
-                                    ${canManage ? `
-                                    <div class="rg-split-add-topic">
-                                        <button class="rg-add-topic-btn" onclick="RegistryPage._addTopicToSection('${sec.id}')">
-                                            <i class="fa-solid fa-plus"></i> Додати тему
-                                        </button>
-                                    </div>` : ''}
-                                </div>
-                                <div class="rg-split-content" id="rg-split-${sec.id}">
-                                    ${this._buildDocContent(sec.id, canManage)}
-                                </div>
-                            </div>
-                        </div>
-                    </div>`;
-                }).join('') +
-            `</div>`;
-        } else {
-            sectionsHtml = canManage
+        let bodyHtml;
+        if (!this._sections.length) {
+            bodyHtml = canManage
                 ? `<div class="rg-sections-empty"><i class="fa-solid fa-layer-group" style="font-size:1.8rem;opacity:.3;display:block;margin-bottom:.6rem"></i>Розділи відсутні — натисніть «Додати розділ»</div>`
                 : '';
+        } else {
+            bodyHtml = sec ? this._buildSectionBody(sec, canManage) : '';
         }
 
         area.innerHTML = `${styles}
-        ${canManage ? `<div class="rg-toolbar">
-            <button class="btn btn-primary btn-sm" onclick="RegistryPage._addSection()"><i class="fa-solid fa-layer-group"></i> Додати розділ</button>
-        </div>` : ''}
-        ${sectionsHtml}`;
+        ${tabBar}
+        ${this._sections.length ? `<div class="rg-tab-body" style="${tabBodyStyle}">${bodyHtml}</div>` : bodyHtml}`;
+
+        requestAnimationFrame(() => {
+            const bar = document.getElementById('rg-tab-bar');
+            if (!bar) return;
+            const update = () => {
+                const overflow = bar.scrollWidth > bar.clientWidth + 2;
+                document.querySelectorAll('.rg-car-btn').forEach(b => b.style.visibility = overflow ? '' : 'hidden');
+            };
+            update();
+            new ResizeObserver(update).observe(bar);
+        });
+    },
+
+    // ── Section tab bar ───────────────────────────────────────────────
+    _buildSectionTabBar(canManage) {
+        if (!this._sections.length && !canManage) return '';
+        this._activeTabColor = null;
+        const tabsHtml = this._sections.map((sec, idx) => {
+            const isActive = this._selectedSection === sec.id;
+            const c = this._tabColors[idx % this._tabColors.length];
+            if (isActive) this._activeTabColor = c;
+            const baseStyle = `background:${c.bg};border-color:${c.border};color:${c.text};`;
+            const dovIcon = sec._dov ? `<i class="fa-solid fa-lock" style="font-size:.6rem;opacity:.7" title="Доступ: ${Fmt.esc(sec._dov.name)}"></i>` : '';
+            const actBtns = canManage ? `
+                <span class="rg-tab-actions" onclick="event.stopPropagation()">
+                    <span class="rg-tab-act-btn" title="Редагувати" onclick="RegistryPage._editSection('${sec.id}',${JSON.stringify(sec.title).replace(/"/g,'&quot;')},${JSON.stringify(sec.dovirenost_id||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-pen"></i></span>
+                    <span class="rg-tab-act-btn" title="Видалити" onclick="RegistryPage._deleteSection('${sec.id}',${JSON.stringify(sec.title).replace(/"/g,'&quot;')})"><i class="fa-solid fa-xmark"></i></span>
+                </span>` : '';
+            return `<button class="rg-tab${isActive ? ' active' : ''}" style="${baseStyle}" onclick="RegistryPage._selectSection('${sec.id}')">
+                <i class="fa-solid fa-folder" style="font-size:.75rem"></i>
+                ${Fmt.esc(sec.title)}
+                ${dovIcon}
+                ${actBtns}
+            </button>`;
+        }).join('');
+        const addBtn = canManage
+            ? `<button class="rg-tab rg-tab-add rg-tab-bar-right" onclick="RegistryPage._addSection()"><i class="fa-solid fa-plus" style="font-size:.7rem"></i> Додати розділ</button>`
+            : '';
+        return `<div class="rg-tab-carousel">
+            <button class="rg-car-btn" onclick="document.getElementById('rg-tab-bar').scrollBy({left:-240,behavior:'smooth'})"><i class="fa-solid fa-chevron-left"></i></button>
+            <div class="rg-tab-bar" id="rg-tab-bar">${tabsHtml}${addBtn}</div>
+            <button class="rg-car-btn" onclick="document.getElementById('rg-tab-bar').scrollBy({left:240,behavior:'smooth'})"><i class="fa-solid fa-chevron-right"></i></button>
+        </div>`;
+    },
+
+    // ── Section body ──────────────────────────────────────────────────
+    _buildSectionBody(sec, canManage) {
+        const secItems = this._items.filter(i => i.section_id === sec.id);
+        const sidebarItems = secItems.map((item, idx) =>
+            this._buildTopicBtn(item, idx, sec.id, secItems, canManage)
+        ).join('');
+        const descHtml = sec.description || canManage ? `
+        <div class="rg-sec-desc-wrap">
+            ${canManage
+                ? `<textarea class="rg-sec-desc-input" id="rg-desc-${sec.id}"
+                        placeholder="Опис розділу (необов'язково)..."
+                        onblur="RegistryPage._saveSecDesc('${sec.id}',this.value)"
+                    >${Fmt.esc(sec.description || '')}</textarea>`
+                : (sec.description ? `<p class="rg-sec-desc-text">${Fmt.esc(sec.description)}</p>` : '')}
+        </div>` : '';
+        return `
+        ${descHtml}
+        <div class="rg-split">
+            <div class="rg-split-sidebar">
+                ${sidebarItems || `<div class="rg-split-empty-topics">Тем ще немає</div>`}
+                ${canManage ? `
+                <div class="rg-split-add-topic">
+                    <button class="rg-add-topic-btn" onclick="RegistryPage._addTopicToSection('${sec.id}')">
+                        <i class="fa-solid fa-plus"></i> Додати тему
+                    </button>
+                </div>` : ''}
+            </div>
+            <div class="rg-split-content" id="rg-split-${sec.id}">
+                ${this._buildDocContent(sec.id, canManage)}
+            </div>
+        </div>`;
+    },
+
+    // ── Select section (tab click) ────────────────────────────────────
+    _selectSection(id) {
+        this._selectedSection = id;
+        const area = document.getElementById('rg-tab-area');
+        if (area) this._render(area);
     },
 
     // ── Build sidebar topic button ────────────────────────────────────
@@ -325,25 +384,15 @@ const RegistryPage = {
     // ── Select topic in split panel ───────────────────────────────────
     _selectTopic(secId, itemId) {
         this._selectedTopics[secId] = itemId;
-        const sec = document.getElementById(`rg-sec-${secId}`);
-        if (sec) {
-            sec.querySelectorAll('.rg-topic-btn').forEach(b => b.classList.remove('active'));
-            document.getElementById(`rg-tbtn-${itemId}`)?.classList.add('active');
-        }
+        document.querySelectorAll('.rg-topic-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById(`rg-tbtn-${itemId}`)?.classList.add('active');
         const content = document.getElementById(`rg-split-${secId}`);
         if (content) content.innerHTML = this._buildDocContent(secId, this._canManage);
     },
 
-    // ── Toggle accordion ──────────────────────────────────────────────
-    _toggleSec(id) {
-        const el = document.getElementById(`rg-sec-${id}`);
-        if (el) el.classList.toggle('open');
-    },
-
-    // ── Open doc (saves accordion state for back-navigation) ──────────
+    // ── Open doc (saves selected section for back-navigation) ────────
     _openDoc(resourceId) {
-        const openSecs = [...document.querySelectorAll('.rg-sec.open')].map(el => el.id);
-        if (openSecs.length) sessionStorage.setItem('rg_open_secs', JSON.stringify(openSecs));
+        if (this._selectedSection) sessionStorage.setItem('rg_selected_sec', this._selectedSection);
         API.documentDownloads.track(resourceId).catch(() => {});
         Router.go(`resource/${resourceId}?from=documents&tab=registry`);
     },
@@ -360,13 +409,10 @@ const RegistryPage = {
         }
     },
 
-    // ── Rerender — preserves open sections + selected topics ──────────
+    // ── Rerender ──────────────────────────────────────────────────────
     _rerender() {
         const area = document.getElementById('rg-tab-area');
-        if (!area) return;
-        const openSecs = new Set([...document.querySelectorAll('.rg-sec.open')].map(el => el.id));
-        this._render(area);
-        openSecs.forEach(id => document.getElementById(id)?.classList.add('open'));
+        if (area) this._render(area);
     },
 
     // ── Topic CRUD ────────────────────────────────────────────────────
@@ -607,6 +653,7 @@ const RegistryPage = {
             const sec = await API.registrySections.create({ title, dovirenost_id: dovirenostId || undefined, order_index: maxOrder + 1 });
             sec._dov = dovirenostId ? (this._allDovs || []).find(d => d.id === dovirenostId) : null;
             this._sections.push(sec);
+            this._selectedSection = sec.id;
             Modal.close();
             Toast.success('Розділ створено');
             this._rerender();
@@ -678,8 +725,12 @@ const RegistryPage = {
             Loader.show();
             await API.registrySections.remove(id);
             this._items.forEach(i => { if (i.section_id === id) i.section_id = null; });
+            const delIdx = this._sections.findIndex(s => s.id === id);
             this._sections = this._sections.filter(s => s.id !== id);
             delete this._selectedTopics[id];
+            if (this._selectedSection === id) {
+                this._selectedSection = this._sections[Math.max(0, delIdx - 1)]?.id || this._sections[0]?.id || null;
+            }
             Toast.success('Розділ видалено');
             this._rerender();
         } catch (e) {

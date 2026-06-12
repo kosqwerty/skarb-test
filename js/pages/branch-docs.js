@@ -680,7 +680,7 @@ const BranchDocsPage = {
                 <div class="bd-content-docs-header">
                     <i class="fa-solid fa-file-lines" style="color:#6366f1"></i>
                     Документи
-                    ${canManage ? `<button class="bd-content-add-btn" onclick="BranchDocsPage._uploadModal(${displayNum},${JSON.stringify(b.title).replace(/"/g,'&quot;')})"><i class="fa-solid fa-plus"></i> Завантажити</button>` : ''}
+                    ${canManage ? `<button class="bd-content-add-btn" onclick="BranchDocsPage._uploadModal(${b.number},${displayNum},${JSON.stringify(b.title).replace(/"/g,'&quot;')})"><i class="fa-solid fa-plus"></i> Завантажити</button>` : ''}
                 </div>
                 <div style="display:flex;flex-direction:column;gap:.4rem;margin-top:.55rem">${docsHtml}</div>
             </div>
@@ -1170,10 +1170,10 @@ const BranchDocsPage = {
         } catch(e) { Toast.error('Помилка', e.message); } finally { Loader.hide(); }
     },
 
-    async _uploadModal(blockNum, blockTitle) {
+    async _uploadModal(blockNum, displayNum, blockTitle) {
         const dovs = await API.dovirenosti.getAll().catch(() => []);
         Modal.open({
-            title: `Блок ${blockNum} — завантажити документ`,
+            title: `Блок ${displayNum} — завантажити документ`,
             size: 'lg',
             body: `
             <div style="background:var(--bg-raised);border-left:3px solid var(--primary);border-radius:var(--radius-md);padding:.65rem .9rem;margin-bottom:1.25rem;font-size:.82rem;color:var(--text-secondary);line-height:1.4">

@@ -625,16 +625,16 @@ document.addEventListener('click', function(e) {
                     <span id="col-last-saved" style="font-size:.78rem;color:var(--text-muted);white-space:nowrap;flex-shrink:0">${savedAt ? 'Останнє збереження: ' + CollectionsPage._fmtAgo(savedAt) : ''}</span>
 
                     <!-- Save split button -->
-                    <div style="display:flex;border-radius:var(--radius-md);overflow:hidden;flex-shrink:0;box-shadow:0 2px 6px rgba(99,102,241,.22)">
+                    <div style="display:flex;border-radius:var(--radius-md);flex-shrink:0;box-shadow:0 2px 6px rgba(99,102,241,.22);position:relative">
                         <button id="col-save-btn"
                                 onclick="CollectionsPage.savePage('${page?.id || ''}', true)"
-                                style="display:inline-flex;align-items:center;gap:.35rem;padding:.38rem .75rem;background:var(--primary);color:#fff;border:none;font-size:.83rem;font-weight:600;cursor:pointer;font-family:inherit;transition:filter .15s"
+                                style="display:inline-flex;align-items:center;gap:.35rem;padding:.38rem .75rem;background:var(--primary);color:#fff;border:none;font-size:.83rem;font-weight:600;cursor:pointer;font-family:inherit;transition:filter .15s;border-radius:var(--radius-md) 0 0 var(--radius-md)"
                                 onmouseenter="this.style.filter='brightness(1.1)'" onmouseleave="this.style.filter=''">
                             <i class="fa-solid fa-check"></i> Зберегти
                         </button>
                         <div style="position:relative;display:flex">
                             <button onclick="CollectionsPage._toggleSaveMenu(this)"
-                                    style="padding:.38rem .45rem;background:var(--primary);color:rgba(255,255,255,.8);border:none;border-left:1px solid rgba(255,255,255,.18);cursor:pointer;font-size:.7rem;transition:filter .15s"
+                                    style="padding:.38rem .45rem;background:var(--primary);color:rgba(255,255,255,.8);border:none;border-left:1px solid rgba(255,255,255,.18);cursor:pointer;font-size:.7rem;transition:filter .15s;border-radius:0 var(--radius-md) var(--radius-md) 0"
                                     onmouseenter="this.style.filter='brightness(1.1)'" onmouseleave="this.style.filter=''">
                                 <i class="fa-solid fa-chevron-down"></i>
                             </button>
@@ -800,7 +800,7 @@ document.addEventListener('click', function(e) {
                     </label>`}
                 </div>
                 <div id="attachment-grid"
-                     style="display:flex;flex-wrap:wrap;gap:.5rem;padding:.625rem .875rem;min-height:96px;align-items:flex-start;overflow-y:auto;max-height:180px">
+                     style="display:flex;flex-wrap:wrap;gap:.5rem;padding:.625rem .875rem;min-height:96px;align-items:flex-start;overflow-y:auto">
                     ${page?.id ? '' : '<span style="font-size:.8rem;color:var(--text-muted);align-self:center">—</span>'}
                 </div>
             </div>

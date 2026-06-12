@@ -124,18 +124,20 @@ const RedFolderPage = {
             @keyframes rf-pulse { 0% { box-shadow: 0 0 0 0 rgba(239,68,68,.6); } 70% { box-shadow: 0 0 0 6px rgba(239,68,68,0); } 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); } }
 
             /* ── Tab bar ──────────────────────────────────────────── */
-            .rf-tab-bar { display: flex; align-items: center; gap: .35rem; margin-bottom: 1.1rem; flex-wrap: wrap; }
-            .rf-tab { display: inline-flex; align-items: center; gap: .45rem; padding: .35rem .75rem; border-radius: var(--radius-md); border: 1.5px solid transparent; font-size: .78rem; font-weight: 500; cursor: pointer; font-family: inherit; transition: opacity .15s, box-shadow .15s, font-size .15s, padding .15s, font-weight .1s; white-space: nowrap; opacity: .55; }
-            .rf-tab:hover { opacity: .8; }
-            .rf-tab.active { font-size: .85rem; font-weight: 700; padding: .4rem .9rem; opacity: 1; box-shadow: 0 2px 10px rgba(0,0,0,.15); }
-            .rf-tab-actions { display: inline-flex; gap: 2px; margin-left: .15rem; opacity: 0; pointer-events: none; transition: opacity .12s; }
-            .rf-tab:hover .rf-tab-actions, .rf-tab.active .rf-tab-actions { opacity: 1; pointer-events: auto; }
+            .rf-tab-bar { display: flex; align-items: flex-end; gap: 5px; margin-bottom: -4px; position: relative; z-index: 2; flex-wrap: nowrap; overflow-x: auto; }
+            .rf-tab { display: inline-flex; align-items: center; gap: .45rem; padding: 8px 16px; border-radius: 12px 12px 0 0; border: 1.5px solid; border-bottom: none; font-size: .8rem; font-weight: 600; cursor: pointer; font-family: inherit; transition: opacity .15s; white-space: nowrap; opacity: 1; margin-bottom: 4px; }
+            .rf-tab:hover { opacity: 1; }
+            .rf-tab.active { opacity: 1; font-size: .88rem; padding: 10px 20px; background: var(--bg-surface) !important; border-width: 3px !important; border-bottom: 3px solid var(--bg-surface) !important; margin-bottom: 0; }
+            .rf-tab-body { border: 3px solid var(--border); border-radius: 0 var(--radius-xl, 18px) var(--radius-xl, 18px) var(--radius-xl, 18px); background: var(--bg-surface); overflow: hidden; padding: 1rem; }
+            .rf-tab-body-full { border-radius: var(--radius-xl, 18px); }
+            .rf-tab-actions { display: inline-flex; gap: 2px; margin-left: .25rem; opacity: .45; pointer-events: auto; transition: opacity .12s; }
+            .rf-tab:hover .rf-tab-actions, .rf-tab.active .rf-tab-actions { opacity: 1; }
             .rf-tab-act-btn { width: 16px; height: 16px; border-radius: 3px; border: none; background: transparent; color: inherit; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: .58rem; padding: 0; opacity: .7; transition: opacity .12s; }
             .rf-tab-act-btn:hover { opacity: 1; }
-            .rf-tab-add { border-style: dashed !important; background: transparent !important; color: var(--text-muted) !important; }
-            .rf-tab-add:hover { color: var(--text-primary) !important; border-color: var(--border) !important; }
+            .rf-tab-add { border-style: dashed !important; background: transparent !important; color: var(--text-muted) !important; opacity: .7 !important; border-radius: 10px 10px 0 0 !important; }
+            .rf-tab-add:hover { color: var(--text-primary) !important; opacity: 1 !important; }
             .rf-tab-bar-right { margin-left: auto; }
-            .rf-tab-sep { width: 1px; height: 20px; background: var(--border); flex-shrink: 0; margin: 0 .1rem; }
+            .rf-tab-sep { display: none; }
 
             /* ── Modal form ───────────────────────────────────────── */
             .rf-form { display: flex; flex-direction: column; gap: .9rem; }
@@ -251,14 +253,16 @@ const RedFolderPage = {
     _buildTabBar(canManage) {
         if (!this._tabs.length && !canManage) return '';
         const visibleTabs = this._getVisibleTabs();
+        this._activeTabColor = null;
         const tabsHtml = visibleTabs.map((t, idx) => {
             const isActive = this._selectedTab === t.id;
             const c = this._tabColors[idx % this._tabColors.length];
+            if (isActive) this._activeTabColor = c;
             const baseStyle = `background:${c.bg};border-color:${c.border};color:${c.text};`;
             const actBtns = canManage ? `
                 <span class="rf-tab-actions" onclick="event.stopPropagation()">
-                    <button class="rf-tab-act-btn" title="Перейменувати" onclick="RedFolderPage._renameTabModal('${t.id}')"><i class="fa-solid fa-pen"></i></button>
-                    <button class="rf-tab-act-btn del" title="Видалити вкладку" onclick="RedFolderPage._deleteTab('${t.id}')"><i class="fa-solid fa-xmark"></i></button>
+                    <span class="rf-tab-act-btn" title="Перейменувати" onclick="RedFolderPage._renameTabModal('${t.id}')"><i class="fa-solid fa-pen"></i></span>
+                    <span class="rf-tab-act-btn del" title="Видалити вкладку" onclick="RedFolderPage._deleteTab('${t.id}')"><i class="fa-solid fa-xmark"></i></span>
                 </span>` : '';
             return `<button class="rf-tab${isActive ? ' active' : ''}" style="${baseStyle}" onclick="RedFolderPage._selectTab('${t.id}')">
                 <i class="fa-solid fa-folder" style="font-size:.75rem"></i>
@@ -291,14 +295,20 @@ const RedFolderPage = {
 
         const tabBar = this._buildTabBar(canManage);
 
+        const tabBodyClass = visibleTabs.length ? 'rf-tab-body' : 'rf-tab-body rf-tab-body-full';
+        const tabBodyStyle = this._activeTabColor
+            ? `border:3px solid ${this._activeTabColor.border};`
+            : `border:3px solid var(--border);`;
         if (!visibleItems.length) {
             el.innerHTML = `
             ${tabBar}
+            <div class="${tabBodyClass}" style="${tabBodyStyle}">
             ${this._buildHeaderZone(canManage)}
             <div style="text-align:center;padding:3rem 1rem;color:var(--text-muted);font-size:.88rem">
                 <i class="fa-regular fa-folder-open" style="font-size:2rem;color:rgba(239,68,68,.3);display:block;margin-bottom:.5rem"></i>
                 ${!this._items.length ? 'Таблиця порожня' : 'У цій вкладці немає рядків'}
                 ${canManage ? `<div style="margin-top:1rem"><button class="btn btn-sm" style="background:linear-gradient(135deg,#ef4444,#b91c1c);color:#fff;border:none" onclick="RedFolderPage._openModal()"><i class="fa-solid fa-plus"></i> Додати рядок</button></div>` : ''}
+            </div>
             </div>`;
             return;
         }
@@ -342,6 +352,7 @@ const RedFolderPage = {
 
         el.innerHTML = `
         ${tabBar}
+        <div class="${tabBodyClass}" style="${tabBodyStyle}">
         ${this._buildHeaderZone(canManage)}
         <div class="rf-split">
             <div class="rf-split-sidebar">
@@ -353,6 +364,7 @@ const RedFolderPage = {
             <div class="rf-split-content" id="rf-split-content">
                 ${this._buildItemContent(this._selectedItem, canManage)}
             </div>
+        </div>
         </div>`;
     },
 

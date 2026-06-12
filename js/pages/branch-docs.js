@@ -147,18 +147,20 @@ const BranchDocsPage = {
             .bd-form-input-g:focus { border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,.12); }
 
             /* ── Tab bar ──────────────────────────────────────────── */
-            .bd-tab-bar { display: flex; align-items: center; gap: .35rem; margin-bottom: 1.1rem; flex-wrap: wrap; }
-            .bd-tab { display: inline-flex; align-items: center; gap: .45rem; padding: .35rem .75rem; border-radius: var(--radius-md); border: 1.5px solid transparent; font-size: .78rem; font-weight: 500; cursor: pointer; font-family: inherit; transition: opacity .15s, box-shadow .15s, font-size .15s, padding .15s, font-weight .1s; white-space: nowrap; opacity: .55; }
-            .bd-tab:hover { opacity: .8; }
-            .bd-tab.active { font-size: .85rem; font-weight: 700; padding: .4rem .9rem; opacity: 1; box-shadow: 0 2px 10px rgba(0,0,0,.15); }
-            .bd-tab-actions { display: inline-flex; gap: 2px; margin-left: .15rem; opacity: 0; pointer-events: none; transition: opacity .12s; }
-            .bd-tab:hover .bd-tab-actions, .bd-tab.active .bd-tab-actions { opacity: 1; pointer-events: auto; }
+            .bd-tab-bar { display: flex; align-items: flex-end; gap: 5px; margin-bottom: -4px; position: relative; z-index: 2; flex-wrap: nowrap; overflow-x: auto; }
+            .bd-tab { display: inline-flex; align-items: center; gap: .45rem; padding: 8px 16px; border-radius: 12px 12px 0 0; border: 1.5px solid; border-bottom: none; font-size: .8rem; font-weight: 600; cursor: pointer; font-family: inherit; transition: opacity .15s; white-space: nowrap; opacity: 1; margin-bottom: 4px; }
+            .bd-tab:hover { opacity: 1; }
+            .bd-tab.active { opacity: 1; font-size: .88rem; padding: 10px 20px; background: var(--bg-surface) !important; border-width: 3px !important; border-bottom: 3px solid var(--bg-surface) !important; margin-bottom: 0; }
+            .bd-tab-body { border: 3px solid var(--border); border-radius: 0 var(--radius-xl, 18px) var(--radius-xl, 18px) var(--radius-xl, 18px); background: var(--bg-surface); overflow: hidden; padding: 1rem; }
+            .bd-tab-body-full { border-radius: var(--radius-xl, 18px); }
+            .bd-tab-actions { display: inline-flex; gap: 2px; margin-left: .25rem; opacity: .45; pointer-events: auto; transition: opacity .12s; }
+            .bd-tab:hover .bd-tab-actions, .bd-tab.active .bd-tab-actions { opacity: 1; }
             .bd-tab-act-btn { width: 16px; height: 16px; border-radius: 3px; border: none; background: transparent; color: inherit; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: .58rem; padding: 0; opacity: .7; transition: opacity .12s; }
             .bd-tab-act-btn:hover { opacity: 1; }
-            .bd-tab-add { border-style: dashed !important; background: transparent !important; color: var(--text-muted) !important; }
-            .bd-tab-add:hover { color: var(--text-primary) !important; border-color: var(--border) !important; }
+            .bd-tab-add { border-style: dashed !important; background: transparent !important; color: var(--text-muted) !important; opacity: .7 !important; border-radius: 10px 10px 0 0 !important; }
+            .bd-tab-add:hover { color: var(--text-primary) !important; opacity: 1 !important; }
             .bd-tab-bar-right { margin-left: auto; }
-            .bd-tab-sep { width: 1px; height: 20px; background: var(--border); flex-shrink: 0; margin: 0 .1rem; }
+            .bd-tab-sep { display: none; }
         `;
         document.head.appendChild(s);
     },
@@ -307,14 +309,16 @@ const BranchDocsPage = {
     _buildTabBar(canManage) {
         if (!this._tabs.length && !canManage) return '';
         const visibleTabs = this._getVisibleTabs();
+        this._activeTabColor = null;
         const tabsHtml = visibleTabs.map((t, idx) => {
             const isActive = this._selectedTab === t.id;
             const c = this._tabColors[idx % this._tabColors.length];
+            if (isActive) this._activeTabColor = c;
             const baseStyle = `background:${c.bg};border-color:${c.border};color:${c.text};`;
             const actBtns = canManage ? `
                 <span class="bd-tab-actions" onclick="event.stopPropagation()">
-                    <button class="bd-tab-act-btn" title="Перейменувати" onclick="BranchDocsPage._renameTabModal('${t.id}')"><i class="fa-solid fa-pen"></i></button>
-                    <button class="bd-tab-act-btn" title="Видалити вкладку" onclick="BranchDocsPage._deleteTab('${t.id}')"><i class="fa-solid fa-xmark"></i></button>
+                    <span class="bd-tab-act-btn" title="Перейменувати" onclick="BranchDocsPage._renameTabModal('${t.id}')"><i class="fa-solid fa-pen"></i></span>
+                    <span class="bd-tab-act-btn del" title="Видалити вкладку" onclick="BranchDocsPage._deleteTab('${t.id}')"><i class="fa-solid fa-xmark"></i></span>
                 </span>` : '';
             return `<button class="bd-tab${isActive ? ' active' : ''}" style="${baseStyle}" onclick="BranchDocsPage._selectTab('${t.id}')">
                 <i class="fa-solid fa-folder" style="font-size:.75rem"></i>
@@ -344,14 +348,20 @@ const BranchDocsPage = {
             ? this._blocks.filter(b => b.tab_id === this._selectedTab || b.tab_id == null)
             : this._blocks;
 
+        const tabBodyClass = visibleTabs.length ? 'bd-tab-body' : 'bd-tab-body bd-tab-body-full';
+        const tabBodyStyle = this._activeTabColor
+            ? `border:3px solid ${this._activeTabColor.border};`
+            : `border:3px solid var(--border);`;
         if (!visibleBlocks.length) {
             el.innerHTML = `
             ${tabBar}
+            <div class="${tabBodyClass}" style="${tabBodyStyle}">
             ${this._buildHeaderZone(canManage)}
             <div style="text-align:center;padding:3rem 1rem;color:var(--text-muted);font-size:.88rem">
                 <i class="fa-regular fa-folder-open" style="font-size:2rem;color:rgba(99,102,241,.3);display:block;margin-bottom:.5rem"></i>
                 ${!this._blocks.length ? 'Блоки не налаштовано' : 'У цій вкладці немає рядків'}
                 ${canManage ? `<div style="margin-top:1rem"><button class="btn btn-primary btn-sm" onclick="BranchDocsPage._blockModal()"><i class="fa-solid fa-plus"></i> Додати рядок</button></div>` : ''}
+            </div>
             </div>`;
             return;
         }
@@ -396,6 +406,7 @@ const BranchDocsPage = {
 
         el.innerHTML = `
         ${tabBar}
+        <div class="${tabBodyClass}" style="${tabBodyStyle}">
         ${this._buildHeaderZone(canManage)}
         <div class="bd-split">
             <div class="bd-split-sidebar">
@@ -407,6 +418,7 @@ const BranchDocsPage = {
             <div class="bd-split-content" id="bd-split-content">
                 ${this._buildBlockContent(this._selectedBlock, canManage)}
             </div>
+        </div>
         </div>`;
     },
 

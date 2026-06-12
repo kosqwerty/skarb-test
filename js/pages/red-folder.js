@@ -824,7 +824,7 @@ const RedFolderPage = {
                         </div>
                         <div>
                             <label class="rfm-lbl">Назва документу <span class="req">*</span></label>
-                            <textarea id="rf-inp-title" class="rf-form-input" rows="1" maxlength="255"
+                            <textarea id="rf-inp-title" class="rf-form-input" rows="1" maxlength="500"
                                 placeholder="Введіть назву документу…"
                                 oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px';const c=document.getElementById('rf-title-cnt');if(c)c.textContent=this.value.length+' / 255'">${item ? Fmt.esc(item.title) : ''}</textarea>
                             <div class="rfm-counter" id="rf-title-cnt">${(item?.title||'').length} / 255</div>
@@ -857,7 +857,7 @@ const RedFolderPage = {
                         </div>
                         <div class="rfm-sub">Додайте текст або коментар для зазначених отримувачів</div>
                         <div>
-                            <textarea id="rf-inp-tov" class="rf-form-input" rows="1" maxlength="1000"
+                            <textarea id="rf-inp-tov" class="rf-form-input" rows="1" maxlength="500"
                                 placeholder="Введіть текст — зберігає переноси рядків…"
                                 oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px';const c=document.getElementById('rf-tov-cnt');if(c)c.textContent=this.value.length+' / 1000'"
                                 style="font-family:inherit;font-size:.88rem;line-height:1.65">${item ? Fmt.esc(item.tov_text || '') : ''}</textarea>

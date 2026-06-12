@@ -875,7 +875,7 @@ const BranchDocsPage = {
                         </div>
                         <div>
                             <label class="bdm-lbl">Назва документа <span class="req">*</span></label>
-                            <textarea id="bd-bl-title" class="bd-form-input" rows="1" maxlength="255"
+                            <textarea id="bd-bl-title" class="bd-form-input" rows="1" maxlength="500"
                                 placeholder="Назва блоку відповідно до законодавства…"
                                 oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px';const c=document.getElementById('bd-title-cnt');if(c)c.textContent=this.value.length+' / 255'">${Fmt.esc(b?.title || '')}</textarea>
                             <div class="bdm-counter" id="bd-title-cnt">${(b?.title||'').length} / 255</div>
@@ -908,7 +908,7 @@ const BranchDocsPage = {
                         </div>
                         <div class="bdm-sub">Додайте текст або коментар для зазначених отримувачів</div>
                         <div>
-                            <textarea id="bd-bl-tov" class="bd-form-input" rows="1" maxlength="1000"
+                            <textarea id="bd-bl-tov" class="bd-form-input" rows="1" maxlength="500"
                                 placeholder="Введіть текст — зберігає переноси рядків…"
                                 oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px';const c=document.getElementById('bd-tov-cnt');if(c)c.textContent=this.value.length+' / 1000'"
                                 style="font-family:inherit;font-size:.88rem;line-height:1.65">${Fmt.esc(b?.tov_text || '')}</textarea>

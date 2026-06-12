@@ -599,7 +599,7 @@ const RedFolderPage = {
 
         const tovHtml = item.tov_text ? `
         <div class="rf-tov-block">
-            <div class="rf-tov-label"><i class="fa-solid fa-building-columns" style="font-size:.75rem"></i> Для ТОВ</div>
+            <div class="rf-tov-label"><i class="fa-solid fa-comment" style="font-size:.75rem"></i> Коментар</div>
             <div class="rf-tov-text">${Fmt.esc(item.tov_text)}</div>
         </div>` : '';
 

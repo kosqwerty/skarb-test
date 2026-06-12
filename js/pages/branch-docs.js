@@ -616,7 +616,7 @@ const BranchDocsPage = {
 
         const tovHtml = b.tov_text ? `
         <div class="bd-tov-block">
-            <div class="bd-tov-label"><i class="fa-solid fa-building-columns"></i> Для ТОВ</div>
+            <div class="bd-tov-label"><i class="fa-solid fa-comment"></i> Коментар</div>
             <div class="bd-tov-text">${Fmt.esc(b.tov_text)}</div>
         </div>` : '';
 

@@ -310,7 +310,7 @@ const BranchDocsPage = {
         const tabsHtml = visibleTabs.map((t, idx) => {
             const isActive = this._selectedTab === t.id;
             const c = this._tabColors[idx % this._tabColors.length];
-            const baseStyle = `background:${c.bg};border-color:${isActive ? c.border : 'transparent'};color:${c.text};`;
+            const baseStyle = `background:${c.bg};border-color:${c.border};color:${c.text};`;
             const actBtns = canManage ? `
                 <span class="bd-tab-actions" onclick="event.stopPropagation()">
                     <button class="bd-tab-act-btn" title="Перейменувати" onclick="BranchDocsPage._renameTabModal('${t.id}')"><i class="fa-solid fa-pen"></i></button>

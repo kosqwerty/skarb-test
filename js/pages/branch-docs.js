@@ -700,7 +700,7 @@ const BranchDocsPage = {
     _addTabModal() {
         Modal.open({
             title: '<i class="fa-solid fa-folder-plus" style="color:#6366f1;margin-right:.4rem"></i> Нова вкладка',
-            size: 'sm',
+            size: 'lg',
             body: `<div>
                 <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.4rem">Назва вкладки <span style="color:var(--danger)">*</span></div>
                 <input id="bd-tab-name-inp" class="bd-form-input-g" placeholder="Наприклад: Безпека праці" autofocus>
@@ -740,7 +740,7 @@ const BranchDocsPage = {
             : `<div style="font-size:.82rem;color:var(--text-muted)">Немає довіреностей</div>`;
         Modal.open({
             title: '<i class="fa-solid fa-pen" style="color:#6366f1;margin-right:.4rem"></i> Налаштування вкладки',
-            size: 'sm',
+            size: 'lg',
             body: `<div style="display:flex;flex-direction:column;gap:1rem">
                 <div>
                     <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.4rem">Назва вкладки <span style="color:var(--danger)">*</span></div>

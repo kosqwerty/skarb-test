@@ -753,7 +753,7 @@ document.addEventListener('click', function(e) {
             </style>
 
             <!-- Split: code left + resize handle + live preview right -->
-            <div id="col-split" style="display:flex;gap:0;flex:1;min-height:0;margin-bottom:.75rem">
+            <div id="col-split" style="display:flex;gap:0;flex:1;min-height:600px;margin-bottom:.75rem">
 
                 <!-- Code panel -->
                 <div id="col-code-panel" style="display:flex;flex-direction:column;width:50%;min-width:180px;border:1px solid var(--border);border-radius:var(--radius-lg) 0 0 var(--radius-lg);overflow:hidden">
@@ -783,7 +783,7 @@ document.addEventListener('click', function(e) {
 
             <!-- Attachment panel -->
             <div id="attachment-panel"
-                 style="flex-shrink:0;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--bg-surface);overflow:hidden">
+                 style="flex-shrink:0;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--bg-surface);overflow-y:auto;display:flex;flex-direction:column">
                 <div style="display:flex;align-items:center;justify-content:space-between;padding:.45rem .875rem;background:var(--bg-raised);border-bottom:1px solid var(--border)">
                     <span style="display:flex;align-items:center;gap:.5rem">
                         <span style="font-size:.8rem;font-weight:600;color:var(--text-muted);letter-spacing:.03em">📎 Прикріплені файли</span>
@@ -800,7 +800,7 @@ document.addEventListener('click', function(e) {
                     </label>`}
                 </div>
                 <div id="attachment-grid"
-                     style="display:flex;flex-wrap:wrap;gap:.5rem;padding:.625rem .875rem;min-height:96px;align-items:flex-start;overflow-y:auto">
+                     style="display:flex;flex-wrap:wrap;gap:.5rem;padding:.625rem .875rem;min-height:96px;align-items:flex-start;overflow-y:auto;flex:1">
                     ${page?.id ? '' : '<span style="font-size:.8rem;color:var(--text-muted);align-self:center">—</span>'}
                 </div>
             </div>

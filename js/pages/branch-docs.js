@@ -610,6 +610,13 @@ const BranchDocsPage = {
         const b = this._blocks.find(x => x.id === blockId);
         if (!b) return '';
 
+        const _visibleTabs = this._getVisibleTabs();
+        const _visibleBlocks = _visibleTabs.length && this._selectedTab
+            ? this._blocks.filter(x => x.tab_id === this._selectedTab || x.tab_id == null)
+            : this._blocks;
+        const _displayIdx = _visibleBlocks.findIndex(x => x.id === b.id);
+        const displayNum = _displayIdx >= 0 ? _displayIdx + 1 : b.number;
+
         const ico = b.icon && b.icon !== 'fa-circle' ? this._iconOptions.find(o => o.icon === b.icon) : null;
         const blockDocs = this._byBlock[b.number] || [];
         const pageIds = b.page_ids || [];
@@ -673,7 +680,7 @@ const BranchDocsPage = {
                 <div class="bd-content-docs-header">
                     <i class="fa-solid fa-file-lines" style="color:#6366f1"></i>
                     Документи
-                    ${canManage ? `<button class="bd-content-add-btn" onclick="BranchDocsPage._uploadModal(${b.number},${JSON.stringify(b.title).replace(/"/g,'&quot;')})"><i class="fa-solid fa-plus"></i> Завантажити</button>` : ''}
+                    ${canManage ? `<button class="bd-content-add-btn" onclick="BranchDocsPage._uploadModal(${displayNum},${JSON.stringify(b.title).replace(/"/g,'&quot;')})"><i class="fa-solid fa-plus"></i> Завантажити</button>` : ''}
                 </div>
                 <div style="display:flex;flex-direction:column;gap:.4rem;margin-top:.55rem">${docsHtml}</div>
             </div>

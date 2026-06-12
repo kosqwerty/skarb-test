@@ -13,6 +13,7 @@ const BranchDocsPage = {
     _myDovIds: null,
     _pageDovMap: {},
     _dovNameMap: {},
+    _allDovirenosti: [],
     _headerDocs: [],     // top-level files above the split
     _tabs: [],           // bd_tabs rows
     _selectedTab: null,  // currently selected tab id
@@ -190,6 +191,7 @@ const BranchDocsPage = {
             this._seeAll = seeAll;
             const myDovIds = myDovs ? new Set(myDovs.map(d => d.id)) : null;
             this._myDovIds = myDovIds;
+            this._allDovirenosti = allDov;
             this._dovNameMap = {};
             for (const d of allDov) this._dovNameMap[d.id] = d.name;
             this._pageDovMap = {};
@@ -266,6 +268,7 @@ const BranchDocsPage = {
             this._seeAll = seeAll;
             const myDovIds = myDovs ? new Set(myDovs.map(d => d.id)) : null;
             this._myDovIds = myDovIds;
+            this._allDovirenosti = allDov;
             this._dovNameMap = {};
             for (const d of allDov) this._dovNameMap[d.id] = d.name;
             this._pageDovMap = {};
@@ -296,9 +299,15 @@ const BranchDocsPage = {
         }
     },
 
+    _getVisibleTabs() {
+        if (this._seeAll) return this._tabs;
+        return this._tabs.filter(t => !t.dov_ids?.length || (this._myDovIds && t.dov_ids.some(id => this._myDovIds.has(id))));
+    },
+
     _buildTabBar(canManage) {
         if (!this._tabs.length && !canManage) return '';
-        const tabsHtml = this._tabs.map((t, idx) => {
+        const visibleTabs = this._getVisibleTabs();
+        const tabsHtml = visibleTabs.map((t, idx) => {
             const isActive = this._selectedTab === t.id;
             const c = this._tabColors[idx % this._tabColors.length];
             const baseStyle = `background:${c.bg};border-color:${isActive ? c.border : 'transparent'};color:${c.text};`;
@@ -311,7 +320,7 @@ const BranchDocsPage = {
                 <i class="fa-solid fa-folder" style="font-size:.75rem"></i>
                 ${Fmt.esc(t.title)}
                 ${actBtns}
-            </button>${idx < this._tabs.length - 1 ? '<span class="bd-tab-sep"></span>' : ''}`;
+            </button>${idx < visibleTabs.length - 1 ? '<span class="bd-tab-sep"></span>' : ''}`;
         }).join('');
         const addBtn = canManage
             ? `<button class="bd-tab bd-tab-add bd-tab-bar-right" onclick="BranchDocsPage._addTabModal()"><i class="fa-solid fa-plus" style="font-size:.7rem"></i> Додати вкладку</button>`
@@ -323,8 +332,15 @@ const BranchDocsPage = {
         const el = document.getElementById('bd-content');
         if (!el) return;
 
+        const visibleTabs = this._getVisibleTabs();
+        if (visibleTabs.length && !visibleTabs.find(t => t.id === this._selectedTab)) {
+            this._selectedTab = visibleTabs[0].id;
+        } else if (!visibleTabs.length) {
+            this._selectedTab = null;
+        }
+
         const tabBar = this._buildTabBar(canManage);
-        const visibleBlocks = this._tabs.length && this._selectedTab
+        const visibleBlocks = visibleTabs.length && this._selectedTab
             ? this._blocks.filter(b => b.tab_id === this._selectedTab || b.tab_id == null)
             : this._blocks;
 
@@ -620,37 +636,34 @@ const BranchDocsPage = {
             <div class="bd-tov-text">${Fmt.esc(b.tov_text)}</div>
         </div>` : '';
 
-        let docsHtml = '';
-        if (linkedPages.length) {
-            docsHtml = linkedPages.map(lp => {
-                const dovIds = this._pageDovMap?.[lp.id] || [];
-                const dovNames = dovIds.map(id => this._dovNameMap?.[id]).filter(Boolean);
-                const label = dovNames.length ? dovNames.join(', ') : lp.title;
-                return `
-                <div class="bd-collection-card" onclick="Router.go('collections/${lp.id}')">
-                    <div class="bd-collection-icon"><i class="fa-solid fa-arrow-up-right-from-square"></i></div>
-                    <span class="bd-collection-title">${Fmt.esc(label)}</span>
-                </div>`;
-            }).join('');
-        } else if (blockDocs.length) {
-            docsHtml = blockDocs.map(d => {
-                const acked = (() => { const a = this._ackMap[d.id]; return a && (a.version || 1) >= (d.doc_version || 1); })();
-                const label = d.dovirenosti?.name ? Fmt.esc(d.dovirenosti.name) : Fmt.esc(d.title);
-                return `
-                <div class="bd-doc-card" onclick="BranchDocsPage._openDoc('${Fmt.esc(d.storage_path||'')}','${d.id}')">
-                    <span class="bd-ack-dot ${acked ? 'bd-read' : 'bd-unread'}" data-doc-dot="${d.id}" title="${acked ? 'Ознайомлено' : 'Не ознайомлено'}"></span>
-                    <div class="bd-doc-card-icon"><i class="fa-solid fa-file-pdf"></i></div>
-                    <span class="bd-doc-card-title">${label}</span>
-                    ${canManage ? `
-                    <div class="bd-doc-card-actions" onclick="event.stopPropagation()">
-                        <button class="bd-ta-btn" title="Редагувати" onclick="BranchDocsPage._editDocModal('${d.id}')"><i class="fa-solid fa-pen"></i></button>
-                        <button class="bd-ta-btn danger" title="Видалити" onclick="BranchDocsPage._deleteDoc('${d.id}')"><i class="fa-solid fa-trash"></i></button>
-                    </div>` : ''}
-                </div>`;
-            }).join('');
-        } else {
-            docsHtml = `<div class="bd-empty-doc">— документів немає —</div>`;
-        }
+        const pagesHtml = linkedPages.map(lp => {
+            const dovIds = this._pageDovMap?.[lp.id] || [];
+            const dovNames = dovIds.map(id => this._dovNameMap?.[id]).filter(Boolean);
+            const label = dovNames.length ? dovNames.join(', ') : lp.title;
+            return `
+            <div class="bd-collection-card" onclick="Router.go('collections/${lp.id}')">
+                <div class="bd-collection-icon"><i class="fa-solid fa-arrow-up-right-from-square"></i></div>
+                <span class="bd-collection-title">${Fmt.esc(label)}</span>
+            </div>`;
+        }).join('');
+
+        const filesHtml = blockDocs.map(d => {
+            const acked = (() => { const a = this._ackMap[d.id]; return a && (a.version || 1) >= (d.doc_version || 1); })();
+            const label = d.dovirenosti?.name ? Fmt.esc(d.dovirenosti.name) : Fmt.esc(d.title);
+            return `
+            <div class="bd-doc-card" onclick="BranchDocsPage._openDoc('${Fmt.esc(d.storage_path||'')}','${d.id}')">
+                <span class="bd-ack-dot ${acked ? 'bd-read' : 'bd-unread'}" data-doc-dot="${d.id}" title="${acked ? 'Ознайомлено' : 'Не ознайомлено'}"></span>
+                <div class="bd-doc-card-icon"><i class="fa-solid fa-file-pdf"></i></div>
+                <span class="bd-doc-card-title">${label}</span>
+                ${canManage ? `
+                <div class="bd-doc-card-actions" onclick="event.stopPropagation()">
+                    <button class="bd-ta-btn" title="Редагувати" onclick="BranchDocsPage._editDocModal('${d.id}')"><i class="fa-solid fa-pen"></i></button>
+                    <button class="bd-ta-btn danger" title="Видалити" onclick="BranchDocsPage._deleteDoc('${d.id}')"><i class="fa-solid fa-trash"></i></button>
+                </div>` : ''}
+            </div>`;
+        }).join('');
+
+        const docsHtml = pagesHtml + filesHtml || `<div class="bd-empty-doc">— документів немає —</div>`;
 
         return `
         <div class="bd-content-inner">
@@ -660,7 +673,7 @@ const BranchDocsPage = {
                 <div class="bd-content-docs-header">
                     <i class="fa-solid fa-file-lines" style="color:#6366f1"></i>
                     Документи
-                    ${canManage && !linkedPages.length ? `<button class="bd-content-add-btn" onclick="BranchDocsPage._uploadModal(${b.number},${JSON.stringify(b.title).replace(/"/g,'&quot;')})"><i class="fa-solid fa-plus"></i> Завантажити</button>` : ''}
+                    ${canManage ? `<button class="bd-content-add-btn" onclick="BranchDocsPage._uploadModal(${b.number},${JSON.stringify(b.title).replace(/"/g,'&quot;')})"><i class="fa-solid fa-plus"></i> Завантажити</button>` : ''}
                 </div>
                 <div style="display:flex;flex-direction:column;gap:.4rem;margin-top:.55rem">${docsHtml}</div>
             </div>
@@ -717,12 +730,31 @@ const BranchDocsPage = {
     _renameTabModal(id) {
         const tab = this._tabs.find(t => t.id === id);
         if (!tab) return;
+        const selDovs = new Set(tab.dov_ids || []);
+        const dovHtml = this._allDovirenosti.length
+            ? this._allDovirenosti.map(d => `
+                <label style="display:flex;align-items:center;gap:.5rem;padding:.3rem .2rem;cursor:pointer;font-size:.85rem">
+                    <input type="checkbox" class="bd-tab-dov-chk" value="${d.id}" ${selDovs.has(d.id) ? 'checked' : ''}>
+                    <span>${Fmt.esc(d.name)}</span>
+                </label>`).join('')
+            : `<div style="font-size:.82rem;color:var(--text-muted)">Немає довіреностей</div>`;
         Modal.open({
-            title: '<i class="fa-solid fa-pen" style="color:#6366f1;margin-right:.4rem"></i> Перейменувати вкладку',
+            title: '<i class="fa-solid fa-pen" style="color:#6366f1;margin-right:.4rem"></i> Налаштування вкладки',
             size: 'sm',
-            body: `<div>
-                <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.4rem">Назва вкладки <span style="color:var(--danger)">*</span></div>
-                <input id="bd-tab-rename-inp" class="bd-form-input-g" value="${Fmt.esc(tab.title)}">
+            body: `<div style="display:flex;flex-direction:column;gap:1rem">
+                <div>
+                    <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.4rem">Назва вкладки <span style="color:var(--danger)">*</span></div>
+                    <input id="bd-tab-rename-inp" class="bd-form-input-g" value="${Fmt.esc(tab.title)}">
+                </div>
+                <div>
+                    <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.4rem">
+                        <i class="fa-solid fa-lock" style="margin-right:.3rem"></i>Доступ (довіреності)
+                        <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:.78rem;margin-left:.4rem;color:var(--text-muted)">Якщо не вибрано — видно всім</span>
+                    </div>
+                    <div style="max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);padding:.4rem .6rem">
+                        ${dovHtml}
+                    </div>
+                </div>
             </div>`,
             footer: `<button class="btn btn-sm" style="background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;border:none" onclick="BranchDocsPage._doRenameTab('${id}')"><i class="fa-solid fa-check"></i> Зберегти</button>
                      <button class="btn btn-ghost btn-sm" onclick="Modal.close()">Скасувати</button>`
@@ -733,9 +765,10 @@ const BranchDocsPage = {
     async _doRenameTab(id) {
         const title = Dom.val('bd-tab-rename-inp').trim();
         if (!title) { Toast.warning('Введіть назву'); return; }
+        const dovIds = Array.from(document.querySelectorAll('.bd-tab-dov-chk:checked')).map(c => c.value);
         try {
             Loader.show();
-            await API.bdTabs.update(id, title);
+            await API.bdTabs.update(id, title, dovIds);
             Modal.close();
             await this._reload(AppState.isAdmin() && !AppState.isPreviewing());
         } catch (e) {

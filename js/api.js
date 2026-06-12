@@ -1810,8 +1810,10 @@ const API = {
             if (error) throw error;
             return data;
         },
-        async update(id, title) {
-            const { error } = await supabase.from('bd_tabs').update({ title }).eq('id', id);
+        async update(id, title, dovIds) {
+            const fields = { title };
+            if (dovIds !== undefined) fields.dov_ids = dovIds;
+            const { error } = await supabase.from('bd_tabs').update(fields).eq('id', id);
             if (error) throw error;
         },
         async remove(id) {
@@ -1834,8 +1836,10 @@ const API = {
             if (error) throw error;
             return data;
         },
-        async update(id, title) {
-            const { error } = await supabase.from('rf_tabs').update({ title }).eq('id', id);
+        async update(id, title, dovIds) {
+            const fields = { title };
+            if (dovIds !== undefined) fields.dov_ids = dovIds;
+            const { error } = await supabase.from('rf_tabs').update(fields).eq('id', id);
             if (error) throw error;
         },
         async remove(id) {

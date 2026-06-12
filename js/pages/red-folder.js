@@ -10,6 +10,7 @@ const RedFolderPage = {
     _ackMap: {},         // resourceId -> { at, version }
     _selectedItem: null, // currently selected item id
     _dovNameMap: {},
+    _allDovirenosti: [],
     _headerDocs: [],     // top-level files above the split
     _tabs: [],           // rf_tabs rows
     _selectedTab: null,  // currently selected tab id
@@ -204,6 +205,7 @@ const RedFolderPage = {
             const myDovIds = myDovs ? new Set(myDovs.map(d => d.id)) : null;
             this._myDovIds = myDovIds;
 
+            this._allDovirenosti = allDov;
             this._dovNameMap = {};
             for (const d of allDov) this._dovNameMap[d.id] = d.name;
 
@@ -241,9 +243,15 @@ const RedFolderPage = {
         }
     },
 
+    _getVisibleTabs() {
+        if (this._seeAll) return this._tabs;
+        return this._tabs.filter(t => !t.dov_ids?.length || (this._myDovIds && t.dov_ids.some(id => this._myDovIds.has(id))));
+    },
+
     _buildTabBar(canManage) {
         if (!this._tabs.length && !canManage) return '';
-        const tabsHtml = this._tabs.map((t, idx) => {
+        const visibleTabs = this._getVisibleTabs();
+        const tabsHtml = visibleTabs.map((t, idx) => {
             const isActive = this._selectedTab === t.id;
             const c = this._tabColors[idx % this._tabColors.length];
             const baseStyle = `background:${c.bg};border-color:${isActive ? c.border : 'transparent'};color:${c.text};`;
@@ -256,7 +264,7 @@ const RedFolderPage = {
                 <i class="fa-solid fa-folder" style="font-size:.75rem"></i>
                 ${Fmt.esc(t.title)}
                 ${actBtns}
-            </button>${idx < this._tabs.length - 1 ? '<span class="rf-tab-sep"></span>' : ''}`;
+            </button>${idx < visibleTabs.length - 1 ? '<span class="rf-tab-sep"></span>' : ''}`;
         }).join('');
         const addBtn = canManage
             ? `<button class="rf-tab rf-tab-add rf-tab-bar-right" onclick="RedFolderPage._addTabModal()"><i class="fa-solid fa-plus" style="font-size:.7rem"></i> Додати вкладку</button>`
@@ -269,8 +277,15 @@ const RedFolderPage = {
         if (!el) return;
         const canManage = AppState.isAdmin();
 
+        const visibleTabs = this._getVisibleTabs();
+        if (visibleTabs.length && !visibleTabs.find(t => t.id === this._selectedTab)) {
+            this._selectedTab = visibleTabs[0].id;
+        } else if (!visibleTabs.length) {
+            this._selectedTab = null;
+        }
+
         // Filter items by selected tab: show items belonging to the tab, or items with no tab (legacy/all)
-        const visibleItems = this._tabs.length && this._selectedTab
+        const visibleItems = visibleTabs.length && this._selectedTab
             ? this._items.filter(i => i.tab_id === this._selectedTab || i.tab_id == null)
             : this._items;
 
@@ -565,37 +580,34 @@ const RedFolderPage = {
             <span class="rf-content-resp-name">${Fmt.esc(item.responsible)}</span>
         </div>` : '';
 
-        let docsHtml = '';
-        if (linkedPages.length) {
-            docsHtml = linkedPages.map(lp => {
-                const dovIds = this._pageDovMap?.[lp.id] || [];
-                const dovNames = dovIds.map(id => this._dovNameMap?.[id]).filter(Boolean);
-                const label = dovNames.length ? dovNames.join(', ') : lp.title;
-                return `
-                <div class="rf-collection-card" onclick="Router.go('collections/${lp.id}')">
-                    <div class="rf-collection-icon"><i class="fa-solid fa-arrow-up-right-from-square"></i></div>
-                    <span class="rf-collection-title">${Fmt.esc(label)}</span>
-                </div>`;
-            }).join('');
-        } else if (itemDocs.length) {
-            docsHtml = itemDocs.map(d => {
-                const acked = (() => { const a = this._ackMap[d.id]; return a && (a.version || 1) >= (d.doc_version || 1); })();
-                const docLabel = (d.dovirenost_id && this._dovNameMap?.[d.dovirenost_id]) || d.title;
-                return `
-                <div class="rf-doc-card" onclick="RedFolderPage._openDoc('${Fmt.esc(d.storage_path||'')}','${d.id}')">
-                    <span class="rf-ack-dot ${acked ? 'rf-read' : 'rf-unread'}" data-doc-dot="${d.id}" title="${acked ? 'Ознайомлено' : 'Не ознайомлено'}"></span>
-                    <div class="rf-doc-card-icon"><i class="fa-solid fa-file-pdf"></i></div>
-                    <span class="rf-doc-card-title">${Fmt.esc(docLabel)}</span>
-                    ${canManage ? `
-                    <div class="rf-doc-card-actions" onclick="event.stopPropagation()">
-                        <button class="rf-ta-btn" title="Редагувати" onclick="RedFolderPage._editDocModal('${d.id}')"><i class="fa-solid fa-pen"></i></button>
-                        <button class="rf-ta-btn danger" title="Видалити" onclick="RedFolderPage._deleteDoc('${d.id}')"><i class="fa-solid fa-trash"></i></button>
-                    </div>` : ''}
-                </div>`;
-            }).join('');
-        } else {
-            docsHtml = `<div class="rf-empty-docs">— документів немає —</div>`;
-        }
+        const pagesHtml = linkedPages.map(lp => {
+            const dovIds = this._pageDovMap?.[lp.id] || [];
+            const dovNames = dovIds.map(id => this._dovNameMap?.[id]).filter(Boolean);
+            const label = dovNames.length ? dovNames.join(', ') : lp.title;
+            return `
+            <div class="rf-collection-card" onclick="Router.go('collections/${lp.id}')">
+                <div class="rf-collection-icon"><i class="fa-solid fa-arrow-up-right-from-square"></i></div>
+                <span class="rf-collection-title">${Fmt.esc(label)}</span>
+            </div>`;
+        }).join('');
+
+        const filesHtml = itemDocs.map(d => {
+            const acked = (() => { const a = this._ackMap[d.id]; return a && (a.version || 1) >= (d.doc_version || 1); })();
+            const docLabel = (d.dovirenost_id && this._dovNameMap?.[d.dovirenost_id]) || d.title;
+            return `
+            <div class="rf-doc-card" onclick="RedFolderPage._openDoc('${Fmt.esc(d.storage_path||'')}','${d.id}')">
+                <span class="rf-ack-dot ${acked ? 'rf-read' : 'rf-unread'}" data-doc-dot="${d.id}" title="${acked ? 'Ознайомлено' : 'Не ознайомлено'}"></span>
+                <div class="rf-doc-card-icon"><i class="fa-solid fa-file-pdf"></i></div>
+                <span class="rf-doc-card-title">${Fmt.esc(docLabel)}</span>
+                ${canManage ? `
+                <div class="rf-doc-card-actions" onclick="event.stopPropagation()">
+                    <button class="rf-ta-btn" title="Редагувати" onclick="RedFolderPage._editDocModal('${d.id}')"><i class="fa-solid fa-pen"></i></button>
+                    <button class="rf-ta-btn danger" title="Видалити" onclick="RedFolderPage._deleteDoc('${d.id}')"><i class="fa-solid fa-trash"></i></button>
+                </div>` : ''}
+            </div>`;
+        }).join('');
+
+        const docsHtml = pagesHtml + filesHtml || `<div class="rf-empty-docs">— документів немає —</div>`;
 
         const tovHtml = item.tov_text ? `
         <div class="rf-tov-block">
@@ -611,7 +623,7 @@ const RedFolderPage = {
                 <div class="rf-content-docs-header">
                     <i class="fa-solid fa-file-lines" style="color:#ef4444"></i>
                     Документи
-                    ${canManage && !linkedPages.length ? `<button class="rf-content-add-btn" onclick="RedFolderPage._uploadModal('${item.id}',${JSON.stringify(item.title).replace(/"/g,'&quot;')})"><i class="fa-solid fa-plus"></i> Завантажити</button>` : ''}
+                    ${canManage ? `<button class="rf-content-add-btn" onclick="RedFolderPage._uploadModal('${item.id}',${JSON.stringify(item.title).replace(/"/g,'&quot;')})"><i class="fa-solid fa-plus"></i> Завантажити</button>` : ''}
                 </div>
                 <div style="display:flex;flex-direction:column;gap:.4rem;margin-top:.55rem">${docsHtml}</div>
             </div>
@@ -669,12 +681,31 @@ const RedFolderPage = {
     _renameTabModal(id) {
         const tab = this._tabs.find(t => t.id === id);
         if (!tab) return;
+        const selDovs = new Set(tab.dov_ids || []);
+        const dovHtml = this._allDovirenosti.length
+            ? this._allDovirenosti.map(d => `
+                <label style="display:flex;align-items:center;gap:.5rem;padding:.3rem .2rem;cursor:pointer;font-size:.85rem">
+                    <input type="checkbox" class="rf-tab-dov-chk" value="${d.id}" ${selDovs.has(d.id) ? 'checked' : ''}>
+                    <span>${Fmt.esc(d.name)}</span>
+                </label>`).join('')
+            : `<div style="font-size:.82rem;color:var(--text-muted)">Немає довіреностей</div>`;
         Modal.open({
-            title: '<i class="fa-solid fa-pen" style="color:#ef4444;margin-right:.4rem"></i> Перейменувати вкладку',
+            title: '<i class="fa-solid fa-pen" style="color:#ef4444;margin-right:.4rem"></i> Налаштування вкладки',
             size: 'sm',
-            body: `<div>
-                <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.4rem">Назва вкладки <span style="color:var(--danger)">*</span></div>
-                <input id="rf-tab-rename-inp" class="rf-form-input" value="${Fmt.esc(tab.title)}">
+            body: `<div style="display:flex;flex-direction:column;gap:1rem">
+                <div>
+                    <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.4rem">Назва вкладки <span style="color:var(--danger)">*</span></div>
+                    <input id="rf-tab-rename-inp" class="rf-form-input" value="${Fmt.esc(tab.title)}">
+                </div>
+                <div>
+                    <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.4rem">
+                        <i class="fa-solid fa-lock" style="margin-right:.3rem"></i>Доступ (довіреності)
+                        <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:.78rem;margin-left:.4rem;color:var(--text-muted)">Якщо не вибрано — видно всім</span>
+                    </div>
+                    <div style="max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);padding:.4rem .6rem">
+                        ${dovHtml}
+                    </div>
+                </div>
             </div>`,
             footer: `<button class="btn btn-sm" style="background:linear-gradient(135deg,#ef4444,#b91c1c);color:#fff;border:none" onclick="RedFolderPage._doRenameTab('${id}')"><i class="fa-solid fa-check"></i> Зберегти</button>
                      <button class="btn btn-ghost btn-sm" onclick="Modal.close()">Скасувати</button>`
@@ -685,9 +716,10 @@ const RedFolderPage = {
     async _doRenameTab(id) {
         const title = Dom.val('rf-tab-rename-inp').trim();
         if (!title) { Toast.warning('Введіть назву'); return; }
+        const dovIds = Array.from(document.querySelectorAll('.rf-tab-dov-chk:checked')).map(c => c.value);
         try {
             Loader.show();
-            await API.rfTabs.update(id, title);
+            await API.rfTabs.update(id, title, dovIds);
             Modal.close();
             await this._load();
         } catch (e) {

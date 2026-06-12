@@ -360,7 +360,7 @@ const BranchDocsPage = {
             return `
             <div class="bd-item-btn${isActive ? ' active' : ''}" id="bd-ibtn-${b.id}"
                  onclick="BranchDocsPage._selectBlock('${b.id}')">
-                <span class="bd-item-num">${b.number}</span>
+                <span class="bd-item-num">${idx + 1}</span>
                 <div class="bd-item-body">
                     <div class="bd-item-title-row">
                         ${ico ? `<i class="fa-solid ${Fmt.esc(b.icon)}" style="color:${ico.color};font-size:.8rem;flex-shrink:0"></i>` : ''}

@@ -93,13 +93,12 @@ const RegistryPage = {
         const styles = `
         <style>
             /* ── Tab carousel ─────────────────────────────────────────── */
-            .rg-tab-carousel{display:flex;align-items:flex-end;gap:6px;position:relative;z-index:2;margin-bottom:-4px;width:1200px}
-            .rg-car-btn{flex-shrink:0;width:30px;height:30px;border-radius:50%;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.6rem;transition:all .2s;font-family:inherit;box-shadow:0 2px 6px rgba(0,0,0,.08);margin-bottom:6px}
-            .rg-car-btn:hover{background:var(--primary);color:#fff;border-color:var(--primary);box-shadow:0 3px 10px rgba(99,102,241,.3)}
-            .rg-tab-bar{flex:1;min-width:0;display:flex;align-items:flex-end;gap:5px;overflow-x:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent;padding-bottom:3px}
-            .rg-tab-bar::-webkit-scrollbar{height:3px}
-            .rg-tab-bar::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
-            .rg-tab-bar::-webkit-scrollbar-track{background:transparent}
+            .rg-tab-carousel{display:flex;align-items:flex-end;position:relative;z-index:2;margin-bottom:-4px;width:1200px}
+            .rg-car-btns{flex-shrink:0;display:flex;align-items:center;gap:2px;padding-bottom:4px}
+            .rg-car-btn{width:24px;height:24px;border:1.5px solid var(--border);border-radius:6px;background:var(--bg-raised);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-muted);transition:color .15s,border-color .15s,background .15s;font-size:.6rem;padding:0;font-family:inherit}
+            .rg-car-btn:hover{color:var(--primary);border-color:var(--primary);background:var(--bg-surface)}
+            .rg-tab-bar{flex:1;min-width:0;display:flex;align-items:flex-end;gap:5px;overflow-x:auto;scrollbar-width:none;padding-bottom:0}
+            .rg-tab-bar::-webkit-scrollbar{display:none}
             .rg-tab{display:inline-flex;align-items:center;gap:.45rem;padding:8px 16px;border-radius:12px 12px 0 0;border:1.5px solid;border-bottom:none;font-size:.8rem;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;opacity:1;margin-bottom:4px;transition:opacity .15s}
             .rg-tab:hover{opacity:1}
             .rg-tab.active{font-size:.88rem;padding:10px 20px;background:var(--bg-surface) !important;border-width:3px !important;border-bottom:3px solid var(--bg-surface) !important;margin-bottom:0}
@@ -242,9 +241,11 @@ const RegistryPage = {
             ? `<button class="rg-tab rg-tab-add rg-tab-bar-right" onclick="RegistryPage._addSection()"><i class="fa-solid fa-plus" style="font-size:.7rem"></i> Додати розділ</button>`
             : '';
         return `<div class="rg-tab-carousel">
-            <button class="rg-car-btn" onclick="document.getElementById('rg-tab-bar').scrollBy({left:-240,behavior:'smooth'})"><i class="fa-solid fa-chevron-left"></i></button>
             <div class="rg-tab-bar" id="rg-tab-bar">${tabsHtml}${addBtn}</div>
-            <button class="rg-car-btn" onclick="document.getElementById('rg-tab-bar').scrollBy({left:240,behavior:'smooth'})"><i class="fa-solid fa-chevron-right"></i></button>
+            <div class="rg-car-btns">
+                <button class="rg-car-btn rg-car-left" onclick="document.getElementById('rg-tab-bar').scrollBy({left:-240,behavior:'smooth'})"><i class="fa-solid fa-chevron-left"></i></button>
+                <button class="rg-car-btn rg-car-right" onclick="document.getElementById('rg-tab-bar').scrollBy({left:240,behavior:'smooth'})"><i class="fa-solid fa-chevron-right"></i></button>
+            </div>
         </div>`;
     },
 
@@ -285,7 +286,21 @@ const RegistryPage = {
     _selectSection(id) {
         this._selectedSection = id;
         const area = document.getElementById('rg-tab-area');
-        if (area) this._render(area);
+        if (!area) return;
+        this._render(area);
+        requestAnimationFrame(() => {
+            const bar = document.getElementById('rg-tab-bar');
+            if (!bar) return;
+            const activeTab = bar.querySelector('.rg-tab.active');
+            if (!activeTab) return;
+            const barRect = bar.getBoundingClientRect();
+            const tabRect = activeTab.getBoundingClientRect();
+            if (tabRect.left < barRect.left) {
+                bar.scrollLeft -= barRect.left - tabRect.left + 8;
+            } else if (tabRect.right > barRect.right) {
+                bar.scrollLeft += tabRect.right - barRect.right + 8;
+            }
+        });
     },
 
     // ── Build sidebar topic button ────────────────────────────────────

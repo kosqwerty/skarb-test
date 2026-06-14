@@ -1725,14 +1725,8 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
             if (viewerAction) {
                 const dateStr = Fmt.dateShort(this._myDownloads[resource.id].at);
                 const btnBase = 'display:inline-flex;align-items:center;gap:6px;padding:8px 20px;border-radius:20px;font-size:.875rem;font-weight:500;cursor:pointer;transition:background var(--transition),color var(--transition)';
-                const reDownload = resource.download_allowed
-                    ? `<button onclick="ResourcesPage.downloadTracked('${resource.id}')"
-                            style="${btnBase};border:1.5px solid var(--border);background:transparent;color:var(--text-muted)"
-                            onmouseenter="this.style.background='var(--bg-raised)'"
-                            onmouseleave="this.style.background='transparent'"><i class="fa-solid fa-download"></i> Завантажити повторно</button>`
-                    : '';
                 viewerAction.style.cssText = 'flex-shrink:0;display:inline-flex;align-items:center;gap:.6rem';
-                viewerAction.innerHTML = `<span style="display:inline-flex;align-items:center;gap:.3rem;color:#10b981;font-weight:500;font-size:.85rem;white-space:nowrap">✅ ${this._ackLabel()} ${dateStr}</span>${reDownload}`;
+                viewerAction.innerHTML = `<span style="display:inline-flex;align-items:center;gap:.3rem;color:#10b981;font-weight:500;font-size:.85rem;white-space:nowrap">✅ ${this._ackLabel()} ${dateStr}</span>`;
             }
 
             // Update only the acknowledged item in the list (no re-fetch needed)
@@ -2379,6 +2373,12 @@ const ResourceViewPage = {
 
         const deadlineBadge = from === 'documents' ? ResourcesPage._deadlineBadge(resource, dlStatus) : '';
 
+        const _alreadyAcked = from === 'documents' && resource.is_tracked_download && dlStatus && !(resource.doc_version > (dlStatus.version || 1));
+        const _ackInline = _alreadyAcked ? (() => {
+            const btnBase = 'flex-shrink:0;display:inline-flex;align-items:center;gap:6px;padding:5px 14px;border-radius:20px;font-size:.85rem;font-weight:500;cursor:pointer;transition:background var(--transition),color var(--transition)';
+            return `<span style="display:inline-flex;align-items:center;gap:.3rem;color:#10b981;font-weight:500;font-size:.85rem;white-space:nowrap">✅ ${ResourcesPage._ackLabel()} ${Fmt.dateShort(dlStatus.at)}</span>`;
+        })() : '';
+
         container.innerHTML = `
             <div style="display:flex;flex-direction:column;gap:1rem">
 
@@ -2386,12 +2386,13 @@ const ResourceViewPage = {
                 <div style="display:flex;align-items:flex-start;gap:1rem;flex-wrap:wrap">
                     <button class="btn btn-ghost btn-sm" onclick="ResourceViewPage._goBack()" style="flex-shrink:0;margin-top:.2rem;display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i> Назад</button>
                     <div style="flex:1;min-width:0">
-                        <div style="display:flex;align-items:center;gap:10px;margin-bottom:.4rem">
+                        <div style="display:flex;align-items:center;gap:10px;margin-bottom:.4rem;flex-wrap:wrap">
                             <h1 style="margin:0;font-size:1.4rem;font-weight:700;line-height:1.3">${Fmt.esc(resource.title)}</h1>
                             <button class="res-star-btn${Bookmarks.isBookmarked('resource/'+resource.id) ? ' active' : ''}"
                                 data-bm-route="resource/${resource.id}"
                                 title="${Bookmarks.isBookmarked('resource/'+resource.id) ? 'Видалити з закладок' : 'Зберегти в закладки'}"
                                 onclick="Bookmarks.toggleResource('${resource.id}',${JSON.stringify(resource.title||'').replace(/"/g,'&quot;')},${JSON.stringify(ResourcesPage._resourceIcon(resource.type||resource.file_type||'file')).replace(/"/g,'&quot;')},${JSON.stringify(resource.category||'').replace(/"/g,'&quot;')})">${Bookmarks.isBookmarked('resource/'+resource.id) ? '<i class="fa-solid fa-bookmark"></i>' : '<i class="fa-regular fa-bookmark"></i>'}</button>
+                            ${_ackInline}
                         </div>
                         <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
                             ${categoryBadge}
@@ -2399,7 +2400,7 @@ const ResourceViewPage = {
                             ${resource.download_allowed === false ? `<span class="badge" style="background:rgba(239,68,68,.1);color:#f87171;font-size:.75rem;padding:3px 10px;border-radius:20px;border:1px solid rgba(239,68,68,.2)">тільки перегляд</span>` : ''}
                             ${deadlineBadge}
                         </div>
-                        ${resource.description ? `<p style="margin:.6rem 0 0;color:var(--text-muted);font-size:.875rem">${Fmt.esc(resource.description)}</p>` : ''}
+                        ${resource.description ? `<p style="margin:.6rem 0 0;font-size:.875rem;color:var(--text-muted);background:var(--bg-raised);border-left:3px solid var(--primary);border-radius:0 6px 6px 0;padding:.5rem .75rem">${Fmt.esc(resource.description)}</p>` : ''}
                     </div>
                     ${AppState.isStaff() ? `
                     <button title="Редагувати" onclick="ResourcesPage.openEdit('${resource.id}')"
@@ -2415,8 +2416,8 @@ const ResourceViewPage = {
                     ${this._buildActionFooter(resource, from, dlStatus, isPdf)}
                 </div>
 
-                <!-- Download bar (above viewer, for all downloadable files) -->
-                ${resource.download_allowed !== false
+                <!-- Download bar (above viewer, hidden for PDF — viewer has its own download button) -->
+                ${resource.download_allowed !== false && !isPdf
                     ? `<div style="display:flex;justify-content:center;padding:.25rem 0">
                         <a href="${Fmt.safeUrl(url)}" download="${Fmt.esc(ResourcesPage._buildFilename(resource))}"
                             style="display:inline-flex;align-items:center;gap:8px;padding:10px 32px;background:var(--primary);color:#fff;border-radius:24px;font-size:.95rem;font-weight:600;text-decoration:none;box-shadow:0 2px 8px rgba(0,0,0,.15);transition:background var(--transition)"
@@ -2454,16 +2455,7 @@ const ResourceViewPage = {
             const alreadyAcked = dlStatus && !isNewVersion;
 
             if (alreadyAcked) {
-                const reDownload = resource.download_allowed
-                    ? `<button onclick="ResourcesPage.downloadTracked('${id}')"
-                            style="${btnBase};border:1.5px solid var(--border);background:transparent;color:var(--text-muted)"
-                            onmouseenter="this.style.background='var(--bg-raised)'"
-                            onmouseleave="this.style.background='transparent'"><i class="fa-solid fa-download"></i> Завантажити повторно</button>`
-                    : '';
-                return `<div id="doc-viewer-action" style="flex-shrink:0;display:inline-flex;align-items:center;gap:.6rem">
-                    <span style="display:inline-flex;align-items:center;gap:.3rem;color:#10b981;font-weight:500;font-size:.85rem;white-space:nowrap">✅ ${ResourcesPage._ackLabel()} ${Fmt.dateShort(dlStatus.at)}</span>
-                    ${reDownload}
-                </div>`;
+                return ''; // shown inline in title row
             }
 
             // Needs (re-)acknowledgment — locked until scroll end

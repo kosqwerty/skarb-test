@@ -108,13 +108,7 @@ Full namespace list: `API.profiles`, `API.courses`, `API.enrollments`, `API.less
 
 ### Database migrations
 
-`sql/migration_v*.sql` — incremental, numbered. The current schema is the result of applying all migrations in order. When adding a new column/table, create `migration_v{N+1}.sql` and run it in the Supabase SQL Editor. **Latest is v89** (`company_bday_messages` — chat for company birthday).
-
-Key recent migrations:
-- v63: notifications — added `message`, `is_read`, `link`, `created_by`; dropped `notifications_type_check`; enabled realtime
-- v73: created `red_folder_items` table (id, number, title, documents, responsible, icon, timestamps); RLS policies
-- v74: `ALTER TABLE resources ADD COLUMN IF NOT EXISTS red_folder_item_id UUID REFERENCES red_folder_items(id) ON DELETE SET NULL`
-- v89: created `company_bday_messages` table (id, user_id, message, year, created_at); RLS; enabled realtime
+`sql/schema.sql` — consolidated schema snapshot of the current DB state. All migrations v2–v109 have been merged into this single file. When adding a new column/table, create `sql/migration_v110.sql` (increment from 110) and run it in the Supabase SQL Editor. **Latest is v109**.
 
 When writing a migration, always include `IF NOT EXISTS` / `IF EXISTS` guards and end with RLS + policies.
 

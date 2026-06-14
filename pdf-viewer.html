@@ -2,327 +2,669 @@
 <html lang="uk">
 <head>
 <meta charset="UTF-8">
-<title>LMS PDF Viewer</title>
+<title>PDF Viewer</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf_viewer.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { height: 100%; overflow: hidden; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; font-family: 'Inter', system-ui, sans-serif; }
 
-body {
-  background: #404040;
-  color: #fff;
-  font-family: Arial, sans-serif;
-  user-select: none;
-  display: flex;
-  flex-direction: column;
+:root {
+  --toolbar-h: 48px;
+  --icon-bar-w: 44px;
+  --panel-w: 220px;
+  --bg-toolbar: #0B1733;
+  --bg-sidebar: #0d1f3c;
+  --bg-panel: #111d35;
+  --bg-viewer: #1c1c2e;
+  --border: rgba(201,162,39,0.18);
+  --primary: #2563EB;
+  --gold: #C9A227;
+  --text: #e2e8f0;
+  --text-muted: #64748b;
+  --radius: 6px;
+  --shadow: rgba(0,0,0,0.5);
+  --page-shadow: rgba(0,0,0,0.6);
 }
 
-/* ── Toolbar ── */
+body.light-theme {
+  --bg-toolbar: #ffffff;
+  --bg-sidebar: #f1f5f9;
+  --bg-panel: #f8fafc;
+  --bg-viewer: #e2e8f0;
+  --border: #e2e8f0;
+  --text: #1e293b;
+  --text-muted: #64748b;
+  --shadow: rgba(0,0,0,0.12);
+  --page-shadow: rgba(0,0,0,0.15);
+}
+
+body.light-theme #toolbar { border-bottom-color: #e2e8f0; }
+body.light-theme .tb-btn { color: #475569; }
+body.light-theme .tb-btn:hover:not(:disabled) { background: rgba(0,0,0,.07); color: #1e293b; }
+body.light-theme .tb-btn.active { color: var(--primary); background: rgba(37,99,235,.1); }
+body.light-theme #page-input,
+body.light-theme #zoom-display {
+  background: #f1f5f9; border-color: #cbd5e1; color: #1e293b;
+}
+body.light-theme #zoom-dropdown,
+body.light-theme #more-menu { background: #ffffff; border-color: #e2e8f0; box-shadow: 0 8px 24px rgba(0,0,0,.12); }
+body.light-theme .zd-item,
+body.light-theme .mm-item { color: #1e293b; }
+body.light-theme .zd-item:hover,
+body.light-theme .mm-item:hover { background: #f1f5f9; }
+body.light-theme #search-bar { background: #f1f5f9; border-color: #cbd5e1; }
+body.light-theme #search-input { color: #1e293b; }
+body.light-theme .icon-btn { color: #64748b; }
+body.light-theme .icon-btn:hover { background: rgba(0,0,0,.06); color: #1e293b; }
+body.light-theme .icon-btn.active { background: rgba(37,99,235,.1); color: var(--primary); }
+body.light-theme .thumb-num { color: #64748b; }
+body.light-theme .outline-item { color: #475569; }
+body.light-theme .outline-item.depth-0 { color: #1e293b; }
+body.light-theme #outline-empty { color: #94a3b8; }
+body.light-theme .page-wrap { box-shadow: 0 2px 12px var(--page-shadow); }
+body.light-theme #download-btn { background: var(--primary); }
+
+/* ── Layout ─────────────────────────────────────────────────── */
+body { display: flex; flex-direction: column; background: var(--bg-viewer); color: var(--text); }
+
 #toolbar {
-  height: 48px;
-  background: #323639;
+  height: var(--toolbar-h);
+  background: var(--bg-toolbar);
+  border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 0 12px;
+  gap: 2px;
+  padding: 0 10px;
   flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(0,0,0,.5);
-  z-index: 10;
+  z-index: 20;
+  position: relative;
 }
 
-#toolbar-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #e2e8f0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 260px;
-  flex-shrink: 0;
-}
+#body-wrap { display: flex; flex: 1; min-height: 0; overflow: hidden; }
 
-.tb-sep { width: 1px; height: 26px; background: rgba(255,255,255,.15); margin: 0 6px; flex-shrink: 0; }
-
-.tb-center { display: flex; align-items: center; gap: 4px; flex: 1; justify-content: center; }
-
-.tb-right { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+/* ── Toolbar pieces ──────────────────────────────────────────── */
+.tb-sep { width: 1px; height: 22px; background: var(--border); margin: 0 4px; flex-shrink: 0; }
+.tb-spacer { flex: 1; }
 
 .tb-btn {
   display: flex; align-items: center; justify-content: center;
-  width: 34px; height: 34px;
-  background: transparent; border: none; border-radius: 6px;
-  color: #c8cfd7; cursor: pointer; font-size: 15px;
-  transition: background .13s, color .13s; flex-shrink: 0;
+  width: 32px; height: 32px; flex-shrink: 0;
+  background: transparent; border: none; border-radius: var(--radius);
+  color: #94a3b8; cursor: pointer; font-size: 15px;
+  transition: background .13s, color .13s;
 }
-.tb-btn svg { width: 18px; height: 18px; }
-.tb-btn:hover:not(:disabled) { background: rgba(255,255,255,.12); color: #fff; }
-.tb-btn:disabled { opacity: .3; cursor: default; }
+.tb-btn:hover:not(:disabled) { background: rgba(255,255,255,.1); color: #fff; }
+.tb-btn:disabled { opacity: .35; cursor: default; }
+.tb-btn.active { color: var(--gold); background: rgba(201,162,39,.1); }
+.tb-btn svg { width: 16px; height: 16px; pointer-events: none; }
 
+/* Search bar */
+#search-bar {
+  display: none; align-items: center; gap: 4px;
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 2px 6px;
+  margin-right: 4px;
+}
+#search-bar.open { display: flex; }
+#search-input {
+  background: transparent; border: none; outline: none;
+  color: var(--text); font-size: 13px; width: 180px;
+}
+#search-input::placeholder { color: var(--text-muted); }
+#search-count { font-size: 12px; color: var(--text-muted); white-space: nowrap; min-width: 40px; }
+
+/* Page nav */
+.page-nav { display: flex; align-items: center; gap: 4px; }
 #page-input {
-  width: 44px; text-align: center;
-  background: #525659; border: 1px solid #666; border-radius: 5px;
-  color: #fff; font-size: 13px; padding: 4px; outline: none;
+  width: 40px; text-align: center;
+  background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12);
+  border-radius: var(--radius); color: var(--text);
+  font-size: 13px; padding: 3px 4px; outline: none;
 }
-#page-input:focus { border-color: #94a3b8; }
-#page-total { font-size: 13px; color: #94a3b8; white-space: nowrap; }
+#page-input:focus { border-color: var(--primary); }
+#page-total { font-size: 13px; color: var(--text-muted); white-space: nowrap; }
 
-#zoom-val {
-  width: 62px; text-align: center;
-  background: #525659; border: 1px solid #666; border-radius: 5px;
-  color: #fff; font-size: 13px; padding: 4px; outline: none;
+/* Zoom */
+.zoom-wrap { display: flex; align-items: center; gap: 2px; position: relative; }
+#zoom-display {
+  display: flex; align-items: center; gap: 3px; cursor: pointer;
+  background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12);
+  border-radius: var(--radius); padding: 3px 8px;
+  font-size: 13px; color: var(--text); user-select: none;
+  transition: background .13s;
 }
+#zoom-display:hover { background: rgba(255,255,255,.14); }
+#zoom-display svg { width: 10px; height: 10px; color: var(--text-muted); }
+#zoom-dropdown {
+  display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 100;
+  background: #1a2845; border: 1px solid var(--border);
+  border-radius: var(--radius); min-width: 140px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.5);
+  overflow: hidden;
+}
+#zoom-dropdown.open { display: block; }
+#zoom-dropdown .zd-item {
+  padding: 7px 14px; font-size: 13px; cursor: pointer; color: var(--text);
+  transition: background .1s; display: flex; justify-content: space-between; align-items: center;
+}
+#zoom-dropdown .zd-item:hover { background: rgba(255,255,255,.08); }
+#zoom-dropdown .zd-item.active { color: var(--primary); }
+#zoom-dropdown hr { border: none; border-top: 1px solid var(--border); margin: 2px 0; }
 
+/* Download button */
 #download-btn {
-  display: inline-flex; align-items: center; gap: 5px;
-  background: #3b82f6; border: none; border-radius: 6px;
-  color: #fff; font-size: 13px; font-weight: 600;
-  padding: 6px 14px; cursor: pointer; flex-shrink: 0; transition: background .15s;
+  display: none; align-items: center; gap: 5px;
+  background: var(--primary); border: none; border-radius: var(--radius);
+  color: #fff; font-size: 12px; font-weight: 600;
+  padding: 5px 12px; cursor: pointer; transition: background .15s; white-space: nowrap; flex-shrink: 0;
 }
-#download-btn:hover { background: #2563eb; }
+#download-btn:hover { background: #1d4ed8; }
+#download-btn.show { display: inline-flex; }
 
-/* ── Body layout ── */
-#body-wrap { display: flex; flex: 1; min-height: 0; }
-
-/* ── Thumbnail sidebar ── */
-#thumb-panel {
-  width: 168px; flex-shrink: 0;
-  background: #2b2d30;
-  border-right: 1px solid rgba(255,255,255,.08);
-  overflow-y: auto; overflow-x: hidden;
-  display: flex; flex-direction: column;
-  align-items: center; gap: 8px;
-  padding: 12px 8px;
+/* More menu */
+#more-menu {
+  display: none; position: absolute; top: calc(100% + 4px); right: 10px; z-index: 100;
+  background: #1a2845; border: 1px solid var(--border);
+  border-radius: var(--radius); min-width: 200px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.5); overflow: hidden;
 }
-#thumb-panel::-webkit-scrollbar { width: 5px; }
-#thumb-panel::-webkit-scrollbar-track { background: transparent; }
-#thumb-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,.2); border-radius: 3px; }
-
-.thumb-item {
-  display: flex; flex-direction: column; align-items: center; gap: 4px;
-  cursor: pointer; width: 100%;
+#more-menu.open { display: block; }
+.mm-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 14px; font-size: 13px; cursor: pointer; color: var(--text);
+  transition: background .1s;
 }
+.mm-item:hover { background: rgba(255,255,255,.08); }
+.mm-item svg { width: 15px; height: 15px; color: var(--text-muted); flex-shrink: 0; }
+.mm-item .mm-check { margin-left: auto; color: var(--primary); display: none; }
+.mm-item.checked .mm-check { display: block; }
+.mm-sep { border: none; border-top: 1px solid var(--border); margin: 3px 0; }
+
+/* ── Icon bar ────────────────────────────────────────────────── */
+#icon-bar {
+  width: var(--icon-bar-w);
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; align-items: center;
+  padding: 8px 0; gap: 4px; flex-shrink: 0;
+}
+.icon-btn {
+  width: 32px; height: 32px;
+  background: transparent; border: none; border-radius: var(--radius);
+  color: #64748b; cursor: pointer; font-size: 15px;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .13s, color .13s;
+}
+.icon-btn:hover { background: rgba(255,255,255,.08); color: #fff; }
+.icon-btn.active { background: rgba(201,162,39,.12); color: var(--gold); }
+.icon-btn svg { width: 17px; height: 17px; }
+
+/* ── Side panel ──────────────────────────────────────────────── */
+#side-panel {
+  width: 0; background: var(--bg-panel);
+  border-right: 1px solid var(--border);
+  overflow: hidden; flex-shrink: 0;
+  transition: width .25s cubic-bezier(.4,0,.2,1);
+}
+#side-panel.open { width: var(--panel-w); }
+
+.panel-content { display: none; width: var(--panel-w); height: 100%; overflow-y: auto; }
+.panel-content.active { display: flex; flex-direction: column; }
+#panel-outline.active { display: block; }
+.panel-content::-webkit-scrollbar { width: 5px; }
+.panel-content::-webkit-scrollbar-thumb { background: rgba(255,255,255,.15); border-radius: 3px; }
+
+/* Thumbnails */
+#panel-thumbs { padding: 10px 8px; gap: 8px; align-items: center; }
+.thumb-item { display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; width: 100%; }
 .thumb-canvas-wrap {
   border: 2px solid transparent; border-radius: 4px; overflow: hidden;
-  transition: border-color .13s; box-shadow: 0 2px 6px rgba(0,0,0,.4);
-  line-height: 0;
+  transition: border-color .13s; box-shadow: 0 2px 8px rgba(0,0,0,.4); line-height: 0;
 }
-.thumb-canvas-wrap:hover { border-color: rgba(148,163,184,.5); }
-.thumb-canvas-wrap.active { border-color: #3b82f6; }
-.thumb-num {
-  font-size: 11px; color: #94a3b8;
-}
+.thumb-canvas-wrap:hover { border-color: rgba(148,163,184,.4); }
+.thumb-canvas-wrap.active { border-color: var(--primary); }
+.thumb-num { font-size: 11px; color: var(--text-muted); }
 
-/* ── Main viewer ── */
+/* Outline / TOC */
+#panel-outline { padding: 8px; }
+.outline-item {
+  display: flex; align-items: flex-start; gap: 6px;
+  padding: 5px 8px; border-radius: var(--radius);
+  font-size: 12.5px; color: #94a3b8; cursor: pointer;
+  transition: background .1s, color .1s; line-height: 1.4;
+}
+.outline-item:hover { background: rgba(255,255,255,.07); color: var(--text); }
+.outline-item.depth-0 { font-weight: 600; color: var(--text); }
+.outline-item .outline-dot { margin-top: 5px; width: 4px; height: 4px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+#outline-empty { padding: 20px; text-align: center; font-size: 12px; color: var(--text-muted); }
+
+/* ── Viewer area ─────────────────────────────────────────────── */
 #viewer-wrap {
   flex: 1; overflow-y: auto; overflow-x: auto;
-  display: flex; flex-direction: column;
-  align-items: center; padding: 20px 20px 40px;
-  gap: 14px; background: #525659;
+  background: var(--bg-viewer);
+  display: flex; flex-direction: column; align-items: center;
+  padding: 20px 20px 60px; gap: 16px;
 }
 #viewer-wrap::-webkit-scrollbar { width: 8px; }
 #viewer-wrap::-webkit-scrollbar-track { background: rgba(0,0,0,.2); }
-#viewer-wrap::-webkit-scrollbar-thumb { background: rgba(255,255,255,.25); border-radius: 4px; }
+#viewer-wrap::-webkit-scrollbar-thumb { background: rgba(255,255,255,.2); border-radius: 4px; }
 
-.page-wrap { position: relative; box-shadow: 0 4px 24px rgba(0,0,0,.6); line-height: 0; }
-canvas { display: block; }
+.page-wrap {
+  position: relative; line-height: 0;
+  box-shadow: 0 4px 24px var(--page-shadow);
+}
+.page-wrap canvas { display: block; }
 
-#loading-msg { margin-top: 80px; text-align: center; color: #94a3b8; font-size: 14px; }
-#error-msg   { margin-top: 80px; text-align: center; color: #f87171; font-size: 14px; line-height: 1.7; }
+/* Text layer */
+.textLayer {
+  position: absolute; inset: 0; overflow: hidden;
+  line-height: 1; opacity: 1;
+}
+.textLayer span {
+  color: transparent; position: absolute; white-space: pre;
+  cursor: text; transform-origin: 0 0;
+}
+.textLayer .highlight { background: rgba(255,220,0,.4); border-radius: 2px; color: transparent; }
+.textLayer .highlight.selected { background: rgba(0,100,255,.4); }
+
+/* Hand tool mode */
+body.hand-tool #viewer-wrap { cursor: grab; }
+body.hand-tool #viewer-wrap:active { cursor: grabbing; }
+body.hand-tool .textLayer { pointer-events: none; }
+
+/* Status */
+#loading-msg, #error-msg {
+  margin-top: 100px; text-align: center; font-size: 14px; color: var(--text-muted);
+}
+#error-msg { color: #f87171; line-height: 1.7; }
+
+/* Search highlight overlay */
+.search-highlight-page { position: absolute; inset: 0; pointer-events: none; }
+
+@media print {
+  @page { margin: 8mm; }
+  #toolbar, #icon-bar, #side-panel, .textLayer, .search-highlight-page { display: none !important; }
+  * { background: transparent !important; box-shadow: none !important; }
+  body, html { background: #fff !important; margin: 0; padding: 0; }
+  #body-wrap, #viewer-wrap {
+    display: block !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    gap: 0 !important;
+    width: auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+  }
+  .page-wrap {
+    display: block !important;
+    width: auto !important;
+    height: auto !important;
+    page-break-inside: avoid;
+    break-inside: avoid;
+    page-break-after: always;
+    break-after: page;
+    margin: 0 !important;
+  }
+  .page-wrap canvas {
+    max-width: 100% !important;
+    width: auto !important;
+    height: auto !important;
+    display: block !important;
+  }
+}
 </style>
 </head>
 <body>
 
-<!-- Toolbar -->
-<div id="toolbar">
-  <span id="toolbar-title"></span>
+<!-- ── Toolbar ─────────────────────────────────────────────────── -->
+<header id="toolbar">
+
+  <!-- Search bar -->
+  <div id="search-bar">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;color:#64748b;flex-shrink:0"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <input id="search-input" placeholder="Пошук у документі…" autocomplete="off">
+    <span id="search-count"></span>
+    <button class="tb-btn" id="btn-search-prev" title="Попередній результат" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="18 15 12 9 6 15"/></svg>
+    </button>
+    <button class="tb-btn" id="btn-search-next" title="Наступний результат" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+    </button>
+    <button class="tb-btn" id="btn-search-close" title="Закрити пошук">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+
+  <!-- Search open -->
+  <button class="tb-btn" id="btn-search-open" title="Пошук (Ctrl+F)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+  </button>
 
   <div class="tb-sep"></div>
 
-  <!-- Page nav (center) -->
-  <div class="tb-center">
-    <button class="tb-btn" id="btn-first" title="Перша сторінка">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>
-    </button>
-    <button class="tb-btn" id="btn-prev" title="Попередня (←)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
-    </button>
-    <input id="page-input" type="number" min="1" value="1" title="Номер сторінки">
-    <span id="page-total" style="font-size:13px;color:#94a3b8">/ —</span>
-    <button class="tb-btn" id="btn-next" title="Наступна (→)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-    </button>
-    <button class="tb-btn" id="btn-last" title="Остання сторінка">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
-    </button>
-
-    <div class="tb-sep"></div>
-
-    <!-- Zoom -->
-    <button class="tb-btn" id="btn-zoom-out" title="Зменшити (-)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
-    </button>
-    <input id="zoom-val" type="text" value="100%" title="Масштаб (клік — по ширині)" style="cursor:pointer" onclick="setScale('fit')">
-    <button class="tb-btn" id="btn-zoom-in" title="Збільшити (+)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
-    </button>
-
-    <div class="tb-sep"></div>
-
-    <!-- Rotate -->
-    <button class="tb-btn" id="btn-rot-l" title="Повернути ліворуч">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-5"/></svg>
-    </button>
-    <button class="tb-btn" id="btn-rot-r" title="Повернути праворуч">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.49-5"/></svg>
-    </button>
+  <!-- Page nav -->
+  <button class="tb-btn" id="btn-prev" title="Попередня (←)" disabled>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+  </button>
+  <div class="page-nav">
+    <input id="page-input" type="number" min="1" value="1">
+    <span id="page-total" style="font-size:13px;color:#64748b">/ —</span>
   </div>
+  <button class="tb-btn" id="btn-next" title="Наступна (→)" disabled>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+  </button>
 
-  <!-- Right: download -->
-  <div class="tb-right">
-    <button id="download-btn" style="display:none">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-      Завантажити
-    </button>
+  <div class="tb-sep"></div>
+
+  <!-- Zoom -->
+  <button class="tb-btn" id="btn-zoom-out" title="Зменшити (-)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+  </button>
+  <div class="zoom-wrap">
+    <div id="zoom-display">
+      <span id="zoom-label">100%</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+    </div>
+    <div id="zoom-dropdown">
+      <div class="zd-item" data-zoom="0.5">50%</div>
+      <div class="zd-item" data-zoom="0.75">75%</div>
+      <div class="zd-item" data-zoom="0.9">90%</div>
+      <div class="zd-item active" data-zoom="1">100%</div>
+      <div class="zd-item" data-zoom="1.25">125%</div>
+      <div class="zd-item" data-zoom="1.5">150%</div>
+      <div class="zd-item" data-zoom="2">200%</div>
+      <div class="zd-item" data-zoom="3">300%</div>
+      <hr>
+      <div class="zd-item" data-zoom="fit-width">По ширині</div>
+      <div class="zd-item" data-zoom="fit-page">По сторінці</div>
+    </div>
   </div>
-</div>
+  <button class="tb-btn" id="btn-zoom-in" title="Збільшити (+)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+  </button>
 
-<!-- Body -->
+  <div class="tb-spacer"></div>
+
+  <!-- Tools right -->
+  <button class="tb-btn active" id="btn-hand-tool" title="Інструмент рука">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"/><path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v2"/><path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>
+  </button>
+
+  <div class="tb-sep"></div>
+
+  <button class="tb-btn" id="btn-rot-l" title="Повернути вліво">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-5"/></svg>
+  </button>
+  <button class="tb-btn" id="btn-rot-r" title="Повернути вправо">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.49-5"/></svg>
+  </button>
+  <button class="tb-btn" id="btn-fullscreen" title="На весь екран">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+  </button>
+
+  <div class="tb-sep"></div>
+
+  <button id="download-btn">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    Завантажити
+  </button>
+
+  <button class="tb-btn" id="btn-more" title="Більше">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="19" r="1" fill="currentColor"/></svg>
+  </button>
+
+  <!-- More dropdown -->
+  <div id="more-menu">
+    <div class="mm-item" id="mm-first">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/><line x1="5" y1="19" x2="19" y2="19"/></svg>
+      Перша сторінка
+    </div>
+    <div class="mm-item" id="mm-last">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="5" x2="19" y2="5"/><polyline points="5 12 12 19 19 12"/><line x1="12" y1="19" x2="12" y2="19"/></svg>
+      Остання сторінка
+    </div>
+    <hr class="mm-sep">
+    <div class="mm-item" id="mm-print">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+      Друк
+    </div>
+  </div>
+</header>
+
+<!-- ── Body ────────────────────────────────────────────────────── -->
 <div id="body-wrap">
-  <div id="thumb-panel"></div>
+
+  <!-- Icon bar -->
+  <nav id="icon-bar">
+    <button class="icon-btn" data-panel="thumbs" title="Мініатюри">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+    </button>
+    <button class="icon-btn" data-panel="outline" title="Зміст документу">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+    </button>
+  </nav>
+
+  <!-- Side panel -->
+  <div id="side-panel">
+    <div id="panel-thumbs" class="panel-content"></div>
+    <div id="panel-outline" class="panel-content">
+      <div id="outline-empty">Зміст недоступний</div>
+    </div>
+  </div>
+
+  <!-- Viewer -->
   <div id="viewer-wrap">
     <div id="loading-msg">Завантаження PDF…</div>
   </div>
 </div>
 
 <script>
-const params      = new URLSearchParams(location.search);
-const fileUrl     = params.get('file');
-const title       = params.get('title') || 'PDF';
-const canDownload = params.get('download') === '1';
+// Apply theme from LMS localStorage or URL param
+(function() {
+  const urlTheme = new URLSearchParams(location.search).get('theme');
+  const lsTheme  = localStorage.getItem('lms_theme');
+  const theme    = urlTheme || lsTheme || 'dark';
+  if (theme === 'light') document.body.classList.add('light-theme');
+})();
 
-document.getElementById('toolbar-title').textContent = title;
-document.title = title;
-
-// Clean up address bar — keep only the title, hide signed URL
-history.replaceState(null, '', '/pdf-viewer.html' + (title ? '?title=' + encodeURIComponent(title) : ''));
-
-if (!fileUrl) {
-  document.getElementById('viewer-wrap').innerHTML = '<div id="error-msg">Файл не вказано.</div>';
-  throw new Error('No file param');
-}
+// React to theme changes from the parent LMS without page reload
+window.addEventListener('storage', e => {
+  if (e.key !== 'lms_theme') return;
+  document.body.classList.toggle('light-theme', e.newValue === 'light');
+});
 
 pdfjsLib.GlobalWorkerOptions.workerSrc =
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-// ── State ──────────────────────────────────────────────────────────────────
-let pdfDoc      = null;
-let totalPages  = 0;
-let currentPage = 1;
-let scale       = 1;
-let rotation    = 0;
-let rendering   = false;
+const params      = new URLSearchParams(location.search);
+const fileUrl     = params.get('file');
+const docTitle    = params.get('title') || 'PDF';
+const canDownload = params.get('download') === '1';
 
-const SCALE_STEP = 0.25;
-const SCALE_MIN  = 0.25;
-const SCALE_MAX  = 4.0;
-const THUMB_W    = 128;
+document.title = docTitle;
+history.replaceState(null, '', '/pdf-viewer.html' + (docTitle ? '?title=' + encodeURIComponent(docTitle) : ''));
 
-// ── DOM ───────────────────────────────────────────────────────────────────
-const wrap      = document.getElementById('viewer-wrap');
-const thumbPanel = document.getElementById('thumb-panel');
-const pageInput = document.getElementById('page-input');
-const pageTotal = document.getElementById('page-total');
-const zoomVal   = document.getElementById('zoom-val');
+if (canDownload) document.getElementById('download-btn').classList.add('show');
+if (!canDownload) document.getElementById('mm-print').style.display = 'none';
 
-// ── Helpers ────────────────────────────────────────────────────────────────
-function getEffectiveScale(page) {
-  if (scale !== 'fit') return scale;
+// ── Persist settings ───────────────────────────────────────────
+const PREFS_KEY = 'lms_pdfviewer_prefs_v2';
+function _loadPrefs() {
+  try { return JSON.parse(localStorage.getItem(PREFS_KEY) || '{}'); } catch { return {}; }
+}
+function _savePrefs(patch) {
+  try { localStorage.setItem(PREFS_KEY, JSON.stringify({ ..._loadPrefs(), ...patch })); } catch {}
+}
+
+// ── State ──────────────────────────────────────────────────────
+let pdfDoc = null, totalPages = 0, currentPage = 1;
+const _prefs = _loadPrefs();
+let scale    = _prefs.scale    ?? 1.5;
+let rotation = _prefs.rotation ?? 0;
+let rendering = false;
+let handTool = true;
+let activePanel = _prefs.activePanel ?? 'thumbs';
+let panelOpen   = _prefs.panelOpen   ?? true;
+let searchResults = [], searchIdx = -1, searchQuery = '';
+let pageTextContent = {};
+
+const SCALE_STEP = 0.25, SCALE_MIN = 0.1, SCALE_MAX = 5;
+const THUMB_W = 150;
+
+// ── DOM ────────────────────────────────────────────────────────
+const wrap       = document.getElementById('viewer-wrap');
+const sidePanel  = document.getElementById('side-panel');
+const thumbPanel = document.getElementById('panel-thumbs');
+const outlinePanel = document.getElementById('panel-outline');
+document.body.classList.add('hand-tool');
+const pageInput  = document.getElementById('page-input');
+const pageTotal  = document.getElementById('page-total');
+const zoomLabel  = document.getElementById('zoom-label');
+
+// ── Helpers ────────────────────────────────────────────────────
+function fitWidthScale(page) {
   const vp = page.getViewport({ scale: 1, rotation });
-  return (wrap.clientWidth - 48) / vp.width;
+  return (wrap.clientWidth - 56) / vp.width;
+}
+function fitPageScale(page) {
+  const vp = page.getViewport({ scale: 1, rotation });
+  const sw = (wrap.clientWidth - 56) / vp.width;
+  const sh = (wrap.clientHeight - 56) / vp.height;
+  return Math.min(sw, sh);
 }
 
-function updateZoomDisplay() {
-  if (scale === 'fit') { zoomVal.value = 'По ширині'; return; }
-  zoomVal.value = Math.round(scale * 100) + '%';
+async function getEffectiveScale(page) {
+  if (scale === 'fit-width') return fitWidthScale(page);
+  if (scale === 'fit-page')  return fitPageScale(page);
+  return scale;
 }
 
-function updateNav() {
-  document.getElementById('btn-first').disabled = currentPage <= 1;
-  document.getElementById('btn-prev').disabled  = currentPage <= 1;
-  document.getElementById('btn-next').disabled  = currentPage >= totalPages;
-  document.getElementById('btn-last').disabled  = currentPage >= totalPages;
-  pageInput.value = currentPage;
-  thumbPanel.querySelectorAll('.thumb-canvas-wrap').forEach((el, i) => {
-    el.classList.toggle('active', i + 1 === currentPage);
+function updateZoomLabel() {
+  if (scale === 'fit-width') { zoomLabel.textContent = 'По ширині'; return; }
+  if (scale === 'fit-page')  { zoomLabel.textContent = 'По сторінці'; return; }
+  zoomLabel.textContent = Math.round(scale * 100) + '%';
+  // highlight active in dropdown
+  document.querySelectorAll('.zd-item').forEach(el => {
+    el.classList.toggle('active', parseFloat(el.dataset.zoom) === scale);
   });
 }
 
-// ── Render main pages ──────────────────────────────────────────────────────
+function updateNav() {
+  document.getElementById('btn-prev').disabled = currentPage <= 1;
+  document.getElementById('btn-next').disabled = currentPage >= totalPages;
+  pageInput.value = currentPage;
+  thumbPanel.querySelectorAll('.thumb-canvas-wrap').forEach((el, i) =>
+    el.classList.toggle('active', i + 1 === currentPage));
+}
+
+// ── Render ─────────────────────────────────────────────────────
 async function renderAll() {
   if (!pdfDoc || rendering) return;
   rendering = true;
   wrap.innerHTML = '';
+  document.getElementById('loading-msg')?.remove();
 
   for (let i = 1; i <= totalPages; i++) {
-    const page      = await pdfDoc.getPage(i);
-    const effScale  = getEffectiveScale(page);
-    const viewport  = page.getViewport({ scale: effScale, rotation });
+    const page = await pdfDoc.getPage(i);
+    const effScale = await getEffectiveScale(page);
+    const viewport = page.getViewport({ scale: effScale, rotation });
 
-    const pageWrap  = document.createElement('div');
+    const pageWrap = document.createElement('div');
     pageWrap.className = 'page-wrap';
     pageWrap.dataset.page = i;
+    pageWrap.style.width  = viewport.width  + 'px';
+    pageWrap.style.height = viewport.height + 'px';
 
-    const canvas   = document.createElement('canvas');
-    canvas.width   = viewport.width;
-    canvas.height  = viewport.height;
+    const canvas = document.createElement('canvas');
+    canvas.width  = viewport.width;
+    canvas.height = viewport.height;
     pageWrap.appendChild(canvas);
     wrap.appendChild(pageWrap);
 
     await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+
+    // Text layer for selection + search
+    try {
+      const tc = await page.getTextContent();
+      pageTextContent[i] = tc;
+      const tl = document.createElement('div');
+      tl.className = 'textLayer';
+      tl.style.width  = viewport.width  + 'px';
+      tl.style.height = viewport.height + 'px';
+      tl.style.setProperty('--scale-factor', viewport.scale);
+      pageWrap.appendChild(tl);
+      await pdfjsLib.renderTextLayer({ textContentSource: tc, container: tl, viewport, textDivs: [] }).promise;
+    } catch(_) {}
   }
 
   rendering = false;
   updateNav();
+  observePages();
   scrollToPage(currentPage, false);
+  if (searchQuery) runSearch(searchQuery, false);
 }
 
-// ── Render thumbnails ──────────────────────────────────────────────────────
+// ── Thumbnails ─────────────────────────────────────────────────
 async function renderThumbs() {
   thumbPanel.innerHTML = '';
   for (let i = 1; i <= totalPages; i++) {
-    const page     = await pdfDoc.getPage(i);
-    const viewport = page.getViewport({ scale: 1, rotation: 0 });
-    const ts       = THUMB_W / viewport.width;
-    const tvp      = page.getViewport({ scale: ts, rotation: 0 });
+    const page = await pdfDoc.getPage(i);
+    const vp   = page.getViewport({ scale: 1, rotation: 0 });
+    const ts   = THUMB_W / vp.width;
+    const tvp  = page.getViewport({ scale: ts, rotation: 0 });
 
-    const item     = document.createElement('div');
+    const item = document.createElement('div');
     item.className = 'thumb-item';
-    item.dataset.page = i;
 
     const wrap2 = document.createElement('div');
     wrap2.className = 'thumb-canvas-wrap' + (i === 1 ? ' active' : '');
 
-    const canvas  = document.createElement('canvas');
-    canvas.width  = tvp.width;
-    canvas.height = tvp.height;
-    canvas.style.display = 'block';
+    const c = document.createElement('canvas');
+    c.width = tvp.width; c.height = tvp.height;
+    await page.render({ canvasContext: c.getContext('2d'), viewport: tvp }).promise;
 
-    await page.render({ canvasContext: canvas.getContext('2d'), viewport: tvp }).promise;
-
-    wrap2.appendChild(canvas);
+    wrap2.appendChild(c);
     const num = document.createElement('span');
-    num.className = 'thumb-num';
-    num.textContent = i;
-
-    item.appendChild(wrap2);
-    item.appendChild(num);
+    num.className = 'thumb-num'; num.textContent = i;
+    item.appendChild(wrap2); item.appendChild(num);
     item.addEventListener('click', () => goTo(i));
     thumbPanel.appendChild(item);
   }
 }
 
-// ── Navigation ─────────────────────────────────────────────────────────────
+// ── Outline / TOC ──────────────────────────────────────────────
+async function renderOutline() {
+  const outline = await pdfDoc.getOutline();
+  if (!outline || !outline.length) return;
+  outlinePanel.innerHTML = '';
+  const render = (items, depth) => {
+    items.forEach(item => {
+      const el = document.createElement('div');
+      el.className = `outline-item depth-${Math.min(depth, 2)}`;
+      el.style.paddingLeft = (8 + depth * 14) + 'px';
+      el.innerHTML = `<span class="outline-dot"></span><span>${item.title || '—'}</span>`;
+      el.addEventListener('click', async () => {
+        if (item.dest) {
+          try {
+            const dest = typeof item.dest === 'string' ? await pdfDoc.getDestination(item.dest) : item.dest;
+            const ref  = await pdfDoc.getPageIndex(dest[0]);
+            goTo(ref + 1);
+          } catch(_) {}
+        }
+      });
+      outlinePanel.appendChild(el);
+      if (item.items?.length) render(item.items, depth + 1);
+    });
+  };
+  render(outline, 0);
+}
+
+// ── Navigation ─────────────────────────────────────────────────
 function scrollToPage(num, smooth = true) {
   const el = wrap.querySelector(`[data-page="${num}"]`);
   if (el) el.scrollIntoView({ behavior: smooth ? 'smooth' : 'instant', block: 'start' });
@@ -333,17 +675,8 @@ function goTo(num) {
   currentPage = num;
   updateNav();
   scrollToPage(num);
-  if (num === totalPages) setTimeout(notifyScrollEnd, 600);
 }
 
-// ── Zoom ───────────────────────────────────────────────────────────────────
-function setScale(val) {
-  scale = val === 'fit' ? 'fit' : Math.max(SCALE_MIN, Math.min(SCALE_MAX, parseFloat(val)));
-  updateZoomDisplay();
-  renderAll();
-}
-
-// ── Scroll → page tracker ──────────────────────────────────────────────────
 let scrollEndSent = false;
 function notifyScrollEnd() {
   if (scrollEndSent) return;
@@ -351,100 +684,311 @@ function notifyScrollEnd() {
   window.parent.postMessage({ type: 'pdf-scroll-end' }, '*');
 }
 
-const io = new IntersectionObserver(entries => {
-  entries.forEach(e => {
-    if (e.isIntersecting && e.intersectionRatio >= 0.1) {
-      const p = parseInt(e.target.dataset.page);
-      if (p !== currentPage) { currentPage = p; updateNav(); }
-      if (p === totalPages) notifyScrollEnd();
-    }
-  });
-}, { threshold: [0.1, 0.4] });
-
 function observePages() {
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        const p = parseInt(e.target.dataset.page);
+        if (p !== currentPage) { currentPage = p; updateNav(); }
+        if (p === totalPages) notifyScrollEnd();
+      }
+    });
+  }, { threshold: 0.3 });
   wrap.querySelectorAll('.page-wrap').forEach(el => io.observe(el));
   if (totalPages === 1) notifyScrollEnd();
   wrap.addEventListener('scroll', () => {
-    if (wrap.scrollTop + wrap.clientHeight >= wrap.scrollHeight - 80) notifyScrollEnd();
+    if (wrap.scrollTop + wrap.clientHeight >= wrap.scrollHeight - 100) notifyScrollEnd();
   }, { passive: true });
 }
 
-// ── Load ───────────────────────────────────────────────────────────────────
+// ── Zoom ───────────────────────────────────────────────────────
+function setScale(val) {
+  scale = val;
+  _savePrefs({ scale });
+  updateZoomLabel();
+  renderAll();
+}
+
+// ── Search ─────────────────────────────────────────────────────
+function clearSearchHighlights() {
+  wrap.querySelectorAll('.textLayer .highlight').forEach(el => {
+    el.classList.remove('highlight', 'selected');
+  });
+}
+
+async function runSearch(query, jump = true) {
+  clearSearchHighlights();
+  searchResults = [];
+  searchQuery = query;
+  if (!query) {
+    document.getElementById('search-count').textContent = '';
+    document.getElementById('btn-search-prev').disabled = true;
+    document.getElementById('btn-search-next').disabled = true;
+    return;
+  }
+  const q = query.toLowerCase();
+
+  wrap.querySelectorAll('.textLayer span').forEach(span => {
+    if (span.textContent.toLowerCase().includes(q)) {
+      span.classList.add('highlight');
+      const page = parseInt(span.closest('.page-wrap')?.dataset.page || 0);
+      searchResults.push({ span, page });
+    }
+  });
+
+  const count = searchResults.length;
+  document.getElementById('btn-search-prev').disabled = count === 0;
+  document.getElementById('btn-search-next').disabled = count === 0;
+
+  if (count === 0) {
+    document.getElementById('search-count').textContent = 'Не знайдено';
+    searchIdx = -1;
+    return;
+  }
+
+  if (jump) {
+    searchIdx = 0;
+    highlightSearchResult();
+  }
+  document.getElementById('search-count').textContent = `${searchIdx + 1} / ${count}`;
+}
+
+function highlightSearchResult() {
+  searchResults.forEach((r, i) => r.span.classList.toggle('selected', i === searchIdx));
+  if (searchResults[searchIdx]) {
+    const { span, page } = searchResults[searchIdx];
+    if (page !== currentPage) goTo(page);
+    span.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    document.getElementById('search-count').textContent = `${searchIdx + 1} / ${searchResults.length}`;
+  }
+}
+
+// ── Panel toggle ───────────────────────────────────────────────
+function togglePanel(name) {
+  if (activePanel === name && panelOpen) {
+    panelOpen = false;
+    _savePrefs({ panelOpen, activePanel });
+    sidePanel.classList.remove('open');
+    document.querySelectorAll('.icon-btn').forEach(b => b.classList.remove('active'));
+  } else {
+    activePanel = name;
+    panelOpen = true;
+    _savePrefs({ panelOpen, activePanel });
+    sidePanel.classList.add('open');
+    document.querySelectorAll('.icon-btn').forEach(b =>
+      b.classList.toggle('active', b.dataset.panel === name));
+    document.querySelectorAll('.panel-content').forEach(p =>
+      p.classList.toggle('active', p.id === 'panel-' + name));
+  }
+}
+
+// ── Load ───────────────────────────────────────────────────────
 async function loadPDF() {
+  if (!fileUrl) {
+    wrap.innerHTML = '<div id="error-msg">Файл не вказано.</div>';
+    return;
+  }
   try {
     pdfDoc     = await pdfjsLib.getDocument(fileUrl).promise;
     totalPages = pdfDoc.numPages;
     pageTotal.textContent = '/ ' + totalPages;
-    pageInput.max         = totalPages;
+    pageInput.max = totalPages;
 
     await renderAll();
-    observePages();
-    renderThumbs(); // async, no await — loads in background
-
-    document.getElementById('loading-msg')?.remove();
-
-    if (canDownload) {
-      const btn = document.getElementById('download-btn');
-      btn.style.display = 'inline-flex';
-      btn.addEventListener('click', async () => {
-        try {
-          btn.disabled = true;
-          btn.textContent = 'Завантаження…';
-          const res  = await fetch(fileUrl);
-          const blob = await res.blob();
-          const url  = URL.createObjectURL(blob);
-          const a    = document.createElement('a');
-          a.href     = url;
-          a.download = title.endsWith('.pdf') ? title : title + '.pdf';
-          a.click();
-          setTimeout(() => URL.revokeObjectURL(url), 2000);
-        } catch(e) {
-          alert('Помилка завантаження: ' + e.message);
-        } finally {
-          btn.disabled = false;
-          btn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Завантажити';
-        }
-      });
+    renderThumbs();
+    renderOutline();
+    // Restore panel state after PDF is loaded
+    if (panelOpen && activePanel) {
+      sidePanel.classList.add('open');
+      document.querySelectorAll('.icon-btn').forEach(b =>
+        b.classList.toggle('active', b.dataset.panel === activePanel));
+      document.querySelectorAll('.panel-content').forEach(p =>
+        p.classList.toggle('active', p.id === 'panel-' + activePanel));
     }
-  } catch (e) {
-    wrap.innerHTML = `<div id="error-msg">Помилка завантаження PDF:<br>${e.message}</div>`;
+  } catch(e) {
+    wrap.innerHTML = `<div id="error-msg">Помилка завантаження:<br>${e.message}</div>`;
   }
 }
 
-// ── Events ─────────────────────────────────────────────────────────────────
-document.getElementById('btn-first').addEventListener('click', () => goTo(1));
-document.getElementById('btn-prev') .addEventListener('click', () => goTo(currentPage - 1));
-document.getElementById('btn-next') .addEventListener('click', () => goTo(currentPage + 1));
-document.getElementById('btn-last') .addEventListener('click', () => goTo(totalPages));
-
-pageInput.addEventListener('change',  () => goTo(parseInt(pageInput.value) || 1));
+// ── Events ─────────────────────────────────────────────────────
+// Nav
+document.getElementById('btn-prev').addEventListener('click', () => goTo(currentPage - 1));
+document.getElementById('btn-next').addEventListener('click', () => goTo(currentPage + 1));
+pageInput.addEventListener('change', () => goTo(parseInt(pageInput.value) || 1));
 pageInput.addEventListener('keydown', e => { if (e.key === 'Enter') goTo(parseInt(pageInput.value) || 1); });
 
+// Zoom
 document.getElementById('btn-zoom-out').addEventListener('click', () =>
-  setScale(scale === 'fit' ? 0.75 : scale - SCALE_STEP));
+  setScale(typeof scale === 'number' ? Math.max(SCALE_MIN, scale - SCALE_STEP) : 0.75));
 document.getElementById('btn-zoom-in').addEventListener('click', () =>
-  setScale(scale === 'fit' ? 1.25 : scale + SCALE_STEP));
+  setScale(typeof scale === 'number' ? Math.min(SCALE_MAX, scale + SCALE_STEP) : 1.25));
 
-document.getElementById('btn-rot-l').addEventListener('click', () => { rotation = (rotation - 90 + 360) % 360; renderAll(); });
-document.getElementById('btn-rot-r').addEventListener('click', () => { rotation = (rotation + 90) % 360; renderAll(); });
+document.getElementById('zoom-display').addEventListener('click', e => {
+  e.stopPropagation();
+  document.getElementById('zoom-dropdown').classList.toggle('open');
+});
+document.getElementById('zoom-dropdown').addEventListener('click', e => {
+  const item = e.target.closest('.zd-item');
+  if (!item) return;
+  const val = item.dataset.zoom;
+  setScale(isNaN(val) ? val : parseFloat(val));
+  document.getElementById('zoom-dropdown').classList.remove('open');
+});
 
+// Tools
+document.getElementById('btn-hand-tool').addEventListener('click', () => {
+  handTool = true;
+  document.body.classList.add('hand-tool');
+  document.getElementById('btn-hand-tool').classList.add('active');
+});
+
+// Rotate
+document.getElementById('btn-rot-l').addEventListener('click', () => { rotation = (rotation - 90 + 360) % 360; _savePrefs({ rotation }); renderAll(); });
+document.getElementById('btn-rot-r').addEventListener('click', () => { rotation = (rotation + 90) % 360; _savePrefs({ rotation }); renderAll(); });
+
+// Fullscreen
+document.getElementById('btn-fullscreen').addEventListener('click', () => {
+  if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+  else document.exitFullscreen?.();
+});
+
+// Download
+document.getElementById('download-btn').addEventListener('click', async () => {
+  try {
+    const btn = document.getElementById('download-btn');
+    btn.textContent = 'Завантаження…';
+    const res  = await fetch(fileUrl);
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = docTitle.endsWith('.pdf') ? docTitle : docTitle + '.pdf';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  } catch(e) { alert('Помилка: ' + e.message); }
+  finally {
+    const btn = document.getElementById('download-btn');
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Завантажити';
+  }
+});
+
+// Icon bar
+document.querySelectorAll('.icon-btn[data-panel]').forEach(btn =>
+  btn.addEventListener('click', () => togglePanel(btn.dataset.panel)));
+
+// Search
+document.getElementById('btn-search-open').addEventListener('click', () => {
+  document.getElementById('search-bar').classList.add('open');
+  document.getElementById('search-input').focus();
+});
+document.getElementById('btn-search-close').addEventListener('click', () => {
+  document.getElementById('search-bar').classList.remove('open');
+  document.getElementById('search-input').value = '';
+  runSearch('');
+});
+let searchTimer;
+document.getElementById('search-input').addEventListener('input', e => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => runSearch(e.target.value.trim()), 300);
+});
+document.getElementById('search-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    if (searchResults.length) {
+      searchIdx = e.shiftKey
+        ? (searchIdx - 1 + searchResults.length) % searchResults.length
+        : (searchIdx + 1) % searchResults.length;
+      highlightSearchResult();
+    }
+    e.preventDefault();
+  }
+  if (e.key === 'Escape') document.getElementById('btn-search-close').click();
+});
+document.getElementById('btn-search-prev').addEventListener('click', () => {
+  if (!searchResults.length) return;
+  searchIdx = (searchIdx - 1 + searchResults.length) % searchResults.length;
+  highlightSearchResult();
+});
+document.getElementById('btn-search-next').addEventListener('click', () => {
+  if (!searchResults.length) return;
+  searchIdx = (searchIdx + 1) % searchResults.length;
+  highlightSearchResult();
+});
+
+// More menu
+document.getElementById('btn-more').addEventListener('click', e => {
+  e.stopPropagation();
+  document.getElementById('more-menu').classList.toggle('open');
+});
+document.getElementById('mm-first').addEventListener('click', () => { goTo(1); document.getElementById('more-menu').classList.remove('open'); });
+document.getElementById('mm-last') .addEventListener('click', () => { goTo(totalPages); document.getElementById('more-menu').classList.remove('open'); });
+document.getElementById('mm-print').addEventListener('click', () => {
+  document.getElementById('more-menu').classList.remove('open');
+  const canvases = wrap.querySelectorAll('.page-wrap canvas');
+  if (!canvases.length) return;
+  const pages = Array.from(canvases).map(c => c.toDataURL('image/png'));
+  const pw = window.open('', '_blank');
+  if (!pw) { alert('Дозвольте спливаючі вікна для цього сайту'); return; }
+  const css = '*{margin:0;padding:0;box-sizing:border-box}body{background:#fff}'
+    + '.pg{page-break-after:always;break-after:page;text-align:center}'
+    + '.pg:last-child{page-break-after:avoid;break-after:avoid}'
+    + '.pg img{max-width:100%;height:auto;display:block;margin:0 auto}'
+    + '@media print{@page{margin:8mm}}';
+  let html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + docTitle + '<\/title>'
+    + '<style>' + css + '<\/style><\/head><body>';
+  pages.forEach(src => { html += '<div class="pg"><img src="' + src + '"><\/div>'; });
+  html += '<\/body><\/html>';
+  pw.document.open();
+  pw.document.write(html);
+  pw.document.close();
+  pw.onload = () => { pw.focus(); pw.print(); pw.close(); };
+});
+
+// Close dropdowns on outside click
+document.addEventListener('click', () => {
+  document.getElementById('zoom-dropdown').classList.remove('open');
+  document.getElementById('more-menu').classList.remove('open');
+});
+
+// Keyboard
 document.addEventListener('keydown', e => {
-  if (document.activeElement === pageInput) return;
+  if (document.activeElement === pageInput || document.activeElement === document.getElementById('search-input')) return;
+  if (e.ctrlKey && e.key === 'f') { e.preventDefault(); document.getElementById('btn-search-open').click(); return; }
   if (e.key === 'ArrowRight' || e.key === 'ArrowDown') goTo(currentPage + 1);
   if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   goTo(currentPage - 1);
   if (e.key === 'Home') goTo(1);
   if (e.key === 'End')  goTo(totalPages);
-  if (e.key === '+' || e.key === '=') { e.preventDefault(); setScale((scale === 'fit' ? 1 : scale) + SCALE_STEP); }
-  if (e.key === '-')                  { e.preventDefault(); setScale((scale === 'fit' ? 1 : scale) - SCALE_STEP); }
+  if ((e.key === '+' || e.key === '=') && !e.ctrlKey) { e.preventDefault(); setScale(typeof scale === 'number' ? Math.min(SCALE_MAX, scale + SCALE_STEP) : 1.25); }
+  if (e.key === '-' && !e.ctrlKey) { e.preventDefault(); setScale(typeof scale === 'number' ? Math.max(SCALE_MIN, scale - SCALE_STEP) : 0.75); }
   if (!canDownload && e.ctrlKey && ['s','p','u'].includes(e.key.toLowerCase())) e.preventDefault();
 });
 
-if (!canDownload) {
-  document.addEventListener('contextmenu', e => e.preventDefault());
-}
+// ── Hand tool drag-to-pan ──────────────────────────────────────
+let isDragging = false, dragStartX = 0, dragStartY = 0, scrollStartX = 0, scrollStartY = 0;
 
-window.addEventListener('resize', () => { if (scale === 'fit') renderAll(); });
+wrap.addEventListener('mousedown', e => {
+  if (!handTool || e.button !== 0) return;
+  isDragging = true;
+  dragStartX = e.clientX; dragStartY = e.clientY;
+  scrollStartX = wrap.scrollLeft; scrollStartY = wrap.scrollTop;
+  wrap.style.cursor = 'grabbing';
+  e.preventDefault();
+});
+document.addEventListener('mousemove', e => {
+  if (!isDragging) return;
+  wrap.scrollLeft = scrollStartX - (e.clientX - dragStartX);
+  wrap.scrollTop  = scrollStartY - (e.clientY - dragStartY);
+});
+document.addEventListener('mouseup', () => {
+  if (!isDragging) return;
+  isDragging = false;
+  wrap.style.cursor = '';
+});
 
+if (!canDownload) document.addEventListener('contextmenu', e => e.preventDefault());
+window.addEventListener('resize', () => {
+  if (scale === 'fit-width' || scale === 'fit-page') renderAll();
+});
+
+updateZoomLabel();
 loadPDF();
 </script>
 </body>

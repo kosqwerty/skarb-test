@@ -12,7 +12,7 @@ const ContactsPage = {
 
     async init(container) {
         UI.setBreadcrumb([{ label: 'Контакти' }]);
-        if (!AccessRestrictions.canAccess('contacts')) {
+        if (AppState.isIntern() || !AccessRestrictions.canAccess('contacts')) {
             container.innerHTML = `
                 <div class="empty-state">
                     <div class="empty-icon">🔒</div>

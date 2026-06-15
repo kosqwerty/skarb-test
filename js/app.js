@@ -80,6 +80,13 @@ const App = {
         // День народження Скарбниці — 9 листопада
         CompanyBirthdayModal.check();
 
+        // Розділи закриті для стажерів
+        const requireNotIntern = () => {
+            if (AppState.profile?.label !== 'intern') return true;
+            Router.go('knowledge-base');
+            return false;
+        };
+
         // Розділи закриті для недовіреної мережі
         const requireTrusted = (isDocs = false) => {
             if (AppState.isTrustedNetwork) return true;
@@ -148,21 +155,25 @@ const App = {
             },
 
             'documents': async ({ container, params }) => {
+                if (!requireNotIntern()) return;
                 if (!requireTrusted(true)) return;
                 await ResourcesPage.init(container, { view: 'docs', tab: params.tab || '', cat: params.cat || '' });
             },
 
             'branch-docs': async ({ container }) => {
+                if (!requireNotIntern()) return;
                 if (!requireTrusted(true)) return;
                 await BranchDocsPage.init(container);
             },
 
             'collections': async ({ container }) => {
+                if (!requireNotIntern()) return;
                 if (!requireTrusted(true)) return;
                 await CollectionsPage.init(container);
             },
 
             'collections/:id': async ({ container, params }) => {
+                if (!requireNotIntern()) return;
                 if (!requireTrusted(true)) return;
                 await CollectionsPage.initView(container, params);
             },
@@ -202,11 +213,13 @@ const App = {
             },
 
             'contacts': async ({ container }) => {
+                if (!requireNotIntern()) return;
                 if (!requireTrusted()) return;
                 await ContactsPage.init(container);
             },
 
             'bookmarks': async ({ container }) => {
+                if (!requireNotIntern()) return;
                 if (!requireTrusted()) return;
                 await BookmarksPage.init(container);
             },
@@ -240,6 +253,11 @@ const App = {
             'expert-path': async ({ container }) => {
                 if (!requireTrusted()) return;
                 await ExpertPathPage.init(container);
+            },
+
+            'interns': async ({ container }) => {
+                if (!requireTrusted()) return;
+                await InternsPage.init(container);
             }
         });
 

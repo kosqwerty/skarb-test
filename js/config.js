@@ -25,6 +25,9 @@ const APP_CONFIG = {
     name: 'LMS Скарбниця',
     version: 'бета',
 
+    supabaseUrl: SUPABASE_URL,
+    anonKey:     SUPABASE_ANON_KEY,
+
     // Supabase Storage
     storagePublicUrl: `${SUPABASE_URL}/storage/v1/object/public`,
     signedUrlExpiry:  900, // seconds (15 minutes)
@@ -95,6 +98,7 @@ const AppState = {
     isCeo()     { return this.profile?.role === 'ceo'; },
     canSchedule(){ return ['owner','admin','manager'].includes(this.profile?.role); },
     isStaff()   { return ['owner','admin','smm','teacher','ceo'].includes(this.profile?.role); },
+    isIntern()  { return this.profile?.label === 'intern'; },
     canMutate() { return this.profile?.role !== 'ceo' && !this._realRole; },
 
     isPreviewing() { return !!this._realRole; },

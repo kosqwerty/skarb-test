@@ -2270,5 +2270,214 @@ const API = {
             const cutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString();
             await supabase.from('user_sessions').delete().lt('last_seen_at', cutoff);
         }
+    },
+
+    // ── Interns ───────────────────────────────────────────────────────────────
+    interns: {
+        async getAll({ search, status, city, managerId, page = 0, pageSize = 50 } = {}) {
+            let q = supabase.from('interns').select(
+                `id, profile_id, manager_id, start_date, planned_end_date, actual_end_date,
+                 status, status_changed_at, notes, created_at, profile_snapshot,
+                 profile:profiles!interns_profile_id_fkey(id, full_name, email, phone, job_position, city, avatar_url, gender),
+                 manager:profiles!interns_manager_id_fkey(id, full_name)`,
+                { count: 'exact' }
+            );
+            if (status)    q = q.eq('status', status);
+            if (managerId) q = q.eq('manager_id', managerId);
+            if (city)      q = q.eq('profile.city', city);
+            if (search)    q = q.ilike('profile.full_name', `%${search}%`);
+            q = q.order('start_date', { ascending: true, nullsFirst: false })
+                 .range(page * pageSize, (page + 1) * pageSize - 1);
+            const { data, error, count } = await q;
+            if (error) throw error;
+            return { data: data || [], count: count || 0 };
+        },
+
+        async getById(id) {
+            const { data, error } = await supabase.from('interns').select(
+                `id, profile_id, manager_id, start_date, planned_end_date, actual_end_date,
+                 status, status_changed_at, notes, created_at, updated_at, profile_snapshot,
+                 profile:profiles!interns_profile_id_fkey(id, full_name, email, phone, job_position, city, avatar_url, gender),
+                 manager:profiles!interns_manager_id_fkey(id, full_name),
+                 intern_disciplines(id, discipline_name, date, address, mentor_id, is_completed, notes, order_index, created_at,
+                     mentor:profiles!intern_disciplines_mentor_id_fkey(id, full_name))`
+            ).eq('id', id).single();
+            if (error) throw error;
+            return data;
+        },
+
+        async create(fields) {
+            const { data, error } = await supabase.from('interns').insert(fields).select().single();
+            if (error) throw error;
+            return data;
+        },
+
+        async update(id, fields) {
+            const payload = { ...fields };
+            if (fields.status && fields.status !== 'active') {
+                payload.status_changed_at = new Date().toISOString();
+                if (!('actual_end_date' in payload)) payload.actual_end_date = new Date().toISOString().slice(0, 10);
+            }
+            const { data, error } = await supabase.from('interns').update(payload).eq('id', id).select().single();
+            if (error) throw error;
+            return data;
+        },
+
+        // Called when status → dropped: snapshot profile + disciplines, then delete auth user
+        async archiveDropped(internId) {
+            // 1. Load full intern record with profile + disciplines + mentors
+            const intern = await this.getById(internId);
+            const p = intern.profile;
+            const snapshot = {
+                full_name:    p?.full_name    || null,
+                email:        p?.email        || null,
+                phone:        p?.phone        || null,
+                city:         p?.city         || null,
+                job_position: p?.job_position || null,
+                gender:       p?.gender       || null,
+                avatar_url:   p?.avatar_url   || null,
+                manager:      intern.manager ? { id: intern.manager.id, full_name: intern.manager.full_name } : null,
+                disciplines:  (intern.intern_disciplines || []).map(d => ({
+                    name:        d.discipline_name,
+                    date:        d.date,
+                    address:     d.address,
+                    is_completed:d.is_completed,
+                    notes:       d.notes,
+                    mentor:      d.mentor ? { id: d.mentor.id, full_name: d.mentor.full_name } : null,
+                })),
+                reviews: [],
+                archived_at: new Date().toISOString(),
+            };
+
+            // 2. Save snapshot, clear profile_id
+            const { error: snapErr } = await supabase.from('interns')
+                .update({ profile_snapshot: snapshot, profile_id: null })
+                .eq('id', internId);
+            if (snapErr) throw snapErr;
+
+            // 3. Delete auth user via Edge Function
+            if (p?.id) {
+                const session = (await supabase.auth.getSession()).data.session;
+                const res = await fetch(`${APP_CONFIG.supabaseUrl}/functions/v1/delete-auth-user`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${session?.access_token}`,
+                        'apikey': APP_CONFIG.anonKey,
+                    },
+                    body: JSON.stringify({ profile_id: p.id }),
+                });
+                const json = await res.json();
+                if (!json.ok) throw new Error(json.error || 'Помилка видалення акаунту');
+            }
+
+            return snapshot;
+        },
+
+        async remove(id) {
+            const { error } = await supabase.from('interns').delete().eq('id', id);
+            if (error) throw error;
+        },
+
+        async getStats(managerId = null) {
+            let q = supabase.from('interns').select(
+                'id, status, start_date, actual_end_date, planned_end_date, manager_id, profile:profiles!interns_profile_id_fkey(city)'
+            );
+            if (managerId) q = q.eq('manager_id', managerId);
+            const { data, error } = await q;
+            if (error) throw error;
+            return data || [];
+        }
+    },
+
+    // ── Intern Disciplines ────────────────────────────────────────────────────
+    internDisciplines: {
+        async getByIntern(internId) {
+            const { data, error } = await supabase.from('intern_disciplines')
+                .select('id, intern_id, discipline_name, date, address, mentor_id, is_completed, notes, order_index, created_at, mentor:profiles!intern_disciplines_mentor_id_fkey(id, full_name)')
+                .eq('intern_id', internId)
+                .order('order_index', { ascending: true });
+            if (error) throw error;
+            return data || [];
+        },
+
+        async create(fields) {
+            const { data, error } = await supabase.from('intern_disciplines').insert(fields).select().single();
+            if (error) throw error;
+            return data;
+        },
+
+        async update(id, fields) {
+            const { data, error } = await supabase.from('intern_disciplines').update(fields).eq('id', id).select().single();
+            if (error) throw error;
+            return data;
+        },
+
+        async remove(id) {
+            const { error } = await supabase.from('intern_disciplines').delete().eq('id', id);
+            if (error) throw error;
+        },
+
+        async reorder(internId, orderedIds) {
+            const updates = orderedIds.map((id, i) =>
+                supabase.from('intern_disciplines').update({ order_index: i }).eq('id', id).eq('intern_id', internId)
+            );
+            await Promise.all(updates);
+        }
+    },
+
+    // ── Intern Viewers ────────────────────────────────────────────────────────
+    internViewers: {
+        async getAll() {
+            const { data, error } = await supabase.from('intern_viewers')
+                .select('profile_id, granted_at, profile:profiles!intern_viewers_profile_id_fkey(id, full_name, email, avatar_url)')
+                .order('granted_at', { ascending: false });
+            if (error) throw error;
+            return data || [];
+        },
+
+        async add(profileId) {
+            const { error } = await supabase.from('intern_viewers').insert({
+                profile_id: profileId,
+                granted_by: (await supabase.auth.getUser()).data.user?.id
+            });
+            if (error) throw error;
+        },
+
+        async remove(profileId) {
+            const { error } = await supabase.from('intern_viewers').delete().eq('profile_id', profileId);
+            if (error) throw error;
+        },
+
+        async isViewer(profileId) {
+            const { data } = await supabase.from('intern_viewers').select('profile_id').eq('profile_id', profileId).maybeSingle();
+            return !!data;
+        }
+    },
+
+    internJobSettings: {
+        async getAll() {
+            const { data, error } = await supabase
+                .from('intern_job_settings')
+                .select('*')
+                .order('job_position');
+            if (error) throw error;
+            return data || [];
+        },
+
+        async upsert(job_position, training_days) {
+            const { error } = await supabase
+                .from('intern_job_settings')
+                .upsert({ job_position, training_days }, { onConflict: 'job_position' });
+            if (error) throw error;
+        },
+
+        async remove(id) {
+            const { error } = await supabase
+                .from('intern_job_settings')
+                .delete()
+                .eq('id', id);
+            if (error) throw error;
+        }
     }
 };

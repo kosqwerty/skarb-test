@@ -1411,6 +1411,7 @@ const AdminPage = {
     },
 
     async openCreateUser() {
+        this._internOn = false;
         const el = document.getElementById('admin-content');
         el.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
         const [{ cities, positions, subdivisions, users }, allDovirenosti] = await Promise.all([
@@ -1459,7 +1460,7 @@ const AdminPage = {
                     </label>
                     <label class="input-label">
                         <span>По батькові</span>
-                        <input id="cu-patronymic" type="text" placeholder="" autocomplete="off">
+                        <input id="cu-patronymic" type="text" placeholder="" autocomplete="off" oninput="applyGenderFromPatronymic('cu-patronymic','cu-gender')">
                     </label>
                 </div>
                 <div class="input-group">
@@ -1538,6 +1539,16 @@ const AdminPage = {
                     <h4>Робоча інформація</h4>
                 </div>
                 <div class="input-group">
+                        <!-- Intern toggle -->
+                        <div id="cu-intern-toggle-wrap" style="grid-column:1/-1;display:flex;align-items:center;gap:.9rem;padding:.75rem 1rem;background:color-mix(in srgb,#8b5cf6 8%,var(--bg-surface));border:1.5px solid color-mix(in srgb,#8b5cf6 25%,var(--border));border-radius:10px;cursor:pointer" onclick="AdminPage._toggleIntern()">
+                            <div id="cu-intern-knob" style="position:relative;width:40px;height:22px;background:var(--bg-hover);border:1.5px solid var(--border);border-radius:11px;transition:background .2s,border-color .2s;flex-shrink:0">
+                                <div style="position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .2s" id="cu-intern-dot"></div>
+                            </div>
+                            <div>
+                                <div style="font-weight:700;font-size:.9rem;color:var(--text-primary);display:flex;align-items:center;gap:.4rem"><i class="fa-solid fa-user-graduate" style="color:#8b5cf6"></i> Стажер</div>
+                                <div style="font-size:.78rem;color:var(--text-muted);margin-top:.1rem">Автоматично встановить посаду "Стажер" та обмежить доступ до розділів</div>
+                            </div>
+                        </div>
                         <label class="input-label">
                         <span>Місто</span>
                         ${CreatableSelect.html('cu-city', 'cities', cities.map(i=>i.name), '')}
@@ -1857,6 +1868,39 @@ const AdminPage = {
         CreatableMultiSelect.init('cu-dovirenosti', allDovirenosti.map(d => ({ id: d.id, name: d.name })), []);
     },
 
+    _internOn: false,
+    _prevJobPosition: '',
+
+    _toggleIntern() {
+        this._internOn = !this._internOn;
+        const knob = document.getElementById('cu-intern-knob');
+        const dot  = document.getElementById('cu-intern-dot');
+        if (knob) {
+            knob.style.background    = this._internOn ? '#8b5cf6' : 'var(--bg-hover)';
+            knob.style.borderColor   = this._internOn ? '#8b5cf6' : 'var(--border)';
+        }
+        if (dot) dot.style.transform = this._internOn ? 'translateX(18px)' : 'translateX(0)';
+
+        const hiddenInp = document.getElementById('cu-job-position');
+        const csWrap    = document.querySelector('[data-cs="cu-job-position"]');
+        const csInput   = csWrap?.querySelector('.cs-input');
+
+        if (this._internOn) {
+            const roleEl = document.getElementById('cu-role');
+            if (roleEl) roleEl.value = 'user';
+            const cur = hiddenInp?.value || csInput?.value || '';
+            this._prevJobPosition = cur;
+            const next = cur && !cur.startsWith('Стажер') ? `Стажер ${cur}` : (cur || 'Стажер');
+            if (hiddenInp) hiddenInp.value = next;
+            if (csInput)   csInput.value   = next;
+        } else {
+            const restored = this._prevJobPosition;
+            if (hiddenInp) hiddenInp.value = restored;
+            if (csInput)   csInput.value   = restored;
+            this._prevJobPosition = '';
+        }
+    },
+
     _autoPassword() {
         const val = Dom.val('cu-birthdate');
         if (!val) return;
@@ -1913,8 +1957,10 @@ const AdminPage = {
                 manager_id:     Dom.val('cu-manager')        || null,
                 hired_at:       Dom.val('cu-hired-at')       || null,
                 position_since: Dom.val('cu-position-since') || null,
+                label:          this._internOn ? 'intern'    : null,
             };
             await supabase.from('profiles').update(extraFields).eq('id', userId);
+            this._internOn = false;
 
             // Auto-assign tests by job_position
             const newPosition = Dom.val('cu-job-position').trim();
@@ -2364,8 +2410,9 @@ const AdminPage = {
     _importHeaders: ['Прізвище','Ім\u2019я','По батькові','Логін','Email','Пароль','Роль','Стать','Телефон','Дата нар.','Місто','Посада','Підрозділ','Довіреність'],
 
     importUsers() {
+        this._importRows = [];
         Modal.open({
-            title: '📥 Імпорт користувачів',
+            title: '<i class="fa-solid fa-file-import" style="color:var(--primary)"></i> Імпорт користувачів',
             size: 'lg',
             body: `
                 <p style="color:var(--text-secondary);font-size:.875rem;margin:0 0 1rem">
@@ -2374,22 +2421,18 @@ const AdminPage = {
                     Роздільник — крапка з комою <code>;</code>.
                 </p>
                 <div style="display:flex;gap:.75rem;margin-bottom:1.25rem;align-items:center">
-                    <button class="btn btn-ghost btn-sm" onclick="AdminPage._downloadImportExample()">📄 Завантажити приклад файлу</button>
-                    <span style="color:var(--text-muted);font-size:.78rem"><i class="fa-solid fa-angle-left"></i> рекомендуємо відкрити у Excel або Google Sheets</span>
+                    <button class="btn btn-ghost btn-sm" onclick="AdminPage._downloadImportExample()"><i class="fa-solid fa-download"></i> Завантажити приклад</button>
                 </div>
-                <div class="file-upload-frame">
-                    <label for="import-file-input" class="file-upload-area">
-                        <div class="file-upload-icon"><i class="fa-solid fa-file-csv"></i></div>
-                        <div class="file-upload-label">Натисніть або перетягніть CSV-файл</div>
-                        <div class="file-upload-hint">CSV, TXT · кодування UTF-8</div>
-                        <input type="file" id="import-file-input" accept=".csv,.txt" style="display:none"
-                               onchange="AdminPage._onImportFile(this)">
-                    </label>
-                </div>
+                <label style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.75rem;padding:2rem;border:2px dashed var(--border);border-radius:12px;cursor:pointer;transition:border-color .15s" onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='var(--border)'">
+                    <i class="fa-solid fa-file-csv" style="font-size:2rem;color:var(--primary)"></i>
+                    <span style="font-weight:600">Натисніть або перетягніть CSV-файл</span>
+                    <span style="font-size:.78rem;color:var(--text-muted)">CSV, TXT · UTF-8</span>
+                    <input type="file" id="import-file-input" accept=".csv,.txt" style="display:none" onchange="AdminPage._onImportFile(this)">
+                </label>
                 <div id="import-preview"></div>`,
             footer: `
-                <button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
-                <button class="btn btn-primary" id="import-run-btn" style="display:none" onclick="AdminPage._runImport()">Імпортувати</button>`
+                <button class="btn btn-ghost btn-sm" onclick="Modal.close()">Скасувати</button>
+                <button class="btn btn-sm" id="import-run-btn" style="display:none;background:linear-gradient(135deg,var(--primary),#4f46e5);color:#fff;border:none" onclick="AdminPage._runImport()"><i class="fa-solid fa-file-import"></i> Імпортувати</button>`
         });
     },
 
@@ -2416,9 +2459,10 @@ const AdminPage = {
         if (!file) return;
         input.value = ''; // reset so the same file can be re-selected
         const reader = new FileReader();
-        reader.onload = e => {
+        reader.onload = async e => {
             const text = e.target.result.replace(/^\uFEFF/, ''); // strip BOM
             this._importRows = this._parseCSV(text);
+            await this._checkImportDuplicates();
             this._renderImportPreview();
         };
         reader.readAsText(file, 'UTF-8');
@@ -2472,6 +2516,40 @@ const AdminPage = {
         }).filter(r => Object.keys(r).length > 2); // skip totally empty rows
     },
 
+    async _checkImportDuplicates() {
+        const rows = this._importRows;
+        // check duplicates within the file itself
+        const seenNames = new Map();
+        rows.forEach(r => {
+            const key = [r.last_name, r.first_name, r.patronymic].join(' ').toLowerCase().trim();
+            if (!key || key === '  ') return;
+            if (seenNames.has(key)) {
+                if (!r._errors.includes('Дублікат ПІБ у файлі')) r._errors.push('Дублікат ПІБ у файлі');
+            } else {
+                seenNames.set(key, true);
+            }
+        });
+
+        // check against existing profiles in DB
+        try {
+            const names = rows
+                .filter(r => r.last_name && r.first_name)
+                .map(r => [r.last_name, r.first_name, r.patronymic].filter(Boolean).join(' '));
+            if (!names.length) return;
+            const { data } = await supabase.from('profiles')
+                .select('full_name')
+                .in('full_name', names);
+            if (!data?.length) return;
+            const existingSet = new Set(data.map(p => p.full_name.toLowerCase().trim()));
+            rows.forEach(r => {
+                const fullName = [r.last_name, r.first_name, r.patronymic].filter(Boolean).join(' ');
+                if (existingSet.has(fullName.toLowerCase().trim())) {
+                    if (!r._errors.includes('Вже існує в системі')) r._errors.push('Вже існує в системі');
+                }
+            });
+        } catch(e) { /* non-critical */ }
+    },
+
     _renderImportPreview() {
         const rows = this._importRows;
         const preview = document.getElementById('import-preview');
@@ -2491,22 +2569,22 @@ const AdminPage = {
                 <span style="color:var(--text-muted);font-size:.78rem">Усього рядків: ${rows.length}</span>
             </div>
             <div style="max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-md)">
-                <table style="font-size:.78rem">
+                <table class="in-table" style="font-size:.75rem">
                     <thead><tr>
-                        <th>#</th><th>Прізвище</th><th>Ім\u2019я</th><th>По батькові</th><th>Email</th><th>Логін</th><th>Роль</th><th>Статус</th>
+                        <th>#</th><th>ПІБ</th><th>Email</th><th>Логін</th><th>Роль</th><th>Місто</th><th>Посада</th><th>Статус</th>
                     </tr></thead>
                     <tbody>
                         ${rows.map(r => `
                             <tr style="${r._errors.length ? 'opacity:.5' : ''}">
-                                <td style="color:var(--text-muted)">${r._line}</td>
-                                <td>${r.last_name  || '<span style="color:var(--danger)">—</span>'}</td>
-                                <td>${r.first_name || '<span style="color:var(--danger)">—</span>'}</td>
-                                <td style="color:var(--text-muted)">${r.patronymic || '—'}</td>
-                                <td>${r.email      || '<span style="color:var(--danger)">—</span>'}</td>
-                                <td style="color:var(--text-muted)">${r.login || '—'}</td>
-                                <td>${r.role ? `<span class="badge badge-muted" style="font-size:.65rem">${Fmt.role(r.role)}</span>` : '<span style="color:var(--text-muted)">user</span>'}</td>
+                                <td style="color:var(--text-muted)">${r._line - 1}</td>
+                                <td>${Fmt.esc([r.last_name, r.first_name, r.patronymic].filter(Boolean).join(' ')) || '<span style="color:var(--danger)">—</span>'}</td>
+                                <td>${Fmt.esc(r.email) || '<span style="color:var(--danger)">—</span>'}</td>
+                                <td style="color:var(--text-muted)">${Fmt.esc(r.login || '—')}</td>
+                                <td>${r.role ? Fmt.roleBadge(r.role) : '<span style="color:var(--text-muted)">user</span>'}</td>
+                                <td style="color:var(--text-muted)">${Fmt.esc(r.city || '—')}</td>
+                                <td style="color:var(--text-muted)">${Fmt.esc(r.job_position || '—')}</td>
                                 <td>${r._errors.length
-                                    ? `<span style="color:var(--danger);font-size:.72rem">✗ ${r._errors.join(', ')}</span>`
+                                    ? `<span style="color:var(--danger);font-size:.7rem">✗ ${r._errors.join(', ')}</span>`
                                     : '<span style="color:var(--success)">✓</span>'}</td>
                             </tr>`).join('')}
                     </tbody>
@@ -2514,7 +2592,7 @@ const AdminPage = {
             </div>`;
 
         runBtn.style.display = okCount > 0 ? '' : 'none';
-        runBtn.textContent   = `Імпортувати ${okCount} користувач${okCount === 1 ? 'а' : 'ів'}`;
+        runBtn.innerHTML = `<i class="fa-solid fa-file-import"></i> Імпортувати ${okCount} користувач${okCount === 1 ? 'а' : 'ів'}`;
     },
 
     async _runImport() {
@@ -3613,11 +3691,13 @@ const AdminPage = {
                 <span style="flex:1;font-size:.855rem;font-weight:500;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Fmt.esc(i.name)}</span>
                 <div class="dir-row-actions" style="display:flex;gap:.2rem;flex-shrink:0;opacity:0;transition:opacity .15s">
                     <button class="btn btn-ghost btn-sm" style="padding:.2rem .4rem;height:26px" title="Редагувати"
-                        onclick="AdminPage.openEditDir('${table}','${i.id}',${JSON.stringify(i.name||'').replace(/"/g,'&quot;')})">
+                        data-name="${Fmt.esc(i.name)}"
+                        onclick="AdminPage.openEditDir('${table}','${i.id}',this.dataset.name)">
                         <i class="fa-solid fa-pen" style="font-size:.7rem"></i>
                     </button>
                     <button class="btn btn-danger btn-sm" style="padding:.2rem .4rem;height:26px" title="Видалити"
-                        onclick="AdminPage.deleteDir('${table}','${i.id}',${JSON.stringify(i.name||'').replace(/"/g,'&quot;')})">
+                        data-name="${Fmt.esc(i.name)}"
+                        onclick="AdminPage.deleteDir('${table}','${i.id}',this.dataset.name)">
                         <i class="fa-solid fa-trash" style="font-size:.7rem"></i>
                     </button>
                 </div>
@@ -3668,12 +3748,16 @@ const AdminPage = {
             body: `
                 <div class="form-group">
                     <label>Назва *</label>
-                    <input id="dir-name" type="text" value="${name}">
+                    <input id="dir-name" type="text" value="${Fmt.esc(name)}">
                 </div>`,
             footer: `
                 <button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
                 <button class="btn btn-primary" onclick="AdminPage.saveDir('${table}','${id}')"><i class="fa-regular fa-floppy-disk"></i> Зберегти</button>`
         });
+        setTimeout(() => {
+            const inp = document.getElementById('dir-name');
+            if (inp) inp.addEventListener('keydown', e => { if (e.key === 'Enter') AdminPage.saveDir(table, id); });
+        }, 50);
     },
 
     async saveDir(table, id) {
@@ -3733,19 +3817,23 @@ const AdminPage = {
                  : `<span style="color:var(--text-muted)">${d} днів</span>`;
         };
 
-        const rowHtml = item => {
+        const rowHtml = (item, idx) => {
             const d = item.item_data;
-            const title = d.full_name || d.title || d.name || d.email || item.item_id;
+            const title = Fmt.esc(d.full_name || d.title || d.name || d.email || item.item_id);
+            const deletedBy = Fmt.esc(item.deleted_by_name || '—');
             return `
-                <tr>
+                <tr data-trash-id="${item.id}" data-trash-type="${item.type}">
+                    <td style="width:32px;padding:0 4px 0 8px;text-align:center">
+                        <input type="checkbox" class="tr-chk" data-id="${item.id}" onchange="AdminPage._onTrashChk()">
+                    </td>
                     <td style="font-size:.85rem;font-weight:500">${title}</td>
                     <td style="font-size:.8rem;color:var(--text-muted);white-space:nowrap">${Fmt.datetime(item.deleted_at)}</td>
-                    <td style="font-size:.82rem;font-weight:500;white-space:nowrap">${item.deleted_by_name}</td>
+                    <td style="font-size:.82rem;font-weight:500;white-space:nowrap">${deletedBy}</td>
                     <td style="font-size:.78rem;white-space:nowrap">${daysLeft(item.expires_at)}</td>
                     <td style="white-space:nowrap">
-                        <button class="btn btn-ghost btn-sm" onclick="AdminPage._previewTrashItem(${JSON.stringify(item).replace(/"/g,'&quot;')})"><i class="fa-solid fa-eye"></i> Перегляд</button>
-                        <button class="btn btn-primary btn-sm" style="margin-left:.3rem" onclick="AdminPage._restoreTrashItem('${item.id}','${item.item_id}','${item.type}')">↩ Відновити</button>
-                        <button class="btn btn-danger btn-sm" style="margin-left:.3rem" onclick="AdminPage._deleteTrashItem('${item.id}')">​<i class="fa-solid fa-trash"></i> Видалити</button>
+                        <button class="btn btn-ghost btn-sm" onclick="AdminPage._previewTrashItem(${JSON.stringify(item).replace(/"/g,'&quot;')})"><i class="fa-solid fa-eye"></i></button>
+                        <button class="btn btn-primary btn-sm" style="margin-left:.3rem" onclick="AdminPage._restoreTrashItem('${item.id}','${item.item_id}','${item.type}')">↩</button>
+                        <button class="btn btn-danger btn-sm" style="margin-left:.3rem" onclick="AdminPage._deleteTrashItem('${item.id}')"><i class="fa-solid fa-trash"></i></button>
                     </td>
                 </tr>`;
         };
@@ -3760,25 +3848,108 @@ const AdminPage = {
         }
 
         el.innerHTML = `
+            <style>
+                .tr-bulk-bar{display:none;align-items:center;gap:.75rem;padding:.6rem 1rem;background:color-mix(in srgb,var(--danger) 8%,var(--bg-surface));border:1.5px solid color-mix(in srgb,var(--danger) 25%,var(--border));border-radius:10px;margin-bottom:1rem}
+                .tr-bulk-bar.visible{display:flex}
+                .tr-th-chk{width:32px;padding:0 4px 0 8px}
+                .tr-resizable{table-layout:fixed;width:100%}
+                .tr-resizable th{position:relative;overflow:hidden}
+                .tr-col-resizer{position:absolute;right:0;top:0;height:100%;width:5px;cursor:col-resize;background:transparent}
+                .tr-col-resizer:hover,.tr-col-resizer.dragging{background:var(--primary)}
+            </style>
             <div class="page-header">
                 <div class="page-title"><h1><i class="fa-solid fa-trash"></i> Кошик</h1><p>Видалені об'єкти зберігаються 7 днів. Всього: ${items.length}</p></div>
+            </div>
+            <div id="tr-bulk-bar" class="tr-bulk-bar">
+                <span id="tr-bulk-count" style="font-size:.88rem;font-weight:600;color:var(--danger)"></span>
+                <button class="btn btn-danger btn-sm" onclick="AdminPage._bulkDeleteTrash()"><i class="fa-solid fa-trash"></i> Видалити вибрані назавжди</button>
             </div>
             ${Object.entries(grouped).map(([type, list]) => `
                 <div style="margin-bottom:2rem">
                     <h3 style="font-size:.95rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.75rem">${typeLabel[type] || type} (${list.length})</h3>
                     <div class="table-wrapper">
-                        <table>
+                        <table class="tr-resizable" id="tr-table-${type}">
                             <thead><tr>
-                                <th>Назва</th>
-                                <th>Видалено</th>
-                                <th>Ким</th>
-                                <th>Залишилось</th>
-                                <th></th>
+                                <th class="tr-th-chk"><input type="checkbox" class="tr-chk-all" data-type="${type}" onchange="AdminPage._onTrashChkAll(this,'${type}')"></th>
+                                <th>Назва<div class="tr-col-resizer"></div></th>
+                                <th style="width:130px">Видалено<div class="tr-col-resizer"></div></th>
+                                <th style="width:130px">Ким<div class="tr-col-resizer"></div></th>
+                                <th style="width:90px">Залишилось<div class="tr-col-resizer"></div></th>
+                                <th style="width:110px"></th>
                             </tr></thead>
-                            <tbody>${list.map(rowHtml).join('')}</tbody>
+                            <tbody>${list.map((item, i) => rowHtml(item, i)).join('')}</tbody>
                         </table>
                     </div>
                 </div>`).join('')}`;
+
+        // init column resize for each table
+        el.querySelectorAll('.tr-resizable').forEach(table => this._initTrashResize(table));
+    },
+
+    _initTrashResize(table) {
+        table.querySelectorAll('th').forEach(th => {
+            const handle = th.querySelector('.tr-col-resizer');
+            if (!handle) return;
+            let startX, startW;
+            handle.addEventListener('mousedown', e => {
+                startX = e.pageX;
+                startW = th.offsetWidth;
+                handle.classList.add('dragging');
+                const onMove = ev => { th.style.width = Math.max(60, startW + ev.pageX - startX) + 'px'; };
+                const onUp   = () => { handle.classList.remove('dragging'); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+                document.addEventListener('mousemove', onMove);
+                document.addEventListener('mouseup', onUp);
+                e.preventDefault();
+            });
+        });
+    },
+
+    _onTrashChk() {
+        const all = [...document.querySelectorAll('.tr-chk')];
+        const checked = all.filter(c => c.checked);
+        const bar = document.getElementById('tr-bulk-bar');
+        const cnt = document.getElementById('tr-bulk-count');
+        if (bar) bar.classList.toggle('visible', checked.length > 0);
+        if (cnt) cnt.textContent = `Вибрано: ${checked.length}`;
+        // sync "select all" checkboxes per type
+        document.querySelectorAll('.tr-chk-all').forEach(ca => {
+            const type = ca.dataset.type;
+            const typeChks = [...document.querySelectorAll(`.tr-chk[data-id]`)].filter(c => {
+                return c.closest('tr')?.dataset.trashType === type;
+            });
+            ca.indeterminate = typeChks.some(c => c.checked) && !typeChks.every(c => c.checked);
+            ca.checked = typeChks.length > 0 && typeChks.every(c => c.checked);
+        });
+    },
+
+    _onTrashChkAll(masterChk, type) {
+        document.querySelectorAll('tr[data-trash-type="' + type + '"] .tr-chk').forEach(c => {
+            c.checked = masterChk.checked;
+        });
+        this._onTrashChk();
+    },
+
+    async _bulkDeleteTrash() {
+        const ids = [...document.querySelectorAll('.tr-chk:checked')].map(c => c.dataset.id);
+        if (!ids.length) return;
+        const ok = await Modal.confirm({
+            title: 'Видалити назавжди?',
+            message: `Видалити ${ids.length} об'єктів остаточно? Відновити буде неможливо.`,
+            confirmText: 'Видалити',
+            danger: true
+        });
+        if (!ok) return;
+        Loader.show();
+        try {
+            const { error } = await supabase.from('trash').delete().in('id', ids);
+            if (error) throw error;
+            Toast.success('Видалено', `${ids.length} об'єктів видалено назавжди`);
+            await this._renderTrash(document.getElementById('admin-content'));
+        } catch(e) {
+            Toast.error('Помилка', e.message);
+        } finally {
+            Loader.hide();
+        }
     },
 
     _previewTrashItem(item) {

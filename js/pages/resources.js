@@ -48,6 +48,11 @@ const ResourcesPage = {
             return;
         }
 
+        if (view === 'docs' && AppState.isIntern()) {
+            Router.go('knowledge-base');
+            return;
+        }
+
         if (view === 'kb' && !AccessRestrictions.canAccess('knowledge-base')) {
             UI.setBreadcrumb([{ label: 'База знань' }]);
             container.innerHTML = `

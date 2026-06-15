@@ -34,7 +34,9 @@ const Modal = {
         document.getElementById('modal-footer').innerHTML = footer;
         document.getElementById('modal-box').className   = `modal-box ${size ? 'modal-' + size : ''}`;
         if (header) header.style.display = noHeader ? 'none' : '';
-        document.getElementById('modal-backdrop').classList.remove('hidden');
+        const backdrop = document.getElementById('modal-backdrop');
+        backdrop.classList.remove('hidden');
+        backdrop.onclick = () => Modal.close();
         document.getElementById('modal-container').classList.remove('hidden');
         this._onClose = onClose;
         document.addEventListener('keydown', this._escHandler);
@@ -592,6 +594,7 @@ const UI = {
         const adminItem       = { icon: '<i class="fa-solid fa-gear"          style="color:#f87171"></i>', label: 'Адміністрування',   route: 'admin' };
         const contentAdmItem  = { icon: '<i class="fa-solid fa-gear"          style="color:#f87171"></i>', label: 'Контент',           route: 'admin' };
         const myCalendarItem  = { icon: '<i class="fa-solid fa-calendar-check" style="color:#60a5fa"></i>', label: 'Мій календар',     route: 'my-calendar', noStar: true };
+        const internsItem     = { icon: '<i class="fa-solid fa-user-graduate"  style="color:#8b5cf6"></i>', label: 'Стажери',          route: 'interns' };
 
         if (role === 'ceo') {
             return [
@@ -603,14 +606,14 @@ const UI = {
         if (role === 'owner' || role === 'admin') {
             return [
                 { title: 'Навчання',    items: contentItems },
-                { title: 'Управління',  items: [ analyticsItem, collectionsItem, schedulerItem, adminItem ] },
+                { title: 'Управління',  items: [ analyticsItem, collectionsItem, schedulerItem, internsItem, adminItem ] },
                 { title: 'Особисте',    items: [ contactsItem, bmItem ] }
             ];
         }
         if (role === 'manager') {
             return [
                 { title: 'Навчання',   items: contentItems },
-                { title: 'Управління', items: [ schedulerItem ] },
+                { title: 'Управління', items: [ schedulerItem, internsItem ] },
                 { title: 'Особисте',   items: [ contactsItem, bmItem ] }
             ];
         }
@@ -626,6 +629,17 @@ const UI = {
                 { title: 'Навчання',   items: contentItems },
                 { title: 'Управління', items: [ analyticsItem, schedulerItemNs ] },
                 { title: 'Особисте',   items: [ contactsItem, bmItem ] }
+            ];
+        }
+        // Стажер: тільки навчання + особисте без документів/контактів/закладок
+        if (AppState.profile?.label === 'intern') {
+            const internContentItems = [
+                ...common,
+                { icon: '<i class="fa-solid fa-folder-open" style="color:#C9A227"></i>', label: 'База знань', route: 'knowledge-base' },
+            ];
+            return [
+                { title: 'Навчання',  items: internContentItems },
+                { title: 'Особисте',  items: [ ntfItem ] }
             ];
         }
         return [
@@ -942,6 +956,24 @@ const Fmt = {
         }
     }
 };
+
+// Auto-detect gender from patronymic and set gender-picker chips
+function applyGenderFromPatronymic(patronymicInputId, genderInputId) {
+    const val = (document.getElementById(patronymicInputId)?.value || '').trim().toLowerCase();
+    let gender = '';
+    if (val.includes('ович') || val.includes('евич') || val.includes('євич')) gender = 'male';
+    else if (val.includes('овна') || val.includes('івна') || val.includes('євна') || val.includes('ївна')) gender = 'female';
+    if (!gender) return;
+    const inp = document.getElementById(genderInputId);
+    if (!inp) return;
+    inp.value = gender;
+    inp.closest('.gender-picker-modern')?.querySelectorAll('.gender-chip').forEach(b => {
+        b.classList.toggle('active',
+            (gender === 'male'   && b.textContent.includes('Чоловік')) ||
+            (gender === 'female' && b.textContent.includes('Жінка'))
+        );
+    });
+}
 
 const Dom = {
     qs(sel, p = document)  { return p.querySelector(sel); },

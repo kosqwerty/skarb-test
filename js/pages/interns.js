@@ -147,6 +147,11 @@
                 ${managers.map(([id, name]) => `<option value="${id}" ${this._filterManager===id?'selected':''}>${Fmt.esc(name||'')}</option>`).join('')}
             </select>
         </div>
+        <div style="display:flex;justify-content:flex-end;margin-bottom:.4rem">
+            <button id="in-col-toggle-btn" class="in-btn in-btn-access" onclick="InternsPage._toggleColDropdown()" title="Налаштувати стовпці">
+                <i class="fa-solid fa-gear"></i> Стовпці
+            </button>
+        </div>
         <div id="in-table-wrap"></div>`;
 
         this._renderTable();
@@ -167,10 +172,106 @@
         });
     },
 
+    // All toggleable columns: key, label, hidden by default
+    _allCols: [
+        { key: 'name',    label: 'ПІБ',          fixed: true },
+        { key: 'gender',  label: 'Стать',         hidden: true },
+        { key: 'city',    label: 'Місто' },
+        { key: 'job',     label: 'Посада' },
+        { key: 'manager', label: 'Керівник' },
+        { key: 'start',   label: 'Дата початку' },
+        { key: 'end',     label: 'Дата випуску' },
+        { key: 'days',    label: 'Днів',          hidden: true },
+        { key: 'status',  label: 'Статус' },
+        { key: 'pct',     label: '% плану' },
+    ],
+    _colVisKey: 'in_col_vis',
+
+    _getColVis() {
+        try {
+            const saved = JSON.parse(localStorage.getItem(this._colVisKey) || 'null');
+            if (saved && typeof saved === 'object') return saved;
+        } catch {}
+        // defaults
+        const def = {};
+        this._allCols.forEach(c => { def[c.key] = !c.hidden; });
+        return def;
+    },
+
+    _saveColVis(vis) {
+        localStorage.setItem(this._colVisKey, JSON.stringify(vis));
+    },
+
+    _toggleColDropdown() {
+        const existing = document.getElementById('in-col-dropdown');
+        if (existing) { existing.remove(); return; }
+
+        const vis = this._getColVis();
+        const btn = document.getElementById('in-col-toggle-btn');
+        const rect = btn.getBoundingClientRect();
+
+        const dd = document.createElement('div');
+        dd.id = 'in-col-dropdown';
+        dd.style.cssText = `position:fixed;z-index:900;background:var(--bg-surface);border:1px solid var(--border);
+            border-radius:var(--radius-lg);box-shadow:0 8px 24px rgba(0,0,0,.18);
+            padding:.5rem 0;min-width:170px;top:${rect.bottom + 6}px;left:${rect.left}px`;
+
+        dd.innerHTML = this._allCols.filter(c => !c.fixed).map(c => `
+            <label style="display:flex;align-items:center;gap:.6rem;padding:.4rem .9rem;cursor:pointer;font-size:.85rem;
+                color:var(--text-primary);transition:background .12s" onmouseover="this.style.background='var(--bg-raised)'" onmouseout="this.style.background=''">
+                <input type="checkbox" ${vis[c.key] ? 'checked' : ''} data-col="${c.key}"
+                    style="accent-color:var(--primary);width:15px;height:15px;cursor:pointer"
+                    onchange="InternsPage._onColToggle('${c.key}',this.checked)">
+                ${c.label}
+            </label>`).join('') +
+            `<div style="border-top:1px solid var(--border);margin:.4rem 0"></div>
+            <button onclick="InternsPage._resetColVis()" style="width:100%;padding:.4rem .9rem;background:none;border:none;
+                text-align:left;font-size:.8rem;color:var(--text-muted);cursor:pointer">Скинути до типових</button>`;
+
+        document.body.appendChild(dd);
+        setTimeout(() => document.addEventListener('click', function h(e) {
+            if (!dd.contains(e.target) && e.target.id !== 'in-col-toggle-btn') {
+                dd.remove(); document.removeEventListener('click', h);
+            }
+        }), 50);
+    },
+
+    _onColToggle(key, visible) {
+        const vis = this._getColVis();
+        vis[key] = visible;
+        this._saveColVis(vis);
+        this._applyColVis();
+    },
+
+    _resetColVis() {
+        localStorage.removeItem(this._colVisKey);
+        document.getElementById('in-col-dropdown')?.remove();
+        this._renderTable();
+    },
+
+    _applyColVis() {
+        const vis = this._getColVis();
+        const table = document.querySelector('#in-table-wrap .in-table');
+        if (!table) return;
+        const ths = [...table.querySelectorAll('thead th[data-col]')];
+        ths.forEach(th => {
+            const col = th.dataset.col;
+            const show = vis[col] !== false;
+            const idx = [...th.parentElement.children].indexOf(th);
+            th.style.display = show ? '' : 'none';
+            table.querySelectorAll(`tbody tr`).forEach(tr => {
+                const td = tr.children[idx];
+                if (td) td.style.display = show ? '' : 'none';
+            });
+        });
+    },
+
     _renderTable() {
         const wrap = document.getElementById('in-table-wrap');
         if (!wrap) return;
         const list = this._filtered();
+        const vis = this._getColVis();
+        const show = k => vis[k] !== false;
 
         if (!list.length) {
             wrap.innerHTML = `<div class="in-empty"><i class="fa-solid fa-user-graduate fa-2x"></i><div>Стажерів не знайдено</div></div>`;
@@ -180,38 +281,38 @@
         wrap.innerHTML = `
         <table class="in-table">
             <thead><tr>
-                <th>ПІБ</th>
-                <th>Стать</th>
-                <th>Місто</th>
-                <th>Посада</th>
-                <th>Керівник</th>
-                <th>Дата початку</th>
-                <th>Дата випуску</th>
-                <th>Днів</th>
-                <th>Статус</th>
-                <th>% плану</th>
+                <th data-col="name">ПІБ</th>
+                <th data-col="gender" ${!show('gender') ? 'style="display:none"' : ''}>Стать</th>
+                <th data-col="city"   ${!show('city')   ? 'style="display:none"' : ''}>Місто</th>
+                <th data-col="job"    ${!show('job')    ? 'style="display:none"' : ''}>Посада</th>
+                <th data-col="manager"${!show('manager')? 'style="display:none"' : ''}>Керівник</th>
+                <th data-col="start"  ${!show('start')  ? 'style="display:none"' : ''}>Дата початку</th>
+                <th data-col="end"    ${!show('end')    ? 'style="display:none"' : ''}>Дата випуску</th>
+                <th data-col="days"   ${!show('days')   ? 'style="display:none"' : ''}>Днів</th>
+                <th data-col="status" ${!show('status') ? 'style="display:none"' : ''}>Статус</th>
+                <th data-col="pct"    ${!show('pct')    ? 'style="display:none"' : ''}>% плану</th>
                 ${this._canManage ? '<th></th>' : ''}
             </tr></thead>
             <tbody>
             ${list.map(i => {
                 const pct = this._calcPct(i);
                 const snap = i.profile_snapshot || {};
-                const p = i.profile || snap; // fallback to snapshot for archived accounts
+                const p = i.profile || snap;
                 const endDate = i.status === 'dropped' ? i.actual_end_date : i.planned_end_date;
                 const days = (['dropped','completed'].includes(i.status) && i.start_date && endDate)
                     ? Math.round((new Date(endDate) - new Date(i.start_date)) / 86400000)
                     : null;
                 return `<tr class="in-tr${i.status === 'dropped' ? ' in-tr-dropped' : ''}" onclick="InternsPage._openDetail('${i.id}')">
-                    <td><div class="in-name-cell">${this._avatar(p)}<span>${Fmt.esc(p?.full_name || '—')}${!i.profile_id ? ' <span style="font-size:.7rem;color:var(--text-muted)">(архів)</span>' : ''}</span></div></td>
-                    <td style="text-align:center;font-weight:600;color:var(--text-muted)">${p?.gender === 'male' ? 'Ч' : p?.gender === 'female' ? 'Ж' : '—'}</td>
-                    <td>${Fmt.esc(p?.city || '—')}</td>
-                    <td>${Fmt.esc(p?.job_position || '—')}</td>
-                    <td>${Fmt.esc(i.manager?.full_name || '—')}</td>
-                    <td class="in-td-date">${i.start_date ? Fmt.date(i.start_date) : '—'}</td>
-                    <td class="in-td-date">${endDate ? Fmt.date(endDate) : '—'}</td>
-                    <td style="text-align:center;color:var(--text-muted);font-size:.85rem">${days !== null ? days : '—'}</td>
-                    <td>${this._statusBadge(i.status)}</td>
-                    <td><div class="in-pct-wrap"><div class="in-pct-bar" style="width:${pct}%"></div><span>${pct}%</span></div></td>
+                    <td data-col="name"><div class="in-name-cell">${this._avatar(p)}<span>${Fmt.esc(p?.full_name || '—')}${!i.profile_id ? ' <span style="font-size:.7rem;color:var(--text-muted)">(архів)</span>' : ''}</span></div></td>
+                    <td data-col="gender" ${!show('gender') ? 'style="display:none"' : ''} style="text-align:center;font-weight:600;color:var(--text-muted)">${p?.gender === 'male' ? 'Ч' : p?.gender === 'female' ? 'Ж' : '—'}</td>
+                    <td data-col="city"   ${!show('city')   ? 'style="display:none"' : ''}>${Fmt.esc(p?.city || '—')}</td>
+                    <td data-col="job"    ${!show('job')    ? 'style="display:none"' : ''}>${Fmt.esc(p?.job_position || '—')}</td>
+                    <td data-col="manager"${!show('manager')? 'style="display:none"' : ''}>${Fmt.esc(i.manager?.full_name || '—')}</td>
+                    <td data-col="start"  ${!show('start')  ? 'style="display:none"' : ''} class="in-td-date">${i.start_date ? Fmt.date(i.start_date) : '—'}</td>
+                    <td data-col="end"    ${!show('end')    ? 'style="display:none"' : ''} class="in-td-date">${endDate ? Fmt.date(endDate) : '—'}</td>
+                    <td data-col="days"   ${!show('days')   ? 'style="display:none"' : ''} style="text-align:center;color:var(--text-muted);font-size:.85rem">${days !== null ? days : '—'}</td>
+                    <td data-col="status" ${!show('status') ? 'style="display:none"' : ''}>${this._statusBadge(i.status)}</td>
+                    <td data-col="pct"    ${!show('pct')    ? 'style="display:none"' : ''}><div class="in-pct-wrap"><div class="in-pct-bar" style="width:${pct}%"></div><span>${pct}%</span></div></td>
                     ${this._canManage ? `<td onclick="event.stopPropagation()">
                         <button class="in-icon-btn" title="Редагувати" onclick="InternsPage._openEditModal('${i.id}')"><i class="fa-solid fa-pen"></i></button>
                         <button class="in-icon-btn in-icon-btn-danger" title="Видалити" data-name="${Fmt.esc(i.profile?.full_name || '')}" onclick="InternsPage._deleteIntern('${i.id}', this.dataset.name)"><i class="fa-solid fa-trash"></i></button>
@@ -1120,11 +1221,46 @@
         reader.readAsText(file, 'UTF-8');
     },
 
+    _csvParseRows(text, delim) {
+        // Full RFC-4180 parser: handles quoted fields with embedded newlines and semicolons
+        const rows = [];
+        let row = [], field = '', inQ = false;
+        for (let i = 0; i < text.length; i++) {
+            const ch = text[i];
+            if (inQ) {
+                if (ch === '"') {
+                    if (text[i + 1] === '"') { field += '"'; i++; } // escaped quote
+                    else inQ = false;
+                } else { field += ch; }
+            } else {
+                if (ch === '"') { inQ = true; }
+                else if (ch === delim) { row.push(field.trim()); field = ''; }
+                else if (ch === '\n' || (ch === '\r' && text[i + 1] === '\n')) {
+                    if (ch === '\r') i++;
+                    row.push(field.trim()); rows.push(row); row = []; field = '';
+                } else { field += ch; }
+            }
+        }
+        if (field || row.length) { row.push(field.trim()); rows.push(row); }
+        return rows.filter(r => r.some(c => c));
+    },
+
     _parseImportCSV(text) {
-        const lines = text.split(/\r?\n/).filter(l => l.trim());
-        if (lines.length < 2) return [];
-        const delim = lines[0].includes(';') ? ';' : ',';
-        const rawHeaders = lines[0].split(delim).map(h => h.trim().toLowerCase());
+        text = text.replace(/^﻿/, '');
+        // Detect delimiter by counting unquoted occurrences in first 2000 chars
+        const sample = text.slice(0, 2000);
+        let inQ = false, semis = 0, commas = 0;
+        for (const ch of sample) {
+            if (ch === '"') { inQ = !inQ; continue; }
+            if (inQ) continue;
+            if (ch === ';') semis++;
+            if (ch === ',') commas++;
+        }
+        const delim = semis >= commas ? ';' : ',';
+        const rows = this._csvParseRows(text, delim);
+        if (rows.length < 2) return [];
+        // Normalize headers: collapse inner newlines/spaces, lowercase
+        const rawHeaders = rows[0].map(h => h.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase());
 
         const colAlias = {
             'дата початку':'start_date','дата початку навчання':'start_date','start_date':'start_date',
@@ -1141,6 +1277,9 @@
             'дата завершення':'end_date','дата завершення навчання':'end_date','end_date':'end_date',
             'статус':'status_raw','status':'status_raw',
             'кількість днів':'_skip','кількість днів навчання':'_skip',
+            'дата початок навчання':'start_date','дата початок':'start_date',
+            'піб керівника':'manager_name','піб керівника ':'manager_name',
+            'кількість днів навчання ':'_skip','кількість днів ':'_skip',
         };
         const colMap = rawHeaders.map(h => colAlias[h] || null);
 
@@ -1181,10 +1320,7 @@
         };
 
         const usedEmails = new Set();
-        return lines.slice(1).map((line, idx) => {
-            const vals = line.split(delim).map(v => v.trim().replace(/^"|"$/g, ''));
-
-
+        return rows.slice(1).map((vals, idx) => {
             const row = { _line: idx + 2 };
             colMap.forEach((key, i) => { if (key && key !== '_skip') row[key] = vals[i] || ''; });
 
@@ -1406,9 +1542,15 @@
 
                 const calcPlanned = this._calcPlannedEnd(row.job_position, row.start_date);
                 const rowStatus   = row.status || 'active';
-                // end_date from CSV: actual if dropped/completed, planned if active
-                const actualEnd   = (rowStatus === 'dropped' || rowStatus === 'completed') ? (row.end_date || null) : null;
-                const plannedEnd  = rowStatus === 'active' ? (row.end_date || calcPlanned || null) : (calcPlanned || null);
+                // end_date from CSV mapping:
+                // active   → planned_end_date (or auto-calc)
+                // dropped  → actual_end_date + planned stays as calc
+                // completed→ actual_end_date + planned_end_date (same value, so table shows it)
+                const csvEnd    = row.end_date || null;
+                const actualEnd = (rowStatus === 'dropped' || rowStatus === 'completed') ? csvEnd : null;
+                const plannedEnd = rowStatus === 'active'
+                    ? (csvEnd || calcPlanned || null)
+                    : (csvEnd || calcPlanned || null); // completed also fills planned so table col shows date
 
                 if (existingIntern) {
                     await API.interns.update(existingIntern.id, {

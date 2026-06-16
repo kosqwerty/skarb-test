@@ -3887,7 +3887,18 @@ const AdminPage = {
     },
 
     _initTrashResize(table) {
-        table.querySelectorAll('th').forEach(th => {
+        const storageKey = 'adm_trash_col_w_' + table.id;
+        const ths = [...table.querySelectorAll('th')];
+
+        // restore saved widths
+        try {
+            const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
+            if (Array.isArray(saved) && saved.length === ths.length) {
+                ths.forEach((th, i) => { if (saved[i] >= 40) th.style.width = saved[i] + 'px'; });
+            }
+        } catch {}
+
+        ths.forEach(th => {
             const handle = th.querySelector('.tr-col-resizer');
             if (!handle) return;
             let startX, startW;
@@ -3895,8 +3906,13 @@ const AdminPage = {
                 startX = e.pageX;
                 startW = th.offsetWidth;
                 handle.classList.add('dragging');
-                const onMove = ev => { th.style.width = Math.max(60, startW + ev.pageX - startX) + 'px'; };
-                const onUp   = () => { handle.classList.remove('dragging'); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+                const onMove = ev => { th.style.width = Math.max(40, startW + ev.pageX - startX) + 'px'; };
+                const onUp   = () => {
+                    handle.classList.remove('dragging');
+                    localStorage.setItem(storageKey, JSON.stringify(ths.map(t => t.offsetWidth)));
+                    document.removeEventListener('mousemove', onMove);
+                    document.removeEventListener('mouseup', onUp);
+                };
                 document.addEventListener('mousemove', onMove);
                 document.addEventListener('mouseup', onUp);
                 e.preventDefault();
@@ -4084,15 +4100,27 @@ const AdminPage = {
 
         const isUser = result?.type === 'user' || itemType === 'user';
         if (isUser) {
-            // Re-link schedule assignments that were unlinked when account was deleted
             const userId = result?.id || itemId;
             if (userId) {
+                // Re-link schedule assignments
                 const { error: saErr } = await supabase
                     .from('schedule_assignments')
                     .update({ user_id: userId })
                     .eq('original_user_id', userId)
                     .is('user_id', null);
                 if (saErr) console.warn('schedule_assignments relink:', saErr.message);
+
+                // Re-link intern records: find by email in snapshot, restore profile_id
+                const { data: prof } = await supabase
+                    .from('profiles').select('email').eq('id', userId).single();
+                if (prof?.email) {
+                    const { error: intErr } = await supabase
+                        .from('interns')
+                        .update({ profile_id: userId, profile_snapshot: null })
+                        .is('profile_id', null)
+                        .eq('profile_snapshot->>email', prof.email);
+                    if (intErr) console.warn('interns relink:', intErr.message);
+                }
             }
             Toast.success('Відновлено', `${result?.full_name || ''} — повернуто до графіку`);
         } else {

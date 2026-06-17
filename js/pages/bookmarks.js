@@ -314,8 +314,12 @@ const BookmarksPage = {
 
     _cardHtml(b) {
         const labels = { resource: '<i class="fa-regular fa-file"></i> Ресурс', news: '<i class="fa-solid fa-newspaper"></i> Новина', collection: '<i class="fa-solid fa-wand-magic-sparkles"></i> Портал' };
+        const isPdfIcon = b.type === 'resource' && (b.icon || '').includes('fa-file-pdf');
+        const openCall = isPdfIcon
+            ? `BookmarksPage._openResource('${b.route}')`
+            : `Router.go('${b.route}')`;
         return `
-<div class="bm-card tp-${b.type}" onclick="Router.go('${b.route}')">
+<div class="bm-card tp-${b.type}" onclick="${openCall}">
     <div class="bm-card-accent"></div>
     <div class="bm-card-body">
         <div class="bm-card-ico">${b.icon || '<i class="fa-solid fa-bookmark"></i>'}</div>
@@ -326,10 +330,24 @@ const BookmarksPage = {
         </div>
     </div>
     <div class="bm-card-footer" onclick="event.stopPropagation()">
-        <button class="bm-go" onclick="Router.go('${b.route}')"><i class="fa-solid fa-eye"></i> Відкрити</button>
+        <button class="bm-go" onclick="${openCall}"><i class="fa-solid fa-eye"></i> Відкрити</button>
         <button class="bm-del" title="Видалити" onclick="BookmarksPage._remove('${b.route}')"><i class="fa-solid fa-trash"></i></button>
     </div>
 </div>`;
+    },
+
+    async _openResource(route) {
+        if (window.innerWidth < 1400) { Router.go(route); return; }
+        const id = route.replace('resource/', '');
+        try {
+            const resource = await API.resources.getById(id);
+            const ext = resource.storage_path?.split('.').pop().toLowerCase() || '';
+            if (resource.type === 'pdf' || ext === 'pdf') {
+                ResourcesPage._openPdfDrawer(resource);
+            } else {
+                Router.go(route);
+            }
+        } catch { Router.go(route); }
     },
 
     _setFilter(filter, btn) {

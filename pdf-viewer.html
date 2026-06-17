@@ -485,6 +485,7 @@ const params      = new URLSearchParams(location.search);
 const fileUrl     = params.get('file');
 const docTitle    = params.get('title') || 'PDF';
 const canDownload = params.get('download') === '1';
+const forcePanel  = params.get('panel'); // 'closed' → override saved prefs
 
 document.title = docTitle;
 history.replaceState(null, '', '/pdf-viewer.html' + (docTitle ? '?title=' + encodeURIComponent(docTitle) : ''));
@@ -509,7 +510,7 @@ let rotation = _prefs.rotation ?? 0;
 let rendering = false;
 let handTool = true;
 let activePanel = _prefs.activePanel ?? 'thumbs';
-let panelOpen   = _prefs.panelOpen   ?? true;
+let panelOpen   = forcePanel === 'closed' ? false : (_prefs.panelOpen ?? true);
 let searchResults = [], searchIdx = -1, searchQuery = '';
 let pageTextContent = {};
 

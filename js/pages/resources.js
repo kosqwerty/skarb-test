@@ -1333,6 +1333,9 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
                 );
             }
 
+            // Cache docs list for PDF drawer lookup
+            if (this._view === 'docs') this._docsCache = filtered;
+
             // Load per-user download state for docs view
             if (this._view === 'docs' && filtered.length) {
                 this._myDownloads = await API.documentDownloads
@@ -1547,8 +1550,21 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
 
     openViewer(id) {
         if (this._view === 'docs') {
-            API.documentDownloads.track(id).catch(() => {});
-            if (!this._myDownloads[id]) this._myDownloads[id] = { at: new Date().toISOString(), version: 1 };
+            const resource = (this._docsCache || []).find(r => r.id === id);
+            const ext = resource?.storage_path?.split('.').pop().toLowerCase() || '';
+            const isPdf = resource && (resource.type === 'pdf' || ext === 'pdf');
+
+            if (isPdf && window.innerWidth >= 1400) {
+                this._openPdfDrawer(resource);
+                return;
+            }
+
+            // Non-PDF tracked docs: mark immediately on open
+            if (!isPdf) {
+                API.documentDownloads.track(id).catch(() => {});
+                if (!this._myDownloads[id]) this._myDownloads[id] = { at: new Date().toISOString(), version: 1 };
+            }
+            // PDF via route: tracking deferred to scroll-end in ResourceViewPage
         }
         const from = this._view === 'admin' ? 'resources' : this._view === 'docs' ? 'documents' : 'knowledge-base';
         let route = `resource/${id}?from=${from}`;
@@ -1558,6 +1574,176 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
             if (this._category) route += `&cat=${encodeURIComponent(this._category)}`;
         }
         Router.go(route);
+    },
+
+    async _openPdfDrawer(resource) {
+        // Remove existing drawer if any
+        document.getElementById('pdf-drawer')?.remove();
+        document.getElementById('pdf-drawer-backdrop')?.remove();
+
+        let url;
+        try {
+            url = await this._getResourceUrl(resource);
+        } catch (e) {
+            Toast.error('Помилка', 'Не вдалося завантажити файл');
+            return;
+        }
+
+        const dl = resource.download_allowed !== false ? '1' : '0';
+        const viewerUrl = `pdf-viewer.html?file=${encodeURIComponent(url)}&title=${encodeURIComponent(resource.title || 'PDF')}&download=${dl}&panel=closed`;
+
+        const dlStatus = (this._myDownloads || {})[resource.id];
+        const isBm = Bookmarks.isBookmarked('resource/' + resource.id);
+        const safeTitle = JSON.stringify(resource.title || '').replace(/"/g, '&quot;');
+        const safeIcon  = JSON.stringify('<i class="fa-regular fa-file-pdf"></i>').replace(/"/g, '&quot;');
+        const safeCat   = JSON.stringify(resource.category || '').replace(/"/g, '&quot;');
+
+        const ackBadge = dlStatus
+            ? `<span class="pdf-drawer-ack pdf-drawer-ack--done" id="pdf-drawer-ack">
+                   <i class="fa-solid fa-check"></i> ${this._ackLabel()} ${Fmt.dateShort(dlStatus.at)}
+               </span>`
+            : `<span class="pdf-drawer-ack pdf-drawer-ack--pending" id="pdf-drawer-ack">
+                   <i class="fa-regular fa-clock"></i> Не ознайомлено
+               </span>`;
+
+        const backdrop = document.createElement('div');
+        backdrop.id = 'pdf-drawer-backdrop';
+        backdrop.className = 'pdf-drawer-backdrop';
+        backdrop.onclick = () => ResourcesPage._closePdfDrawer();
+
+        const drawer = document.createElement('div');
+        drawer.id = 'pdf-drawer';
+        drawer.className = 'pdf-drawer';
+        drawer.innerHTML = `
+            <div class="pdf-drawer-header">
+                <div class="pdf-drawer-title"><i class="fa-regular fa-file-pdf" style="color:var(--danger)"></i> ${Fmt.esc(resource.title || 'PDF')}</div>
+                <div class="pdf-drawer-meta">
+                    ${ackBadge}
+                    <button class="pdf-drawer-bm${isBm ? ' active' : ''}" id="pdf-drawer-bm"
+                        title="${isBm ? 'Видалити з закладок' : 'Зберегти в закладки'}"
+                        onclick="ResourcesPage._toggleDrawerBookmark('${resource.id}',${safeTitle},${safeIcon},${safeCat})">
+                        <i class="${isBm ? 'fa-solid' : 'fa-regular'} fa-bookmark"></i>
+                    </button>
+                </div>
+                <button class="pdf-drawer-close" onclick="ResourcesPage._closePdfDrawer()" title="Закрити"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="pdf-drawer-body">
+                <iframe src="${viewerUrl}" style="width:100%;height:100%;border:none"></iframe>
+            </div>`;
+
+        this._drawerResource = resource;
+
+        document.body.appendChild(backdrop);
+        document.body.appendChild(drawer);
+
+        // Animate in
+        requestAnimationFrame(() => {
+            backdrop.classList.add('pdf-drawer-backdrop--open');
+            drawer.classList.add('pdf-drawer--open');
+        });
+
+        // Track as read after scrolling to end
+        this._drawerScrollHandler = e => {
+            if (e.data?.type === 'pdf-scroll-end') {
+                API.documentDownloads.track(resource.id).catch(() => {});
+                if (!this._myDownloads) this._myDownloads = {};
+                if (!this._myDownloads[resource.id]) {
+                    const now = new Date().toISOString();
+                    this._myDownloads[resource.id] = { at: now, version: resource.doc_version || 1 };
+                    UI.loadDocBadge();
+                    // Update ack badge in drawer header
+                    const badge = document.getElementById('pdf-drawer-ack');
+                    if (badge) {
+                        badge.className = 'pdf-drawer-ack pdf-drawer-ack--done';
+                        badge.innerHTML = `<i class="fa-solid fa-check"></i> ${this._ackLabel()} ${Fmt.dateShort(now)}`;
+                    }
+                }
+                window.removeEventListener('message', this._drawerScrollHandler);
+                this._drawerScrollHandler = null;
+            }
+        };
+        window.addEventListener('message', this._drawerScrollHandler);
+
+        // Close on Escape
+        this._drawerEscHandler = e => { if (e.key === 'Escape') ResourcesPage._closePdfDrawer(); };
+        document.addEventListener('keydown', this._drawerEscHandler);
+    },
+
+    _refreshDocCard(resource) {
+        const card = document.querySelector(`.resource-item[data-id="${resource.id}"]`);
+        if (!card) return;
+        const dlStatus = (this._myDownloads || {})[resource.id];
+        const dlAt = dlStatus?.at;
+        const isNewVersion = dlStatus && resource.doc_version > (dlStatus.version || 1);
+
+        // Update status badge
+        const statusRow = card.querySelector('[data-status-row]');
+        if (statusRow) {
+            let statusBadge;
+            if (resource.is_tracked_download) {
+                if (isNewVersion) {
+                    statusBadge = `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.73rem;color:#d97706;font-weight:500"><i class="fa-solid fa-rotate" style="font-size:.65rem"></i> Нова версія</span>`;
+                } else if (dlAt) {
+                    statusBadge = `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.73rem;color:#10b981;font-weight:500"><i class="fa-solid fa-check" style="font-size:.65rem"></i> ${this._ackLabel()} ${Fmt.dateShort(dlAt)}</span>`;
+                } else {
+                    statusBadge = `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.73rem;color:#ef4444;font-weight:500"><i class="fa-solid fa-circle-exclamation" style="font-size:.65rem"></i> Не ознайомлено</span>`;
+                }
+            } else {
+                statusBadge = dlAt
+                    ? `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.73rem;color:var(--text-muted)"><i class="fa-regular fa-eye" style="font-size:.65rem"></i> Відкрито ${Fmt.dateShort(dlAt)}</span>`
+                    : `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.73rem;color:var(--text-muted)"><i class="fa-regular fa-eye-slash" style="font-size:.65rem"></i> Не переглянуто</span>`;
+            }
+            statusRow.innerHTML = statusBadge + this._deadlineBadge(resource, dlStatus);
+        }
+
+        // Update ack dot
+        const dot = card.querySelector(`[data-doc-dot="${resource.id}"]`);
+        if (dot) {
+            const isRead = dlAt && !isNewVersion;
+            dot.className = `res-ack-dot ${isRead ? 'res-read' : 'res-unread'}`;
+            dot.title = isRead ? 'Ознайомлено' : (isNewVersion ? 'Нова версія — потрібне повторне ознайомлення' : 'Не ознайомлено');
+        }
+
+        // Update card class
+        if (resource.is_tracked_download) {
+            card.classList.toggle('doc-acked', !!(dlAt && !isNewVersion));
+            card.classList.toggle('doc-needs-ack', !(dlAt && !isNewVersion));
+        }
+    },
+
+    _toggleDrawerBookmark(id, title, icon, category) {
+        Bookmarks.toggleResource(id, title, icon, category);
+        const isBm = Bookmarks.isBookmarked('resource/' + id);
+        const btn = document.getElementById('pdf-drawer-bm');
+        if (btn) {
+            btn.classList.toggle('active', isBm);
+            btn.title = isBm ? 'Видалити з закладок' : 'Зберегти в закладки';
+            btn.innerHTML = `<i class="${isBm ? 'fa-solid' : 'fa-regular'} fa-bookmark"></i>`;
+        }
+    },
+
+    _closePdfDrawer() {
+        const drawer = document.getElementById('pdf-drawer');
+        const backdrop = document.getElementById('pdf-drawer-backdrop');
+        if (!drawer) return;
+        drawer.classList.remove('pdf-drawer--open');
+        backdrop?.classList.remove('pdf-drawer-backdrop--open');
+        setTimeout(() => {
+            drawer.remove();
+            backdrop?.remove();
+        }, 300);
+        if (this._drawerEscHandler) {
+            document.removeEventListener('keydown', this._drawerEscHandler);
+            this._drawerEscHandler = null;
+        }
+        if (this._drawerScrollHandler) {
+            window.removeEventListener('message', this._drawerScrollHandler);
+            this._drawerScrollHandler = null;
+        }
+        if (this._drawerResource) {
+            this._refreshDocCard(this._drawerResource);
+            this._drawerResource = null;
+        }
     },
 
     async _getResourceUrl(resource) {
@@ -2324,7 +2510,7 @@ const ResourceViewPage = {
         if (isPdf) {
             const dl = resource.download_allowed !== false ? '1' : '0';
             const viewerUrl = `pdf-viewer.html?file=${encodeURIComponent(url)}&title=${encodeURIComponent(resource.title || 'PDF')}&download=${dl}`;
-            viewerHtml = `<iframe src="${viewerUrl}" style="width:90%;height:calc(90vh - 130px);min-height:450px;border:none;display:block"></iframe>`;
+            viewerHtml = `<iframe src="${viewerUrl}" style="width:100%;height:calc(90vh - 130px);min-height:450px;border:none;display:block"></iframe>`;
 
         } else if (isVideo) {
             const noDownload = resource.download_allowed === false ? 'controlsList="nodownload"' : '';

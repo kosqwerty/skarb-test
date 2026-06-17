@@ -558,7 +558,7 @@
             this._currentIntern = intern;
             this._disciplines = (intern.intern_disciplines || []).sort((a,b) => a.order_index - b.order_index);
             // update title with name + badge for dropped
-            const mt = document.querySelector('.modal-title');
+            const mt = document.getElementById('modal-title');
             if (mt) {
                 const name = intern.profile?.full_name ? ` — ${Fmt.esc(intern.profile.full_name)}` : '';
                 const badge = intern.status === 'dropped' ? ` ${this._statusBadge(intern.status)}` : '';
@@ -566,12 +566,12 @@
             }
             this._renderDetailBody(intern);
         } catch (e) {
-            document.querySelector('.modal-body').innerHTML = `<div style="color:var(--danger)">${Fmt.esc(e.message)}</div>`;
+            document.getElementById('modal-body').innerHTML = `<div style="color:var(--danger)">${Fmt.esc(e.message)}</div>`;
         }
     },
 
     _renderDetailBody(intern) {
-        const mb = document.querySelector('.modal-body');
+        const mb = document.getElementById('modal-body');
         if (!mb) return;
         const canEdit = this._canManage;
         mb.innerHTML = `
@@ -691,18 +691,135 @@
         this._renderInternModal(null);
     },
 
+    _flipModal(bodyHtml, title, footerHtml, cb) {
+        const box      = document.getElementById('modal-box');
+        const titleEl  = document.getElementById('modal-title');
+        const bodyEl   = document.getElementById('modal-body');
+        const footerEl = document.getElementById('modal-footer');
+        if (!box) return;
+
+        // Phase 1: rotate away (0 → 90deg)
+        box.style.transition = 'transform .28s cubic-bezier(.4,0,.6,1)';
+        box.style.transformOrigin = 'center center';
+        box.style.transform = 'rotateY(90deg)';
+
+        setTimeout(() => {
+            // Swap content at the midpoint (invisible)
+            if (titleEl && title)       titleEl.innerHTML  = title;
+            if (footerEl && footerHtml) footerEl.innerHTML = footerHtml;
+            if (bodyEl  && bodyHtml)    bodyEl.innerHTML   = bodyHtml;
+            cb?.();
+
+            // Phase 2: rotate in from -90 → 0
+            box.style.transition = 'none';
+            box.style.transform  = 'rotateY(-90deg)';
+
+            requestAnimationFrame(() => requestAnimationFrame(() => {
+                box.style.transition = 'transform .28s cubic-bezier(.4,0,.6,1)';
+                box.style.transform  = 'rotateY(0deg)';
+                setTimeout(() => {
+                    box.style.transition = '';
+                    box.style.transform  = '';
+                    box.style.transformOrigin = '';
+                }, 300);
+            }));
+        }, 280);
+    },
+
     async _openEditModal(internId) {
-        Modal.close();
+        this._editFromDetail = true;
         try {
             Loader.show();
             const intern = await API.interns.getById(internId);
             this._internFormState = { ...intern };
-            this._renderInternModal(intern);
+
+            const statusOpts = [
+                { v: 'active',    l: 'Навчається' },
+                { v: 'completed', l: 'Завершив' },
+                { v: 'dropped',   l: 'Відмовився' }
+            ];
+            const profiles = this._allProfiles;
+
+            const bodyHtml = `
+            <div class="in-form">
+                <div class="in-form-group">
+                    <label class="in-form-label">Стажер <span style="color:var(--danger)">*</span></label>
+                    <select id="inf-profile" class="in-input" onchange="InternsPage._onFormDateChange()">
+                        <option value="">— Обрати профіль —</option>
+                        ${profiles.map(p => `<option value="${p.id}" data-job="${Fmt.esc(p.job_position||'')}" ${intern.profile_id===p.id?'selected':''}>${Fmt.esc(p.full_name)} ${p.city?`(${Fmt.esc(p.city)})`:''}${p.job_position?` — ${Fmt.esc(p.job_position)}`:''}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="in-form-group">
+                    <label class="in-form-label">Керівник</label>
+                    <select id="inf-manager" class="in-input">
+                        <option value="">— Без керівника —</option>
+                        ${profiles.map(p => `<option value="${p.id}" ${intern.manager_id===p.id?'selected':''}>${Fmt.esc(p.full_name)}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="in-form-row">
+                    <div class="in-form-group">
+                        <label class="in-form-label">Дата початку</label>
+                        <input id="inf-start" type="date" class="in-input" value="${intern.start_date||''}" oninput="InternsPage._onFormDateChange()">
+                    </div>
+                    <div class="in-form-group">
+                        <label class="in-form-label" style="display:flex;align-items:center;justify-content:space-between">
+                            <span>Плановий випуск</span>
+                            <button type="button" style="background:none;border:none;cursor:pointer;color:var(--primary);font-size:.8rem;padding:0;display:flex;align-items:center;gap:.3rem" onclick="InternsPage._onFormDateChange(true)"><i class="fa-solid fa-rotate"></i> авто</button>
+                        </label>
+                        <input id="inf-end" type="date" class="in-input" value="${intern.planned_end_date||''}">
+                    </div>
+                </div>
+                <div class="in-form-group">
+                    <label class="in-form-label">Статус</label>
+                    <select id="inf-status" class="in-input" onchange="InternsPage._onStatusChange()">
+                        ${statusOpts.map(o => `<option value="${o.v}" ${(intern.status||'active')===o.v?'selected':''}>${o.l}</option>`).join('')}
+                    </select>
+                </div>
+                <div id="inf-dropped-wrap" class="in-form-group" style="${(intern.status||'active')==='dropped'?'':'display:none'}">
+                    <label class="in-form-label">Дата відмови</label>
+                    <input id="inf-actual-end" type="date" class="in-input" value="${intern.actual_end_date||''}">
+                </div>
+                <div class="in-form-group">
+                    <label class="in-form-label">Нотатки</label>
+                    <textarea id="inf-notes" class="in-input" rows="3" style="resize:vertical">${Fmt.esc(intern.notes||'')}</textarea>
+                </div>
+            </div>`;
+
+            const footerHtml = `
+                <button class="btn btn-sm" style="background:linear-gradient(135deg,#8b5cf6,#6d28d9);color:#fff;border:none" onclick="InternsPage._saveIntern('${intern.id}')">
+                    <i class="fa-solid fa-floppy-disk"></i> Зберегти
+                </button>
+                <button class="btn btn-ghost btn-sm" onclick="InternsPage._flipBackToDetail('${intern.id}')"><i class="fa-solid fa-arrow-left"></i> Назад</button>`;
+
+            this._flipModal(
+                bodyHtml,
+                `<i class="fa-solid fa-pen" style="color:#8b5cf6"></i> Редагування стажера`,
+                footerHtml
+            );
+        } catch (e) { Toast.error('Помилка', e.message); }
+        finally { Loader.hide(); }
+    },
+
+    async _flipBackToDetail(internId) {
+        try {
+            Loader.show();
+            const intern = await API.interns.getById(internId);
+            this._currentIntern = intern;
+            this._disciplines = (intern.intern_disciplines || []).sort((a,b) => a.order_index - b.order_index);
+            const name = intern.profile?.full_name ? ` — ${Fmt.esc(intern.profile.full_name)}` : '';
+            const badge = intern.status === 'dropped' ? ` ${this._statusBadge(intern.status)}` : '';
+            this._flipModal(
+                null,
+                `<i class="fa-solid fa-user-graduate"></i> Картка стажера${name}${badge}`,
+                `<button class="btn btn-ghost btn-sm" onclick="Modal.close()">Закрити</button>`,
+                () => { this._renderDetailBody(intern); }
+            );
         } catch (e) { Toast.error('Помилка', e.message); }
         finally { Loader.hide(); }
     },
 
     _renderInternModal(intern) {
+        this._editFromDetail = false;
         const isEdit = !!intern;
         const profiles = this._allProfiles;
         const statusOpts = [
@@ -826,7 +943,6 @@
         try {
             Loader.show();
             if (internId) {
-                // Check if status is being changed to dropped
                 const prev = this._interns.find(i => i.id === internId);
                 const becomingDropped = status === 'dropped' && prev?.status !== 'dropped';
                 await API.interns.update(internId, payload);
@@ -839,6 +955,13 @@
                     }
                 } else {
                     Toast.success('Збережено');
+                }
+                // If opened from detail modal — flip back instead of closing
+                if (this._editFromDetail) {
+                    this._editFromDetail = false;
+                    await this._reload();
+                    await this._flipBackToDetail(internId);
+                    return;
                 }
             } else {
                 await API.interns.create(payload);

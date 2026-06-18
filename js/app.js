@@ -267,8 +267,12 @@ const App = {
         // Start activity tracking (page views via hash change)
         ActivityTracker.start();
 
-        // Redirect to dashboard if no hash
-        if (!location.hash || location.hash === '#' || location.hash === '#/') {
+        // Відновити маршрут після автовиходу через неактивність
+        const returnHash = localStorage.getItem('lms_return_hash');
+        if (returnHash) {
+            localStorage.removeItem('lms_return_hash');
+            location.hash = returnHash;
+        } else if (!location.hash || location.hash === '#' || location.hash === '#/') {
             Router.go('dashboard');
         }
 

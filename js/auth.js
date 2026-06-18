@@ -333,22 +333,24 @@ const Heartbeat = {
 
 // ── Автовихід при неактивності ─────────────────────────────────────
 const InactivityWatcher = {
-    _TIMEOUT:   60 * 60 * 1000,   // 1 година в мс
-    _WARN:      5  * 60 * 1000,   // попередження за 5 хв до виходу
-    _CHECK:     30 * 1000,         // перевірка кожні 30 с (стійка до throttling і сну ПК)
-    _ticker:    null,
+    _TIMEOUT:    30 * 60 * 1000,   // 30 хвилин неактивності
+    _CHECK:      30 * 1000,         // перевірка кожні 30 с
+    _ticker:     null,
     _lastActive: 0,
-    _warned:    false,
-    _warnToast: null,
-    _events:    ['mousemove','mousedown','keydown','touchstart','scroll','click'],
+    _events:     ['mousemove','mousedown','keydown','touchstart','scroll','click'],
 
     start() {
-        this.stop(); // запобігаємо подвійній підписці
-        this._lastActive = Date.now();
-        this._warned = false;
+        this.stop();
+        // Відновлюємо час останньої активності з localStorage —
+        // щоб закриття/відкриття браузера не скидало таймер
+        const stored = parseInt(localStorage.getItem('lms_last_active') || '0', 10);
+        this._lastActive = stored || Date.now();
+        // Якщо вже перевищено таймаут — одразу logout, не чекаємо CHECK
+        if (Date.now() - this._lastActive >= this._TIMEOUT) {
+            this._doLogout();
+            return;
+        }
         this._events.forEach(e => document.addEventListener(e, this._onActivity, { passive: true }));
-        // Короткий інтервал замість одного довгого setTimeout —
-        // стійкий до фонових вкладок, сну ноутбука і browser throttling
         this._ticker = setInterval(() => this._check(), this._CHECK);
     },
 
@@ -356,81 +358,35 @@ const InactivityWatcher = {
         this._events.forEach(e => document.removeEventListener(e, this._onActivity));
         clearInterval(this._ticker);
         this._ticker = null;
-        this._warned = false;
-        if (this._warnToast) {
-            const el = document.getElementById('inactivity-warn-toast');
-            if (el) el.remove();
-            this._warnToast = null;
-        }
     },
 
-    _onActivity: null,   // заповнюється нижче
+    _onActivity: null,
 
     _reset() {
         this._lastActive = Date.now();
-        // Якщо вже показали попередження — прибираємо його
-        if (this._warned) {
-            this._warned = false;
-            const el = document.getElementById('inactivity-warn-toast');
-            if (el) el.remove();
-            this._warnToast = null;
-        }
+        localStorage.setItem('lms_last_active', this._lastActive);
     },
 
     _check() {
         const idle = Date.now() - this._lastActive;
         if (idle >= this._TIMEOUT) {
             this._doLogout();
-        } else if (idle >= this._TIMEOUT - this._WARN && !this._warned) {
-            this._warned = true;
-            this._showWarning();
         }
-    },
-
-    _showWarning() {
-        // Показуємо persistent toast (без автозакриття)
-        const div = document.createElement('div');
-        div.id = 'inactivity-warn-toast';
-        div.style.cssText = `
-            position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;
-            background:var(--bg-surface);border:1.5px solid #f59e0b;
-            border-radius:var(--radius-xl);padding:.85rem 1.1rem;
-            box-shadow:0 8px 32px rgba(0,0,0,.22);
-            display:flex;align-items:center;gap:.75rem;
-            max-width:340px;animation:toast-in .25s ease`;
-        div.innerHTML = `
-            <div style="width:36px;height:36px;border-radius:50%;background:rgba(245,158,11,.15);
-                        color:#f59e0b;display:flex;align-items:center;justify-content:center;
-                        font-size:1.1rem;flex-shrink:0">⏱️</div>
-            <div style="flex:1;min-width:0">
-                <div style="font-size:.82rem;font-weight:700;color:var(--text-primary);margin-bottom:.15rem">
-                    Сесія завершується
-                </div>
-                <div style="font-size:.75rem;color:var(--text-muted)">
-                    Ви неактивні. Через 5 хвилин відбудеться автоматичний вихід.
-                </div>
-            </div>
-            <button onclick="InactivityWatcher._reset()" style="
-                flex-shrink:0;border:1px solid #f59e0b;background:rgba(245,158,11,.1);
-                color:#f59e0b;border-radius:var(--radius-md);padding:.3rem .7rem;
-                font-size:.75rem;font-weight:600;cursor:pointer;font-family:inherit">
-                Залишитись
-            </button>`;
-        document.body.appendChild(div);
-        this._warnToast = div;
     },
 
     _doLogout() {
         this.stop();
-        const el = document.getElementById('inactivity-warn-toast');
-        if (el) el.remove();
-        Toast.warning('Автовихід', 'Ви були неактивні більше 1 години');
+        localStorage.removeItem('lms_last_active');
+        const hash = location.hash;
+        if (hash && hash !== '#' && hash !== '#/') {
+            localStorage.setItem('lms_return_hash', hash);
+        }
         try { API.activityLog.log('logout', { details: { reason: 'inactivity' } }); } catch(_) {}
         setTimeout(async () => {
             try { await supabase.auth.signOut(); } catch(_) {}
             AppState.user = null; AppState.profile = null; AppState.session = null;
             location.hash = '';
-        }, 1500);
+        }, 300);
     },
 };
 

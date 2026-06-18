@@ -1872,6 +1872,14 @@ const AdminPage = {
     _prevJobPosition: '',
 
     _toggleIntern() {
+        const jobInp = document.getElementById('cu-job-position');
+        const csWrap = document.querySelector('[data-cs="cu-job-position"]');
+        const csInput = csWrap?.querySelector('.cs-input');
+        const hasJob = (jobInp?.value || csInput?.value || '').trim();
+        if (!this._internOn && !hasJob) {
+            Toast.warning('Оберіть посаду', 'Спочатку вкажіть посаду, потім вмикайте стажера');
+            return;
+        }
         this._internOn = !this._internOn;
         const knob = document.getElementById('cu-intern-knob');
         const dot  = document.getElementById('cu-intern-dot');
@@ -1881,9 +1889,7 @@ const AdminPage = {
         }
         if (dot) dot.style.transform = this._internOn ? 'translateX(18px)' : 'translateX(0)';
 
-        const hiddenInp = document.getElementById('cu-job-position');
-        const csWrap    = document.querySelector('[data-cs="cu-job-position"]');
-        const csInput   = csWrap?.querySelector('.cs-input');
+        const hiddenInp = jobInp;
 
         if (this._internOn) {
             const roleEl = document.getElementById('cu-role');
@@ -1960,6 +1966,7 @@ const AdminPage = {
                 label:          this._internOn ? 'intern'    : null,
             };
             await supabase.from('profiles').update(extraFields).eq('id', userId);
+            const wasIntern = this._internOn;
             this._internOn = false;
 
             // Auto-assign tests by job_position
@@ -1989,6 +1996,29 @@ const AdminPage = {
             Toast.success('Користувача створено');
             const adminEl = document.getElementById('admin-content');
             if (adminEl) await this._renderUsersList(adminEl);
+
+            // Auto-create intern record when label='intern'
+            if (wasIntern) {
+                try {
+                    const managerId = Dom.val('cu-manager') || (AppState.isManager() ? AppState.profile.id : null);
+                    await API.interns.create({
+                        profile_id:  userId,
+                        manager_id:  managerId || null,
+                        status:      'active',
+                    });
+                    Toast.info('Стажер', `${fullName} додано до таблиці стажерів. Заповніть деталі у розділі Стажери.`);
+                } catch(e) {
+                    Toast.warning('Стажер', 'Профіль створено, але не вдалось додати до таблиці стажерів: ' + e.message);
+                }
+            }
+
+            // Check if this person was previously an intern (terminated or archived)
+            try {
+                const matches = await API.interns.findBySnapshot(email, fullName);
+                if (matches.length) {
+                    this._showInternRestorePrompt(matches, userId, fullName);
+                }
+            } catch(_) {}
         } catch(e) {
             Toast.error('Помилка', e.message);
         } finally { Loader.hide(); }
@@ -1997,6 +2027,56 @@ const AdminPage = {
     async openEditUser(user) {
         const el = document.getElementById('admin-content');
         await ProfilePage.openAsAdmin(el, user, () => this._renderUsersList(el));
+    },
+
+    _showInternRestorePrompt(matches, newProfileId, newName) {
+        const rows = matches.map(r => {
+            const s    = r.profile_snapshot || {};
+            const ei   = r.employment_info  || {};
+            const mgr  = r.manager?.full_name ? `Керівник: ${Fmt.esc(r.manager.full_name)}` : '';
+            const sinceLabel = ei.employed_since
+                ? `Працював з ${Fmt.dateShort(ei.employed_since)}`
+                : (r.start_date ? `Стажер з ${Fmt.dateShort(r.start_date)}` : '');
+            const termLabel = ei.terminated_at
+                ? `Звільнений ${Fmt.dateShort(ei.terminated_at)}`
+                : (r.status === 'dropped' ? `Відмовився ${r.actual_end_date ? Fmt.dateShort(r.actual_end_date) : ''}` : '');
+            return `
+            <div style="border:1px solid var(--border);border-radius:var(--radius-lg);padding:1rem;margin-bottom:.75rem;background:var(--bg-raised)">
+                <div style="font-weight:600;margin-bottom:.35rem">${Fmt.esc(s.full_name || newName)}</div>
+                <div style="font-size:.82rem;color:var(--text-muted);display:flex;flex-wrap:wrap;gap:.5rem .75rem">
+                    ${s.city ? `<span><i class="fa-solid fa-location-dot"></i> ${Fmt.esc(s.city)}</span>` : ''}
+                    ${s.job_position ? `<span><i class="fa-solid fa-briefcase"></i> ${Fmt.esc(s.job_position)}</span>` : ''}
+                    ${mgr ? `<span><i class="fa-solid fa-user-tie"></i> ${mgr}</span>` : ''}
+                    ${sinceLabel ? `<span><i class="fa-regular fa-calendar"></i> ${sinceLabel}</span>` : ''}
+                    ${termLabel ? `<span style="color:#ef4444"><i class="fa-solid fa-door-open"></i> ${termLabel}</span>` : ''}
+                </div>
+                <button class="btn btn-sm" style="margin-top:.65rem;background:linear-gradient(135deg,#8b5cf6,#6d28d9);color:#fff;border:none"
+                    onclick="AdminPage._restoreIntern('${r.id}','${newProfileId}')">
+                    <i class="fa-solid fa-rotate-left"></i> Відновити запис стажера
+                </button>
+            </div>`;
+        }).join('');
+
+        Modal.open({
+            title: '<i class="fa-solid fa-rotate-left" style="color:#8b5cf6"></i> Знайдено попередній запис',
+            body: `
+            <p style="margin:0 0 1rem;color:var(--text-muted);font-size:.875rem">
+                У системі є запис(и) стажера з такими самими даними. Відновити зв'язок — і вся попередня інформація (навчання, керівник, дати, нотатки) буде прив'язана до нового акаунту.
+            </p>
+            ${rows}`,
+            footer: `<button class="btn btn-ghost btn-sm" onclick="Modal.close()">Пропустити</button>`
+        });
+    },
+
+    async _restoreIntern(internId, newProfileId) {
+        try {
+            Loader.show();
+            await API.interns.restoreToProfile(internId, newProfileId);
+            Modal.close();
+            Toast.success('Відновлено', "Запис стажера пов’язано з новим акаунтом");
+        } catch(e) {
+            Toast.error('Помилка', e.message);
+        } finally { Loader.hide(); }
     },
 
     // ── Пагінація ─────────────────────────────────────────────────
@@ -2363,20 +2443,48 @@ const AdminPage = {
             ? `<br><span style="color:var(--warning);font-size:.82rem">Серед вибраних ${adminCount} адміністратор(ів)</span>`
             : '';
 
-        const ok = await Modal.confirm({
-            title: '<i class="fa-solid fa-trash"></i> Видалити користувачів',
-            message: `Ви впевнені, що хочете <strong>остаточно видалити ${toDelete.length} користувач(ів)</strong>?
-                      ${adminNote}
-                      <br><br>Дія незворотна.${AppState.isOwner() ? ' Дані будуть збережені в Кошику на 7 днів.' : ''}`,
-            confirmText: `Видалити ${toDelete.length}`,
-            danger: true
+        const today = new Date().toISOString().slice(0, 10);
+
+        // Check if any of the users being deleted have a completed intern record
+        let completedInternCount = 0;
+        try {
+            const checks = await Promise.all(toDelete.map(u => API.interns.getCompletedByProfileId(u.id).catch(() => null)));
+            completedInternCount = checks.filter(Boolean).length;
+        } catch(_) {}
+
+        // Custom confirm modal — with optional termination date picker
+        const internBlock = completedInternCount
+            ? '<div style="margin-top:1rem;padding:.85rem 1rem;background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.25);border-radius:var(--radius-lg)">'
+              + '<div style="font-size:.82rem;font-weight:600;color:#ef4444;margin-bottom:.5rem"><i class="fa-solid fa-door-open"></i> Серед вибраних ' + completedInternCount + ' діючий співробітник(ів)</div>'
+              + '<label style="font-size:.82rem;color:var(--text-muted);display:block;margin-bottom:.3rem">Дата звільнення</label>'
+              + '<input id="bulk-terminated-at" type="date" class="in-input" value="' + today + '" style="max-width:200px">'
+              + '</div>'
+            : '';
+
+        const terminatedAt = await new Promise(resolve => {
+            Modal.open({
+                title: '<i class="fa-solid fa-trash"></i> Видалити користувачів',
+                body: '<p>Ви впевнені, що хочете <strong>остаточно видалити ' + toDelete.length + ' користувач(ів)</strong>?' + adminNote + '<br><br>Дія незворотна.' + (AppState.isOwner() ? ' Дані будуть збережені в Кошику на 7 днів.' : '') + '</p>' + internBlock,
+                footer: '<button class="btn btn-danger btn-sm" onclick="AdminPage._bulkDeleteResolve(document.getElementById(\'bulk-terminated-at\')?.value||null)"><i class="fa-solid fa-trash"></i> Видалити ' + toDelete.length + '</button>'
+                      + '<button class="btn btn-ghost btn-sm" onclick="AdminPage._bulkDeleteResolve(false)">Скасувати</button>'
+            });
+            this._bulkDeleteResolve = (val) => { Modal.close(); resolve(val); };
         });
-        if (!ok) return;
+        if (terminatedAt === false) return;
+        const terminationDate = (terminatedAt && typeof terminatedAt === 'string') ? terminatedAt : today;
 
         Loader.show();
         let done = 0, failed = 0;
         for (const u of toDelete) {
             try {
+                // Save terminated_at in employment_info before profile deletion
+                // (profile_snapshot is saved automatically by DB trigger on SET NULL)
+                try {
+                    const intern = await API.interns.getByProfileId(u.id);
+                    if (intern) {
+                        await API.interns.setEmploymentInfo(intern.id, { terminated_at: terminationDate });
+                    }
+                } catch(_) {}
                 const { error } = await supabase.rpc('admin_user_delete', { p_user_id: u.id });
                 if (error) throw error;
                 done++;
@@ -4114,12 +4222,24 @@ const AdminPage = {
                 const { data: prof } = await supabase
                     .from('profiles').select('email').eq('id', userId).single();
                 if (prof?.email) {
-                    const { error: intErr } = await supabase
+                    // Find intern record by snapshot email
+                    const { data: matchedInterns } = await supabase
                         .from('interns')
-                        .update({ profile_id: userId, profile_snapshot: null })
+                        .select('id, employment_info')
                         .is('profile_id', null)
                         .eq('profile_snapshot->>email', prof.email);
-                    if (intErr) console.warn('interns relink:', intErr.message);
+                    for (const intern of (matchedInterns || [])) {
+                        const ei = { ...(intern.employment_info || {}) };
+                        const today = new Date().toISOString().slice(0, 10);
+                        if (ei.terminated_at) {
+                            ei.rehired_at = today;
+                            delete ei.terminated_at;
+                        }
+                        await supabase.from('interns')
+                            .update({ profile_id: userId, profile_snapshot: null, employment_info: ei })
+                            .eq('id', intern.id);
+                    }
+                    if (!matchedInterns?.length) console.warn('interns relink: no match found for', prof.email);
                 }
             }
             Toast.success('Відновлено', `${result?.full_name || ''} — повернуто до графіку`);

@@ -2278,7 +2278,7 @@ const API = {
             let q = supabase.from('interns').select(
                 `id, profile_id, manager_id, start_date, planned_end_date, actual_end_date,
                  status, status_changed_at, employment_info, characteristic, mentors_info, notes, created_at, profile_snapshot,
-                 profile:profiles!interns_profile_id_fkey(id, full_name, email, phone, job_position, city, avatar_url, gender),
+                 profile:profiles!interns_profile_id_fkey(id, full_name, email, phone, job_position, city, avatar_url, gender, manager_id),
                  manager:profiles!interns_manager_id_fkey(id, full_name)`,
                 { count: 'exact' }
             );
@@ -2297,9 +2297,9 @@ const API = {
             const { data, error } = await supabase.from('interns').select(
                 `id, profile_id, manager_id, start_date, planned_end_date, actual_end_date,
                  status, status_changed_at, employment_info, characteristic, mentors_info, notes, created_at, updated_at, profile_snapshot,
-                 profile:profiles!interns_profile_id_fkey(id, full_name, email, phone, job_position, city, avatar_url, gender),
+                 profile:profiles!interns_profile_id_fkey(id, full_name, email, phone, job_position, city, avatar_url, gender, manager_id),
                  manager:profiles!interns_manager_id_fkey(id, full_name),
-                 intern_disciplines(id, discipline_name, date, address, mentor_id, is_completed, notes, order_index, created_at,
+                 intern_disciplines(id, discipline_name, date, hours, place, cabinet, address, row_type, mentor_id, is_completed, notes, order_index, created_at,
                      mentor:profiles!intern_disciplines_mentor_id_fkey(id, full_name))`
             ).eq('id', id).single();
             if (error) throw error;
@@ -2449,7 +2449,7 @@ const API = {
     internDisciplines: {
         async getByIntern(internId) {
             const { data, error } = await supabase.from('intern_disciplines')
-                .select('id, intern_id, discipline_name, date, address, mentor_id, is_completed, notes, order_index, created_at, mentor:profiles!intern_disciplines_mentor_id_fkey(id, full_name)')
+                .select('id, intern_id, discipline_name, date, hours, place, cabinet, address, row_type, mentor_id, is_completed, notes, order_index, created_at, mentor:profiles!intern_disciplines_mentor_id_fkey(id, full_name)')
                 .eq('intern_id', internId)
                 .order('order_index', { ascending: true });
             if (error) throw error;

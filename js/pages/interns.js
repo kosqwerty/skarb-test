@@ -2838,10 +2838,10 @@ ${discs.length ? `<table>
 #in-tab-content { flex:1; display:flex; flex-direction:column; overflow:hidden; min-height:0; }
 #in-table-wrap { flex:1; display:flex; flex-direction:column; min-height:0; overflow:hidden; }
 .in-table-scroll { flex:1; overflow:auto; border-radius:10px; border:1px solid var(--border); min-height:0; }
-.in-table { width:100%; border-collapse:collapse; font-size:.875rem; table-layout:auto; min-width:700px; }
+.in-table { width:100%; border-collapse:collapse; font-size:.875rem; table-layout:fixed; min-width:700px; }
 .in-table thead tr { background:var(--bg-raised); }
-.in-table th { padding:.65rem .85rem; text-align:left; font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--text-muted); white-space:nowrap; position:relative; }
-.in-table td { padding:.65rem .85rem; border-bottom:1px solid var(--border); vertical-align:middle; white-space:nowrap; }
+.in-table th { padding:.65rem .85rem; text-align:left; font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--text-muted); position:relative; min-width:0; overflow:hidden; white-space:nowrap; }
+.in-table td { padding:.65rem .85rem; border-bottom:1px solid var(--border); vertical-align:middle; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .in-col-resizer { position:absolute; right:0; top:20%; bottom:20%; width:3px; cursor:col-resize; user-select:none; z-index:1; background:var(--border); border-radius:2px; transition:background .15s; }
 .in-col-resizer:hover, .in-col-resizer.active { background:#8b5cf6; }
 .in-tr { cursor:pointer; transition:background .12s; }

@@ -223,7 +223,7 @@
         dd.id = 'in-col-dropdown';
         dd.style.cssText = `position:fixed;z-index:900;background:var(--bg-surface);border:1px solid var(--border);
             border-radius:var(--radius-lg);box-shadow:0 8px 24px rgba(0,0,0,.18);
-            padding:.5rem 0;min-width:170px;top:${rect.bottom + 6}px;left:${rect.left}px`;
+            padding:.5rem 0;min-width:170px;top:${rect.bottom + 6}px;right:${window.innerWidth - rect.right}px`;
 
         dd.innerHTML = this._allCols.filter(c => !c.fixed).map(c => `
             <label style="display:flex;align-items:center;gap:.6rem;padding:.4rem .9rem;cursor:pointer;font-size:.85rem;

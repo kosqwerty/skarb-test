@@ -1158,6 +1158,8 @@
     _chrSetScore(internId, key, val) {
         const chr = this._currentIntern?.characteristic || {};
         if (!chr.criteria) chr.criteria = {};
+        // clicking the current score again resets it to 0
+        if (chr.criteria[key] === val) val = 0;
         chr.criteria[key] = val;
         if (this._currentIntern) this._currentIntern.characteristic = chr;
 

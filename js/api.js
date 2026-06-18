@@ -2277,7 +2277,7 @@ const API = {
         async getAll({ search, status, city, managerId, page = 0, pageSize = 50 } = {}) {
             let q = supabase.from('interns').select(
                 `id, profile_id, manager_id, start_date, planned_end_date, actual_end_date,
-                 status, status_changed_at, notes, created_at, profile_snapshot,
+                 status, status_changed_at, employment_info, characteristic, mentors_info, notes, created_at, profile_snapshot,
                  profile:profiles!interns_profile_id_fkey(id, full_name, email, phone, job_position, city, avatar_url, gender),
                  manager:profiles!interns_manager_id_fkey(id, full_name)`,
                 { count: 'exact' }
@@ -2296,7 +2296,7 @@ const API = {
         async getById(id) {
             const { data, error } = await supabase.from('interns').select(
                 `id, profile_id, manager_id, start_date, planned_end_date, actual_end_date,
-                 status, status_changed_at, notes, created_at, updated_at, profile_snapshot,
+                 status, status_changed_at, employment_info, characteristic, mentors_info, notes, created_at, updated_at, profile_snapshot,
                  profile:profiles!interns_profile_id_fkey(id, full_name, email, phone, job_position, city, avatar_url, gender),
                  manager:profiles!interns_manager_id_fkey(id, full_name),
                  intern_disciplines(id, discipline_name, date, address, mentor_id, is_completed, notes, order_index, created_at,
@@ -2376,6 +2376,61 @@ const API = {
 
         async remove(id) {
             const { error } = await supabase.from('interns').delete().eq('id', id);
+            if (error) throw error;
+        },
+
+        async setEmploymentInfo(id, patch) {
+            // Merge patch into existing employment_info
+            const { data: cur, error: e1 } = await supabase.from('interns')
+                .select('employment_info').eq('id', id).single();
+            if (e1) throw e1;
+            const merged = { ...(cur.employment_info || {}), ...patch };
+            const { error: e2 } = await supabase.from('interns')
+                .update({ employment_info: merged }).eq('id', id);
+            if (e2) throw e2;
+        },
+
+        // Find intern record by profile_id (used before profile deletion to save terminated_at)
+        async getByProfileId(profileId) {
+            const { data, error } = await supabase.from('interns')
+                .select('id, status, employment_info, profile_snapshot')
+                .eq('profile_id', profileId)
+                .maybeSingle();
+            if (error) throw error;
+            return data;
+        },
+
+        // Find terminated/archived interns with no active profile, matching by email or full_name
+        async findBySnapshot(email, fullName) {
+            // interns where profile_id is null (archived/terminated) and snapshot matches
+            const { data, error } = await supabase.from('interns')
+                .select(`id, status, employment_info, profile_snapshot, start_date, actual_end_date,
+                         status_changed_at, notes,
+                         manager:profiles!interns_manager_id_fkey(id, full_name)`)
+                .is('profile_id', null)
+                .order('created_at', { ascending: false });
+            if (error) throw error;
+            if (!data?.length) return [];
+            const emailLow = (email || '').toLowerCase();
+            const nameLow  = (fullName || '').toLowerCase();
+            return data.filter(r => {
+                const s = r.profile_snapshot || {};
+                if (emailLow && s.email && s.email.toLowerCase() === emailLow) return true;
+                if (nameLow  && s.full_name && s.full_name.toLowerCase() === nameLow) return true;
+                return false;
+            });
+        },
+
+        // Restore intern record: link to new profile_id, clear terminated_at, record rehired_at
+        async restoreToProfile(internId, newProfileId) {
+            const today = new Date().toISOString().slice(0, 10);
+            const { data: cur } = await supabase.from('interns')
+                .select('employment_info').eq('id', internId).single();
+            const ei = { ...(cur?.employment_info || {}), rehired_at: today };
+            delete ei.terminated_at;
+            const { error } = await supabase.from('interns')
+                .update({ profile_id: newProfileId, employment_info: ei })
+                .eq('id', internId);
             if (error) throw error;
         },
 

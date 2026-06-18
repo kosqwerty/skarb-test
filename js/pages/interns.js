@@ -14,7 +14,7 @@
     _search: '',
     _currentInternId: null,
     _currentIntern: null,
-    _detailTab: 'info',    // 'info' | 'schedule'
+    _detailTab: 'info',    // 'info' | 'schedule' | 'characteristic' | 'mentors'
     _disciplines: [],
     _editingDisciplineId: null,
     _jobSettings: [],       // [{ job_position, training_days }]
@@ -38,6 +38,7 @@
         this._interns = [];
         this._canManage = AppState.isOwner();
         this._isManager = AppState.isManager();
+        this._loadFilters();
 
         UI.setBreadcrumb([{ label: 'Стажери' }]);
         this._injectStyles();
@@ -73,11 +74,7 @@
 
     // ── render ────────────────────────────────────────────────────────────────
     _render() {
-        if (this._isManager) {
-            this._renderManagerDashboard();
-        } else {
-            this._renderOwnerView();
-        }
+        this._renderOwnerView();
     },
 
     _renderOwnerView() {
@@ -85,7 +82,7 @@
         c.innerHTML = `
         <div class="in-page">
             <div class="in-header">
-                <div class="in-title"><i class="fa-solid fa-user-graduate"></i> Стажери</div>
+                <div class="in-title"><i class="fa-solid fa-user-graduate"></i> ${this._isManager ? 'Мої стажери' : 'Стажери'}</div>
                 <div class="in-header-actions">
                     ${AppState.isAdmin() ? `<button class="in-btn in-btn-access" onclick="InternsPage._recalcAllDates()" title="Перерахувати планові дати для всіх стажерів з порожньою датою"><i class="fa-solid fa-rotate"></i> Дати</button>
                     <button class="in-btn in-btn-access" onclick="InternsPage._fixJobPositions()" title="Додати префікс Стажер до посад"><i class="fa-solid fa-tag"></i> Посади</button>
@@ -98,12 +95,12 @@
             </div>
             <div class="in-tabs">
                 <button class="in-tab ${this._tab === 'list' ? 'in-tab-active' : ''}" onclick="InternsPage._switchTab('list')"><i class="fa-solid fa-list"></i> Список</button>
-                <button class="in-tab ${this._tab === 'analytics' ? 'in-tab-active' : ''}" onclick="InternsPage._switchTab('analytics')"><i class="fa-solid fa-chart-bar"></i> Аналітика HRD</button>
+                ${!this._isManager ? `<button class="in-tab ${this._tab === 'analytics' ? 'in-tab-active' : ''}" onclick="InternsPage._switchTab('analytics')"><i class="fa-solid fa-chart-bar"></i> Аналітика HRD</button>` : ''}
             </div>
             <div id="in-tab-content"></div>
         </div>`;
 
-        if (this._tab === 'list') this._renderList();
+        if (this._tab === 'list' || this._isManager) this._renderList();
         else this._renderAnalytics();
     },
 
@@ -127,29 +124,40 @@
         const managers = [...new Map(this._interns.filter(i => i.manager).map(i => [i.manager_id, i.manager?.full_name])).entries()];
 
         area.innerHTML = `
-        <div class="in-filters">
+        <div class="in-toolbar">
             <div class="in-search-wrap">
                 <i class="fa-solid fa-magnifying-glass in-search-icon"></i>
-                <input id="in-search" class="in-input in-search-input" placeholder="Пошук за ПІБ…" value="${Fmt.esc(this._search)}" oninput="InternsPage._onSearch(this.value)">
+                <input id="in-search" class="in-toolbar-input in-search-input" placeholder="Пошук за ПІБ…" value="${Fmt.esc(this._search)}" oninput="InternsPage._onSearch(this.value)">
             </div>
-            <select class="in-input in-select" onchange="InternsPage._filterChange('status', this.value)">
-                <option value="">Всі статуси</option>
-                <option value="active"    ${this._filterStatus==='active'    ? 'selected':''}>Навчаються</option>
-                <option value="completed" ${this._filterStatus==='completed' ? 'selected':''}>Завершили</option>
-                <option value="dropped"   ${this._filterStatus==='dropped'   ? 'selected':''}>Відмовились</option>
-            </select>
-            <select class="in-input in-select" onchange="InternsPage._filterChange('city', this.value)">
-                <option value="">Всі міста</option>
-                ${cities.map(c => `<option value="${Fmt.esc(c)}" ${this._filterCity===c?'selected':''}>${Fmt.esc(c)}</option>`).join('')}
-            </select>
-            <select class="in-input in-select" onchange="InternsPage._filterChange('manager', this.value)">
-                <option value="">Всі керівники</option>
-                ${managers.map(([id, name]) => `<option value="${id}" ${this._filterManager===id?'selected':''}>${Fmt.esc(name||'')}</option>`).join('')}
-            </select>
-        </div>
-        <div style="display:flex;justify-content:flex-end;margin-bottom:.4rem">
-            <button id="in-col-toggle-btn" class="in-btn in-btn-access" onclick="InternsPage._toggleColDropdown()" title="Налаштувати стовпці">
-                <i class="fa-solid fa-gear"></i> Стовпці
+            <div class="in-toolbar-divider"></div>
+            <div class="in-toolbar-filters">
+                <div class="in-filter-wrap in-filter-status${this._filterStatus ? ' in-filter-active' : ''}">
+                    <i class="fa-solid fa-circle-half-stroke in-filter-icon"></i>
+                    <select class="in-toolbar-select" onchange="InternsPage._filterChange('status', this.value)">
+                        <option value="">Всі статуси</option>
+                        <option value="active"    ${this._filterStatus==='active'    ? 'selected':''}>Навчаються</option>
+                        <option value="completed" ${this._filterStatus==='completed' ? 'selected':''}>Завершили</option>
+                        <option value="dropped"   ${this._filterStatus==='dropped'   ? 'selected':''}>Відмовились</option>
+                    </select>
+                </div>
+                <div class="in-filter-wrap in-filter-city${this._filterCity ? ' in-filter-active' : ''}">
+                    <i class="fa-solid fa-location-dot in-filter-icon"></i>
+                    <select class="in-toolbar-select" onchange="InternsPage._filterChange('city', this.value)">
+                        <option value="">Всі міста</option>
+                        ${cities.map(c => `<option value="${Fmt.esc(c)}" ${this._filterCity===c?'selected':''}>${Fmt.esc(c)}</option>`).join('')}
+                    </select>
+                </div>
+                ${!this._isManager ? `<div class="in-filter-wrap in-filter-manager${this._filterManager ? ' in-filter-active' : ''}">
+                    <i class="fa-solid fa-user-tie in-filter-icon"></i>
+                    <select class="in-toolbar-select" onchange="InternsPage._filterChange('manager', this.value)">
+                        <option value="">Всі керівники</option>
+                        ${managers.map(([id, name]) => `<option value="${id}" ${this._filterManager===id?'selected':''}>${Fmt.esc(name||'')}</option>`).join('')}
+                    </select>
+                </div>` : ''}
+            </div>
+            <div class="in-toolbar-divider"></div>
+            <button id="in-col-toggle-btn" class="in-btn in-btn-access in-col-btn" onclick="InternsPage._toggleColDropdown()" title="Налаштувати стовпці">
+                <i class="fa-solid fa-table-columns"></i><span>Стовпці</span>
             </button>
         </div>
         <div id="in-table-wrap"></div>`;
@@ -186,6 +194,7 @@
         { key: 'pct',     label: '% плану' },
     ],
     _colVisKey: 'in_col_vis',
+    _filtersKey: 'in_filters',
 
     _getColVis() {
         try {
@@ -279,6 +288,7 @@
         }
 
         wrap.innerHTML = `
+        <div class="in-table-scroll">
         <table class="in-table">
             <thead><tr>
                 <th data-col="name">ПІБ</th>
@@ -291,6 +301,7 @@
                 <th data-col="days"   ${!show('days')   ? 'style="display:none"' : ''}>Днів</th>
                 <th data-col="status" ${!show('status') ? 'style="display:none"' : ''}>Статус</th>
                 <th data-col="pct"    ${!show('pct')    ? 'style="display:none"' : ''}>% плану</th>
+                <th data-col="employ">Зайнятість</th>
                 ${this._canManage ? '<th></th>' : ''}
             </tr></thead>
             <tbody>
@@ -302,8 +313,9 @@
                 const days = (['dropped','completed'].includes(i.status) && i.start_date && endDate)
                     ? Math.round((new Date(endDate) - new Date(i.start_date)) / 86400000)
                     : null;
-                return `<tr class="in-tr${i.status === 'dropped' ? ' in-tr-dropped' : ''}" onclick="InternsPage._openDetail('${i.id}')">
-                    <td data-col="name"><div class="in-name-cell">${this._avatar(p)}<span>${Fmt.esc(p?.full_name || '—')}${!i.profile_id ? ' <span style="font-size:.7rem;color:var(--text-muted)">(архів)</span>' : ''}</span></div></td>
+                const isTerminated = i.status === 'dropped' || !!(i.employment_info && i.employment_info.terminated_at);
+                return `<tr class="in-tr${isTerminated ? ' in-tr-dropped' : ''}" onclick="InternsPage._openDetail('${i.id}')">
+                    <td data-col="name"><div class="in-name-cell">${this._avatar(p)}<span>${this._hl(p?.full_name || '—', this._search)}${!i.profile_id ? ' <span style="font-size:.7rem;color:var(--text-muted)">(архів)</span>' : ''}</span></div></td>
                     <td data-col="gender" ${!show('gender') ? 'style="display:none"' : ''} style="text-align:center;font-weight:600;color:var(--text-muted)">${p?.gender === 'male' ? 'Ч' : p?.gender === 'female' ? 'Ж' : '—'}</td>
                     <td data-col="city"   ${!show('city')   ? 'style="display:none"' : ''}>${Fmt.esc(p?.city || '—')}</td>
                     <td data-col="job"    ${!show('job')    ? 'style="display:none"' : ''}>${Fmt.esc(p?.job_position || '—')}</td>
@@ -313,26 +325,55 @@
                     <td data-col="days"   ${!show('days')   ? 'style="display:none"' : ''} style="text-align:center;color:var(--text-muted);font-size:.85rem">${days !== null ? days : '—'}</td>
                     <td data-col="status" ${!show('status') ? 'style="display:none"' : ''}>${this._statusBadge(i.status)}</td>
                     <td data-col="pct"    ${!show('pct')    ? 'style="display:none"' : ''}><div class="in-pct-wrap"><div class="in-pct-bar" style="width:${pct}%"></div><span>${pct}%</span></div></td>
-                    ${this._canManage ? `<td onclick="event.stopPropagation()">
-                        <button class="in-icon-btn" title="Редагувати" onclick="InternsPage._openEditModal('${i.id}')"><i class="fa-solid fa-pen"></i></button>
-                        <button class="in-icon-btn in-icon-btn-danger" title="Видалити" data-name="${Fmt.esc(i.profile?.full_name || '')}" onclick="InternsPage._deleteIntern('${i.id}', this.dataset.name)"><i class="fa-solid fa-trash"></i></button>
+                    <td data-col="employ">${this._employmentBadge(i)}</td>
+                    ${this._canManage ? `<td class="in-td-actions" onclick="event.stopPropagation()">
+                        <button class="in-icon-btn in-icon-btn-danger in-btn-del" title="Видалити" data-name="${Fmt.esc(i.profile?.full_name || '')}" onclick="InternsPage._deleteIntern('${i.id}', this.dataset.name)"><i class="fa-solid fa-trash"></i></button>
                     </td>` : ''}
                 </tr>`;
             }).join('')}
             </tbody>
-        </table>`;
+        </table>
+        </div>`;
         requestAnimationFrame(() => this._initTableResize(wrap.querySelector('.in-table')));
     },
 
     _onSearch(val) {
         this._search = val;
+        this._saveFilters();
         this._renderTable();
+    },
+
+    _hl(text, query) {
+        if (!query || !text) return Fmt.esc(text || '');
+        const q = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const parts = text.split(new RegExp(`(${q})`, 'gi'));
+        return parts.map((p, idx) => idx % 2 === 1 ? `<mark class="in-hl">${Fmt.esc(p)}</mark>` : Fmt.esc(p)).join('');
+    },
+
+    _loadFilters() {
+        try {
+            const saved = JSON.parse(localStorage.getItem(this._filtersKey) || '{}');
+            this._filterStatus  = saved.status  || '';
+            this._filterCity    = saved.city     || '';
+            this._filterManager = saved.manager  || (this._isManager ? AppState.profile.id : '');
+            this._search        = saved.search   || '';
+        } catch { this._filterStatus = this._filterCity = this._filterManager = this._search = ''; }
+    },
+
+    _saveFilters() {
+        localStorage.setItem(this._filtersKey, JSON.stringify({
+            status:  this._filterStatus,
+            city:    this._filterCity,
+            manager: this._filterManager,
+            search:  this._search,
+        }));
     },
 
     _filterChange(field, val) {
         if (field === 'status')  this._filterStatus = val;
         if (field === 'city')    this._filterCity = val;
         if (field === 'manager') this._filterManager = val;
+        this._saveFilters();
         this._renderTable();
     },
 
@@ -364,32 +405,37 @@
                 ${this._statCard('Відмовились', dropped, 'fa-user-xmark', '#ef4444')}
             </div>
             ${!list.length ? `<div class="in-empty"><i class="fa-solid fa-user-graduate fa-2x"></i><div>У вас немає стажерів</div></div>` : `
+            <div id="in-table-wrap"><div class="in-table-scroll">
             <table class="in-table">
                 <thead><tr>
                     <th>ПІБ</th>
                     <th>Дата початку</th>
-                    <th>Поточний етап</th>
                     <th>% плану</th>
                     <th>Дата випуску</th>
                     <th>Статус</th>
+                    <th>Зайнятість</th>
                 </tr></thead>
                 <tbody>
                 ${list.map(i => {
                     const discs = disciplines[i.id] || [];
                     const current = discs.find(d => !d.is_completed);
                     const pct = discs.length ? Math.round(discs.filter(d => d.is_completed).length / discs.length * 100) : 0;
-                    return `<tr class="in-tr" onclick="InternsPage._openDetail('${i.id}')">
-                        <td><div class="in-name-cell">${this._avatar(i.profile)}<span>${Fmt.esc(i.profile?.full_name || '—')}</span></div></td>
+                    const isTerm = i.status === 'dropped' || !!(i.employment_info && i.employment_info.terminated_at);
+                    return `<tr class="in-tr${isTerm ? ' in-tr-dropped' : ''}" onclick="InternsPage._openDetail('${i.id}')">
+                        <td><div class="in-name-cell">${this._avatar(i.profile)}<span>${this._hl(i.profile?.full_name || '—', this._search)}</span></div></td>
                         <td>${i.start_date ? Fmt.date(i.start_date) : '—'}</td>
-                        <td>${current ? Fmt.esc(current.discipline_name) : '<span style="color:var(--text-muted)">Всі виконані</span>'}</td>
                         <td><div class="in-pct-wrap"><div class="in-pct-bar" style="width:${pct}%"></div><span>${pct}%</span></div></td>
                         <td>${i.planned_end_date ? Fmt.date(i.planned_end_date) : '—'}</td>
                         <td>${this._statusBadge(i.status)}</td>
+                        <td>${this._employmentBadge(i)}</td>
                     </tr>`;
                 }).join('')}
                 </tbody>
-            </table>`}
+            </table>
+            </div></div>`}
         </div>`;
+
+        requestAnimationFrame(() => this._initTableResize(c.querySelector('#in-table-wrap .in-table')));
     },
 
     // ── Analytics tab ─────────────────────────────────────────────────────────
@@ -576,12 +622,18 @@
         const canEdit = this._canManage;
         mb.innerHTML = `
         <div class="in-detail-tabs">
-            <button class="in-detail-tab ${this._detailTab==='info'?'active':''}" onclick="InternsPage._switchDetailTabById('info','${intern.id}')">Інфо</button>
-            <button class="in-detail-tab ${this._detailTab==='schedule'?'active':''}" onclick="InternsPage._switchDetailTabById('schedule','${intern.id}')">Розклад <span class="in-disc-count">${this._disciplines.length}</span></button>
+            <button class="in-detail-tab ${this._detailTab==='info'?'active':''}" onclick="InternsPage._switchDetailTabById('info','${intern.id}')"><i class="fa-solid fa-circle-info"></i> Інфо</button>
+            <button class="in-detail-tab ${this._detailTab==='schedule'?'active':''}" onclick="InternsPage._switchDetailTabById('schedule','${intern.id}')"><i class="fa-solid fa-calendar-days"></i> Розклад <span class="in-disc-count">${this._disciplines.length}</span></button>
+            <button class="in-detail-tab ${this._detailTab==='characteristic'?'active':''}" onclick="InternsPage._switchDetailTabById('characteristic','${intern.id}')"><i class="fa-solid fa-star"></i> Характеристика</button>
+            <button class="in-detail-tab ${this._detailTab==='mentors'?'active':''}" onclick="InternsPage._switchDetailTabById('mentors','${intern.id}')"><i class="fa-solid fa-users"></i> Наставники</button>
+            ${(this._canManage || this._isManager) ? `<button class="in-detail-tab ${this._detailTab==='report'?'active':''}" onclick="InternsPage._switchDetailTabById('report','${intern.id}')"><i class="fa-solid fa-file-lines"></i> Звіт</button>` : ''}
         </div>
         <div id="in-detail-content"></div>`;
         if (this._detailTab === 'info') this._renderDetailInfo(intern);
-        else this._renderDetailSchedule(intern.id);
+        else if (this._detailTab === 'schedule') this._renderDetailSchedule(intern.id);
+        else if (this._detailTab === 'characteristic') this._renderDetailCharacteristic(intern);
+        else if (this._detailTab === 'mentors') this._renderDetailMentors(intern);
+        else if (this._detailTab === 'report') this._renderDetailReport(intern);
     },
 
     async _switchDetailTabById(tab, internId) {
@@ -597,35 +649,186 @@
     _renderDetailInfo(intern) {
         const dc = document.getElementById('in-detail-content');
         if (!dc) return;
-        const p = intern.profile || {};
-        const phone = p.phone ? `<a href="tel:${Fmt.esc(p.phone)}" style="color:var(--primary)">${Fmt.esc(p.phone)}</a>` : '—';
+        const p = intern.profile || intern.profile_snapshot || {};
+        const ei = intern.employment_info || {};
         const pct = this._calcPct(intern);
+        const phone = p.phone
+            ? `<a href="tel:${Fmt.esc(p.phone)}" class="idc-link">${Fmt.esc(p.phone)}</a>`
+            : '—';
+        const avatarUrl = p.avatar_url
+            ? `${APP_CONFIG.storagePublicUrl}/avatars/${p.avatar_url}`
+            : null;
+        const initials = Fmt.initials(p.full_name || '?');
+        const genderGrad = p.gender === 'female' ? '#ec4899,#8b5cf6'
+                         : p.gender === 'male'   ? '#3b82f6,#6366f1'
+                         :                         '#10b981,#0ea5e9';
+
+        const endLabel = intern.status === 'dropped' ? 'Дата відмови' : 'Фактичний випуск';
+        const endVal   = intern.actual_end_date
+            ? `<span style="color:${intern.status==='dropped'?'#ef4444':intern.status==='completed'?'#10b981':'var(--text-primary)'};font-weight:600">${Fmt.date(intern.actual_end_date)}</span>`
+            : '<span style="color:var(--text-muted)">—</span>';
+
         dc.innerHTML = `
-        <div class="in-info-grid">
-            <div class="in-info-row"><span class="in-info-label">ПІБ</span><span>${Fmt.esc(p.full_name||'—')}</span></div>
-            <div class="in-info-row"><span class="in-info-label">Місто</span><span>${Fmt.esc(p.city||'—')}</span></div>
-            <div class="in-info-row"><span class="in-info-label">Посада</span><span>${Fmt.esc(p.job_position||'—')}</span></div>
-            <div class="in-info-row"><span class="in-info-label">Телефон</span><span>${phone}</span></div>
-            <div class="in-info-row"><span class="in-info-label">Керівник</span><span>${Fmt.esc(intern.manager?.full_name||'—')}</span></div>
-            ${intern.group_number ? `<div class="in-info-row"><span class="in-info-label">№ групи</span><span>${Fmt.esc(intern.group_number)}</span></div>` : ''}
-            <div class="in-info-row"><span class="in-info-label">Початок</span><span>${intern.start_date ? Fmt.date(intern.start_date) : '—'}</span></div>
-            <div class="in-info-row"><span class="in-info-label">Плановий випуск</span><span>${intern.planned_end_date ? Fmt.date(intern.planned_end_date) : '—'}</span></div>
-            ${intern.status === 'dropped' ? `
-            <div class="in-info-row"><span class="in-info-label">Дата відмови</span><span style="color:#ef4444;font-weight:600">${intern.actual_end_date ? Fmt.date(intern.actual_end_date) : '—'}</span></div>
-            <div class="in-info-row"><span class="in-info-label">Статус</span><span style="display:flex;align-items:center;gap:.5rem">${this._statusBadge(intern.status)}</span></div>
-            ` : `
-            <div class="in-info-row"><span class="in-info-label">Фактичний випуск</span><span>${intern.actual_end_date ? Fmt.date(intern.actual_end_date) : '—'}</span></div>
-            <div class="in-info-row"><span class="in-info-label">Статус</span><span>${this._statusBadge(intern.status)}</span></div>
-            `}
-            <div class="in-info-row"><span class="in-info-label">% плану</span><span>
-                <div class="in-pct-wrap" style="max-width:160px"><div class="in-pct-bar" style="width:${pct}%"></div><span>${pct}%</span></div>
-            </span></div>
-            ${intern.notes ? `<div class="in-info-row in-info-full"><span class="in-info-label">Нотатки</span><span>${Fmt.esc(intern.notes)}</span></div>` : ''}
-        </div>
-        ${this._canManage ? `<div style="margin-top:1rem;display:flex;gap:.5rem;flex-wrap:wrap">
-            <button class="in-btn in-btn-primary" onclick="InternsPage._openEditModal('${intern.id}')"><i class="fa-solid fa-pen"></i> Редагувати</button>
-            ${intern.status === 'active' ? `<button class="in-btn in-btn-graduate" onclick="InternsPage._openGraduateModal('${intern.id}')"><i class="fa-solid fa-graduation-cap"></i> Випустити</button>` : ''}
-        </div>` : ''}`;
+        <div class="idc-wrap">
+            <div class="idc-hero">
+                <div class="idc-avatar-wrap">
+                    ${avatarUrl
+                        ? `<img src="${Fmt.safeUrl(avatarUrl)}" class="idc-avatar-img">`
+                        : `<div class="idc-avatar-initials" style="background:linear-gradient(135deg,${genderGrad})">${Fmt.esc(initials)}</div>`}
+                </div>
+                <div class="idc-hero-info">
+                    <div class="idc-hero-name">${Fmt.esc(p.full_name||'—')}</div>
+                    <div class="idc-hero-meta">
+                        ${p.job_position ? `<span><i class="fa-solid fa-briefcase"></i> ${Fmt.esc(p.job_position)}</span>` : ''}
+                        ${p.city ? `<span><i class="fa-solid fa-location-dot"></i> ${Fmt.esc(p.city)}</span>` : ''}
+                        ${intern.manager?.full_name ? `<span><i class="fa-solid fa-user-tie"></i> ${Fmt.esc(intern.manager.full_name)}</span>` : ''}
+                    </div>
+                    <div class="idc-hero-rows">
+                        <div class="idc-hero-row">
+                            <span class="idc-row-label">Навчання</span>
+                            ${intern.start_date ? `<span class="idc-date-chip"><i class="fa-regular fa-calendar"></i> ${Fmt.date(intern.start_date)}</span>` : ''}
+                            ${intern.planned_end_date ? `<span class="idc-date-arrow">→</span><span class="idc-date-chip"><i class="fa-solid fa-flag-checkered"></i> ${Fmt.date(intern.planned_end_date)}${(() => { const s = this._jobSettings.find(s => s.job_position === (intern.profile?.job_position||'')); return s?.training_days ? ` <span class="idc-date-days">${s.training_days} дн.</span>` : ''; })()}</span>` : ''}
+                            ${this._statusBadge(intern.status)}
+                        </div>
+                        ${(() => { const empl = this._employmentBadge(intern); return empl !== '—' ? `
+                        <div class="idc-hero-row">
+                            <span class="idc-row-label">Зайнятість</span>
+                            ${empl}
+                        </div>` : ''; })()}
+                    </div>
+                </div>
+            </div>
+
+            <div class="idc-progress-bar-wrap">
+                <div class="idc-progress-label"><span>Прогрес навчання</span><strong>${pct}%</strong></div>
+                <div class="idc-progress-track"><div class="idc-progress-fill" style="width:${pct}%"></div></div>
+            </div>
+
+            <div class="idc-fields">
+                <div class="idc-field">
+                    <div class="idc-field-label"><i class="fa-solid fa-phone"></i> Телефон</div>
+                    <div class="idc-field-val">${phone}</div>
+                </div>
+                <div class="idc-field">
+                    <div class="idc-field-label"><i class="fa-solid fa-flag-checkered"></i> ${Fmt.esc(endLabel)}</div>
+                    <div class="idc-field-val">${endVal}</div>
+                </div>
+                ${intern.group_number ? `<div class="idc-field">
+                    <div class="idc-field-label"><i class="fa-solid fa-users-line"></i> № групи</div>
+                    <div class="idc-field-val">${Fmt.esc(intern.group_number)}</div>
+                </div>` : ''}
+                ${intern.status === 'completed' && this._canManage ? `<div class="idc-field">
+                    <div class="idc-field-label"><i class="fa-solid fa-briefcase"></i> Працює з</div>
+                    <div class="idc-field-val" style="display:flex;align-items:center;gap:.4rem">
+                        ${(() => { const d = ei.employed_since || intern.actual_end_date || intern.planned_end_date || ''; const dur = this._monthsStr(d); return `${d ? Fmt.date(d) : '—'}${dur ? ` <span class="badge badge-success">${dur}</span>` : ''}`; })()}
+                        <button class="in-icon-btn" title="Змінити дату" onclick="InternsPage._editEmployedSince('${intern.id}')"><i class="fa-solid fa-pen" style="font-size:.65rem"></i></button>
+                    </div>
+                </div>` : ''}
+            </div>
+
+            ${intern.notes ? `<div class="idc-notes"><i class="fa-solid fa-note-sticky"></i> ${Fmt.esc(intern.notes)}</div>` : ''}
+
+            ${this._canManage ? `<div class="idc-actions">
+                <button id="idc-edit-btn" class="in-btn in-btn-primary" onclick="InternsPage._toggleInlineEdit('${intern.id}')"><i class="fa-solid fa-pen"></i> Редагувати</button>
+                ${intern.status === 'active' ? `<button class="in-btn in-btn-graduate" onclick="InternsPage._openGraduateModal('${intern.id}')"><i class="fa-solid fa-graduation-cap"></i> Випустити</button>` : ''}
+            </div>
+            <div id="idc-edit-form" style="display:none">
+                ${this._buildInlineEditForm(intern)}
+            </div>` : ''}
+        </div>`;
+    },
+
+    _toggleInlineEdit(internId) {
+        const form = document.getElementById('idc-edit-form');
+        const btn  = document.getElementById('idc-edit-btn');
+        if (!form) return;
+        const isOpen = form.style.display !== 'none';
+        form.style.display = isOpen ? 'none' : '';
+        this._editInline = !isOpen;
+        if (btn) {
+            btn.innerHTML = isOpen
+                ? '<i class="fa-solid fa-pen"></i> Редагувати'
+                : '<i class="fa-solid fa-xmark"></i> Скасувати';
+        }
+        if (!isOpen) form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    },
+
+    _buildInlineEditForm(intern) {
+        const profiles  = this._allProfiles;
+        const statusOpts = [
+            { v: 'active',    l: 'Навчається' },
+            { v: 'completed', l: 'Завершив' },
+            { v: 'dropped',   l: 'Відмовився' },
+        ];
+        return `
+        <div class="inf-form" style="margin-top:.5rem">
+            <input type="hidden" id="inf-profile" value="${intern.profile_id||''}">
+            <div class="inf-section">
+                <div class="inf-section-title"><i class="fa-solid fa-user"></i> Учасник</div>
+                <div class="inf-grid-2">
+                    <div class="inf-field">
+                        <label class="inf-label">Посада</label>
+                        <select id="inf-job" class="inf-select" onchange="InternsPage._onJobChange()">
+                            <option value="">— Обрати посаду —</option>
+                            ${this._jobSettings.map(s => `<option value="${Fmt.esc(s.job_position)}" data-job="${Fmt.esc(s.job_position)}" ${(intern.profile?.job_position||intern.profile_snapshot?.job_position||'')===s.job_position?'selected':''}>${Fmt.esc(s.job_position)}</option>`).join('')}
+                        </select>
+                        <span id="inf-job-hint" class="inf-hint">${(() => { const cur = intern.profile?.job_position||intern.profile_snapshot?.job_position||''; const s = this._jobSettings.find(s => s.job_position === cur); return s?.training_days ? s.training_days + ' днів навчання' : ''; })()}</span>
+                    </div>
+                    <div class="inf-field">
+                        <label class="inf-label">Керівник</label>
+                        <select id="inf-manager" class="inf-select">
+                            <option value="">— Без керівника —</option>
+                            ${profiles.map(p => `<option value="${p.id}" ${intern.manager_id===p.id?'selected':''}>${Fmt.esc(p.full_name)}</option>`).join('')}
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="inf-section">
+                <div class="inf-section-title"><i class="fa-solid fa-calendar-days"></i> Терміни</div>
+                <div class="inf-grid-2">
+                    <div class="inf-field">
+                        <label class="inf-label">Дата початку</label>
+                        <input id="inf-start" type="date" class="inf-input" value="${intern.start_date||''}" oninput="InternsPage._onFormDateChange()">
+                    </div>
+                    <div class="inf-field">
+                        <label class="inf-label" style="display:flex;align-items:center;justify-content:space-between">
+                            <span>Плановий випуск</span>
+                            <button type="button" class="inf-auto-btn" onclick="InternsPage._onFormDateChange(true)"><i class="fa-solid fa-rotate"></i> авто</button>
+                        </label>
+                        <input id="inf-end" type="date" class="inf-input" value="${intern.planned_end_date||''}">
+                    </div>
+                </div>
+            </div>
+            <div class="inf-section">
+                <div class="inf-section-title"><i class="fa-solid fa-circle-half-stroke"></i> Статус</div>
+                <div class="inf-grid-2">
+                    <div class="inf-field">
+                        <label class="inf-label">Поточний статус</label>
+                        <div class="inf-status-group">
+                            ${statusOpts.map(o => `<label class="inf-status-opt${(intern.status||'active')===o.v?' inf-status-opt-active':''}">
+                                <input type="radio" name="inf-status-radio" value="${o.v}" ${(intern.status||'active')===o.v?'checked':''} onchange="InternsPage._onStatusChange(this.value)" style="display:none">
+                                ${o.l}
+                            </label>`).join('')}
+                        </div>
+                        <input type="hidden" id="inf-status" value="${intern.status||'active'}">
+                    </div>
+                    <div id="inf-dropped-wrap" class="inf-field" style="${(intern.status||'active')==='dropped'?'':'display:none'}">
+                        <label class="inf-label">Дата відмови</label>
+                        <input id="inf-actual-end" type="date" class="inf-input" value="${intern.actual_end_date||''}">
+                    </div>
+                </div>
+            </div>
+            <div class="inf-section">
+                <div class="inf-section-title"><i class="fa-solid fa-note-sticky"></i> Нотатки</div>
+                <div class="inf-field">
+                    <textarea id="inf-notes" class="inf-textarea" rows="3" placeholder="Додаткова інформація…">${Fmt.esc(intern.notes||'')}</textarea>
+                </div>
+            </div>
+            <div style="display:flex;gap:.5rem;padding-top:.25rem">
+                <button class="in-btn in-btn-primary" onclick="InternsPage._saveIntern('${intern.id}')"><i class="fa-solid fa-floppy-disk"></i> Зберегти</button>
+                <button class="in-btn in-btn-access" onclick="InternsPage._toggleInlineEdit('${intern.id}')"><i class="fa-solid fa-xmark"></i> Скасувати</button>
+            </div>
+        </div>`;
     },
 
     _renderDetailSchedule(internId) {
@@ -677,6 +880,272 @@
         } catch (e) { Toast.error('Помилка', e.message); }
     },
 
+    _renderDetailCharacteristic(intern) {
+        const dc = document.getElementById('in-detail-content');
+        if (!dc) return;
+        const hasData = intern.characteristic && Object.keys(intern.characteristic).length > 0;
+        dc.innerHTML = `
+        <div class="in-stub-wrap">
+            <div class="in-stub-icon"><i class="fa-solid fa-star"></i></div>
+            <div class="in-stub-title">Характеристика</div>
+            <div class="in-stub-text">Розділ у розробці. Тут відображатиметься оцінка стажера, коментарі керівника та підсумкова характеристика.</div>
+            ${hasData ? `<pre class="in-stub-data">${Fmt.esc(JSON.stringify(intern.characteristic, null, 2))}</pre>` : ''}
+        </div>`;
+    },
+
+    _renderDetailMentors(intern) {
+        const dc = document.getElementById('in-detail-content');
+        if (!dc) return;
+        const list = Array.isArray(intern.mentors_info) ? intern.mentors_info : [];
+        dc.innerHTML = `
+        <div class="in-stub-wrap">
+            <div class="in-stub-icon"><i class="fa-solid fa-users"></i></div>
+            <div class="in-stub-title">Наставники</div>
+            <div class="in-stub-text">Розділ у розробці. Тут відображатиметься список наставників, закріплених за стажером, та їхні відгуки.</div>
+            ${list.length ? `<pre class="in-stub-data">${Fmt.esc(JSON.stringify(list, null, 2))}</pre>` : ''}
+        </div>`;
+    },
+
+    _renderDetailReport(intern) {
+        const dc = document.getElementById('in-detail-content');
+        if (!dc) return;
+        const p   = intern.profile || intern.profile_snapshot || {};
+        const ei  = intern.employment_info || {};
+        const chr = intern.characteristic || {};
+        const mentors = Array.isArray(intern.mentors_info) ? intern.mentors_info : [];
+        const discs   = this._disciplines;
+        const done    = discs.filter(d => d.is_completed).length;
+        const pct     = discs.length ? Math.round(done / discs.length * 100) : 0;
+
+        const managerName = intern.manager?.full_name || '—';
+        const periodStr   = [intern.start_date ? Fmt.date(intern.start_date) : null, intern.planned_end_date ? Fmt.date(intern.planned_end_date) : null].filter(Boolean).join(' — ') || '—';
+        const actualEnd   = intern.actual_end_date ? Fmt.date(intern.actual_end_date) : '—';
+        const emplSince   = ei.employed_since ? Fmt.date(ei.employed_since) : (intern.actual_end_date ? Fmt.date(intern.actual_end_date) : '—');
+        const months      = this._monthsStr(ei.employed_since || intern.actual_end_date || intern.planned_end_date || '');
+
+        const statusLabel = intern.status === 'completed' ? 'Завершив навчання' : intern.status === 'dropped' ? 'Відмовився від навчання' : 'Проходить навчання';
+        const statusColor = intern.status === 'completed' ? '#10b981' : intern.status === 'dropped' ? '#ef4444' : '#3b82f6';
+
+        const discRows = discs.map((d, i) => `
+            <tr>
+                <td>${i + 1}</td>
+                <td>${Fmt.esc(d.discipline_name)}</td>
+                <td>${d.date ? Fmt.date(d.date) : '—'}</td>
+                <td>${d.mentor?.full_name ? Fmt.esc(d.mentor.full_name) : '—'}</td>
+                <td style="text-align:center">${d.is_completed ? '<i class="fa-solid fa-circle-check" style="color:#10b981"></i>' : '<i class="fa-regular fa-circle" style="color:#94a3b8"></i>'}</td>
+            </tr>`).join('');
+
+        const mentorRows = mentors.length ? mentors.map(m => `
+            <div class="irp-mentor-row">
+                <div class="irp-mentor-name"><i class="fa-solid fa-chalkboard-user"></i> ${Fmt.esc(m.full_name || '—')}</div>
+                ${m.feedback ? `<div class="irp-mentor-feedback">${Fmt.esc(m.feedback)}</div>` : ''}
+            </div>`).join('') : `<div class="irp-empty">Наставників не призначено</div>`;
+
+        const chrSummary = chr.summary || '';
+        const chrRating  = chr.rating  ? String(chr.rating) : '';
+
+        dc.innerHTML = `
+        <div class="irp-wrap">
+            <div class="irp-topbar">
+                <div class="irp-topbar-title"><i class="fa-solid fa-file-lines"></i> Звіт по випуску стажера</div>
+                <button class="in-btn in-btn-primary" onclick="InternsPage._printReport('${intern.id}')"><i class="fa-solid fa-print"></i> Друк / PDF</button>
+            </div>
+
+            <div class="irp-header">
+                <div class="irp-header-left">
+                    <div class="irp-name">${Fmt.esc(p.full_name || '—')}</div>
+                    <div class="irp-meta-row"><i class="fa-solid fa-briefcase"></i> ${Fmt.esc(p.job_position || '—')}</div>
+                    <div class="irp-meta-row"><i class="fa-solid fa-location-dot"></i> ${Fmt.esc(p.city || '—')}</div>
+                    <div class="irp-meta-row"><i class="fa-solid fa-user-tie"></i> Керівник: ${Fmt.esc(managerName)}</div>
+                </div>
+                <div class="irp-header-right">
+                    <div class="irp-status-badge" style="background:${statusColor}20;color:${statusColor};border:1.5px solid ${statusColor}40">${Fmt.esc(statusLabel)}</div>
+                    <div class="irp-kpi-row"><span>Виконано дисциплін</span><strong>${done} / ${discs.length}</strong></div>
+                    <div class="irp-kpi-row"><span>Прогрес</span><strong>${pct}%</strong></div>
+                    <div class="irp-kpi-row"><span>Термін навчання</span><strong>${Fmt.esc(periodStr)}</strong></div>
+                    ${intern.actual_end_date ? `<div class="irp-kpi-row"><span>Фактичний випуск</span><strong style="color:${statusColor}">${Fmt.esc(actualEnd)}</strong></div>` : ''}
+                    ${intern.status === 'completed' ? `<div class="irp-kpi-row"><span>Працює з</span><strong>${Fmt.esc(emplSince)}${months ? ` · ${months}` : ''}</strong></div>` : ''}
+                </div>
+            </div>
+
+            <div class="irp-section">
+                <div class="irp-section-title"><i class="fa-solid fa-calendar-days"></i> Розклад навчання</div>
+                ${discs.length ? `
+                <div class="irp-progress-bar"><div class="irp-progress-fill" style="width:${pct}%"></div></div>
+                <table class="irp-table">
+                    <thead><tr><th>#</th><th>Дисципліна</th><th>Дата</th><th>Наставник</th><th>✓</th></tr></thead>
+                    <tbody>${discRows}</tbody>
+                </table>` : `<div class="irp-empty">Дисциплін немає</div>`}
+            </div>
+
+            <div class="irp-section">
+                <div class="irp-section-title"><i class="fa-solid fa-users"></i> Наставники</div>
+                <div class="irp-mentors">${mentorRows}</div>
+            </div>
+
+            <div class="irp-section">
+                <div class="irp-section-title"><i class="fa-solid fa-star"></i> Характеристика</div>
+                ${chrRating ? `<div class="irp-kpi-row" style="margin-bottom:.5rem"><span>Оцінка</span><strong>${Fmt.esc(chrRating)} / 5</strong></div>` : ''}
+                ${chrSummary
+                    ? `<div class="irp-chr-text">${Fmt.esc(chrSummary)}</div>`
+                    : `<div class="irp-empty">Характеристику ще не заповнено</div>`}
+                ${(this._canManage || this._isManager) ? `<button class="in-btn in-btn-access" style="margin-top:.75rem" onclick="InternsPage._editCharacteristic('${intern.id}')"><i class="fa-solid fa-pen"></i> Заповнити характеристику</button>` : ''}
+            </div>
+        </div>`;
+    },
+
+    _printReport(internId) {
+        const intern = this._currentIntern;
+        if (!intern) return;
+        const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        const p   = intern.profile || intern.profile_snapshot || {};
+        const ei  = intern.employment_info || {};
+        const chr = intern.characteristic || {};
+        const mentors = Array.isArray(intern.mentors_info) ? intern.mentors_info : [];
+        const discs   = this._disciplines;
+        const done    = discs.filter(d => d.is_completed).length;
+        const pct     = discs.length ? Math.round(done / discs.length * 100) : 0;
+        const managerName = intern.manager?.full_name || '—';
+        const periodStr   = [intern.start_date ? Fmt.date(intern.start_date) : null, intern.planned_end_date ? Fmt.date(intern.planned_end_date) : null].filter(Boolean).join(' — ') || '—';
+        const actualEnd   = intern.actual_end_date ? Fmt.date(intern.actual_end_date) : '—';
+        const emplSince   = ei.employed_since ? Fmt.date(ei.employed_since) : (intern.actual_end_date ? Fmt.date(intern.actual_end_date) : '—');
+        const months      = this._monthsStr(ei.employed_since || intern.actual_end_date || intern.planned_end_date || '');
+        const statusLabel = intern.status === 'completed' ? 'Завершив навчання' : intern.status === 'dropped' ? 'Відмовився від навчання' : 'Проходить навчання';
+        const statusColor = intern.status === 'completed' ? '#10b981' : intern.status === 'dropped' ? '#ef4444' : '#3b82f6';
+
+        const discRows = discs.map((d, i) => `
+            <tr>
+                <td>${i + 1}</td>
+                <td>${esc(d.discipline_name)}</td>
+                <td>${d.date ? Fmt.date(d.date) : '—'}</td>
+                <td>${d.mentor?.full_name ? esc(d.mentor.full_name) : '—'}</td>
+                <td style="text-align:center;font-size:1.1em">${d.is_completed ? '✓' : '○'}</td>
+            </tr>`).join('');
+
+        const mentorHtml = mentors.length
+            ? mentors.map(m => `<div style="margin-bottom:.5rem"><strong>${esc(m.full_name)}</strong>${m.feedback ? `<div style="color:#555;margin-top:.2rem">${esc(m.feedback).replace(/\n/g,'<br>')}</div>` : ''}</div>`).join('')
+            : '<i>Наставників не призначено</i>';
+
+        const chrHtml = chr.summary
+            ? `${chr.rating ? `<p><strong>Оцінка:</strong> ${chr.rating} / 5</p>` : ''}<p>${esc(chr.summary).replace(/\n/g,'<br>')}</p>`
+            : '<i>Характеристику ще не заповнено</i>';
+
+        const html = `<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<title>Звіт — ${(p.full_name||'Стажер').replace(/</g,'&lt;')}</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:system-ui,-apple-system,sans-serif; font-size:13px; color:#1e293b; padding:24px 32px; }
+  h1 { font-size:22px; margin-bottom:4px; }
+  .meta { color:#475569; margin-bottom:16px; font-size:12px; }
+  .badge { display:inline-block; padding:3px 10px; border-radius:20px; font-size:12px; font-weight:700; margin-bottom:12px; }
+  .kpi-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:16px; }
+  .kpi { border:1px solid #e2e8f0; border-radius:8px; padding:8px 12px; }
+  .kpi span { display:block; font-size:11px; color:#64748b; margin-bottom:2px; }
+  .kpi strong { font-size:15px; }
+  h2 { font-size:14px; font-weight:700; color:#374151; border-bottom:2px solid #e5e7eb; padding-bottom:4px; margin:16px 0 8px; }
+  table { width:100%; border-collapse:collapse; font-size:12px; margin-bottom:8px; }
+  th { background:#f8fafc; text-align:left; padding:6px 8px; border:1px solid #e2e8f0; font-weight:600; }
+  td { padding:5px 8px; border:1px solid #e2e8f0; }
+  tr:nth-child(even) td { background:#f8fafc; }
+  .prog { background:#e5e7eb; border-radius:4px; height:6px; margin-bottom:8px; }
+  .prog-fill { background:#10b981; height:6px; border-radius:4px; }
+  .section { margin-bottom:12px; }
+  @media print {
+    body { padding:16px; }
+    button { display:none; }
+  }
+</style>
+</head>
+<body>
+<h1>${esc(p.full_name||'—')}</h1>
+<div class="meta">
+  ${esc(p.job_position||'')}${p.city ? ' · ' + esc(p.city) : ''} · Керівник: ${esc(managerName)}
+</div>
+<div class="badge" style="background:${statusColor}20;color:${statusColor};border:1.5px solid ${statusColor}40">${esc(statusLabel)}</div>
+<div class="kpi-grid">
+  <div class="kpi"><span>Термін навчання</span><strong>${esc(periodStr)}</strong></div>
+  <div class="kpi"><span>Виконано дисциплін</span><strong>${done} / ${discs.length} (${pct}%)</strong></div>
+  ${intern.actual_end_date ? `<div class="kpi"><span>Фактичний випуск</span><strong style="color:${statusColor}">${actualEnd}</strong></div>` : '<div></div>'}
+  ${intern.status === 'completed' ? `<div class="kpi"><span>Працює з</span><strong>${emplSince}${months ? ' · ' + months : ''}</strong></div>` : '<div></div>'}
+</div>
+<div class="prog"><div class="prog-fill" style="width:${pct}%"></div></div>
+
+<h2>Розклад навчання</h2>
+<div class="section">
+${discs.length ? `<table>
+  <thead><tr><th>#</th><th>Дисципліна</th><th>Дата</th><th>Наставник</th><th>Виконано</th></tr></thead>
+  <tbody>${discRows}</tbody>
+</table>` : '<i>Дисциплін немає</i>'}
+</div>
+
+<h2>Наставники</h2>
+<div class="section">${mentorHtml}</div>
+
+<h2>Характеристика</h2>
+<div class="section">${chrHtml}</div>
+
+<div style="margin-top:24px;padding-top:12px;border-top:1px solid #e2e8f0;font-size:11px;color:#94a3b8">
+  Сформовано: ${Fmt.datetime(new Date())} · LMS Скарбниця
+</div>
+</body>
+</html>`;
+
+        const w = window.open('', '_blank', 'width=900,height=700');
+        if (!w) { Toast.warning('Заблоковано', 'Дозвольте спливаючі вікна для цього сайту'); return; }
+        w.document.write(html);
+        w.document.close();
+        w.focus();
+        setTimeout(() => w.print(), 400);
+    },
+
+    _editCharacteristic(internId) {
+        const intern = this._currentIntern;
+        if (!intern) return;
+        const chr = intern.characteristic || {};
+        const ratingOpts = [1,2,3,4,5].map(n =>
+            `<label style="cursor:pointer;display:inline-flex;align-items:center;gap:.3rem;margin-right:.5rem">
+                <input type="radio" name="chr-rating" value="${n}" ${chr.rating===n?'checked':''}> ${n}
+            </label>`).join('');
+        Modal.open({
+            title: '<i class="fa-solid fa-star"></i> Характеристика',
+            size: 'lg',
+            body: `
+            <div style="display:flex;flex-direction:column;gap:1rem">
+                <div>
+                    <label style="font-size:.8rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em">Оцінка (1–5)</label>
+                    <div style="margin-top:.4rem">${ratingOpts}</div>
+                </div>
+                <div>
+                    <label style="font-size:.8rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em">Коментар / підсумок</label>
+                    <textarea id="chr-summary" rows="6" style="width:100%;margin-top:.4rem;padding:.6rem;border:1.5px solid var(--border);border-radius:var(--radius-md);background:var(--bg-input,var(--bg-surface));color:var(--text-primary);font-size:.9rem;resize:vertical" placeholder="Опис успіхів, зауваження, рекомендації...">${Fmt.esc(chr.summary||'')}</textarea>
+                </div>
+            </div>`,
+            footer: `
+            <button class="btn btn-ghost btn-sm" onclick="Modal.close()">Скасувати</button>
+            <button class="btn btn-primary btn-sm" onclick="InternsPage._saveCharacteristic('${internId}')"><i class="fa-solid fa-floppy-disk"></i> Зберегти</button>`
+        });
+    },
+
+    async _saveCharacteristic(internId) {
+        const ratingEl = document.querySelector('input[name="chr-rating"]:checked');
+        const summary  = document.getElementById('chr-summary')?.value.trim() || '';
+        const rating   = ratingEl ? parseInt(ratingEl.value) : null;
+        const characteristic = {};
+        if (rating)   characteristic.rating  = rating;
+        if (summary)  characteristic.summary = summary;
+        try {
+            await API.interns.update(internId, { characteristic });
+            Toast.success('Збережено', 'Характеристику оновлено');
+            Modal.close();
+            // reload and re-render report tab
+            this._detailTab = 'report';
+            await this._switchDetailTabById('report', internId);
+        } catch (e) { Toast.error('Помилка', e.message); }
+    },
+
     _calcPct(intern) {
         const discs = intern._discsCache || intern.intern_disciplines;
         if (!discs || !discs.length) return 0;
@@ -685,6 +1154,7 @@
 
     // ── Add/Edit intern modal ─────────────────────────────────────────────────
     _internFormState: {},
+    _editInline: false,
 
     _openAddModal() {
         this._internFormState = {};
@@ -741,55 +1211,77 @@
             const profiles = this._allProfiles;
 
             const bodyHtml = `
-            <div class="in-form">
-                <div class="in-form-group">
-                    <label class="in-form-label">Стажер <span style="color:var(--danger)">*</span></label>
-                    <select id="inf-profile" class="in-input" onchange="InternsPage._onFormDateChange()">
-                        <option value="">— Обрати профіль —</option>
-                        ${profiles.map(p => `<option value="${p.id}" data-job="${Fmt.esc(p.job_position||'')}" ${intern.profile_id===p.id?'selected':''}>${Fmt.esc(p.full_name)} ${p.city?`(${Fmt.esc(p.city)})`:''}${p.job_position?` — ${Fmt.esc(p.job_position)}`:''}</option>`).join('')}
-                    </select>
-                </div>
-                <div class="in-form-group">
-                    <label class="in-form-label">Керівник</label>
-                    <select id="inf-manager" class="in-input">
-                        <option value="">— Без керівника —</option>
-                        ${profiles.map(p => `<option value="${p.id}" ${intern.manager_id===p.id?'selected':''}>${Fmt.esc(p.full_name)}</option>`).join('')}
-                    </select>
-                </div>
-                <div class="in-form-row">
-                    <div class="in-form-group">
-                        <label class="in-form-label">Дата початку</label>
-                        <input id="inf-start" type="date" class="in-input" value="${intern.start_date||''}" oninput="InternsPage._onFormDateChange()">
-                    </div>
-                    <div class="in-form-group">
-                        <label class="in-form-label" style="display:flex;align-items:center;justify-content:space-between">
-                            <span>Плановий випуск</span>
-                            <button type="button" style="background:none;border:none;cursor:pointer;color:var(--primary);font-size:.8rem;padding:0;display:flex;align-items:center;gap:.3rem" onclick="InternsPage._onFormDateChange(true)"><i class="fa-solid fa-rotate"></i> авто</button>
-                        </label>
-                        <input id="inf-end" type="date" class="in-input" value="${intern.planned_end_date||''}">
+            <div class="inf-form">
+                <div class="inf-section">
+                    <div class="inf-section-title"><i class="fa-solid fa-user"></i> Учасник</div>
+                    <div class="inf-grid-2">
+                        <div class="inf-field inf-field-full">
+                            <label class="inf-label">Стажер <span class="inf-required">*</span></label>
+                            <select id="inf-profile" class="inf-select" onchange="InternsPage._onFormDateChange()">
+                                <option value="">— Обрати профіль —</option>
+                                ${profiles.map(p => `<option value="${p.id}" data-job="${Fmt.esc(p.job_position||'')}" ${intern.profile_id===p.id?'selected':''}>${Fmt.esc(p.full_name)}${p.city?' ('+Fmt.esc(p.city)+')':''}${p.job_position?' — '+Fmt.esc(p.job_position):''}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="inf-field inf-field-full">
+                            <label class="inf-label">Керівник</label>
+                            <select id="inf-manager" class="inf-select">
+                                <option value="">— Без керівника —</option>
+                                ${profiles.map(p => `<option value="${p.id}" ${intern.manager_id===p.id?'selected':''}>${Fmt.esc(p.full_name)}</option>`).join('')}
+                            </select>
+                        </div>
                     </div>
                 </div>
-                <div class="in-form-group">
-                    <label class="in-form-label">Статус</label>
-                    <select id="inf-status" class="in-input" onchange="InternsPage._onStatusChange()">
-                        ${statusOpts.map(o => `<option value="${o.v}" ${(intern.status||'active')===o.v?'selected':''}>${o.l}</option>`).join('')}
-                    </select>
+
+                <div class="inf-section">
+                    <div class="inf-section-title"><i class="fa-solid fa-calendar-days"></i> Терміни</div>
+                    <div class="inf-grid-2">
+                        <div class="inf-field">
+                            <label class="inf-label">Дата початку</label>
+                            <input id="inf-start" type="date" class="inf-input" value="${intern.start_date||''}" oninput="InternsPage._onFormDateChange()">
+                        </div>
+                        <div class="inf-field">
+                            <label class="inf-label" style="display:flex;align-items:center;justify-content:space-between">
+                                <span>Плановий випуск</span>
+                                <button type="button" class="inf-auto-btn" onclick="InternsPage._onFormDateChange(true)"><i class="fa-solid fa-rotate"></i> авто</button>
+                            </label>
+                            <input id="inf-end" type="date" class="inf-input" value="${intern.planned_end_date||''}">
+                        </div>
+                    </div>
                 </div>
-                <div id="inf-dropped-wrap" class="in-form-group" style="${(intern.status||'active')==='dropped'?'':'display:none'}">
-                    <label class="in-form-label">Дата відмови</label>
-                    <input id="inf-actual-end" type="date" class="in-input" value="${intern.actual_end_date||''}">
+
+                <div class="inf-section">
+                    <div class="inf-section-title"><i class="fa-solid fa-circle-half-stroke"></i> Статус</div>
+                    <div class="inf-grid-2">
+                        <div class="inf-field">
+                            <label class="inf-label">Поточний статус</label>
+                            <div class="inf-status-group">
+                                ${statusOpts.map(o => `<label class="inf-status-opt${(intern.status||'active')===o.v?' inf-status-opt-active':''}">
+                                    <input type="radio" name="inf-status-radio" value="${o.v}" ${(intern.status||'active')===o.v?'checked':''} onchange="InternsPage._onStatusChange(this.value)" style="display:none">
+                                    ${o.l}
+                                </label>`).join('')}
+                            </div>
+                            <input type="hidden" id="inf-status" value="${intern.status||'active'}">
+                        </div>
+                        <div id="inf-dropped-wrap" class="inf-field" style="${(intern.status||'active')==='dropped'?'':'display:none'}">
+                            <label class="inf-label">Дата відмови</label>
+                            <input id="inf-actual-end" type="date" class="inf-input" value="${intern.actual_end_date||''}">
+                        </div>
+                    </div>
                 </div>
-                <div class="in-form-group">
-                    <label class="in-form-label">Нотатки</label>
-                    <textarea id="inf-notes" class="in-input" rows="3" style="resize:vertical">${Fmt.esc(intern.notes||'')}</textarea>
+
+                <div class="inf-section">
+                    <div class="inf-section-title"><i class="fa-solid fa-note-sticky"></i> Нотатки</div>
+                    <div class="inf-field">
+                        <textarea id="inf-notes" class="inf-textarea" rows="3" placeholder="Додаткова інформація про стажера…">${Fmt.esc(intern.notes||'')}</textarea>
+                    </div>
                 </div>
             </div>`;
 
             const footerHtml = `
-                <button class="btn btn-sm" style="background:linear-gradient(135deg,#8b5cf6,#6d28d9);color:#fff;border:none" onclick="InternsPage._saveIntern('${intern.id}')">
+                <button class="in-btn in-btn-primary" onclick="InternsPage._saveIntern('${intern.id}')">
                     <i class="fa-solid fa-floppy-disk"></i> Зберегти
                 </button>
-                <button class="btn btn-ghost btn-sm" onclick="InternsPage._flipBackToDetail('${intern.id}')"><i class="fa-solid fa-arrow-left"></i> Назад</button>`;
+                <button class="in-btn in-btn-access" onclick="InternsPage._flipBackToDetail('${intern.id}')"><i class="fa-solid fa-arrow-left"></i> Назад</button>`;
 
             this._flipModal(
                 bodyHtml,
@@ -886,7 +1378,15 @@
         if (!intern?.planned_end_date) requestAnimationFrame(() => this._onFormDateChange());
     },
 
-    _onStatusChange() {
+    _onStatusChange(val) {
+        if (val !== undefined) {
+            const hidden = document.getElementById('inf-status');
+            if (hidden) hidden.value = val;
+            document.querySelectorAll('.inf-status-opt').forEach(l => {
+                const v = l.querySelector('input')?.value;
+                l.classList.toggle('inf-status-opt-active', v === val);
+            });
+        }
         const status = document.getElementById('inf-status')?.value;
         const wrap   = document.getElementById('inf-dropped-wrap');
         const input  = document.getElementById('inf-actual-end');
@@ -903,15 +1403,33 @@
         }
     },
 
+    _onJobChange() {
+        const jobSel  = document.getElementById('inf-job');
+        const jobPos  = jobSel?.value || '';
+        const setting = this._jobSettings.find(s => s.job_position === jobPos);
+        // always force-recalculate end date when job changes
+        this._onFormDateChange(true);
+        // show training days hint
+        const hint = document.getElementById('inf-job-hint');
+        if (hint) {
+            hint.textContent = setting?.training_days ? `${setting.training_days} днів навчання` : '';
+        }
+    },
+
     _onFormDateChange(force = false) {
-        const profileSel = document.getElementById('inf-profile');
         const startInput = document.getElementById('inf-start');
         const endInput   = document.getElementById('inf-end');
-        if (!profileSel || !startInput || !endInput) return;
-        // don't overwrite manually set value unless force=true
+        if (!startInput || !endInput) return;
         if (!force && endInput.value) return;
-        const selectedOpt = profileSel.options[profileSel.selectedIndex];
-        const jobPosition = selectedOpt?.dataset.job || '';
+        // inline edit uses inf-job select; add modal uses inf-profile select
+        const jobSel     = document.getElementById('inf-job');
+        const profileSel = document.getElementById('inf-profile');
+        let jobPosition = '';
+        if (jobSel && jobSel.tagName === 'SELECT') {
+            jobPosition = jobSel.value;
+        } else if (profileSel && profileSel.tagName === 'SELECT') {
+            jobPosition = profileSel.options[profileSel.selectedIndex]?.dataset.job || '';
+        }
         const planned = this._calcPlannedEnd(jobPosition, startInput.value);
         if (planned) endInput.value = planned;
         else if (force) Toast.warning('Для цієї посади не встановлено кількість днів навчання');
@@ -925,6 +1443,7 @@
         const status      = Dom.val('inf-status');
         const notes       = Dom.val('inf-notes');
         const actualEnd   = Dom.val('inf-actual-end');
+        const jobPosition = (() => { const el = document.getElementById('inf-job'); return el?.tagName === 'SELECT' ? el.value : null; })();
 
         if (!profileId) { Toast.warning('Оберіть стажера'); return; }
 
@@ -944,8 +1463,16 @@
             Loader.show();
             if (internId) {
                 const prev = this._interns.find(i => i.id === internId);
-                const becomingDropped = status === 'dropped' && prev?.status !== 'dropped';
+                const becomingDropped   = status === 'dropped'   && prev?.status !== 'dropped';
+                const becomingCompleted = status === 'completed' && prev?.status !== 'completed';
                 await API.interns.update(internId, payload);
+                if (jobPosition && profileId) {
+                    await API.profiles.update(profileId, { job_position: jobPosition }).catch(() => {});
+                }
+                if (becomingCompleted) {
+                    const employedSince = payload.actual_end_date || new Date().toISOString().slice(0, 10);
+                    await API.interns.setEmploymentInfo(internId, { employed_since: employedSince }).catch(() => {});
+                }
                 if (becomingDropped && prev?.profile_id) {
                     try {
                         await API.interns.archiveDropped(internId);
@@ -956,11 +1483,29 @@
                 } else {
                     Toast.success('Збережено');
                 }
-                // If opened from detail modal — flip back instead of closing
+                // Inline edit inside detail card — just refresh the detail view
+                if (this._editInline) {
+                    this._editInline = false;
+                    await this._reload();
+                    const updated = this._interns.find(i => i.id === internId);
+                    if (updated) {
+                        this._currentIntern = updated;
+                        this._renderDetailBody(updated);
+                    }
+                    if (becomingCompleted) {
+                        this._openEmploymentSetupModal(updated || { id: internId });
+                    }
+                    return;
+                }
+                // If opened from detail modal via flip — flip back
                 if (this._editFromDetail) {
                     this._editFromDetail = false;
                     await this._reload();
                     await this._flipBackToDetail(internId);
+                    if (becomingCompleted) {
+                        const updated = this._interns.find(i => i.id === internId);
+                        this._openEmploymentSetupModal(updated || { id: internId });
+                    }
                     return;
                 }
             } else {
@@ -969,6 +1514,10 @@
             }
             Modal.close();
             await this._reload();
+            if (internId && becomingCompleted) {
+                const updated = this._interns.find(i => i.id === internId);
+                this._openEmploymentSetupModal(updated || { id: internId });
+            }
         } catch (e) { Toast.error('Помилка', e.message); }
         finally { Loader.hide(); }
     },
@@ -982,6 +1531,106 @@
             Toast.success('Видалено');
             await this._reload();
         } catch (e) { Toast.error('Помилка', e.message); }
+        finally { Loader.hide(); }
+    },
+
+    async _editEmployedSince(internId) {
+        const intern = this._interns.find(i => i.id === internId) || await API.interns.getById(internId);
+        const ei = intern.employment_info || {};
+        const current = ei.employed_since || intern.actual_end_date || intern.planned_end_date || '';
+        Modal.open({
+            title: '<i class="fa-solid fa-calendar-pen" style="color:#8b5cf6"></i> Дата виходу на посаду',
+            size: 'sm',
+            body: `
+            <div class="in-form-group">
+                <label class="in-form-label">Дата (коли приступив до роботи)</label>
+                <input id="emp-since-input" type="date" class="in-input" value="${current}">
+            </div>`,
+            footer: `
+            <button class="btn btn-sm btn-primary" onclick="InternsPage._saveEmployedSince('${internId}')">
+                <i class="fa-solid fa-floppy-disk"></i> Зберегти
+            </button>
+            <button class="btn btn-ghost btn-sm" onclick="Modal.close()">Скасувати</button>`
+        });
+    },
+
+    async _saveEmployedSince(internId) {
+        const date = Dom.val('emp-since-input');
+        if (!date) { Toast.warning('Вкажіть дату'); return; }
+        try {
+            Loader.show();
+            await API.interns.setEmploymentInfo(internId, { employed_since: date });
+            Modal.close();
+            await this._reload();
+            await this._flipBackToDetail(internId);
+        } catch(e) { Toast.error('Помилка', e.message); }
+        finally { Loader.hide(); }
+    },
+
+    // ── Employment setup modal (shown when status → completed) ────────────────
+    async _openEmploymentSetupModal(intern) {
+        const name = intern.profile?.full_name || intern.profile_snapshot?.full_name || '—';
+        let allDovs = [];
+        let locations = [];
+        try {
+            [allDovs, { data: locations }] = await Promise.all([
+                API.dovirenosti.getAll().catch(() => []),
+                supabase.from('locations').select('id, name').order('name').catch(() => ({ data: [] }))
+            ]);
+        } catch(_) {}
+
+        Modal.open({
+            title: `<i class="fa-solid fa-briefcase" style="color:#10b981"></i> ${Fmt.esc(name)} — приступив до роботи`,
+            size: 'lg',
+            body: `
+            <p style="margin:0 0 1rem;color:var(--text-muted);font-size:.875rem">
+                Вкажіть довіреності та локацію для нового співробітника, або пропустіть — налаштувати можна пізніше в картці.
+            </p>
+            <div class="in-form-group">
+                <label class="in-form-label">Довіреності (доступ до документів)</label>
+                <div id="emp-dov-list" style="display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.4rem">
+                    ${allDovs.map(d => `
+                    <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.82rem;padding:.3rem .6rem;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-raised)">
+                        <input type="checkbox" class="emp-dov-cb" value="${d.id}" style="accent-color:var(--primary)">
+                        ${Fmt.esc(d.name || d.title || d.id)}
+                    </label>`).join('') || '<span style="color:var(--text-muted);font-size:.82rem">Довіреностей не знайдено</span>'}
+                </div>
+            </div>
+            <div class="in-form-group" style="margin-top:1rem">
+                <label class="in-form-label">Локація (для змін у графіку)</label>
+                <select id="emp-location" class="in-input">
+                    <option value="">— Без локації —</option>
+                    ${(locations||[]).map(l => `<option value="${l.id}">${Fmt.esc(l.name)}</option>`).join('')}
+                </select>
+            </div>`,
+            footer: `
+            <button class="btn btn-sm" style="background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none"
+                onclick="InternsPage._applyEmploymentSetup('${intern.id}','${intern.profile_id||''}')">
+                <i class="fa-solid fa-check"></i> Зберегти
+            </button>
+            <button class="btn btn-ghost btn-sm" onclick="Modal.close()">Пропустити</button>`
+        });
+    },
+
+    async _applyEmploymentSetup(internId, profileId) {
+        const selectedDovIds = [...document.querySelectorAll('.emp-dov-cb:checked')].map(el => el.value);
+        const locationId = Dom.val('emp-location');
+        try {
+            Loader.show();
+            if (selectedDovIds.length && profileId) {
+                // Assign dovirenosti to the profile
+                const rows = selectedDovIds.map(dovId => ({ profile_id: profileId, dovirenost_id: dovId }));
+                await supabase.from('profile_dovirenosti').upsert(rows, { onConflict: 'profile_id,dovirenost_id' });
+            }
+            if (locationId && profileId) {
+                // Add to location assignments
+                await supabase.from('schedule_assignments')
+                    .upsert({ profile_id: profileId, location_id: locationId, is_primary: true },
+                             { onConflict: 'profile_id,location_id' });
+            }
+            Modal.close();
+            Toast.success('Налаштовано', 'Довіреності та локацію призначено');
+        } catch(e) { Toast.error('Помилка', e.message); }
         finally { Loader.hide(); }
     },
 
@@ -1263,9 +1912,39 @@
     },
 
     _statusBadge(status) {
-        const map = { active: ['badge-success', 'Навчається'], completed: ['badge-info', 'Завершив'], dropped: ['badge-danger', 'Відмовився'] };
+        const map = { active: ['badge-info', 'Навчається'], completed: ['badge-success', 'Завершив'], dropped: ['badge-danger', 'Відмовився'] };
         const [cls, label] = map[status] || ['badge-secondary', status];
         return `<span class="badge ${cls}">${label}</span>`;
+    },
+
+    _monthsStr(fromStr, toStr) {
+        if (!fromStr) return '';
+        const from = new Date(fromStr);
+        const to   = toStr ? new Date(toStr) : new Date();
+        const m = (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth());
+        if (m <= 0) return '';
+        return m === 1 ? '1 міс.' : `${m} міс.`;
+    },
+
+    _employmentBadge(intern) {
+        const ei = intern.employment_info || {};
+
+        if (ei.terminated_at) {
+            const sinceRaw = ei.employed_since || intern.actual_end_date || null;
+            const dur = this._monthsStr(sinceRaw, ei.terminated_at);
+            return `<span class="badge badge-danger">Звільнений ${Fmt.dateShort(ei.terminated_at)}${dur ? ` · ${dur}` : ''}</span>`;
+        }
+        if (intern.status === 'dropped') {
+            const date = intern.actual_end_date ? Fmt.dateShort(intern.actual_end_date) : '';
+            return `<span class="badge badge-danger">Відмовився${date ? ' ' + date : ''}</span>`;
+        }
+        if (intern.status === 'completed') {
+            const sinceRaw = ei.employed_since || intern.actual_end_date || intern.planned_end_date || null;
+            const since = sinceRaw ? Fmt.dateShort(sinceRaw) : '';
+            const dur = this._monthsStr(sinceRaw);
+            return `<span class="badge badge-success">Працює${since ? ' з ' + since : ''}${dur ? ' · ' + dur : ''}</span>`;
+        }
+        return '—';
     },
 
     _avatar(profile, size = 32) {
@@ -2058,7 +2737,7 @@
         try {
             const saved = JSON.parse(localStorage.getItem(this._tableColKey) || 'null');
             if (!Array.isArray(saved) || saved.length !== ths.length) return false;
-            ths.forEach((th, i) => { if (saved[i] >= 60) th.style.width = saved[i] + 'px'; });
+            ths.forEach((th, i) => { if (saved[i] >= 20) th.style.width = saved[i] + 'px'; });
             return true;
         } catch { return false; }
     },
@@ -2086,7 +2765,7 @@
                 handle.classList.add('active');
 
                 const onMove = e => {
-                    const w = Math.max(60, startW + e.clientX - startX);
+                    const w = Math.max(20, startW + e.clientX - startX);
                     th.style.width = w + 'px';
                 };
                 const onUp = () => {
@@ -2107,8 +2786,8 @@
         const s = document.createElement('style');
         s.id = 'in-styles';
         s.textContent = `
-.in-page { padding: 1.25rem; max-width: 1200px; }
-.in-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.25rem; flex-wrap:wrap; gap:.75rem; }
+.in-page { padding:1.25rem; display:flex; flex-direction:column; height:calc(100vh - 64px); box-sizing:border-box; overflow:hidden; }
+.in-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.25rem; flex-wrap:wrap; gap:.75rem; flex-shrink:0; }
 .in-title { font-size:1.25rem; font-weight:800; color:var(--text-primary); display:flex; align-items:center; gap:.5rem; }
 .in-title i { color:#8b5cf6; }
 .in-header-actions { display:flex; gap:.5rem; }
@@ -2116,22 +2795,53 @@
 .in-btn:hover { opacity:.88; }
 .in-btn-primary { background:linear-gradient(135deg,#8b5cf6,#6d28d9); color:#fff; box-shadow:0 3px 10px rgba(139,92,246,.3); }
 .in-btn-access { background:var(--bg-hover); color:var(--text-secondary); border:1px solid var(--border); }
-.in-tabs { display:flex; gap:.25rem; margin-bottom:1.25rem; border-bottom:1px solid var(--border); }
+.in-tabs { display:flex; gap:.25rem; margin-bottom:1.25rem; border-bottom:1px solid var(--border); flex-shrink:0; }
 .in-tab { padding:.55rem 1.1rem; background:none; border:none; border-bottom:2px solid transparent; color:var(--text-muted); font-size:.88rem; font-weight:600; cursor:pointer; transition:color .15s,border-color .15s; display:flex; align-items:center; gap:.4rem; margin-bottom:-1px; }
 .in-tab:hover { color:var(--text-primary); }
 .in-tab-active { color:#8b5cf6; border-bottom-color:#8b5cf6; }
-.in-filters { display:flex; gap:.6rem; flex-wrap:wrap; margin-bottom:1rem; }
+.in-toolbar { display:flex; align-items:center; gap:.4rem; background:var(--bg-surface); border:1px solid var(--border); border-radius:12px; padding:.35rem .45rem; margin-bottom:1rem; flex-wrap:wrap; flex-shrink:0; }
+.in-toolbar-divider { width:1px; height:22px; background:var(--border); flex-shrink:0; margin:0 .1rem; }
 .in-search-wrap { position:relative; flex:1; min-width:180px; }
-.in-search-icon { position:absolute; left:.7rem; top:50%; transform:translateY(-50%); color:var(--text-muted); font-size:.8rem; }
-.in-search-input { padding-left:2rem !important; }
-.in-input { width:100%; padding:.5rem .7rem; background:var(--bg-surface); border:1px solid var(--border); border-radius:8px; color:var(--text-primary); font-size:.875rem; outline:none; box-sizing:border-box; }
-.in-input:focus { border-color:#8b5cf6; box-shadow:0 0 0 3px color-mix(in srgb,#8b5cf6 15%,transparent); }
-.in-select { min-width:140px; flex:0 0 auto; cursor:pointer; }
-.in-table { width:100%; border-collapse:collapse; font-size:.875rem; table-layout:fixed; }
+.in-search-icon { position:absolute; left:.7rem; top:50%; transform:translateY(-50%); color:var(--text-muted); font-size:.8rem; pointer-events:none; }
+.in-search-input { padding-left:2.1rem !important; }
+.in-toolbar-input { width:100%; padding:.42rem .7rem; background:transparent; border:none; color:var(--text-primary); font-size:.875rem; outline:none; box-sizing:border-box; }
+.in-toolbar-filters { display:flex; align-items:center; gap:.3rem; flex-wrap:wrap; }
+.in-filter-wrap { position:relative; display:flex; align-items:center; border-radius:8px; border:1.5px solid transparent; transition:border-color .15s, background .15s; }
+.in-filter-icon { position:absolute; left:.55rem; top:50%; transform:translateY(-50%); font-size:.72rem; pointer-events:none; z-index:1; transition:color .15s; }
+.in-toolbar-select { padding:.38rem .7rem .38rem 1.75rem; background:transparent; border:none; border-radius:7px; color:var(--text-primary); font-size:.82rem; font-weight:500; outline:none; cursor:pointer; appearance:none; -webkit-appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='5' viewBox='0 0 9 5'%3E%3Cpath fill='%238b8b9a' d='M0 0l4.5 5L9 0z'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right .45rem center; padding-right:1.5rem; }
+
+/* status — violet */
+.in-filter-status { border-color:color-mix(in srgb,#8b5cf6 30%,transparent); background:color-mix(in srgb,#8b5cf6 8%,transparent); }
+.in-filter-status .in-filter-icon { color:#8b5cf6; }
+.in-filter-status .in-toolbar-select { color:#7c3aed; }
+.in-filter-status .in-toolbar-select:focus { outline:none; }
+.in-filter-status:focus-within { border-color:#8b5cf6; box-shadow:0 0 0 2px color-mix(in srgb,#8b5cf6 18%,transparent); }
+
+/* city — teal */
+.in-filter-city { border-color:color-mix(in srgb,#0ea5e9 30%,transparent); background:color-mix(in srgb,#0ea5e9 8%,transparent); }
+.in-filter-city .in-filter-icon { color:#0ea5e9; }
+.in-filter-city .in-toolbar-select { color:#0284c7; }
+.in-filter-city:focus-within { border-color:#0ea5e9; box-shadow:0 0 0 2px color-mix(in srgb,#0ea5e9 18%,transparent); }
+
+/* manager — amber */
+.in-filter-manager { border-color:color-mix(in srgb,#f59e0b 30%,transparent); background:color-mix(in srgb,#f59e0b 8%,transparent); }
+.in-filter-manager .in-filter-icon { color:#f59e0b; }
+.in-filter-manager .in-toolbar-select { color:#b45309; }
+.in-filter-manager:focus-within { border-color:#f59e0b; box-shadow:0 0 0 2px color-mix(in srgb,#f59e0b 18%,transparent); }
+
+/* active filter — stronger bg */
+.in-filter-active.in-filter-status { background:color-mix(in srgb,#8b5cf6 15%,transparent); border-color:#8b5cf6; }
+.in-filter-active.in-filter-city    { background:color-mix(in srgb,#0ea5e9 15%,transparent); border-color:#0ea5e9; }
+.in-filter-active.in-filter-manager { background:color-mix(in srgb,#f59e0b 15%,transparent); border-color:#f59e0b; }
+
+.in-col-btn { display:flex; align-items:center; gap:.4rem; padding:.38rem .75rem; font-size:.82rem; flex-shrink:0; }
+#in-tab-content { flex:1; display:flex; flex-direction:column; overflow:hidden; min-height:0; }
+#in-table-wrap { flex:1; display:flex; flex-direction:column; min-height:0; overflow:hidden; }
+.in-table-scroll { flex:1; overflow:auto; border-radius:10px; border:1px solid var(--border); min-height:0; }
+.in-table { width:100%; border-collapse:collapse; font-size:.875rem; table-layout:auto; min-width:700px; }
 .in-table thead tr { background:var(--bg-raised); }
-.in-table th { padding:.65rem .85rem; text-align:left; font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--text-muted); white-space:nowrap; position:relative; overflow:hidden; text-overflow:ellipsis; }
-.in-table td { padding:.65rem .85rem; border-bottom:1px solid var(--border); vertical-align:middle; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:0; }
-.in-table td.in-td-date { white-space:normal; word-break:break-word; }
+.in-table th { padding:.65rem .85rem; text-align:left; font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--text-muted); white-space:nowrap; position:relative; }
+.in-table td { padding:.65rem .85rem; border-bottom:1px solid var(--border); vertical-align:middle; white-space:nowrap; }
 .in-col-resizer { position:absolute; right:0; top:20%; bottom:20%; width:3px; cursor:col-resize; user-select:none; z-index:1; background:var(--border); border-radius:2px; transition:background .15s; }
 .in-col-resizer:hover, .in-col-resizer.active { background:#8b5cf6; }
 .in-tr { cursor:pointer; transition:background .12s; }
@@ -2139,12 +2849,16 @@
 .in-tr-dropped td { background:color-mix(in srgb,#ef4444 6%,transparent); }
 .in-tr-dropped:hover td { background:color-mix(in srgb,#ef4444 12%,transparent); }
 .in-name-cell { display:flex; align-items:center; gap:.6rem; }
+mark.in-hl { background:color-mix(in srgb,#f59e0b 35%,transparent); color:inherit; border-radius:2px; padding:0 1px; font-style:normal; }
 .in-pct-wrap { display:flex; align-items:center; gap:.5rem; min-width:100px; }
 .in-pct-bar { height:6px; border-radius:3px; background:linear-gradient(90deg,#8b5cf6,#6366f1); min-width:2px; }
 .in-pct-wrap span { font-size:.8rem; color:var(--text-muted); white-space:nowrap; }
 .in-icon-btn { background:none; border:none; cursor:pointer; padding:.3rem; border-radius:6px; color:var(--text-muted); transition:background .12s,color .12s; }
 .in-icon-btn:hover { background:var(--bg-hover); color:var(--text-primary); }
 .in-icon-btn-danger:hover { background:rgba(239,68,68,.1); color:#ef4444; }
+.in-td-actions { width:32px; text-align:center; }
+.in-btn-del { opacity:0; transition:opacity .15s; }
+.in-tr:hover .in-btn-del { opacity:1; }
 .in-empty { text-align:center; padding:4rem 2rem; color:var(--text-muted); display:flex; flex-direction:column; align-items:center; gap:.75rem; font-size:.9rem; }
 .in-stat-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:.85rem; margin-bottom:1.25rem; }
 .in-stat-card { background:var(--bg-surface); border:1px solid var(--border); border-radius:12px; padding:1rem 1.1rem; display:flex; align-items:center; gap:.85rem; }
@@ -2156,13 +2870,82 @@
 .in-chart-card { background:var(--bg-surface); border:1px solid var(--border); border-radius:12px; padding:1.1rem; }
 .in-chart-title { font-size:.82rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:.75rem; }
 .in-detail-tabs { display:flex; gap:.25rem; border-bottom:1px solid var(--border); margin-bottom:1rem; }
-.in-detail-tab { background:none; border:none; border-bottom:2px solid transparent; padding:.45rem .9rem; font-size:.85rem; font-weight:600; cursor:pointer; color:var(--text-muted); transition:color .12s,border-color .12s; margin-bottom:-1px; }
+.in-detail-tab { background:none; border:none; border-bottom:2px solid transparent; padding:.45rem .9rem; font-size:.85rem; font-weight:600; cursor:pointer; color:var(--text-muted); transition:color .12s,border-color .12s; margin-bottom:-1px; display:flex; align-items:center; gap:.35rem; }
 .in-detail-tab.active { color:#8b5cf6; border-bottom-color:#8b5cf6; }
+.in-stub-wrap { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.75rem; padding:3rem 1rem; text-align:center; }
+.in-stub-icon { width:56px; height:56px; border-radius:50%; background:color-mix(in srgb,#8b5cf6 12%,transparent); display:flex; align-items:center; justify-content:center; font-size:1.4rem; color:#8b5cf6; }
+.in-stub-title { font-size:1rem; font-weight:700; color:var(--text-primary); }
+.in-stub-text { font-size:.85rem; color:var(--text-muted); max-width:340px; line-height:1.5; }
+.in-stub-data { margin-top:.75rem; background:var(--bg-main,var(--bg-surface)); border:1px solid var(--border); border-radius:8px; padding:.75rem 1rem; font-size:.78rem; color:var(--text-muted); text-align:left; max-width:400px; overflow:auto; }
 .in-disc-count { background:var(--bg-raised); border-radius:10px; padding:.1rem .45rem; font-size:.75rem; margin-left:.3rem; }
+/* ── Report tab ─────────────────────────────────────────────────────────── */
+.irp-wrap { display:flex; flex-direction:column; gap:1.25rem; padding:.25rem 0; }
+.irp-topbar { display:flex; align-items:center; justify-content:space-between; }
+.irp-topbar-title { font-size:1rem; font-weight:700; color:var(--text-primary); display:flex; align-items:center; gap:.5rem; }
+.irp-header { display:flex; gap:1.5rem; background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:1rem 1.25rem; }
+.irp-header-left { flex:1; display:flex; flex-direction:column; gap:.35rem; }
+.irp-header-right { min-width:220px; display:flex; flex-direction:column; gap:.35rem; align-items:flex-end; }
+.irp-name { font-size:1.15rem; font-weight:700; color:var(--text-primary); }
+.irp-meta-row { font-size:.83rem; color:var(--text-muted); display:flex; align-items:center; gap:.4rem; }
+.irp-status-badge { padding:.3rem .9rem; border-radius:20px; font-size:.8rem; font-weight:700; margin-bottom:.25rem; }
+.irp-kpi-row { display:flex; gap:.5rem; align-items:baseline; font-size:.83rem; }
+.irp-kpi-row span { color:var(--text-muted); }
+.irp-kpi-row strong { color:var(--text-primary); font-weight:700; }
+.irp-section { }
+.irp-section-title { font-size:.85rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin-bottom:.75rem; display:flex; align-items:center; gap:.4rem; border-bottom:1px solid var(--border); padding-bottom:.4rem; }
+.irp-progress-bar { height:6px; background:var(--border); border-radius:3px; margin-bottom:.75rem; overflow:hidden; }
+.irp-progress-fill { height:6px; background:linear-gradient(90deg,#10b981,#34d399); border-radius:3px; transition:width .4s; }
+.irp-table { width:100%; border-collapse:collapse; font-size:.83rem; }
+.irp-table th { background:var(--bg-surface); padding:.45rem .6rem; text-align:left; border-bottom:2px solid var(--border); font-weight:700; font-size:.75rem; text-transform:uppercase; letter-spacing:.04em; color:var(--text-muted); }
+.irp-table td { padding:.4rem .6rem; border-bottom:1px solid var(--border); color:var(--text-primary); }
+.irp-table tr:last-child td { border-bottom:none; }
+.irp-empty { font-size:.85rem; color:var(--text-muted); font-style:italic; padding:.5rem 0; }
+.irp-mentors { display:flex; flex-direction:column; gap:.6rem; }
+.irp-mentor-row { background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--radius-md); padding:.65rem .9rem; }
+.irp-mentor-name { font-weight:600; font-size:.9rem; display:flex; align-items:center; gap:.4rem; color:var(--text-primary); }
+.irp-mentor-feedback { font-size:.83rem; color:var(--text-muted); margin-top:.3rem; line-height:1.5; }
+.irp-chr-text { font-size:.9rem; color:var(--text-primary); line-height:1.6; background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--radius-md); padding:.75rem 1rem; white-space:pre-wrap; }
 .in-info-grid { display:grid; grid-template-columns:1fr 1fr; gap:.6rem; }
 .in-info-full { grid-column:1/-1; }
 .in-info-row { display:flex; flex-direction:column; gap:.2rem; }
 .in-info-label { font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--text-muted); }
+
+/* ── Intern detail card (idc) ── */
+.idc-wrap { display:flex; flex-direction:column; gap:1.1rem; }
+.idc-hero { display:flex; align-items:flex-start; gap:1rem; background:var(--bg-raised); border-radius:12px; padding:1rem 1.1rem; }
+.idc-avatar-wrap { flex-shrink:0; }
+.idc-avatar-img { width:64px; height:64px; border-radius:50%; object-fit:cover; }
+.idc-avatar-initials { width:64px; height:64px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:1.4rem; font-weight:800; color:#fff; letter-spacing:-.5px; }
+.idc-hero-info { flex:1; min-width:0; }
+.idc-hero-name { font-size:1.05rem; font-weight:800; color:var(--text-primary); margin-bottom:.35rem; line-height:1.2; }
+.idc-hero-meta { display:flex; flex-wrap:wrap; gap:.5rem .9rem; font-size:.82rem; color:var(--text-muted); margin-bottom:.5rem; }
+.idc-hero-meta span { display:flex; align-items:center; gap:.3rem; }
+.idc-hero-meta i { font-size:.72rem; }
+.idc-hero-rows { display:flex; flex-direction:column; gap:.4rem; margin-top:.5rem; }
+.idc-hero-row { display:flex; align-items:center; gap:.4rem; flex-wrap:wrap; }
+.idc-row-label { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); min-width:68px; }
+.idc-date-chip { display:flex; align-items:center; gap:.28rem; font-size:.8rem; color:var(--text-secondary,var(--text-muted)); background:var(--bg-main,var(--bg-surface)); border:1px solid var(--border); border-radius:6px; padding:.14rem .45rem; white-space:nowrap; }
+.idc-date-chip i { font-size:.66rem; }
+.idc-date-arrow { color:var(--text-muted); font-size:.8rem; opacity:.5; }
+.idc-date-days { color:#8b5cf6; font-weight:700; font-size:.73rem; margin-left:.15rem; }
+
+.idc-progress-bar-wrap { background:var(--bg-raised); border-radius:10px; padding:.7rem 1rem; }
+.idc-progress-label { display:flex; justify-content:space-between; font-size:.8rem; color:var(--text-muted); margin-bottom:.45rem; }
+.idc-progress-label strong { color:var(--text-primary); }
+.idc-progress-track { height:8px; background:var(--border); border-radius:99px; overflow:hidden; }
+.idc-progress-fill { height:100%; background:linear-gradient(90deg,#8b5cf6,#6366f1); border-radius:99px; transition:width .4s ease; }
+
+.idc-fields { display:grid; grid-template-columns:1fr 1fr; gap:.55rem; }
+.idc-field { background:var(--bg-raised); border-radius:10px; padding:.6rem .85rem; }
+.idc-field-label { font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); margin-bottom:.25rem; display:flex; align-items:center; gap:.35rem; }
+.idc-field-label i { font-size:.65rem; }
+.idc-field-val { font-size:.9rem; color:var(--text-primary); font-weight:500; }
+.idc-link { color:#8b5cf6; text-decoration:none; }
+.idc-link:hover { text-decoration:underline; }
+
+.idc-notes { background:color-mix(in srgb,#f59e0b 10%,transparent); border:1px solid color-mix(in srgb,#f59e0b 30%,transparent); border-radius:10px; padding:.65rem .9rem; font-size:.85rem; color:var(--text-primary); display:flex; gap:.5rem; }
+.idc-notes i { color:#f59e0b; flex-shrink:0; margin-top:.1rem; }
+.idc-actions { display:flex; gap:.5rem; flex-wrap:wrap; padding-top:.25rem; }
 .in-disc-card { background:var(--bg-raised); border:1px solid var(--border); border-radius:10px; padding:.75rem 1rem; margin-bottom:.5rem; transition:border-color .15s; }
 .in-disc-done { border-color:rgba(16,185,129,.3); background:color-mix(in srgb,#10b981 5%,var(--bg-raised)); }
 .in-disc-header { display:flex; align-items:center; gap:.6rem; }
@@ -2179,6 +2962,27 @@
 .in-form-group { display:flex; flex-direction:column; gap:.35rem; }
 .in-form-row { display:grid; grid-template-columns:1fr 1fr; gap:.85rem; }
 .in-form-label { font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--text-muted); }
+
+/* ── inf- edit form ── */
+.inf-form { display:flex; flex-direction:column; gap:.75rem; }
+.inf-section { background:var(--bg-raised); border-radius:12px; padding:.85rem 1rem; display:flex; flex-direction:column; gap:.65rem; }
+.inf-section-title { font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#8b5cf6; display:flex; align-items:center; gap:.4rem; }
+.inf-section-title i { font-size:.7rem; }
+.inf-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:.65rem; }
+.inf-field { display:flex; flex-direction:column; gap:.3rem; }
+.inf-field-full { grid-column:1/-1; }
+.inf-label { font-size:.72rem; font-weight:600; color:var(--text-muted); letter-spacing:.02em; }
+.inf-required { color:#ef4444; }
+.inf-input,.inf-select,.inf-textarea { width:100%; padding:.45rem .65rem; background:var(--bg-surface); border:1.5px solid var(--border); border-radius:8px; color:var(--text-primary); font-size:.875rem; outline:none; box-sizing:border-box; transition:border-color .15s,box-shadow .15s; }
+.inf-input:focus,.inf-select:focus,.inf-textarea:focus { border-color:#8b5cf6; box-shadow:0 0 0 3px color-mix(in srgb,#8b5cf6 15%,transparent); }
+.inf-textarea { resize:vertical; font-family:inherit; }
+.inf-auto-btn { background:none; border:none; cursor:pointer; color:#8b5cf6; font-size:.75rem; padding:0; display:flex; align-items:center; gap:.25rem; font-weight:600; }
+.inf-auto-btn:hover { opacity:.75; }
+.inf-status-group { display:flex; gap:.4rem; flex-wrap:wrap; }
+.inf-status-opt { display:inline-flex; align-items:center; padding:.35rem .8rem; border-radius:20px; font-size:.8rem; font-weight:600; cursor:pointer; border:1.5px solid var(--border); color:var(--text-muted); background:var(--bg-surface); transition:all .15s; user-select:none; }
+.inf-status-opt:hover { border-color:#8b5cf6; color:#8b5cf6; }
+.inf-status-opt-active { background:color-mix(in srgb,#8b5cf6 12%,transparent); border-color:#8b5cf6; color:#7c3aed; }
+.inf-hint { font-size:12px; color:var(--text-muted); margin-top:4px; display:block; min-height:16px; }
 .in-viewer-row { display:flex; align-items:center; gap:.6rem; padding:.5rem 0; border-bottom:1px solid var(--border); }
 .in-viewer-row:last-child { border-bottom:none; }
 .badge-danger { background:rgba(239,68,68,.15); color:#ef4444; }
@@ -2192,3 +2996,4 @@
         document.head.appendChild(s);
     }
 };
+

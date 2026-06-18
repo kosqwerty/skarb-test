@@ -966,6 +966,7 @@
 
         const addLine = (key, hi5, hi4, hi3, lo) => {
             const s = criteria[key] || 0;
+            if (!s) return; // skip unrated criteria
             const base = s >= 5 ? hi5 : s >= 4 ? hi4 : s >= 3 ? hi3 : lo;
             const notes = (criteria[key + '_notes'] || '').trim();
             lines.push(notes ? `${base} ${notes}` : base);

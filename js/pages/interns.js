@@ -319,7 +319,7 @@
                     <td data-col="gender" ${!show('gender') ? 'style="display:none"' : ''} style="text-align:center;font-weight:600;color:var(--text-muted)">${p?.gender === 'male' ? 'Ч' : p?.gender === 'female' ? 'Ж' : '—'}</td>
                     <td data-col="city"   ${!show('city')   ? 'style="display:none"' : ''}>${Fmt.esc(p?.city || '—')}</td>
                     <td data-col="job"    ${!show('job')    ? 'style="display:none"' : ''}>${Fmt.esc(p?.job_position || '—')}</td>
-                    <td data-col="manager"${!show('manager')? 'style="display:none"' : ''}>${Fmt.esc(i.manager?.full_name || '—')}</td>
+                    <td data-col="manager"${!show('manager')? 'style="display:none"' : ''}>${Fmt.esc(i.manager?.full_name || this._allProfiles.find(p => p.id === i.profile?.manager_id)?.full_name || '—')}</td>
                     <td data-col="start"  ${!show('start')  ? 'style="display:none"' : ''} class="in-td-date">${i.start_date ? Fmt.date(i.start_date) : '—'}</td>
                     <td data-col="end"    ${!show('end')    ? 'style="display:none"' : ''} class="in-td-date">${endDate ? Fmt.date(endDate) : '—'}</td>
                     <td data-col="days"   ${!show('days')   ? 'style="display:none"' : ''} style="text-align:center;color:var(--text-muted);font-size:.85rem">${days !== null ? days : '—'}</td>
@@ -681,7 +681,7 @@
                     <div class="idc-hero-meta">
                         ${p.job_position ? `<span><i class="fa-solid fa-briefcase"></i> ${Fmt.esc(p.job_position)}</span>` : ''}
                         ${p.city ? `<span><i class="fa-solid fa-location-dot"></i> ${Fmt.esc(p.city)}</span>` : ''}
-                        ${intern.manager?.full_name ? `<span><i class="fa-solid fa-user-tie"></i> ${Fmt.esc(intern.manager.full_name)}</span>` : ''}
+                        ${(intern.manager?.full_name || this._allProfiles.find(p => p.id === intern.profile?.manager_id)?.full_name) ? `<span><i class="fa-solid fa-user-tie"></i> ${Fmt.esc(intern.manager?.full_name || this._allProfiles.find(p => p.id === intern.profile?.manager_id)?.full_name)}</span>` : ''}
                     </div>
                     <div class="idc-hero-rows">
                         <div class="idc-hero-row">
@@ -750,7 +750,10 @@
                 ? '<i class="fa-solid fa-pen"></i> Редагувати'
                 : '<i class="fa-solid fa-xmark"></i> Скасувати';
         }
-        if (!isOpen) form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        if (!isOpen) {
+            form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            requestAnimationFrame(() => this._onFormDateChange());
+        }
     },
 
     _buildInlineEditForm(intern) {
@@ -778,7 +781,7 @@
                         <label class="inf-label">Керівник</label>
                         <select id="inf-manager" class="inf-select">
                             <option value="">— Без керівника —</option>
-                            ${profiles.map(p => `<option value="${p.id}" ${intern.manager_id===p.id?'selected':''}>${Fmt.esc(p.full_name)}</option>`).join('')}
+                            ${profiles.map(p => `<option value="${p.id}" ${(intern.manager_id||intern.profile?.manager_id)===p.id?'selected':''}>${Fmt.esc(p.full_name)}</option>`).join('')}
                         </select>
                     </div>
                 </div>
@@ -788,14 +791,14 @@
                 <div class="inf-grid-2">
                     <div class="inf-field">
                         <label class="inf-label">Дата початку</label>
-                        <input id="inf-start" type="date" class="inf-input" value="${intern.start_date||''}" oninput="InternsPage._onFormDateChange()">
+                        <input id="inf-start" type="date" class="inf-input" value="${intern.start_date||''}" oninput="InternsPage._onFormDateChange(true)">
                     </div>
                     <div class="inf-field">
                         <label class="inf-label" style="display:flex;align-items:center;justify-content:space-between">
                             <span>Плановий випуск</span>
                             <button type="button" class="inf-auto-btn" onclick="InternsPage._onFormDateChange(true)"><i class="fa-solid fa-rotate"></i> авто</button>
                         </label>
-                        <input id="inf-end" type="date" class="inf-input" value="${intern.planned_end_date||''}">
+                        <input id="inf-end" type="date" class="inf-input" value="${(intern.planned_end_date && parseInt(intern.planned_end_date) >= 2020) ? intern.planned_end_date : ''}">
                     </div>
                 </div>
             </div>
@@ -835,34 +838,71 @@
         const dc = document.getElementById('in-detail-content');
         if (!dc) return;
         const discs = this._disciplines;
+        const intern = this._currentIntern;
+        const p = intern?.profile || intern?.profile_snapshot || {};
 
-        dc.innerHTML = `
-        <div id="in-disc-list">
-        ${!discs.length ? `<div class="in-empty" style="padding:2rem"><i class="fa-solid fa-calendar-days"></i><div>Дисциплін ще немає</div></div>` :
-        discs.map((d, idx) => `
-        <div class="in-disc-card ${d.is_completed ? 'in-disc-done' : ''}">
-            <div class="in-disc-header">
-                <div class="in-disc-order">${idx+1}</div>
-                <div class="in-disc-name">${Fmt.esc(d.discipline_name)}</div>
-                <div class="in-disc-actions">
-                    ${this._canManage ? `
-                    <button class="in-icon-btn" onclick="InternsPage._editDisc('${d.id}')" title="Редагувати"><i class="fa-solid fa-pen"></i></button>
-                    <button class="in-icon-btn in-icon-btn-danger" data-name="${Fmt.esc(d.discipline_name)}" onclick="InternsPage._deleteDisc('${d.id}', this.dataset.name)" title="Видалити"><i class="fa-solid fa-trash"></i></button>
-                    ` : ''}
-                    <button class="in-disc-check ${d.is_completed ? 'in-disc-check-done' : ''}" onclick="InternsPage._toggleDisc('${d.id}', ${d.is_completed}, '${internId}')" title="${d.is_completed ? 'Скасувати' : 'Відмітити виконаною'}">
+        const rows = discs.map((d, idx) => {
+            const isHoliday   = d.row_type === 'holiday';
+            const isHighlight = d.row_type === 'highlight';
+            const rowClass    = isHoliday ? 'isc-row-holiday' : isHighlight ? 'isc-row-highlight' : d.is_completed ? 'isc-row-done' : '';
+            if (isHoliday) {
+                return `<tr class="isc-row ${rowClass}">
+                    <td>${idx + 1}</td>
+                    <td>${d.date ? Fmt.date(d.date) : ''}</td>
+                    <td colspan="4" style="text-align:center;font-style:italic;color:var(--text-muted)">${Fmt.esc(d.discipline_name || 'Вихідний')}</td>
+                    <td style="text-align:center">
+                        ${this._canManage ? `<button class="in-icon-btn" onclick="InternsPage._editDisc('${d.id}')" title="Редагувати"><i class="fa-solid fa-pen"></i></button>
+                        <button class="in-icon-btn in-icon-btn-danger" data-name="${Fmt.esc(d.discipline_name)}" onclick="InternsPage._deleteDisc('${d.id}',this.dataset.name)" title="Видалити"><i class="fa-solid fa-trash"></i></button>` : ''}
+                    </td>
+                </tr>`;
+            }
+            return `<tr class="isc-row ${rowClass}">
+                <td class="isc-num">${idx + 1}</td>
+                <td class="isc-date">${d.date ? Fmt.date(d.date) : '—'}</td>
+                <td class="isc-hours">${Fmt.esc(d.hours || '')}</td>
+                <td class="isc-name">${Fmt.esc(d.discipline_name)}</td>
+                <td class="isc-place">${Fmt.esc(d.place || d.address || '')}</td>
+                <td class="isc-cabinet">${Fmt.esc(d.cabinet || '')}</td>
+                <td class="isc-actions">
+                    <button class="isc-done-btn ${d.is_completed ? 'isc-done-active' : ''}" onclick="InternsPage._toggleDisc('${d.id}',${d.is_completed},'${internId}')" title="${d.is_completed ? 'Скасувати' : 'Виконано'}">
                         <i class="fa-solid ${d.is_completed ? 'fa-circle-check' : 'fa-circle'}"></i>
                     </button>
-                </div>
+                    ${this._canManage ? `<button class="in-icon-btn" onclick="InternsPage._editDisc('${d.id}')" title="Редагувати"><i class="fa-solid fa-pen"></i></button>
+                    <button class="in-icon-btn in-icon-btn-danger" data-name="${Fmt.esc(d.discipline_name)}" onclick="InternsPage._deleteDisc('${d.id}',this.dataset.name)" title="Видалити"><i class="fa-solid fa-trash"></i></button>` : ''}
+                </td>
+            </tr>`;
+        }).join('');
+
+        dc.innerHTML = `
+        <div class="isc-wrap">
+            <div class="isc-header-block">
+                <div class="isc-header-title">Графік проходження навчання</div>
+                ${p.job_position ? `<div class="isc-header-sub">${Fmt.esc(p.job_position)}</div>` : ''}
+                ${intern?.manager?.full_name ? `<div class="isc-header-contact"><i class="fa-solid fa-user-tie"></i> ${Fmt.esc(intern.manager.full_name)}</div>` : ''}
             </div>
-            ${(d.date || d.address || d.mentor?.full_name) ? `<div class="in-disc-meta">
-                ${d.date ? `<span><i class="fa-regular fa-calendar"></i> ${Fmt.date(d.date)}</span>` : ''}
-                ${d.address ? `<span><i class="fa-solid fa-location-dot"></i> ${Fmt.esc(d.address)}</span>` : ''}
-                ${d.mentor?.full_name ? `<span><i class="fa-solid fa-chalkboard-user"></i> ${Fmt.esc(d.mentor.full_name)}</span>` : ''}
+            ${!discs.length
+                ? `<div class="in-empty" style="padding:2rem"><i class="fa-solid fa-calendar-days"></i><div>Дисциплін ще немає</div></div>`
+                : `<div class="isc-table-wrap">
+                <table class="isc-table">
+                    <thead>
+                        <tr>
+                            <th class="isc-num">№</th>
+                            <th class="isc-date">Дата</th>
+                            <th class="isc-hours">Години</th>
+                            <th class="isc-name">План навчання</th>
+                            <th class="isc-place">Місце</th>
+                            <th class="isc-cabinet">Каб.</th>
+                            <th class="isc-actions"></th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>`}
+            ${this._canManage ? `<div class="isc-footer-actions">
+                <button class="in-btn in-btn-primary" onclick="InternsPage._addDiscModal('${internId}')"><i class="fa-solid fa-plus"></i> Додати рядок</button>
+                <button class="in-btn in-btn-access" onclick="InternsPage._addHolidayRow('${internId}')"><i class="fa-solid fa-umbrella-beach"></i> Вихідний</button>
             </div>` : ''}
-            ${d.notes ? `<div class="in-disc-notes">${Fmt.esc(d.notes)}</div>` : ''}
-        </div>`).join('')}
-        </div>
-        ${this._canManage ? `<button class="in-btn in-btn-primary" style="margin-top:1rem" onclick="InternsPage._addDiscModal('${internId}')"><i class="fa-solid fa-plus"></i> Додати дисципліну</button>` : ''}`;
+        </div>`;
     },
 
     async _toggleDisc(discId, current, internId) {
@@ -880,17 +920,307 @@
         } catch (e) { Toast.error('Помилка', e.message); }
     },
 
+    _CRITERIA: [
+        { key: 'learning',   label: 'Навчаємість',                weight: 25, icon: 'fa-brain',
+          desc: 'Як швидко засвоює нову інформацію, чи ставить уточнюючі запитання, чи робить висновки з помилок, чи повторює одні й ті самі помилки.',
+          warn: 'Тривожний сигнал: пояснили 3–4 рази, а продовжує діяти по-старому.' },
+        { key: 'attention',  label: 'Уважність до деталей',        weight: 20, icon: 'fa-magnifying-glass',
+          desc: 'Чи звіряє IMEI, чи помічає дефекти техніки, чи перевіряє комплектацію, чи дотримується чек-листа повністю.',
+          warn: 'Помилка на дрібниці може коштувати компанії десятки тисяч гривень.' },
+        { key: 'honesty',    label: 'Чесність та відповідальність', weight: 20, icon: 'fa-handshake',
+          desc: 'Чи визнає свої помилки, чи намагається приховати недоліки, чи виконує завдання без постійного контролю.',
+          warn: 'Краще середній спеціаліст, який чесний, ніж талановитий, але схильний приховувати помилки.' },
+        { key: 'client',     label: 'Робота з клієнтом',            weight: 15, icon: 'fa-user-tie',
+          desc: 'Ввічливість, впевненість, вміння пояснювати рішення, вміння витримувати тиск клієнта.',
+          warn: 'Експерт продає не лише оцінку, а й довіру.' },
+        { key: 'logic',      label: 'Логічне мислення',             weight: 10, icon: 'fa-lightbulb',
+          desc: 'Реакція на нестандартні кейси: iPhone із заміненим дисплеєм, ноутбук вмикається через раз, підозріле клеймо на золоті.',
+          warn: 'Важливий не готовий відповідь, а хід міркувань.' },
+        { key: 'stress',     label: 'Стресостійкість',              weight:  5, icon: 'fa-shield-halved',
+          desc: 'Поведінка в умовах черги, кількох клієнтів одночасно, обмеженого часу на оцінку.',
+          warn: 'Деякі чудово навчаються в класі, але губляться у відділенні.' },
+        { key: 'speed',      label: 'Швидкість роботи',             weight:  5, icon: 'fa-gauge-high',
+          desc: 'Смартфон: 15–20 хв, ноутбук: 20–30 хв, оформлення договору: до 10 хв.',
+          warn: 'Спочатку якість — потім швидкість.' },
+    ],
+
+    _chrScoreLabel(s) {
+        return ['', 'Дуже низько', 'Нижче норми', 'Задовільно', 'Добре', 'Відмінно'][s] || '';
+    },
+
+    _chrScoreColor(s) {
+        return ['','#ef4444','#f97316','#eab308','#22c55e','#10b981'][s] || 'var(--text-muted)';
+    },
+
+    _generateCharText(criteria, internName) {
+        const name = internName || 'Стажер';
+        const lines = [];
+        const weighted = this._CRITERIA.reduce((sum, c) => {
+            const sc = criteria[c.key] || 0;
+            return sum + sc * c.weight;
+        }, 0) / 100;
+        const overall = Math.round(weighted * 10) / 10;
+
+        lines.push(`Характеристика на ${name}.`);
+        lines.push('');
+
+        const addLine = (key, hi5, hi4, hi3, lo) => {
+            const s = criteria[key] || 0;
+            const base = s >= 5 ? hi5 : s >= 4 ? hi4 : s >= 3 ? hi3 : lo;
+            const notes = (criteria[key + '_notes'] || '').trim();
+            lines.push(notes ? `${base} ${notes}` : base);
+        };
+
+        addLine('learning',
+            'Демонструє відмінну здатність до навчання: швидко засвоює матеріал, задає правильні запитання та робить висновки з помилок.',
+            'Навчається добре, засвоює матеріал без зайвих повторень.',
+            'Навчається задовільно, іноді потребує додаткових пояснень.',
+            'Засвоєння матеріалу відбувається повільно, потребує постійного контролю.');
+
+        addLine('attention',
+            'Виявляє надзвичайну уважність до деталей: ретельно перевіряє комплектацію, IMEI та дефекти.',
+            'Достатньо уважний, зрідка пропускає дрібні деталі.',
+            'Уважність задовільна, деякі перевірки виконує не в повному обсязі.',
+            'Припускається помилок через неуважність, потребує додаткового контролю.');
+
+        addLine('honesty',
+            'Повністю відповідальний та чесний: визнає помилки, виконує завдання самостійно.',
+            'Відповідальний, здебільшого чесний у роботі.',
+            'Загалом чесний, проте іноді уникає відповідальності.',
+            'Мають місце випадки приховування помилок або недостатньої відповідальності.');
+
+        addLine('client',
+            'Відмінно працює з клієнтами: ввічливий, впевнений, витримує тиск.',
+            'Добре взаємодіє з клієнтами, рідко виникають труднощі.',
+            'Спілкування з клієнтами задовільне, є над чим попрацювати.',
+            'Відчуває труднощі у роботі з клієнтами, потребує розвитку комунікативних навичок.');
+
+        addLine('logic',
+            'Демонструє відмінне логічне мислення у нестандартних ситуаціях.',
+            'Добре справляється з нетиповими кейсами.',
+            'Логічне мислення на задовільному рівні.',
+            'Важко орієнтується у нестандартних ситуаціях.');
+
+        addLine('stress',
+            'Відмінно витримує стресові ситуації: черги, кілька клієнтів одночасно.',
+            'Добре справляється з навантаженням.',
+            'Стресостійкість задовільна, іноді потребує підтримки.',
+            'Важко переносить робоче навантаження та стресові ситуації.');
+
+        addLine('speed',
+            'Працює швидко без втрати якості.',
+            'Швидкість роботи відповідає нормі.',
+            'Темп роботи задовільний, є потенціал для прискорення.',
+            'Працює повільно, потребує відпрацювання швидкості.');
+
+        lines.push('');
+        const verdict = overall >= 4.5 ? 'Рекомендується до самостійної роботи.' :
+                        overall >= 3.5 ? 'Рекомендується продовжити навчання з подальшою оцінкою.' :
+                        overall >= 2.5 ? 'Потребує додаткової підготовки та контролю.' :
+                                         'Не рекомендується до самостійної роботи на даному етапі.';
+        lines.push(`Загальна зважена оцінка: ${overall.toFixed(1)} / 5.0. ${verdict}`);
+
+        return lines.join('\n');
+    },
+
     _renderDetailCharacteristic(intern) {
         const dc = document.getElementById('in-detail-content');
         if (!dc) return;
-        const hasData = intern.characteristic && Object.keys(intern.characteristic).length > 0;
+        const chr = intern.characteristic || {};
+        const criteria = chr.criteria || {};
+        const canEdit = AppState.isAdmin();
+        const p = intern.profile || intern.profile_snapshot || {};
+
+        const weighted = this._CRITERIA.reduce((sum, c) => sum + (criteria[c.key] || 0) * c.weight, 0) / 100;
+        const overall  = weighted > 0 ? Math.round(weighted * 10) / 10 : null;
+        const overallColor = overall >= 4 ? '#10b981' : overall >= 3 ? '#eab308' : overall ? '#ef4444' : 'var(--text-muted)';
+
+        const criteriaCards = this._CRITERIA.map(c => {
+            const score = criteria[c.key] || 0;
+            const stars = [1,2,3,4,5].map(n =>
+                `<button class="ichr-star ${n <= score ? 'ichr-star-on' : ''}" data-key="${c.key}" data-val="${n}" onclick="InternsPage._chrSetScore('${intern.id}','${c.key}',${n})" ${!canEdit?'disabled':''}>${n <= score ? '★' : '☆'}</button>`
+            ).join('');
+            return `
+            <div class="ichr-card" id="ichr-card-${c.key}">
+                <div class="ichr-card-header">
+                    <div class="ichr-card-title"><i class="fa-solid ${c.icon}"></i> ${c.label} <span class="ichr-weight">${c.weight}%</span></div>
+                    <div class="ichr-stars">${stars}</div>
+                    <div class="ichr-score-label" id="ichr-lbl-${c.key}" style="color:${this._chrScoreColor(score)}">${score ? this._chrScoreLabel(score) : ''}</div>
+                </div>
+                <div class="ichr-card-desc">${Fmt.esc(c.desc)}</div>
+                ${c.warn ? `<div class="ichr-warn"><i class="fa-solid fa-triangle-exclamation"></i> ${Fmt.esc(c.warn)}</div>` : ''}
+                ${canEdit ? `<textarea class="ichr-notes" id="ichr-notes-${c.key}" placeholder="Нотатки…" rows="2">${Fmt.esc(criteria[c.key + '_notes'] || '')}</textarea>` : (criteria[c.key + '_notes'] ? `<div class="ichr-notes-ro">${Fmt.esc(criteria[c.key + '_notes'])}</div>` : '')}
+            </div>`;
+        }).join('');
+
         dc.innerHTML = `
-        <div class="in-stub-wrap">
-            <div class="in-stub-icon"><i class="fa-solid fa-star"></i></div>
-            <div class="in-stub-title">Характеристика</div>
-            <div class="in-stub-text">Розділ у розробці. Тут відображатиметься оцінка стажера, коментарі керівника та підсумкова характеристика.</div>
-            ${hasData ? `<pre class="in-stub-data">${Fmt.esc(JSON.stringify(intern.characteristic, null, 2))}</pre>` : ''}
+        <div class="ichr-wrap">
+            ${overall !== null ? `
+            <div class="ichr-overall">
+                <div class="ichr-overall-label">Загальна оцінка</div>
+                <div class="ichr-overall-score" style="color:${overallColor}">${overall.toFixed(1)}<span style="font-size:.9rem;color:var(--text-muted)"> / 5.0</span></div>
+                <div class="ichr-overall-bar"><div class="ichr-overall-fill" style="width:${overall/5*100}%;background:${overallColor}"></div></div>
+            </div>` : ''}
+            ${canEdit ? `<div class="ichr-grid">${criteriaCards}</div>
+            <div class="ichr-actions">
+                <button class="in-btn in-btn-access" onclick="InternsPage._chrGenerate('${intern.id}')"><i class="fa-solid fa-wand-magic-sparkles"></i> Сформувати характеристику</button>
+                <button class="in-btn in-btn-primary" onclick="InternsPage._chrSave('${intern.id}')"><i class="fa-solid fa-floppy-disk"></i> Зберегти</button>
+            </div>
+            ${chr.summary ? `
+            <div class="ichr-summary-block">
+                <div class="ichr-summary-title"><i class="fa-solid fa-file-lines"></i> Сформована характеристика</div>
+                <textarea class="ichr-summary-text" id="ichr-summary" rows="8">${Fmt.esc(chr.summary)}</textarea>
+            </div>` : `<div id="ichr-summary-placeholder"></div>`}
+            ` : (chr.summary ? `
+            ${this._renderCharReadOnly(chr, intern)}` : `<div class="in-stub-wrap" style="padding:2rem"><div class="in-stub-icon"><i class="fa-solid fa-star"></i></div><div class="in-stub-title">Характеристику ще не заповнено</div></div>`)}
         </div>`;
+    },
+
+    _renderCharReadOnly(chr, intern) {
+        const criteria = chr.criteria || {};
+        const p = intern?.profile || intern?.profile_snapshot || {};
+        const weighted = this._CRITERIA.reduce((sum, c) => sum + (criteria[c.key] || 0) * c.weight, 0) / 100;
+        const overall  = Math.round(weighted * 10) / 10;
+        const overallColor = overall >= 4 ? '#10b981' : overall >= 3 ? '#eab308' : '#ef4444';
+        const verdict  = overall >= 4.5 ? 'Рекомендується до самостійної роботи.' :
+                         overall >= 3.5 ? 'Рекомендується продовжити навчання з подальшою оцінкою.' :
+                         overall >= 2.5 ? 'Потребує додаткової підготовки та контролю.' :
+                                          'Не рекомендується до самостійної роботи на даному етапі.';
+        const authorName = chr.author_name || this._allProfiles.find(p2 => p2.id === chr.author_id)?.full_name || '';
+
+        const byScore = (key, hi5, hi4, hi3, lo) => {
+            const s = criteria[key] || 0;
+            return s >= 5 ? hi5 : s >= 4 ? hi4 : s >= 3 ? hi3 : lo;
+        };
+        const texts = {
+            learning: byScore('learning','Демонструє відмінну здатність до навчання: швидко засвоює матеріал, задає правильні запитання та робить висновки з помилок.','Навчається добре, засвоює матеріал без зайвих повторень.','Навчається задовільно, іноді потребує додаткових пояснень.','Засвоєння матеріалу відбувається повільно, потребує постійного контролю.'),
+            attention: byScore('attention','Виявляє надзвичайну уважність до деталей: ретельно перевіряє комплектацію, IMEI та дефекти.','Достатньо уважний, зрідка пропускає дрібні деталі.','Уважність задовільна, деякі перевірки виконує не в повному обсязі.','Припускається помилок через неуважність, потребує додаткового контролю.'),
+            honesty:   byScore('honesty','Повністю відповідальний та чесний: визнає помилки, виконує завдання самостійно.','Відповідальний, здебільшого чесний у роботі.','Загалом чесний, проте іноді уникає відповідальності.','Мають місце випадки приховування помилок або недостатньої відповідальності.'),
+            client:    byScore('client','Відмінно працює з клієнтами: ввічливий, впевнений, витримує тиск.','Добре взаємодіє з клієнтами, рідко виникають труднощі.','Спілкування з клієнтами задовільне, є над чим попрацювати.','Відчуває труднощі у роботі з клієнтами, потребує розвитку комунікативних навичок.'),
+            logic:     byScore('logic','Демонструє відмінне логічне мислення у нестандартних ситуаціях.','Добре справляється з нетиповими кейсами.','Логічне мислення на задовільному рівні.','Важко орієнтується у нестандартних ситуаціях.'),
+            stress:    byScore('stress','Відмінно витримує стресові ситуації: черги, кілька клієнтів одночасно.','Добре справляється з навантаженням.','Стресостійкість задовільна, іноді потребує підтримки.','Важко переносить робоче навантаження та стресові ситуації.'),
+            speed:     byScore('speed','Працює швидко без втрати якості.','Швидкість роботи відповідає нормі.','Темп роботи задовільний, є потенціал для прискорення.','Працює повільно, потребує відпрацювання швидкості.'),
+        };
+
+        const criteriaRows = this._CRITERIA.map(c => {
+            const score = criteria[c.key] || 0;
+            if (!score) return '';
+            const notes = (criteria[c.key + '_notes'] || '').trim();
+            const color = this._chrScoreColor(score);
+            const stars = '★'.repeat(score) + '☆'.repeat(5 - score);
+            return `
+            <div class="ichr-ro-row">
+                <div class="ichr-ro-left">
+                    <div class="ichr-ro-icon" style="background:${color}20;color:${color}"><i class="fa-solid ${c.icon}"></i></div>
+                </div>
+                <div class="ichr-ro-body">
+                    <div class="ichr-ro-header">
+                        <span class="ichr-ro-label">${Fmt.esc(c.label)}</span>
+                        <span class="ichr-ro-stars" style="color:${color}">${stars}</span>
+                        <span class="ichr-ro-score-lbl" style="color:${color}">${this._chrScoreLabel(score)}</span>
+                        <span class="ichr-ro-weight">${c.weight}%</span>
+                    </div>
+                    <div class="ichr-ro-text">${Fmt.esc(texts[c.key])}${notes ? ` <span class="ichr-ro-note">${Fmt.esc(notes)}</span>` : ''}</div>
+                </div>
+            </div>`;
+        }).join('');
+
+        const verdictBg = overall >= 4 ? '#f0fdf4' : overall >= 3 ? '#fefce8' : '#fef2f2';
+        const verdictBorder = overall >= 4 ? '#bbf7d0' : overall >= 3 ? '#fde68a' : '#fecaca';
+
+        return `
+        <div class="ichr-ro-wrap">
+            <div class="ichr-ro-title-row">
+                <div>
+                    <div class="ichr-ro-name">Характеристика — ${Fmt.esc(p.full_name || '—')}</div>
+                    ${p.job_position ? `<div class="ichr-ro-pos">${Fmt.esc(p.job_position)}</div>` : ''}
+                </div>
+                <div class="ichr-ro-overall" style="color:${overallColor}">
+                    <div class="ichr-ro-overall-num">${overall.toFixed(1)}</div>
+                    <div class="ichr-ro-overall-sub">з 5.0</div>
+                </div>
+            </div>
+            <div class="ichr-ro-bar-wrap">
+                <div class="ichr-ro-bar-fill" style="width:${overall/5*100}%;background:${overallColor}"></div>
+            </div>
+            <div class="ichr-ro-rows">${criteriaRows}</div>
+            <div class="ichr-ro-verdict" style="background:${verdictBg};border-color:${verdictBorder}">
+                <i class="fa-solid fa-circle-info" style="color:${overallColor}"></i>
+                <span>${Fmt.esc(verdict)}</span>
+            </div>
+            <div class="ichr-summary-meta">
+                ${authorName ? `<span><i class="fa-solid fa-user-pen"></i> ${Fmt.esc(authorName)}</span>` : ''}
+                ${chr.updated_at ? `<span><i class="fa-regular fa-calendar"></i> ${Fmt.date(chr.updated_at)}</span>` : ''}
+            </div>
+        </div>`;
+    },
+
+    _chrSetScore(internId, key, val) {
+        const chr = this._currentIntern?.characteristic || {};
+        if (!chr.criteria) chr.criteria = {};
+        chr.criteria[key] = val;
+        if (this._currentIntern) this._currentIntern.characteristic = chr;
+
+        // update stars UI
+        document.querySelectorAll(`.ichr-star[data-key="${key}"]`).forEach(btn => {
+            const n = parseInt(btn.dataset.val);
+            btn.textContent = n <= val ? '★' : '☆';
+            btn.classList.toggle('ichr-star-on', n <= val);
+        });
+        const lbl = document.getElementById(`ichr-lbl-${key}`);
+        if (lbl) { lbl.textContent = this._chrScoreLabel(val); lbl.style.color = this._chrScoreColor(val); }
+
+        // recalc overall
+        const criteria = chr.criteria;
+        const weighted = this._CRITERIA.reduce((sum, c) => sum + (criteria[c.key] || 0) * c.weight, 0) / 100;
+        const overall  = Math.round(weighted * 10) / 10;
+        const overallColor = overall >= 4 ? '#10b981' : overall >= 3 ? '#eab308' : '#ef4444';
+        const scoreEl = document.querySelector('.ichr-overall-score');
+        const fillEl  = document.querySelector('.ichr-overall-fill');
+        const wrapEl  = document.querySelector('.ichr-overall');
+        if (scoreEl) { scoreEl.innerHTML = `${overall.toFixed(1)}<span style="font-size:.9rem;color:var(--text-muted)"> / 5.0</span>`; scoreEl.style.color = overallColor; }
+        if (fillEl)  { fillEl.style.width = `${overall/5*100}%`; fillEl.style.background = overallColor; }
+        if (!wrapEl && overall > 0) this._renderDetailCharacteristic(this._currentIntern);
+    },
+
+    _chrGenerate(internId) {
+        const chr = this._currentIntern?.characteristic || {};
+        const criteria = {};
+        // collect current scores + notes from DOM
+        this._CRITERIA.forEach(c => {
+            criteria[c.key] = chr.criteria?.[c.key] || 0;
+            criteria[c.key + '_notes'] = document.getElementById(`ichr-notes-${c.key}`)?.value.trim() || chr.criteria?.[c.key + '_notes'] || '';
+        });
+        const p = this._currentIntern?.profile || this._currentIntern?.profile_snapshot || {};
+        const text = this._generateCharText(criteria, p.full_name);
+
+        let summaryEl = document.getElementById('ichr-summary');
+        if (!summaryEl) {
+            const ph = document.getElementById('ichr-summary-placeholder');
+            if (ph) ph.outerHTML = `
+            <div class="ichr-summary-block">
+                <div class="ichr-summary-title"><i class="fa-solid fa-wand-magic-sparkles"></i> Сформована характеристика</div>
+                <textarea class="ichr-summary-text" id="ichr-summary" rows="8"></textarea>
+            </div>`;
+            summaryEl = document.getElementById('ichr-summary');
+        }
+        if (summaryEl) summaryEl.value = text;
+    },
+
+    async _chrSave(internId) {
+        const chr = this._currentIntern?.characteristic || {};
+        const criteriaData = {};
+        this._CRITERIA.forEach(c => {
+            criteriaData[c.key] = chr.criteria?.[c.key] || 0;
+            criteriaData[c.key + '_notes'] = document.getElementById(`ichr-notes-${c.key}`)?.value.trim() || '';
+        });
+        const summary = document.getElementById('ichr-summary')?.value.trim() || chr.summary || '';
+        const payload = { criteria: criteriaData, summary, updated_at: new Date().toISOString().slice(0,10), author_id: AppState.profile.id, author_name: AppState.profile.full_name };
+        try {
+            await API.interns.update(internId, { characteristic: payload });
+            if (this._currentIntern) this._currentIntern.characteristic = payload;
+            Toast.success('Збережено', 'Характеристику оновлено');
+        } catch(e) { Toast.error('Помилка', e.message); }
     },
 
     _renderDetailMentors(intern) {
@@ -941,8 +1271,7 @@
                 ${m.feedback ? `<div class="irp-mentor-feedback">${Fmt.esc(m.feedback)}</div>` : ''}
             </div>`).join('') : `<div class="irp-empty">Наставників не призначено</div>`;
 
-        const chrSummary = chr.summary || '';
-        const chrRating  = chr.rating  ? String(chr.rating) : '';
+        const hasChr = chr.summary || (chr.criteria && Object.values(chr.criteria).some(v => typeof v === 'number' && v > 0));
 
         dc.innerHTML = `
         <div class="irp-wrap">
@@ -985,11 +1314,10 @@
 
             <div class="irp-section">
                 <div class="irp-section-title"><i class="fa-solid fa-star"></i> Характеристика</div>
-                ${chrRating ? `<div class="irp-kpi-row" style="margin-bottom:.5rem"><span>Оцінка</span><strong>${Fmt.esc(chrRating)} / 5</strong></div>` : ''}
-                ${chrSummary
-                    ? `<div class="irp-chr-text">${Fmt.esc(chrSummary)}</div>`
+                ${hasChr
+                    ? this._renderCharReadOnly(chr, intern)
                     : `<div class="irp-empty">Характеристику ще не заповнено</div>`}
-                ${(this._canManage || this._isManager) ? `<button class="in-btn in-btn-access" style="margin-top:.75rem" onclick="InternsPage._editCharacteristic('${intern.id}')"><i class="fa-solid fa-pen"></i> Заповнити характеристику</button>` : ''}
+                ${AppState.isAdmin() ? `<button class="in-btn in-btn-access" style="margin-top:.75rem" onclick="InternsPage._switchDetailTabById('characteristic','${intern.id}')"><i class="fa-solid fa-pen"></i> Заповнити характеристику</button>` : ''}
             </div>
         </div>`;
     },
@@ -1226,7 +1554,7 @@ ${discs.length ? `<table>
                             <label class="inf-label">Керівник</label>
                             <select id="inf-manager" class="inf-select">
                                 <option value="">— Без керівника —</option>
-                                ${profiles.map(p => `<option value="${p.id}" ${intern.manager_id===p.id?'selected':''}>${Fmt.esc(p.full_name)}</option>`).join('')}
+                                ${profiles.map(p => `<option value="${p.id}" ${(intern.manager_id||intern.profile?.manager_id)===p.id?'selected':''}>${Fmt.esc(p.full_name)}</option>`).join('')}
                             </select>
                         </div>
                     </div>
@@ -1237,14 +1565,14 @@ ${discs.length ? `<table>
                     <div class="inf-grid-2">
                         <div class="inf-field">
                             <label class="inf-label">Дата початку</label>
-                            <input id="inf-start" type="date" class="inf-input" value="${intern.start_date||''}" oninput="InternsPage._onFormDateChange()">
+                            <input id="inf-start" type="date" class="inf-input" value="${intern.start_date||''}" oninput="InternsPage._onFormDateChange(true)">
                         </div>
                         <div class="inf-field">
                             <label class="inf-label" style="display:flex;align-items:center;justify-content:space-between">
                                 <span>Плановий випуск</span>
                                 <button type="button" class="inf-auto-btn" onclick="InternsPage._onFormDateChange(true)"><i class="fa-solid fa-rotate"></i> авто</button>
                             </label>
-                            <input id="inf-end" type="date" class="inf-input" value="${intern.planned_end_date||''}">
+                            <input id="inf-end" type="date" class="inf-input" value="${(intern.planned_end_date && parseInt(intern.planned_end_date) >= 2020) ? intern.planned_end_date : ''}">
                         </div>
                     </div>
                 </div>
@@ -1341,7 +1669,7 @@ ${discs.length ? `<table>
                 <div class="in-form-row">
                     <div class="in-form-group">
                         <label class="in-form-label">Дата початку</label>
-                        <input id="inf-start" type="date" class="in-input" value="${intern?.start_date||''}" oninput="InternsPage._onFormDateChange()">
+                        <input id="inf-start" type="date" class="in-input" value="${intern?.start_date||''}" oninput="InternsPage._onFormDateChange(true)">
                     </div>
                     <div class="in-form-group">
                         <label class="in-form-label" style="display:flex;align-items:center;justify-content:space-between">
@@ -1466,8 +1794,13 @@ ${discs.length ? `<table>
                 const becomingDropped   = status === 'dropped'   && prev?.status !== 'dropped';
                 const becomingCompleted = status === 'completed' && prev?.status !== 'completed';
                 await API.interns.update(internId, payload);
-                if (jobPosition && profileId) {
-                    await API.profiles.update(profileId, { job_position: jobPosition }).catch(() => {});
+                if (profileId) {
+                    const profileUpdate = {};
+                    if (jobPosition) profileUpdate.job_position = jobPosition;
+                    if (payload.manager_id !== undefined) profileUpdate.manager_id = payload.manager_id;
+                    if (Object.keys(profileUpdate).length) {
+                        await API.profiles.update(profileId, profileUpdate).catch(() => {});
+                    }
                 }
                 if (becomingCompleted) {
                     const employedSince = payload.actual_end_date || new Date().toISOString().slice(0, 10);
@@ -1741,61 +2074,114 @@ ${discs.length ? `<table>
 
     _renderDiscModal(internId, disc) {
         const profiles = this._allProfiles;
+        const rowType  = disc?.row_type || 'normal';
+        const placeOpts = ['УЦ','ЛФ','МАГ','ЛФ/МАГ','УЦ/ЛФ'].map(v =>
+            `<option value="${v}" ${(disc?.place||'')===v?'selected':''}>${v}</option>`).join('');
         Modal.open({
-            title: `<i class="fa-solid fa-calendar-days" style="color:#8b5cf6"></i> ${disc ? 'Редагування дисципліни' : 'Нова дисципліна'}`,
+            title: `<i class="fa-solid fa-calendar-days" style="color:#8b5cf6"></i> ${disc ? 'Редагування рядка' : 'Новий рядок'}`,
             size: 'lg',
             body: `
-            <div class="in-form">
-                <div class="in-form-group">
-                    <label class="in-form-label">Назва дисципліни <span style="color:var(--danger)">*</span></label>
-                    <input id="idf-name" class="in-input" placeholder="Назва" value="${Fmt.esc(disc?.discipline_name||'')}">
-                </div>
-                <div class="in-form-row">
-                    <div class="in-form-group">
-                        <label class="in-form-label">Дата</label>
-                        <input id="idf-date" type="date" class="in-input" value="${disc?.date||''}">
+            <div class="inf-form">
+                <div class="inf-section">
+                    <div class="inf-section-title"><i class="fa-solid fa-tag"></i> Тип рядка</div>
+                    <div class="inf-status-group" style="margin-bottom:.25rem">
+                        ${[['normal','Заняття'],['holiday','Вихідний'],['highlight','Важливе']].map(([v,l]) =>
+                            `<label class="inf-status-opt${rowType===v?' inf-status-opt-active':''}">
+                                <input type="radio" name="idf-rowtype" value="${v}" ${rowType===v?'checked':''} onchange="InternsPage._onDiscRowTypeChange(this.value)" style="display:none">${l}
+                            </label>`).join('')}
                     </div>
-                    <div class="in-form-group">
-                        <label class="in-form-label">Адреса</label>
-                        <input id="idf-address" class="in-input" placeholder="Адреса" value="${Fmt.esc(disc?.address||'')}">
+                    <input type="hidden" id="idf-rowtype" value="${rowType}">
+                </div>
+                <div class="inf-section">
+                    <div class="inf-section-title"><i class="fa-solid fa-book-open"></i> Інформація</div>
+                    <div class="inf-field inf-field-full">
+                        <label class="inf-label">Назва / тема <span class="inf-required">*</span></label>
+                        <input id="idf-name" class="inf-input" placeholder="Введіть назву…" value="${Fmt.esc(disc?.discipline_name||'')}">
+                    </div>
+                    <div class="inf-grid-2">
+                        <div class="inf-field">
+                            <label class="inf-label">Дата</label>
+                            <input id="idf-date" type="date" class="inf-input" value="${disc?.date||''}">
+                        </div>
+                        <div class="inf-field">
+                            <label class="inf-label">Години</label>
+                            <input id="idf-hours" class="inf-input" placeholder="08:00–17:00" value="${Fmt.esc(disc?.hours||'')}">
+                        </div>
+                    </div>
+                    <div class="inf-grid-2">
+                        <div class="inf-field">
+                            <label class="inf-label">Місце</label>
+                            <select id="idf-place" class="inf-select">
+                                <option value="">— Оберіть —</option>
+                                ${placeOpts}
+                                <option value="інше" ${!['УЦ','ЛФ','МАГ','ЛФ/МАГ','УЦ/ЛФ',''].includes(disc?.place||'')?'selected':''}>Інше…</option>
+                            </select>
+                        </div>
+                        <div class="inf-field">
+                            <label class="inf-label">Кабінет</label>
+                            <input id="idf-cabinet" class="inf-input" placeholder="№" value="${Fmt.esc(disc?.cabinet||'')}">
+                        </div>
                     </div>
                 </div>
-                <div class="in-form-group">
-                    <label class="in-form-label">Наставник</label>
-                    <select id="idf-mentor" class="in-input">
-                        <option value="">— Без наставника —</option>
-                        ${profiles.map(p => `<option value="${p.id}" ${disc?.mentor_id===p.id?'selected':''}>${Fmt.esc(p.full_name)}</option>`).join('')}
-                    </select>
+                <div class="inf-section">
+                    <div class="inf-section-title"><i class="fa-solid fa-chalkboard-user"></i> Наставник</div>
+                    <div class="inf-field inf-field-full">
+                        <select id="idf-mentor" class="inf-select">
+                            <option value="">— Без наставника —</option>
+                            ${profiles.map(p => `<option value="${p.id}" ${disc?.mentor_id===p.id?'selected':''}>${Fmt.esc(p.full_name)}</option>`).join('')}
+                        </select>
+                    </div>
                 </div>
-                <div class="in-form-group">
-                    <label class="in-form-label">Нотатки</label>
-                    <textarea id="idf-notes" class="in-input" rows="2" style="resize:vertical">${Fmt.esc(disc?.notes||'')}</textarea>
+                <div class="inf-section">
+                    <div class="inf-section-title"><i class="fa-solid fa-note-sticky"></i> Нотатки</div>
+                    <div class="inf-field inf-field-full">
+                        <textarea id="idf-notes" class="inf-textarea" rows="2" placeholder="Додаткова інформація…">${Fmt.esc(disc?.notes||'')}</textarea>
+                    </div>
                 </div>
             </div>`,
             footer: `
-            <button class="btn btn-sm" style="background:linear-gradient(135deg,#8b5cf6,#6d28d9);color:#fff;border:none" onclick="InternsPage._saveDisc('${internId}', ${disc ? `'${disc.id}'` : 'null'})">
+            <button class="btn btn-ghost btn-sm" onclick="InternsPage._backToDetail('${internId}')">Скасувати</button>
+            <button class="in-btn in-btn-primary" onclick="InternsPage._saveDisc('${internId}', ${disc ? `'${disc.id}'` : 'null'})">
                 <i class="fa-solid ${disc ? 'fa-floppy-disk' : 'fa-plus'}"></i> ${disc ? 'Зберегти' : 'Додати'}
-            </button>
-            <button class="btn btn-ghost btn-sm" onclick="InternsPage._backToDetail('${internId}')">Скасувати</button>`
+            </button>`
         });
+    },
+
+    _onDiscRowTypeChange(val) {
+        document.getElementById('idf-rowtype').value = val;
+        document.querySelectorAll('input[name="idf-rowtype"]').forEach(r => {
+            r.closest('label').classList.toggle('inf-status-opt-active', r.value === val);
+        });
+    },
+
+    _addHolidayRow(internId) {
+        this._editingDisciplineId = null;
+        const disc = { discipline_name: 'Вихідний', row_type: 'holiday' };
+        this._renderDiscModal(internId, disc);
     },
 
     async _saveDisc(internId, discId) {
         const name    = Dom.val('idf-name').trim();
         const date    = Dom.val('idf-date');
-        const address = Dom.val('idf-address').trim();
+        const hours   = Dom.val('idf-hours').trim();
+        const place   = Dom.val('idf-place');
+        const cabinet = Dom.val('idf-cabinet').trim();
         const mentor  = Dom.val('idf-mentor');
         const notes   = Dom.val('idf-notes').trim();
+        const rowType = document.getElementById('idf-rowtype')?.value || 'normal';
 
-        if (!name) { Toast.warning('Введіть назву дисципліни'); return; }
+        if (!name) { Toast.warning('Введіть назву'); return; }
 
         const payload = {
             intern_id:       internId,
             discipline_name: name,
             date:            date    || null,
-            address:         address || null,
+            hours:           hours   || null,
+            place:           place   || null,
+            cabinet:         cabinet || null,
             mentor_id:       mentor  || null,
             notes:           notes   || null,
+            row_type:        rowType,
             order_index:     discId ? (this._disciplines.find(d => d.id === discId)?.order_index ?? 0) : this._disciplines.length
         };
 
@@ -2878,6 +3264,91 @@ mark.in-hl { background:color-mix(in srgb,#f59e0b 35%,transparent); color:inheri
 .in-stub-text { font-size:.85rem; color:var(--text-muted); max-width:340px; line-height:1.5; }
 .in-stub-data { margin-top:.75rem; background:var(--bg-main,var(--bg-surface)); border:1px solid var(--border); border-radius:8px; padding:.75rem 1rem; font-size:.78rem; color:var(--text-muted); text-align:left; max-width:400px; overflow:auto; }
 .in-disc-count { background:var(--bg-raised); border-radius:10px; padding:.1rem .45rem; font-size:.75rem; margin-left:.3rem; }
+/* ── Characteristic tab ─────────────────────────────────────────────────── */
+.ichr-wrap { display:flex; flex-direction:column; gap:1rem; }
+.ichr-overall { background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:.85rem 1.1rem; display:flex; align-items:center; gap:1rem; }
+.ichr-overall-label { font-size:.8rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); flex-shrink:0; }
+.ichr-overall-score { font-size:1.6rem; font-weight:800; flex-shrink:0; min-width:80px; }
+.ichr-overall-bar { flex:1; height:8px; background:var(--border); border-radius:4px; overflow:hidden; }
+.ichr-overall-fill { height:8px; border-radius:4px; transition:width .4s,background .3s; }
+.ichr-grid { display:flex; flex-direction:column; gap:.65rem; }
+.ichr-card { background:var(--bg-surface); border:1.5px solid var(--border); border-radius:var(--radius-lg); padding:.85rem 1rem; display:flex; flex-direction:column; gap:.5rem; transition:border-color .2s; }
+.ichr-card:focus-within { border-color:#8b5cf640; }
+.ichr-card-header { display:flex; align-items:center; gap:.75rem; flex-wrap:wrap; }
+.ichr-card-title { font-size:.9rem; font-weight:700; color:var(--text-primary); display:flex; align-items:center; gap:.4rem; flex:1; }
+.ichr-card-title i { color:#8b5cf6; }
+.ichr-weight { font-size:.72rem; font-weight:600; color:var(--text-muted); background:var(--bg-raised); padding:.1rem .4rem; border-radius:6px; }
+.ichr-stars { display:flex; gap:.1rem; }
+.ichr-star { background:none; border:none; font-size:1.35rem; cursor:pointer; color:#d1d5db; line-height:1; padding:0 .1rem; transition:color .15s,transform .1s; }
+.ichr-star:hover,.ichr-star-on { color:#f59e0b; }
+.ichr-star:hover { transform:scale(1.2); }
+.ichr-star:disabled { cursor:default; }
+.ichr-star:disabled:hover { transform:none; }
+.ichr-score-label { font-size:.78rem; font-weight:700; min-width:80px; }
+.ichr-card-desc { font-size:.82rem; color:var(--text-muted); line-height:1.5; }
+.ichr-warn { font-size:.78rem; color:#f97316; background:#fff7ed; border:1px solid #fed7aa; border-radius:6px; padding:.35rem .6rem; display:flex; gap:.4rem; align-items:flex-start; }
+.ichr-notes { width:100%; margin-top:.1rem; padding:.45rem .6rem; border:1.5px solid var(--border); border-radius:8px; background:var(--bg-main,var(--bg-surface)); color:var(--text-primary); font-size:.82rem; resize:vertical; font-family:inherit; }
+.ichr-notes:focus { outline:none; border-color:#8b5cf6; }
+.ichr-notes-ro,.ichr-summary-ro { font-size:.85rem; color:var(--text-secondary); line-height:1.6; white-space:pre-wrap; }
+.ichr-summary-meta { display:flex; gap:1rem; font-size:.78rem; color:var(--text-muted); margin-top:.5rem; padding-top:.5rem; border-top:1px solid var(--border); }
+.ichr-summary-meta span { display:flex; align-items:center; gap:.3rem; }
+/* read-only characteristic view */
+.ichr-ro-wrap { display:flex; flex-direction:column; gap:.85rem; }
+.ichr-ro-title-row { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; }
+.ichr-ro-name { font-size:1rem; font-weight:800; color:var(--text-primary); }
+.ichr-ro-pos { font-size:.82rem; color:var(--text-muted); margin-top:.15rem; }
+.ichr-ro-overall { text-align:center; flex-shrink:0; }
+.ichr-ro-overall-num { font-size:2rem; font-weight:800; line-height:1; }
+.ichr-ro-overall-sub { font-size:.75rem; color:var(--text-muted); }
+.ichr-ro-bar-wrap { height:6px; background:var(--border); border-radius:3px; overflow:hidden; }
+.ichr-ro-bar-fill { height:6px; border-radius:3px; transition:width .4s; }
+.ichr-ro-rows { display:flex; flex-direction:column; gap:.5rem; }
+.ichr-ro-row { display:flex; gap:.75rem; align-items:flex-start; }
+.ichr-ro-left { flex-shrink:0; }
+.ichr-ro-icon { width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:.85rem; }
+.ichr-ro-body { flex:1; }
+.ichr-ro-header { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; margin-bottom:.2rem; }
+.ichr-ro-label { font-size:.82rem; font-weight:700; color:var(--text-primary); }
+.ichr-ro-stars { font-size:.8rem; letter-spacing:.05em; }
+.ichr-ro-score-lbl { font-size:.75rem; font-weight:600; }
+.ichr-ro-weight { font-size:.72rem; color:var(--text-muted); background:var(--bg-raised); padding:.1rem .35rem; border-radius:5px; margin-left:auto; }
+.ichr-ro-text { font-size:.83rem; color:var(--text-secondary); line-height:1.55; }
+.ichr-ro-note { color:var(--text-primary); font-style:italic; }
+.ichr-ro-verdict { display:flex; align-items:flex-start; gap:.5rem; font-size:.83rem; color:var(--text-primary); border:1px solid; border-radius:var(--radius-md); padding:.6rem .85rem; line-height:1.5; }
+.ichr-actions { display:flex; gap:.5rem; }
+.ichr-summary-block { background:var(--bg-surface); border:1.5px solid var(--border); border-radius:var(--radius-lg); padding:.85rem 1rem; display:flex; flex-direction:column; gap:.5rem; }
+.ichr-summary-title { font-size:.82rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); display:flex; align-items:center; gap:.4rem; }
+.ichr-summary-text { width:100%; padding:.6rem .75rem; border:1.5px solid var(--border); border-radius:8px; background:var(--bg-main,var(--bg-surface)); color:var(--text-primary); font-size:.85rem; resize:vertical; font-family:inherit; line-height:1.6; }
+.ichr-summary-text:focus { outline:none; border-color:#8b5cf6; }
+/* ── Schedule grid ──────────────────────────────────────────────────────── */
+.isc-wrap { display:flex; flex-direction:column; gap:.75rem; }
+.isc-header-block { background:linear-gradient(135deg,#8b5cf610,#6d28d908); border:1px solid #8b5cf630; border-radius:var(--radius-lg); padding:.85rem 1.1rem; text-align:center; }
+.isc-header-title { font-size:.95rem; font-weight:800; color:var(--text-primary); letter-spacing:.01em; }
+.isc-header-sub { font-size:.85rem; color:var(--text-secondary); margin-top:.2rem; }
+.isc-header-contact { font-size:.8rem; color:var(--text-muted); margin-top:.25rem; display:flex; align-items:center; justify-content:center; gap:.35rem; }
+.isc-table-wrap { border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; }
+.isc-table { width:100%; border-collapse:collapse; font-size:.83rem; table-layout:fixed; }
+.isc-table thead tr { background:var(--bg-raised); }
+.isc-table th { padding:.5rem .65rem; text-align:left; font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); border-bottom:2px solid var(--border); }
+.isc-table td { padding:.5rem .65rem; border-bottom:1px solid var(--border); vertical-align:middle; }
+.isc-table tr:last-child td { border-bottom:none; }
+.isc-num  { width:38px; text-align:center; color:var(--text-muted); font-size:.78rem; }
+.isc-date { width:105px; white-space:nowrap; color:var(--text-secondary); font-size:.8rem; }
+.isc-hours { width:110px; white-space:nowrap; font-weight:600; font-size:.8rem; color:var(--text-primary); }
+.isc-name { color:var(--text-primary); font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.isc-place { width:72px; text-align:center; font-weight:700; font-size:.8rem; color:#6d28d9; }
+.isc-cabinet { width:52px; text-align:center; font-size:.8rem; color:var(--text-muted); }
+.isc-actions { width:100px; text-align:right; white-space:nowrap; }
+.isc-row:hover td { background:var(--bg-hover); }
+.isc-row-holiday td { background:#f8fafc; color:var(--text-muted); font-style:italic; }
+.isc-row-holiday:hover td { background:#f1f5f9; }
+.isc-row-highlight td { background:#fefce8; }
+.isc-row-highlight:hover td { background:#fef9c3; }
+.isc-row-done td { opacity:.6; }
+.isc-done-btn { background:none; border:none; cursor:pointer; font-size:1rem; padding:.1rem .25rem; color:var(--text-muted); transition:color .15s; }
+.isc-done-btn:hover { color:#10b981; }
+.isc-done-active { color:#10b981 !important; }
+.isc-footer-actions { display:flex; gap:.5rem; }
 /* ── Report tab ─────────────────────────────────────────────────────────── */
 .irp-wrap { display:flex; flex-direction:column; gap:1.25rem; padding:.25rem 0; }
 .irp-topbar { display:flex; align-items:center; justify-content:space-between; }

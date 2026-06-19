@@ -2344,31 +2344,109 @@ ${discs.length ? `<table>
         const mb = document.querySelector('.modal-body');
         if (!mb) return;
         const viewerIds = new Set(viewers.map(v => v.profile_id));
-        const candidates = this._allProfiles.filter(p => !viewerIds.has(p.id) && p.id !== AppState.profile.id);
+        this._accessCandidates = this._allProfiles.filter(p => !viewerIds.has(p.id) && p.id !== AppState.profile.id);
+        this._accessSelectedId = null;
+
         mb.innerHTML = `
-        <div class="in-form-group" style="margin-bottom:1rem">
-            <label class="in-form-label">Додати профіль</label>
-            <div style="display:flex;gap:.5rem">
-                <select id="in-viewer-select" class="in-input" style="flex:1">
-                    <option value="">— Оберіть профіль —</option>
-                    ${candidates.map(p => `<option value="${p.id}">${Fmt.esc(p.full_name)}${p.city?` (${Fmt.esc(p.city)})`:''}</option>`).join('')}
-                </select>
-                <button class="in-btn in-btn-primary" onclick="InternsPage._addViewer()"><i class="fa-solid fa-plus"></i> Додати</button>
-            </div>
+        <style>
+        .iac-section-title{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin:1.25rem 0 .6rem}
+        .iac-search-wrap{position:relative;margin-bottom:.5rem}
+        .iac-search-icon{position:absolute;left:.75rem;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:.85rem;pointer-events:none}
+        .iac-search{width:100%;padding:.55rem .75rem .55rem 2.2rem;border:1.5px solid var(--border);border-radius:var(--radius-md);background:var(--bg-surface);color:var(--text-primary);font-size:.875rem;outline:none;box-sizing:border-box;transition:border-color .15s}
+        .iac-search:focus{border-color:var(--primary)}
+        .iac-dropdown{max-height:200px;overflow-y:auto;border:1.5px solid var(--border);border-radius:var(--radius-md);background:var(--bg-surface);display:none;margin-bottom:.75rem}
+        .iac-dropdown.open{display:block}
+        .iac-option{display:flex;align-items:center;gap:.6rem;padding:.5rem .75rem;cursor:pointer;transition:background .1s}
+        .iac-option:hover,.iac-option.selected{background:var(--bg-raised)}
+        .iac-option-name{font-weight:500;font-size:.875rem}
+        .iac-option-meta{font-size:.78rem;color:var(--text-muted)}
+        .iac-add-bar{display:flex;align-items:center;gap:.75rem;padding:.6rem .75rem;background:color-mix(in srgb,var(--primary) 6%,var(--bg-surface));border:1.5px solid color-mix(in srgb,var(--primary) 20%,var(--border));border-radius:var(--radius-md);margin-bottom:.75rem;display:none}
+        .iac-add-bar.visible{display:flex}
+        .iac-add-name{flex:1;font-weight:600;font-size:.875rem}
+        .iac-viewer-row{display:flex;align-items:center;gap:.6rem;padding:.55rem .5rem;border-radius:var(--radius-md);transition:background .1s}
+        .iac-viewer-row:hover{background:var(--bg-raised)}
+        .iac-viewer-name{flex:1;font-weight:500;font-size:.875rem}
+        .iac-viewer-meta{font-size:.78rem;color:var(--text-muted);white-space:nowrap}
+        .iac-empty{color:var(--text-muted);font-size:.875rem;padding:.75rem 0;text-align:center}
+        </style>
+
+        <div class="iac-section-title"><i class="fa-solid fa-plus"></i> Надати доступ</div>
+        <div class="iac-search-wrap">
+            <i class="fa-solid fa-magnifying-glass iac-search-icon"></i>
+            <input id="iac-search" class="iac-search" placeholder="Пошук за ПІБ або містом…" oninput="InternsPage._accessSearch(this.value)" onfocus="InternsPage._accessSearch(this.value)">
         </div>
-        <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);margin-bottom:.5rem">Поточний доступ</div>
-        ${!viewers.length ? `<div style="color:var(--text-muted);font-size:.875rem">Нікому не надано доступ</div>` :
-        viewers.map(v => `<div class="in-viewer-row">
-            ${this._avatar(v.profile, 28)}
-            <span style="flex:1">${Fmt.esc(v.profile?.full_name||'—')}</span>
-            <span style="font-size:.8rem;color:var(--text-muted)">${v.granted_at ? Fmt.date(v.granted_at) : ''}</span>
-            <button class="in-icon-btn in-icon-btn-danger" data-name="${Fmt.esc(v.profile?.full_name||'')}" onclick="InternsPage._removeViewer('${v.profile_id}', this.dataset.name)"><i class="fa-solid fa-xmark"></i></button>
-        </div>`).join('')}`;
+        <div id="iac-dropdown" class="iac-dropdown"></div>
+        <div id="iac-add-bar" class="iac-add-bar">
+            <div class="iac-add-name" id="iac-add-name"></div>
+            <button class="in-btn in-btn-primary" onclick="InternsPage._addViewer()"><i class="fa-solid fa-user-plus"></i> Додати</button>
+            <button class="in-btn" style="background:var(--bg-raised);border:1px solid var(--border)" onclick="InternsPage._accessClearSelection()"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div class="iac-section-title"><i class="fa-solid fa-users"></i> Поточний доступ <span style="font-weight:400;font-size:.85rem">(${viewers.length})</span></div>
+        <div id="iac-viewers-list">
+        ${!viewers.length ? `<div class="iac-empty">Нікому не надано доступ</div>` :
+        viewers.map(v => `<div class="iac-viewer-row">
+            ${this._avatar(v.profile, 32)}
+            <div style="flex:1;min-width:0">
+                <div class="iac-viewer-name">${Fmt.esc(v.profile?.full_name||'—')}</div>
+                <div class="iac-viewer-meta">${Fmt.esc(v.profile?.job_position||'')}${v.profile?.city?` · ${Fmt.esc(v.profile.city)}`:''}</div>
+            </div>
+            <div class="iac-viewer-meta">${v.granted_at ? Fmt.date(v.granted_at) : ''}</div>
+            <button class="in-icon-btn in-icon-btn-danger" data-name="${Fmt.esc(v.profile?.full_name||'')}" onclick="InternsPage._removeViewer('${v.profile_id}', this.dataset.name)" title="Відкликати доступ"><i class="fa-solid fa-xmark"></i></button>
+        </div>`).join('')}
+        </div>`;
+
+        // close dropdown on outside click
+        setTimeout(() => document.addEventListener('click', function h(e) {
+            if (!document.getElementById('iac-dropdown')?.contains(e.target) && e.target.id !== 'iac-search') {
+                document.getElementById('iac-dropdown')?.classList.remove('open');
+                document.removeEventListener('click', h);
+            }
+        }), 50);
+    },
+
+    _accessSearch(q) {
+        const dd = document.getElementById('iac-dropdown');
+        if (!dd) return;
+        const lq = q.toLowerCase();
+        const matches = this._accessCandidates.filter(p =>
+            (p.full_name||'').toLowerCase().includes(lq) ||
+            (p.city||'').toLowerCase().includes(lq) ||
+            (p.job_position||'').toLowerCase().includes(lq)
+        ).slice(0, 30);
+        dd.innerHTML = matches.length ? matches.map(p => `
+            <div class="iac-option" data-id="${p.id}" onclick="InternsPage._accessSelect('${p.id}',${JSON.stringify(p.full_name).replace(/"/g,'&quot;')})">
+                ${this._avatar(p, 28)}
+                <div>
+                    <div class="iac-option-name">${Fmt.esc(p.full_name)}</div>
+                    <div class="iac-option-meta">${Fmt.esc(p.job_position||'')}${p.city?` · ${Fmt.esc(p.city)}`:''}</div>
+                </div>
+            </div>`).join('')
+            : `<div style="padding:.75rem;color:var(--text-muted);font-size:.85rem;text-align:center">Нічого не знайдено</div>`;
+        dd.classList.toggle('open', q.length > 0 || matches.length > 0);
+    },
+
+    _accessSelect(id, name) {
+        this._accessSelectedId = id;
+        document.getElementById('iac-dropdown')?.classList.remove('open');
+        document.getElementById('iac-search').value = name;
+        const bar = document.getElementById('iac-add-bar');
+        const lbl = document.getElementById('iac-add-name');
+        if (bar) bar.classList.add('visible');
+        if (lbl) lbl.textContent = name;
+    },
+
+    _accessClearSelection() {
+        this._accessSelectedId = null;
+        const bar = document.getElementById('iac-add-bar');
+        if (bar) bar.classList.remove('visible');
+        const inp = document.getElementById('iac-search');
+        if (inp) { inp.value = ''; inp.focus(); }
     },
 
     async _addViewer() {
-        const profileId = Dom.val('in-viewer-select');
-        if (!profileId) { Toast.warning('Оберіть профіль'); return; }
+        const profileId = this._accessSelectedId;
+        if (!profileId) { Toast.warning('Оберіть профіль зі списку'); return; }
         try {
             Loader.show();
             await API.internViewers.add(profileId);

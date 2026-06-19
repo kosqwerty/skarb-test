@@ -2328,6 +2328,10 @@ const API = {
             // 1. Load full intern record with profile + disciplines + mentors
             const intern = await this.getById(internId);
             const p = intern.profile;
+
+            // If profile already unlinked (repeated call or already deleted), nothing to do
+            if (!p?.id) return intern.profile_snapshot || {};
+
             const snapshot = {
                 full_name:    p?.full_name    || null,
                 email:        p?.email        || null,

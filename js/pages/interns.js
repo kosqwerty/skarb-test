@@ -167,10 +167,11 @@
 
     _filtered() {
         return this._interns.filter(i => {
-            const name = (i.profile?.full_name || '').toLowerCase();
+            const p = i.profile || i.profile_snapshot || {};
+            const name = (p.full_name || '').toLowerCase();
             if (this._search && !name.includes(this._search.toLowerCase())) return false;
             if (this._filterStatus && i.status !== this._filterStatus) return false;
-            if (this._filterCity && i.profile?.city !== this._filterCity) return false;
+            if (this._filterCity && p.city !== this._filterCity) return false;
             if (this._filterManager && i.manager_id !== this._filterManager) return false;
             return true;
         }).sort((a, b) => {

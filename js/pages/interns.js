@@ -1802,13 +1802,16 @@ ${discs.length ? `<table>
                 const becomingDropped   = status === 'dropped'   && prev?.status !== 'dropped';
                 const becomingCompleted = status === 'completed' && prev?.status !== 'completed';
                 await API.interns.update(internId, payload);
+                // Always sync editable fields to profile (intern card = profile editor)
                 if (profileId) {
                     const profileUpdate = {};
-                    if (jobPosition) profileUpdate.job_position = jobPosition;
-                    if (payload.manager_id !== undefined) profileUpdate.manager_id = payload.manager_id;
-                    if (Object.keys(profileUpdate).length) {
-                        await API.profiles.update(profileId, profileUpdate).catch(() => {});
-                    }
+                    // job_position: sync if select exists (null = clear if empty selected)
+                    if (jobPosition !== null) profileUpdate.job_position = jobPosition || null;
+                    // manager_id: always sync
+                    profileUpdate.manager_id = payload.manager_id ?? null;
+                    // label: clear when graduating or firing
+                    if (becomingCompleted || becomingDropped) profileUpdate.label = null;
+                    await API.profiles.update(profileId, profileUpdate).catch(() => {});
                 }
                 if (becomingCompleted) {
                     const employedSince = payload.actual_end_date || new Date().toISOString().slice(0, 10);
@@ -1817,7 +1820,7 @@ ${discs.length ? `<table>
                 if (becomingDropped && prev?.profile_id) {
                     try {
                         await API.interns.archiveDropped(internId);
-                        Toast.success('Збережено', 'Профіль стажера деактивовано, дані збережено в архіві');
+                        Toast.success('Збережено', 'Профіль стажера переміщено в кошик');
                     } catch (archErr) {
                         Toast.warning('Збережено', `Не вдалось видалити акаунт: ${archErr.message}`);
                     }
@@ -1914,10 +1917,11 @@ ${discs.length ? `<table>
         let allDovs = [];
         let locations = [];
         try {
-            [allDovs, { data: locations }] = await Promise.all([
-                API.dovirenosti.getAll().catch(() => []),
-                supabase.from('locations').select('id, name').order('name').catch(() => ({ data: [] }))
-            ]);
+            allDovs = await API.dovirenosti.getAll();
+        } catch(_) {}
+        try {
+            const { data } = await supabase.from('locations').select('id, name').order('name');
+            locations = data || [];
         } catch(_) {}
 
         Modal.open({
@@ -2055,10 +2059,17 @@ ${discs.length ? `<table>
 
         try {
             Loader.show();
+            const today = new Date().toISOString().slice(0, 10);
+            const intern = this._currentIntern;
             await Promise.all([
                 API.interns.update(internId, { status: 'completed' }),
-                API.profiles.update(profileId, { job_position: newPosition, label: null }),
-                API.dovirenosti.setForProfile(profileId, [...this._graduateState.selectedDovIds])
+                API.profiles.update(profileId, {
+                    job_position: newPosition,
+                    label: null,
+                    manager_id: intern?.manager_id || null,
+                }),
+                API.dovirenosti.setForProfile(profileId, [...this._graduateState.selectedDovIds]),
+                API.interns.setEmploymentInfo(internId, { employed_since: today }),
             ]);
             Modal.close();
             Toast.success('Стажера випущено', `${newPosition} — мітку стажера знято`);

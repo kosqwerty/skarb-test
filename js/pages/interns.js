@@ -2521,8 +2521,8 @@ ${discs.length ? `<table>
     _avatar(profile, size = 32) {
         const name = profile?.full_name || '?';
         if (profile?.avatar_url) {
-            const url = APP_CONFIG.storagePublicUrl + '/avatars/' + profile.avatar_url;
-            return `<img src="${Fmt.safeUrl(url)}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;flex-shrink:0" alt="">`;
+            // avatar_url stores full URL in profiles table
+            return `<img src="${Fmt.safeUrl(profile.avatar_url)}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;flex-shrink:0" onerror="this.style.display='none';this.nextSibling&&(this.nextSibling.style.display='flex')" alt="">`;
         }
         const initials = Fmt.initials(name);
         return `<div style="width:${size}px;height:${size}px;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#6366f1);display:flex;align-items:center;justify-content:center;color:#fff;font-size:${Math.round(size*0.35)}px;font-weight:700;flex-shrink:0">${Fmt.esc(initials)}</div>`;

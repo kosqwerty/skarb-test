@@ -96,6 +96,7 @@
             <div class="in-tabs">
                 <button class="in-tab ${this._tab === 'list' ? 'in-tab-active' : ''}" onclick="InternsPage._switchTab('list')"><i class="fa-solid fa-list"></i> Список</button>
                 ${!this._isManager ? `<button class="in-tab ${this._tab === 'analytics' ? 'in-tab-active' : ''}" onclick="InternsPage._switchTab('analytics')"><i class="fa-solid fa-chart-bar"></i> Аналітика HRD</button>` : ''}
+                ${AppState.isOwner() ? `<button class="in-tab ${this._tab === 'log' ? 'in-tab-active' : ''}" onclick="InternsPage._switchTab('log')"><i class="fa-solid fa-clock-rotate-left"></i> Журнал дій</button>` : ''}
             </div>
             <div id="in-tab-content"></div>
         </div>`;
@@ -109,9 +110,11 @@
         this._destroyCharts();
         const active = `in-tab-active`;
         this._container.querySelectorAll('.in-tab').forEach(b => b.classList.remove(active));
-        const idx = tab === 'list' ? 0 : 1;
-        this._container.querySelectorAll('.in-tab')[idx]?.classList.add(active);
+        const tabs = this._container.querySelectorAll('.in-tab');
+        const tabMap = { list: 0, analytics: 1, log: 2 };
+        tabs[tabMap[tab] ?? 0]?.classList.add(active);
         if (tab === 'list') this._renderList();
+        else if (tab === 'log') this._renderLog();
         else this._renderAnalytics();
     },
 
@@ -440,6 +443,72 @@
     },
 
     // ── Analytics tab ─────────────────────────────────────────────────────────
+    async _renderLog() {
+        const area = document.getElementById('in-tab-content');
+        if (!area) return;
+        area.innerHTML = `<div style="padding:1.5rem 0"><i class="fa-solid fa-spinner fa-spin"></i> Завантаження...</div>`;
+        try {
+            const logs = await API.internLogs.getAll({ limit: 500 });
+            const actionLabel = {
+                open_card:         { icon: 'fa-eye',              color: '#6366f1', label: 'Відкрив картку' },
+                edit_info:         { icon: 'fa-pen',              color: '#3b82f6', label: 'Редагував дані' },
+                graduated:         { icon: 'fa-graduation-cap',   color: '#10b981', label: 'Випустив стажера' },
+                fired:             { icon: 'fa-user-xmark',       color: '#ef4444', label: 'Звільнив стажера' },
+                save_characteristic:{ icon: 'fa-star',            color: '#f59e0b', label: 'Зберіг характеристику' },
+                add_discipline:    { icon: 'fa-plus',             color: '#10b981', label: 'Додав дисципліну' },
+                edit_discipline:   { icon: 'fa-pen-to-square',   color: '#3b82f6', label: 'Редагував дисципліну' },
+                delete_discipline: { icon: 'fa-trash',            color: '#ef4444', label: 'Видалив дисципліну' },
+            };
+            const rows = logs.map(l => {
+                const a = actionLabel[l.action] || { icon: 'fa-circle', color: '#9ca3af', label: l.action };
+                const d = l.details || {};
+                const actor = l.actor?.full_name || 'Невідомо';
+                const internName = d.intern_name || '—';
+                let extra = '';
+                if (d.changes && Object.keys(d.changes).length) {
+                    extra = Object.entries(d.changes).map(([k,v]) => `<span class="inlog-change">${Fmt.esc(k)}: ${Fmt.esc(String(v))}</span>`).join('');
+                }
+                if (d.new_position) extra += `<span class="inlog-change">нова посада: ${Fmt.esc(d.new_position)}</span>`;
+                if (d.discipline)   extra += `<span class="inlog-change">${Fmt.esc(d.discipline)}</span>`;
+                return `<tr class="inlog-row">
+                    <td class="inlog-td-time">${Fmt.datetime(l.created_at)}</td>
+                    <td class="inlog-td-actor">${Fmt.esc(actor)}</td>
+                    <td class="inlog-td-action"><i class="fa-solid ${a.icon}" style="color:${a.color};margin-right:.4rem"></i>${a.label}</td>
+                    <td class="inlog-td-intern">${Fmt.esc(internName)}</td>
+                    <td class="inlog-td-details">${extra}</td>
+                </tr>`;
+            }).join('');
+            area.innerHTML = `
+            <div class="inlog-wrap">
+                <div class="inlog-header">
+                    <span><i class="fa-solid fa-clock-rotate-left"></i> Журнал дій — останні ${logs.length} записів</span>
+                </div>
+                ${logs.length ? `<table class="inlog-table">
+                    <thead><tr>
+                        <th>Час</th><th>Хто</th><th>Дія</th><th>Стажер</th><th>Деталі</th>
+                    </tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>` : '<div class="in-empty">Журнал порожній</div>'}
+            </div>
+            <style>
+            .inlog-wrap{padding:.5rem 0}
+            .inlog-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem;color:var(--text-muted);font-size:.85rem}
+            .inlog-table{width:100%;border-collapse:collapse;font-size:.82rem}
+            .inlog-table thead th{background:var(--bg-raised);padding:.5rem .75rem;text-align:left;font-weight:600;color:var(--text-muted);border-bottom:1px solid var(--border);white-space:nowrap}
+            .inlog-row:hover{background:var(--bg-raised)}
+            .inlog-row td{padding:.45rem .75rem;border-bottom:1px solid var(--border);vertical-align:middle}
+            .inlog-td-time{color:var(--text-muted);white-space:nowrap;font-size:.78rem}
+            .inlog-td-actor{font-weight:500;white-space:nowrap}
+            .inlog-td-action{white-space:nowrap}
+            .inlog-td-intern{color:var(--text-secondary)}
+            .inlog-td-details{display:flex;flex-wrap:wrap;gap:.3rem}
+            .inlog-change{background:var(--bg-raised);border:1px solid var(--border);border-radius:4px;padding:.1rem .4rem;font-size:.75rem;color:var(--text-secondary)}
+            </style>`;
+        } catch(e) {
+            area.innerHTML = `<div style="color:var(--danger);padding:1rem">${Fmt.esc(e.message)}</div>`;
+        }
+    },
+
     async _renderAnalytics() {
         const area = document.getElementById('in-tab-content');
         if (!area) return;
@@ -604,6 +673,8 @@
             const intern = await API.interns.getById(internId);
             this._currentIntern = intern;
             this._disciplines = (intern.intern_disciplines || []).sort((a,b) => a.order_index - b.order_index);
+            const _iname = intern.profile?.full_name || intern.profile_snapshot?.full_name || '?';
+            API.internLogs.add(internId, 'open_card', { intern_name: _iname });
             // update title with name + badge for dropped
             const mt = document.getElementById('modal-title');
             if (mt) {
@@ -1228,6 +1299,8 @@
         try {
             await API.interns.update(internId, { characteristic: payload });
             if (this._currentIntern) this._currentIntern.characteristic = payload;
+            const _iname = this._currentIntern?.profile?.full_name || '?';
+            API.internLogs.add(internId, 'save_characteristic', { intern_name: _iname, has_summary: !!summary });
             Toast.success('Збережено', 'Характеристику оновлено');
         } catch(e) { Toast.error('Помилка', e.message); }
     },
@@ -1818,6 +1891,14 @@ ${discs.length ? `<table>
                     const employedSince = payload.actual_end_date || new Date().toISOString().slice(0, 10);
                     await API.interns.setEmploymentInfo(internId, { employed_since: employedSince }).catch(() => {});
                 }
+                // Log the save action
+                const _pname = prev?.profile?.full_name || prev?.profile_snapshot?.full_name || '?';
+                const _changes = {};
+                if (jobPosition !== null && jobPosition !== (prev?.profile?.job_position || '')) _changes.посада = jobPosition || '(очищено)';
+                if (payload.manager_id !== prev?.manager_id) _changes.керівник = payload.manager_id ? 'змінено' : '(знято)';
+                if (status !== prev?.status) _changes.статус = status;
+                API.internLogs.add(internId, becomingDropped ? 'fired' : becomingCompleted ? 'graduated' : 'edit_info', { intern_name: _pname, changes: _changes });
+
                 if (becomingDropped && prev?.profile_id) {
                     try {
                         await API.interns.archiveDropped(internId);
@@ -2072,6 +2153,7 @@ ${discs.length ? `<table>
                 API.dovirenosti.setForProfile(profileId, [...this._graduateState.selectedDovIds]),
                 API.interns.setEmploymentInfo(internId, { employed_since: today }),
             ]);
+            API.internLogs.add(internId, 'graduated', { intern_name: intern?.profile?.full_name || '?', new_position: newPosition });
             Modal.close();
             Toast.success('Стажера випущено', `${newPosition} — мітку стажера знято`);
             await this._reload();
@@ -2209,8 +2291,10 @@ ${discs.length ? `<table>
             Loader.show();
             if (discId) {
                 await API.internDisciplines.update(discId, payload);
+                API.internLogs.add(internId, 'edit_discipline', { discipline: name });
             } else {
                 await API.internDisciplines.create(payload);
+                API.internLogs.add(internId, 'add_discipline', { discipline: name });
             }
             await this._backToDetail(internId);
         } catch (e) { Toast.error('Помилка', e.message); }
@@ -2225,7 +2309,10 @@ ${discs.length ? `<table>
             const disc = this._disciplines.find(d => d.id === discId);
             const internId = disc?.intern_id;
             await API.internDisciplines.remove(discId);
-            if (internId) await this._backToDetail(internId);
+            if (internId) {
+                API.internLogs.add(internId, 'delete_discipline', { discipline: name });
+                await this._backToDetail(internId);
+            }
         } catch (e) { Toast.error('Помилка', e.message); }
         finally { Loader.hide(); }
     },

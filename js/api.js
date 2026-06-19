@@ -2453,6 +2453,29 @@ const API = {
         }
     },
 
+    // ── Intern Logs ───────────────────────────────────────────────────────────
+    internLogs: {
+        async add(internId, action, details = {}) {
+            const { error } = await supabase.from('intern_logs').insert({
+                actor_id:  (await supabase.auth.getUser()).data.user?.id || null,
+                intern_id: internId,
+                action,
+                details,
+            });
+            if (error) console.error('intern_log error:', error.message);
+        },
+        async getAll({ internId, limit = 200 } = {}) {
+            let q = supabase.from('intern_logs')
+                .select('id, action, details, created_at, actor:profiles!intern_logs_actor_id_fkey(id, full_name, avatar_url)')
+                .order('created_at', { ascending: false })
+                .limit(limit);
+            if (internId) q = q.eq('intern_id', internId);
+            const { data, error } = await q;
+            if (error) throw error;
+            return data || [];
+        },
+    },
+
     // ── Intern Disciplines ────────────────────────────────────────────────────
     internDisciplines: {
         async getByIntern(internId) {

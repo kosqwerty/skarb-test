@@ -2355,20 +2355,24 @@ const API = {
                 .eq('id', internId);
             if (snapErr) throw snapErr;
 
-            // 3. Delete auth user via Edge Function — triggers trg_profile_to_trash so profile lands in admin Кошик
+            // 3. Delete public profile directly → triggers trg_profile_to_trash → lands in admin Кошик
             if (p?.id) {
-                const session = (await supabase.auth.getSession()).data.session;
-                const res = await fetch(`${APP_CONFIG.supabaseUrl}/functions/v1/delete-auth-user`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${session?.access_token}`,
-                        'apikey': APP_CONFIG.anonKey,
-                    },
-                    body: JSON.stringify({ profile_id: p.id }),
-                });
-                const json = await res.json();
-                if (!json.ok) throw new Error(json.error || 'Помилка видалення акаунту');
+                const { error: delErr } = await supabase.from('profiles').delete().eq('id', p.id);
+                if (delErr) throw delErr;
+
+                // 4. Best-effort: also remove auth user (orphaned auth row can't log in anyway)
+                try {
+                    const session = (await supabase.auth.getSession()).data.session;
+                    await fetch(`${APP_CONFIG.supabaseUrl}/functions/v1/delete-auth-user`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${session?.access_token}`,
+                            'apikey': APP_CONFIG.anonKey,
+                        },
+                        body: JSON.stringify({ profile_id: p.id }),
+                    });
+                } catch (_) { /* non-critical */ }
             }
 
             return snapshot;

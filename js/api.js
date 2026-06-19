@@ -2355,7 +2355,7 @@ const API = {
                 .eq('id', internId);
             if (snapErr) throw snapErr;
 
-            // 3. Delete auth user via Edge Function
+            // 3. Delete auth user via Edge Function — triggers trg_profile_to_trash so profile lands in admin Кошик
             if (p?.id) {
                 const session = (await supabase.auth.getSession()).data.session;
                 const res = await fetch(`${APP_CONFIG.supabaseUrl}/functions/v1/delete-auth-user`, {

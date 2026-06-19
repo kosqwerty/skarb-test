@@ -773,7 +773,12 @@
                         <label class="inf-label">Посада</label>
                         <select id="inf-job" class="inf-select" onchange="InternsPage._onJobChange()">
                             <option value="">— Обрати посаду —</option>
-                            ${this._jobSettings.map(s => `<option value="${Fmt.esc(s.job_position)}" data-job="${Fmt.esc(s.job_position)}" ${(intern.profile?.job_position||intern.profile_snapshot?.job_position||'')===s.job_position?'selected':''}>${Fmt.esc(s.job_position)}</option>`).join('')}
+                            ${(() => {
+                                const cur = intern.profile?.job_position || intern.profile_snapshot?.job_position || '';
+                                const inList = this._jobSettings.some(s => s.job_position === cur);
+                                const extra = (cur && !inList) ? `<option value="${Fmt.esc(cur)}" selected>${Fmt.esc(cur)}</option>` : '';
+                                return extra + this._jobSettings.map(s => `<option value="${Fmt.esc(s.job_position)}" ${cur === s.job_position ? 'selected' : ''}>${Fmt.esc(s.job_position)}</option>`).join('');
+                            })()}
                         </select>
                         <span id="inf-job-hint" class="inf-hint">${(() => { const cur = intern.profile?.job_position||intern.profile_snapshot?.job_position||''; const s = this._jobSettings.find(s => s.job_position === cur); return s?.training_days ? s.training_days + ' днів навчання' : ''; })()}</span>
                     </div>
@@ -1812,7 +1817,7 @@ ${discs.length ? `<table>
                 if (becomingDropped && prev?.profile_id) {
                     try {
                         await API.interns.archiveDropped(internId);
-                        Toast.success('Збережено', 'Акаунт стажера видалено, дані збережено в архіві');
+                        Toast.success('Збережено', 'Профіль стажера деактивовано, дані збережено в архіві');
                     } catch (archErr) {
                         Toast.warning('Збережено', `Не вдалось видалити акаунт: ${archErr.message}`);
                     }

@@ -2466,7 +2466,7 @@ const API = {
         },
         async getAll({ internId, limit = 200 } = {}) {
             let q = supabase.from('intern_logs')
-                .select('id, action, details, created_at, actor:profiles!intern_logs_actor_id_fkey(id, full_name, avatar_url)')
+                .select('id, intern_id, action, details, created_at, actor:profiles!intern_logs_actor_id_fkey(id, full_name, avatar_url)')
                 .order('created_at', { ascending: false })
                 .limit(limit);
             if (internId) q = q.eq('intern_id', internId);

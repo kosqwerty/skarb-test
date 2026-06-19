@@ -9,7 +9,8 @@
     _isViewer: false,
     _charts: [],
     _filterStatus: '',
-    _filterCity: '',
+    _filterCity: '',       // legacy, unused
+    _filterCities: [],     // array of selected cities
     _filterManager: '',
     _search: '',
     _currentInternId: null,
@@ -143,12 +144,19 @@
                         <option value="dropped"   ${this._filterStatus==='dropped'   ? 'selected':''}>Відмовились</option>
                     </select>
                 </div>
-                <div class="in-filter-wrap in-filter-city${this._filterCity ? ' in-filter-active' : ''}">
-                    <i class="fa-solid fa-location-dot in-filter-icon"></i>
-                    <select class="in-toolbar-select" onchange="InternsPage._filterChange('city', this.value)">
-                        <option value="">Всі міста</option>
-                        ${cities.map(c => `<option value="${Fmt.esc(c)}" ${this._filterCity===c?'selected':''}>${Fmt.esc(c)}</option>`).join('')}
-                    </select>
+                <div class="in-filter-wrap in-filter-city${this._filterCities.length ? ' in-filter-active' : ''}" style="position:relative">
+                    <button class="in-toolbar-select in-city-btn" style="cursor:pointer;text-align:left;display:flex;align-items:center;gap:.4rem;min-width:130px" onclick="InternsPage._toggleCityDropdown(event)">
+                        ${this._filterCities.length
+                            ? `<i class="fa-solid fa-location-dot"></i> Міста <span class="in-city-count">${this._filterCities.length}</span>`
+                            : `<i class="fa-solid fa-location-dot"></i> Всі міста <i class="fa-solid fa-chevron-down" style="font-size:.7rem;margin-left:auto"></i>`}
+                    </button>
+                    <div class="in-city-dropdown" id="in-city-dropdown" style="display:none;position:absolute;top:calc(100% + 4px);left:0;z-index:200;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 4px 16px rgba(0,0,0,.12);min-width:180px;max-height:260px;overflow-y:auto;padding:.4rem 0">
+                        ${this._filterCities.length ? `<div style="padding:.25rem .75rem .4rem"><button onclick="InternsPage._clearCityFilter()" style="font-size:.75rem;color:var(--primary);background:none;border:none;cursor:pointer;padding:0">✕ Скинути фільтр</button></div>` : ''}
+                        ${cities.map(c => `<label class="in-city-option" style="display:flex;align-items:center;gap:.55rem;padding:.35rem .75rem;cursor:pointer;font-size:.85rem">
+                            <input type="checkbox" class="in-city-cb" data-city="${Fmt.esc(c)}" ${this._filterCities.includes(c)?'checked':''} onchange="InternsPage._toggleCityFilter(${JSON.stringify(c).replace(/"/g,'&quot;')})">
+                            ${Fmt.esc(c)}
+                        </label>`).join('')}
+                    </div>
                 </div>
                 ${!this._isManager ? `<div class="in-filter-wrap in-filter-manager${this._filterManager ? ' in-filter-active' : ''}">
                     <i class="fa-solid fa-user-tie in-filter-icon"></i>
@@ -174,7 +182,7 @@
             const name = (p.full_name || '').toLowerCase();
             if (this._search && !name.includes(this._search.toLowerCase())) return false;
             if (this._filterStatus && i.status !== this._filterStatus) return false;
-            if (this._filterCity && p.city !== this._filterCity) return false;
+            if (this._filterCities.length && !this._filterCities.includes(p.city || '')) return false;
             if (this._filterManager && i.manager_id !== this._filterManager) return false;
             return true;
         }).sort((a, b) => {
@@ -358,16 +366,16 @@
         try {
             const saved = JSON.parse(localStorage.getItem(this._filtersKey) || '{}');
             this._filterStatus  = saved.status  || '';
-            this._filterCity    = saved.city     || '';
+            this._filterCities  = Array.isArray(saved.cities) ? saved.cities : (saved.city ? [saved.city] : []);
             this._filterManager = saved.manager  || (this._isManager ? AppState.profile.id : '');
             this._search        = saved.search   || '';
-        } catch { this._filterStatus = this._filterCity = this._filterManager = this._search = ''; }
+        } catch { this._filterStatus = ''; this._filterCities = []; this._filterManager = ''; this._search = ''; }
     },
 
     _saveFilters() {
         localStorage.setItem(this._filtersKey, JSON.stringify({
             status:  this._filterStatus,
-            city:    this._filterCity,
+            cities:  this._filterCities,
             manager: this._filterManager,
             search:  this._search,
         }));
@@ -375,10 +383,52 @@
 
     _filterChange(field, val) {
         if (field === 'status')  this._filterStatus = val;
-        if (field === 'city')    this._filterCity = val;
         if (field === 'manager') this._filterManager = val;
         this._saveFilters();
         this._renderTable();
+    },
+
+    _toggleCityDropdown(e) {
+        e.stopPropagation();
+        const dd = document.getElementById('in-city-dropdown');
+        if (!dd) return;
+        const isOpen = dd.style.display !== 'none';
+        dd.style.display = isOpen ? 'none' : '';
+        if (!isOpen) {
+            const close = ev => { if (!dd.contains(ev.target)) { dd.style.display = 'none'; document.removeEventListener('click', close); } };
+            setTimeout(() => document.addEventListener('click', close), 0);
+        }
+    },
+
+    _toggleCityFilter(city) {
+        const idx = this._filterCities.indexOf(city);
+        if (idx === -1) this._filterCities.push(city);
+        else this._filterCities.splice(idx, 1);
+        this._saveFilters();
+        this._rerenderCityFilter();
+        this._renderTable();
+    },
+
+    _clearCityFilter() {
+        this._filterCities = [];
+        this._saveFilters();
+        this._rerenderCityFilter();
+        this._renderTable();
+    },
+
+    _rerenderCityFilter() {
+        const wrap = document.querySelector('.in-filter-city');
+        if (!wrap) return;
+        const fc = this._filterCities;
+        wrap.classList.toggle('in-filter-active', fc.length > 0);
+        const btn = wrap.querySelector('.in-city-btn');
+        if (btn) btn.innerHTML = fc.length
+            ? `<i class="fa-solid fa-location-dot"></i> Міста <span class="in-city-count">${fc.length}</span>`
+            : `<i class="fa-solid fa-location-dot"></i> Всі міста <i class="fa-solid fa-chevron-down" style="font-size:.7rem;margin-left:.2rem"></i>`;
+        // update checkboxes
+        wrap.querySelectorAll('.in-city-cb').forEach(cb => {
+            cb.checked = fc.includes(cb.dataset.city);
+        });
     },
 
     // ── Manager dashboard ─────────────────────────────────────────────────────
@@ -443,74 +493,185 @@
     },
 
     // ── Analytics tab ─────────────────────────────────────────────────────────
+    _logFilterCities: new Set(),
+
     async _renderLog() {
         const area = document.getElementById('in-tab-content');
         if (!area) return;
         area.innerHTML = `<div style="padding:1.5rem 0"><i class="fa-solid fa-spinner fa-spin"></i> Завантаження...</div>`;
         try {
-            const logs = await API.internLogs.getAll({ limit: 500 });
-            const actionLabel = {
-                open_card:           { icon: 'fa-eye',              color: '#6366f1', label: 'Відкрив картку' },
-                view_tab:            { icon: 'fa-table-columns',    color: '#8b5cf6', label: 'Переглянув вкладку' },
-                open_edit_form:      { icon: 'fa-pen',              color: '#3b82f6', label: 'Відкрив форму редагування' },
-                edit_info:           { icon: 'fa-floppy-disk',      color: '#3b82f6', label: 'Зберіг дані' },
-                open_graduate_modal: { icon: 'fa-graduation-cap',   color: '#8b5cf6', label: 'Відкрив модаль випуску' },
-                graduated:           { icon: 'fa-graduation-cap',   color: '#10b981', label: 'Випустив стажера' },
-                fired:               { icon: 'fa-user-xmark',       color: '#ef4444', label: 'Звільнив стажера' },
-                save_characteristic: { icon: 'fa-star',             color: '#f59e0b', label: 'Зберіг характеристику' },
-                add_discipline:      { icon: 'fa-plus',             color: '#10b981', label: 'Додав дисципліну' },
-                edit_discipline:     { icon: 'fa-pen-to-square',    color: '#3b82f6', label: 'Редагував дисципліну' },
-                delete_discipline:   { icon: 'fa-trash',            color: '#ef4444', label: 'Видалив дисципліну' },
+            const logs = await API.internLogs.getAll({ limit: 1000 });
+            if (!logs.length) { area.innerHTML = '<div class="in-empty" style="padding:2rem">Журнал порожній</div>'; return; }
+
+            // Build intern_id → city map from already-loaded interns list
+            const cityMap = {};
+            (this._interns || []).forEach(i => {
+                const city = i.profile?.city || i.profile_snapshot?.city || '';
+                if (i.id) cityMap[i.id] = city;
+            });
+            logs.forEach(l => { l._city = cityMap[l.intern_id] || ''; });
+
+            const allCities = [...new Set(logs.map(l => l._city).filter(Boolean))].sort();
+
+            const NAV_ACTIONS = new Set(['open_card', 'view_tab', 'open_edit_form', 'open_graduate_modal']);
+            const AL = {
+                open_card:           { icon: 'fa-eye',            color: '#6366f1', label: 'Відкрив картку' },
+                view_tab:            { icon: 'fa-table-columns',  color: '#8b5cf6', label: 'Вкладка' },
+                open_edit_form:      { icon: 'fa-pen',            color: '#3b82f6', label: 'Відкрив редагування' },
+                edit_info:           { icon: 'fa-floppy-disk',    color: '#2563eb', label: 'Зберіг дані' },
+                open_graduate_modal: { icon: 'fa-graduation-cap', color: '#8b5cf6', label: 'Відкрив випуск' },
+                graduated:           { icon: 'fa-graduation-cap', color: '#10b981', label: 'Випустив' },
+                fired:               { icon: 'fa-user-xmark',     color: '#ef4444', label: 'Звільнив' },
+                save_characteristic: { icon: 'fa-star',           color: '#f59e0b', label: 'Характеристика' },
+                add_discipline:      { icon: 'fa-plus',           color: '#10b981', label: 'Додав дисципліну' },
+                edit_discipline:     { icon: 'fa-pen-to-square',  color: '#3b82f6', label: 'Редагував дисципліну' },
+                delete_discipline:   { icon: 'fa-trash',          color: '#ef4444', label: 'Видалив дисципліну' },
             };
-            const rows = logs.map(l => {
-                const a = actionLabel[l.action] || { icon: 'fa-circle', color: '#9ca3af', label: l.action };
-                const d = l.details || {};
-                const actor = l.actor?.full_name || 'Невідомо';
-                const internName = d.intern_name || '—';
-                let extra = '';
-                if (d.tab)          extra += `<span class="inlog-change">${Fmt.esc(d.tab)}</span>`;
-                if (d.changes && Object.keys(d.changes).length) {
-                    extra += Object.entries(d.changes).map(([k,v]) => `<span class="inlog-change">${Fmt.esc(k)}: ${Fmt.esc(String(v))}</span>`).join('');
+
+            // Group into sessions: same actor + same intern + gap < 30 min
+            const SESSION_GAP = 30 * 60 * 1000;
+            const sorted = [...logs].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+            const sessions = [];
+            sorted.forEach(l => {
+                const last = sessions[sessions.length - 1];
+                const actorId = l.actor?.id;
+                const internName = l.details?.intern_name || '—';
+                const gap = last ? (new Date(l.created_at) - new Date(last.end)) : Infinity;
+                if (last && last.actorId === actorId && last.internName === internName && gap < SESSION_GAP) {
+                    last.events.push(l);
+                    last.end = l.created_at;
+                } else {
+                    sessions.push({ actorId, actorName: l.actor?.full_name || '?', internName, internId: l.intern_id, start: l.created_at, end: l.created_at, events: [l] });
                 }
-                if (d.new_position) extra += `<span class="inlog-change">нова посада: ${Fmt.esc(d.new_position)}</span>`;
-                if (d.discipline)   extra += `<span class="inlog-change">${Fmt.esc(d.discipline)}</span>`;
-                return `<tr class="inlog-row">
-                    <td class="inlog-td-time">${Fmt.datetime(l.created_at)}</td>
-                    <td class="inlog-td-actor">${Fmt.esc(actor)}</td>
-                    <td class="inlog-td-action"><i class="fa-solid ${a.icon}" style="color:${a.color};margin-right:.4rem"></i>${a.label}</td>
-                    <td class="inlog-td-intern">${Fmt.esc(internName)}</td>
-                    <td class="inlog-td-details">${extra}</td>
-                </tr>`;
+            });
+            sessions.reverse(); // newest first
+
+            // Filter by selected cities
+            const fc = this._logFilterCities;
+            const visibleSessions = fc.size
+                ? sessions.filter(s => fc.has(cityMap[s.internId] || ''))
+                : sessions;
+
+            const chipFor = l => {
+                if (NAV_ACTIONS.has(l.action)) return '';
+                const a = AL[l.action] || { icon: 'fa-circle', color: '#9ca3af', label: l.action };
+                const d = l.details || {};
+                let detail = '';
+                if (d.new_position) detail = `: ${d.new_position}`;
+                else if (d.discipline) detail = `: ${d.discipline}`;
+                else if (d.changes && Object.keys(d.changes).length) detail = ': ' + Object.keys(d.changes).join(', ');
+                return `<span class="inlog-chip" style="--chip-c:${a.color}"><i class="fa-solid ${a.icon}"></i>${Fmt.esc(a.label + detail)}</span>`;
+            };
+
+            const rows = visibleSessions.map((s, idx) => {
+                const isSingle = s.events.length === 1;
+                const timeStr = Fmt.datetime(s.start) + (s.start !== s.end ? ` – ${Fmt.time(s.end)}` : '');
+                const meaningfulChips = s.events.map(chipFor).join('');
+                const chips = meaningfulChips || `<span class="inlog-chip" style="--chip-c:#9ca3af"><i class="fa-solid fa-eye"></i>Переглянув</span>`;
+                const details = !isSingle ? `
+                <tr class="inlog-detail-row" id="inlog-detail-${idx}" style="display:none">
+                    <td colspan="4" style="padding:.25rem .75rem .75rem 2.5rem">
+                        <div class="inlog-timeline">
+                        ${s.events.map(l => {
+                            const a = AL[l.action] || { icon: 'fa-circle', color: '#9ca3af', label: l.action };
+                            const d = l.details || {};
+                            let det = '';
+                            if (d.tab) det = d.tab;
+                            else if (d.new_position) det = d.new_position;
+                            else if (d.discipline) det = d.discipline;
+                            else if (d.changes && Object.keys(d.changes).length) det = Object.entries(d.changes).map(([k,v])=>`${k}: ${v}`).join(', ');
+                            return `<div class="inlog-tl-item">
+                                <span class="inlog-tl-time">${Fmt.time(l.created_at)}</span>
+                                <span class="inlog-tl-dot" style="background:${a.color}"></span>
+                                <span class="inlog-tl-label"><i class="fa-solid ${a.icon}" style="color:${a.color}"></i> ${a.label}${det ? ' <span class="inlog-tl-det">'+Fmt.esc(det)+'</span>' : ''}</span>
+                            </div>`;
+                        }).join('')}
+                        </div>
+                    </td>
+                </tr>` : '';
+                return `<tr class="inlog-row${isSingle?'':' inlog-row-expand'}" onclick="${isSingle?'':'InternsPage._toggleLogDetail('+idx+')'}">
+                    <td class="inlog-td-time">${timeStr}${!isSingle?` <span class="inlog-count">${s.events.length}</span>`:''}</td>
+                    <td class="inlog-td-actor">${Fmt.esc(s.actorName)}</td>
+                    <td class="inlog-td-intern">${Fmt.esc(s.internName)}</td>
+                    <td class="inlog-td-chips">${chips}${!isSingle?'<i class="fa-solid fa-chevron-down inlog-chevron" id="inlog-chev-'+idx+'"></i>':''}</td>
+                </tr>${details}`;
             }).join('');
+
+            const cityChips = allCities.map(c => {
+                const active = fc.has(c);
+                return `<button class="inlog-city-chip${active?' active':''}" onclick="InternsPage._toggleLogCity(${JSON.stringify(c).replace(/"/g,'&quot;')})">${Fmt.esc(c)}</button>`;
+            }).join('');
+
             area.innerHTML = `
             <div class="inlog-wrap">
-                <div class="inlog-header">
-                    <span><i class="fa-solid fa-clock-rotate-left"></i> Журнал дій — останні ${logs.length} записів</span>
+                <div class="inlog-topbar">
+                    <span class="inlog-stat"><i class="fa-solid fa-clock-rotate-left"></i> ${visibleSessions.length} сесій · ${logs.length} подій</span>
+                    ${allCities.length ? `<div class="inlog-city-bar">
+                        <span class="inlog-city-label">Місто:</span>
+                        ${cityChips}
+                        ${fc.size ? `<button class="inlog-city-clear" onclick="InternsPage._clearLogCities()">✕ Скинути</button>` : ''}
+                    </div>` : ''}
                 </div>
-                ${logs.length ? `<table class="inlog-table">
-                    <thead><tr>
-                        <th>Час</th><th>Хто</th><th>Дія</th><th>Стажер</th><th>Деталі</th>
-                    </tr></thead>
+                <table class="inlog-table">
+                    <thead><tr><th>Час</th><th>Хто</th><th>Стажер</th><th>Дії</th></tr></thead>
                     <tbody>${rows}</tbody>
-                </table>` : '<div class="in-empty">Журнал порожній</div>'}
+                </table>
             </div>
             <style>
-            .inlog-wrap{padding:.5rem 0}
-            .inlog-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem;color:var(--text-muted);font-size:.85rem}
+            .inlog-wrap{padding:.25rem 0}
+            .inlog-topbar{display:flex;flex-wrap:wrap;align-items:center;gap:.75rem;margin-bottom:.75rem;padding:.25rem 0}
+            .inlog-stat{color:var(--text-muted);font-size:.82rem;white-space:nowrap}
+            .inlog-city-bar{display:flex;flex-wrap:wrap;align-items:center;gap:.35rem}
+            .inlog-city-label{font-size:.78rem;color:var(--text-muted);white-space:nowrap}
+            .inlog-city-chip{padding:.2rem .65rem;border-radius:20px;border:1px solid var(--border);background:var(--bg-raised);color:var(--text-secondary);font-size:.78rem;cursor:pointer;transition:all .15s}
+            .inlog-city-chip:hover{border-color:var(--primary);color:var(--primary)}
+            .inlog-city-chip.active{background:var(--primary);border-color:var(--primary);color:#fff;font-weight:600}
+            .inlog-city-clear{padding:.2rem .55rem;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--text-muted);font-size:.75rem;cursor:pointer}
+            .inlog-city-clear:hover{border-color:var(--danger);color:var(--danger)}
             .inlog-table{width:100%;border-collapse:collapse;font-size:.82rem}
-            .inlog-table thead th{background:var(--bg-raised);padding:.5rem .75rem;text-align:left;font-weight:600;color:var(--text-muted);border-bottom:1px solid var(--border);white-space:nowrap}
+            .inlog-table thead th{background:var(--bg-raised);padding:.45rem .75rem;text-align:left;font-weight:600;color:var(--text-muted);border-bottom:1px solid var(--border);white-space:nowrap}
+            .inlog-row td{padding:.5rem .75rem;border-bottom:1px solid var(--border);vertical-align:middle}
             .inlog-row:hover{background:var(--bg-raised)}
-            .inlog-row td{padding:.45rem .75rem;border-bottom:1px solid var(--border);vertical-align:middle}
-            .inlog-td-time{color:var(--text-muted);white-space:nowrap;font-size:.78rem}
-            .inlog-td-actor{font-weight:500;white-space:nowrap}
-            .inlog-td-action{white-space:nowrap}
-            .inlog-td-intern{color:var(--text-secondary)}
-            .inlog-td-details{display:flex;flex-wrap:wrap;gap:.3rem}
-            .inlog-change{background:var(--bg-raised);border:1px solid var(--border);border-radius:4px;padding:.1rem .4rem;font-size:.75rem;color:var(--text-secondary)}
+            .inlog-row-expand{cursor:pointer}
+            .inlog-td-time{color:var(--text-muted);white-space:nowrap;font-size:.78rem;width:160px}
+            .inlog-td-actor{font-weight:500;white-space:nowrap;width:220px}
+            .inlog-td-intern{color:var(--text-secondary);width:200px}
+            .inlog-td-chips{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+            .inlog-chip{display:inline-flex;align-items:center;gap:.3rem;padding:.15rem .5rem;border-radius:20px;font-size:.75rem;font-weight:500;background:color-mix(in srgb,var(--chip-c) 12%,var(--bg-surface));color:var(--chip-c);border:1px solid color-mix(in srgb,var(--chip-c) 25%,var(--border))}
+            .inlog-count{display:inline-flex;align-items:center;justify-content:center;background:var(--primary);color:#fff;border-radius:10px;font-size:.7rem;font-weight:700;padding:.05rem .4rem;margin-left:.3rem}
+            .inlog-chevron{margin-left:auto;color:var(--text-muted);font-size:.7rem;transition:transform .2s}
+            .inlog-chevron.open{transform:rotate(180deg)}
+            .inlog-detail-row td{background:color-mix(in srgb,var(--primary) 3%,var(--bg-surface))}
+            .inlog-timeline{display:flex;flex-direction:column;gap:.3rem;padding:.25rem 0}
+            .inlog-tl-item{display:flex;align-items:center;gap:.6rem;font-size:.8rem}
+            .inlog-tl-time{color:var(--text-muted);width:40px;flex-shrink:0;font-size:.75rem}
+            .inlog-tl-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+            .inlog-tl-label{display:flex;align-items:center;gap:.35rem}
+            .inlog-tl-det{color:var(--text-muted);font-weight:400}
             </style>`;
         } catch(e) {
             area.innerHTML = `<div style="color:var(--danger);padding:1rem">${Fmt.esc(e.message)}</div>`;
         }
+    },
+
+    _toggleLogDetail(idx) {
+        const row = document.getElementById(`inlog-detail-${idx}`);
+        const chev = document.getElementById(`inlog-chev-${idx}`);
+        if (!row) return;
+        const open = row.style.display !== 'none';
+        row.style.display = open ? 'none' : '';
+        chev?.classList.toggle('open', !open);
+    },
+
+    _toggleLogCity(city) {
+        if (this._logFilterCities.has(city)) this._logFilterCities.delete(city);
+        else this._logFilterCities.add(city);
+        this._renderLog();
+    },
+
+    _clearLogCities() {
+        this._logFilterCities.clear();
+        this._renderLog();
     },
 
     async _renderAnalytics() {
@@ -3404,6 +3565,10 @@ ${discs.length ? `<table>
 .in-filter-city .in-filter-icon { color:#0ea5e9; }
 .in-filter-city .in-toolbar-select { color:#0284c7; }
 .in-filter-city:focus-within { border-color:#0ea5e9; box-shadow:0 0 0 2px color-mix(in srgb,#0ea5e9 18%,transparent); }
+.in-city-btn { background-image:none !important; padding-right:.7rem !important; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:220px; }
+.in-city-count { display:inline-flex;align-items:center;justify-content:center;background:#0284c7;color:#fff;border-radius:10px;font-size:.68rem;font-weight:700;padding:.05rem .35rem;margin-left:.2rem; }
+.in-city-option:hover { background:var(--bg-raised); }
+.in-city-option input[type=checkbox] { accent-color:#0284c7; }
 
 /* manager — amber */
 .in-filter-manager { border-color:color-mix(in srgb,#f59e0b 30%,transparent); background:color-mix(in srgb,#f59e0b 8%,transparent); }
@@ -3422,7 +3587,7 @@ ${discs.length ? `<table>
 .in-table-scroll { flex:1; overflow:auto; border-radius:10px; border:1px solid var(--border); min-height:0; }
 .in-table { width:100%; border-collapse:collapse; font-size:.875rem; table-layout:fixed; min-width:700px; }
 .in-table thead tr { background:var(--bg-raised); }
-.in-table th { padding:.65rem .85rem; text-align:left; font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--text-muted); position:relative; min-width:0; overflow:hidden; white-space:nowrap; }
+.in-table th { padding:.65rem .85rem; text-align:left; font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--text-muted); position:sticky; top:0; z-index:2; background:var(--bg-raised); min-width:0; overflow:hidden; white-space:nowrap; }
 .in-table td { padding:.65rem .85rem; border-bottom:1px solid var(--border); vertical-align:middle; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .in-col-resizer { position:absolute; right:0; top:20%; bottom:20%; width:3px; cursor:col-resize; user-select:none; z-index:1; background:var(--border); border-radius:2px; transition:background .15s; }
 .in-col-resizer:hover, .in-col-resizer.active { background:#8b5cf6; }

@@ -450,14 +450,17 @@
         try {
             const logs = await API.internLogs.getAll({ limit: 500 });
             const actionLabel = {
-                open_card:         { icon: 'fa-eye',              color: '#6366f1', label: 'Відкрив картку' },
-                edit_info:         { icon: 'fa-pen',              color: '#3b82f6', label: 'Редагував дані' },
-                graduated:         { icon: 'fa-graduation-cap',   color: '#10b981', label: 'Випустив стажера' },
-                fired:             { icon: 'fa-user-xmark',       color: '#ef4444', label: 'Звільнив стажера' },
-                save_characteristic:{ icon: 'fa-star',            color: '#f59e0b', label: 'Зберіг характеристику' },
-                add_discipline:    { icon: 'fa-plus',             color: '#10b981', label: 'Додав дисципліну' },
-                edit_discipline:   { icon: 'fa-pen-to-square',   color: '#3b82f6', label: 'Редагував дисципліну' },
-                delete_discipline: { icon: 'fa-trash',            color: '#ef4444', label: 'Видалив дисципліну' },
+                open_card:           { icon: 'fa-eye',              color: '#6366f1', label: 'Відкрив картку' },
+                view_tab:            { icon: 'fa-table-columns',    color: '#8b5cf6', label: 'Переглянув вкладку' },
+                open_edit_form:      { icon: 'fa-pen',              color: '#3b82f6', label: 'Відкрив форму редагування' },
+                edit_info:           { icon: 'fa-floppy-disk',      color: '#3b82f6', label: 'Зберіг дані' },
+                open_graduate_modal: { icon: 'fa-graduation-cap',   color: '#8b5cf6', label: 'Відкрив модаль випуску' },
+                graduated:           { icon: 'fa-graduation-cap',   color: '#10b981', label: 'Випустив стажера' },
+                fired:               { icon: 'fa-user-xmark',       color: '#ef4444', label: 'Звільнив стажера' },
+                save_characteristic: { icon: 'fa-star',             color: '#f59e0b', label: 'Зберіг характеристику' },
+                add_discipline:      { icon: 'fa-plus',             color: '#10b981', label: 'Додав дисципліну' },
+                edit_discipline:     { icon: 'fa-pen-to-square',    color: '#3b82f6', label: 'Редагував дисципліну' },
+                delete_discipline:   { icon: 'fa-trash',            color: '#ef4444', label: 'Видалив дисципліну' },
             };
             const rows = logs.map(l => {
                 const a = actionLabel[l.action] || { icon: 'fa-circle', color: '#9ca3af', label: l.action };
@@ -465,8 +468,9 @@
                 const actor = l.actor?.full_name || 'Невідомо';
                 const internName = d.intern_name || '—';
                 let extra = '';
+                if (d.tab)          extra += `<span class="inlog-change">${Fmt.esc(d.tab)}</span>`;
                 if (d.changes && Object.keys(d.changes).length) {
-                    extra = Object.entries(d.changes).map(([k,v]) => `<span class="inlog-change">${Fmt.esc(k)}: ${Fmt.esc(String(v))}</span>`).join('');
+                    extra += Object.entries(d.changes).map(([k,v]) => `<span class="inlog-change">${Fmt.esc(k)}: ${Fmt.esc(String(v))}</span>`).join('');
                 }
                 if (d.new_position) extra += `<span class="inlog-change">нова посада: ${Fmt.esc(d.new_position)}</span>`;
                 if (d.discipline)   extra += `<span class="inlog-change">${Fmt.esc(d.discipline)}</span>`;
@@ -714,6 +718,9 @@
             const intern = await API.interns.getById(internId);
             this._currentIntern = intern;
             this._disciplines = (intern.intern_disciplines || []).sort((a,b) => a.order_index - b.order_index);
+            const _tabLabels = { info: 'Інфо', schedule: 'Розклад', characteristic: 'Характеристика', mentors: 'Наставники', report: 'Звіт' };
+            const _iname = intern.profile?.full_name || intern.profile_snapshot?.full_name || '?';
+            API.internLogs.add(internId, 'view_tab', { intern_name: _iname, tab: _tabLabels[tab] || tab });
             this._renderDetailBody(intern);
         } catch (_) {}
     },
@@ -823,6 +830,8 @@
                 : '<i class="fa-solid fa-xmark"></i> Скасувати';
         }
         if (!isOpen) {
+            const _iname = this._currentIntern?.profile?.full_name || this._currentIntern?.profile_snapshot?.full_name || '?';
+            API.internLogs.add(internId, 'open_edit_form', { intern_name: _iname });
             form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             requestAnimationFrame(() => this._onFormDateChange());
         }
@@ -2065,6 +2074,8 @@ ${discs.length ? `<table>
     _graduateState: { allDovs: [], selectedDovIds: new Set() },
 
     async _openGraduateModal(internId) {
+        const _iname = this._currentIntern?.profile?.full_name || '?';
+        API.internLogs.add(internId, 'open_graduate_modal', { intern_name: _iname });
         Modal.open({
             title: '<i class="fa-solid fa-graduation-cap" style="color:#8b5cf6"></i> Випуск стажера',
             size: 'lg',

@@ -1156,6 +1156,7 @@
                 <button class="in-btn in-btn-access" onclick="InternsPage._addHolidayRow('${internId}')"><i class="fa-solid fa-umbrella-beach"></i> Вихідний</button>
                 <button class="in-btn in-btn-access" onclick="InternsPage._openApplyTemplateModal('${internId}')"><i class="fa-solid fa-layer-group"></i> Шаблон</button>
                 ${discs.length ? `<button class="in-btn in-btn-danger" onclick="InternsPage._openApplyTemplateModal('${internId}',true)"><i class="fa-solid fa-arrows-rotate"></i> Замінити</button>` : ''}
+                ${discs.length ? `<button class="in-btn in-btn-danger" data-intern-id="${internId}" onclick="InternsPage._clearSchedule(this.dataset.internId)"><i class="fa-solid fa-trash"></i> Очистити</button>` : ''}
             </div>` : ''}
         </div>`;
         requestAnimationFrame(() => this._initTableResize(dc.querySelector('.isc-table')));
@@ -2692,6 +2693,23 @@ ${discs.length ? `<table>
             this._disciplines = discs.sort((a,b) => a.order_index - b.order_index);
             this._renderDetailSchedule(internId);
             Toast.success('Шаблон застосовано', `Додано ${toInsert.length} рядків`);
+        } catch(e) {
+            Toast.error('Помилка', e.message);
+        } finally {
+            Loader.hide();
+        }
+    },
+
+    async _clearSchedule(internId) {
+        const ok = await Modal.confirm({ message: 'Видалити весь розклад стажера?', confirmText: 'Видалити', danger: true });
+        if (!ok) return;
+        Loader.show();
+        try {
+            await API.internDisciplines.removeByIntern(internId);
+            const discs = await API.internDisciplines.getByIntern(internId);
+            this._disciplines = discs;
+            this._renderDetailSchedule(internId);
+            Toast.success('Розклад очищено');
         } catch(e) {
             Toast.error('Помилка', e.message);
         } finally {

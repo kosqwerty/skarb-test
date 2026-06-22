@@ -2504,6 +2504,11 @@ const API = {
             if (error) throw error;
         },
 
+        async removeByIntern(internId) {
+            const { error } = await supabase.from('intern_disciplines').delete().eq('intern_id', internId);
+            if (error) throw error;
+        },
+
         async reorder(internId, orderedIds) {
             const updates = orderedIds.map((id, i) =>
                 supabase.from('intern_disciplines').update({ order_index: i }).eq('id', id).eq('intern_id', internId)

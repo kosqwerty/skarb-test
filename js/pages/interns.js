@@ -38,14 +38,14 @@
         this._container = container;
         this._tab = 'list';
         this._interns = [];
-        this._canManage = AppState.isOwner();
+        this._canManage = AppState.isAdmin(); // owner + admin
         this._isManager = AppState.isManager();
         this._loadFilters();
 
         UI.setBreadcrumb([{ label: 'Стажери' }]);
         this._injectStyles();
 
-        // access check for non-owner/non-manager
+        // access check for non-owner/non-admin/non-manager
         if (!this._canManage && !this._isManager) {
             this._isViewer = await API.internViewers.isViewer(AppState.profile.id);
             if (!this._isViewer) { Router.go('dashboard'); return; }
@@ -834,9 +834,9 @@
 
     // ── Detail modal ──────────────────────────────────────────────────────────
     async _openDetail(internId) {
+        if (this._currentInternId !== internId) this._detailTab = 'info';
         this._currentInternId = internId;
-        this._detailTab = 'info';
-        Modal.open({ title: '<i class="fa-solid fa-user-graduate"></i> Картка стажера', size: 'lg', body: '<div style="text-align:center;padding:2rem"><i class="fa-solid fa-spinner fa-spin"></i></div>', footer: `<button class="btn btn-ghost btn-sm" onclick="Modal.close()">Закрити</button>` });
+        Modal.open({ title: '<i class="fa-solid fa-user-graduate"></i> Картка стажера', size: 'lg', body: '<div style="text-align:center;padding:2rem"><i class="fa-solid fa-spinner fa-spin"></i></div>', footer: `<button class="btn btn-ghost btn-sm" onclick="Modal.close()">Закрити</button>`, onClose: () => document.getElementById('ist-tpl-overlay')?.remove() });
         try {
             const intern = await API.interns.getById(internId);
             this._currentIntern = intern;
@@ -1094,7 +1094,8 @@
         const rows = discs.map((d, idx) => {
             const isHoliday   = d.row_type === 'holiday';
             const isHighlight = d.row_type === 'highlight';
-            const rowClass    = isHoliday ? 'isc-row-holiday' : isHighlight ? 'isc-row-highlight' : d.is_completed ? 'isc-row-done' : '';
+            const isInfo      = d.row_type === 'info';
+            const rowClass    = isHoliday ? 'isc-row-holiday' : isHighlight ? 'isc-row-highlight' : isInfo ? 'isc-row-info' : d.is_completed ? 'isc-row-done' : '';
             if (isHoliday) {
                 return `<tr class="isc-row ${rowClass}">
                     <td>${idx + 1}</td>
@@ -1154,6 +1155,7 @@
                 <button class="in-btn in-btn-primary" onclick="InternsPage._addDiscModal('${internId}')"><i class="fa-solid fa-plus"></i> Додати рядок</button>
                 <button class="in-btn in-btn-access" onclick="InternsPage._addHolidayRow('${internId}')"><i class="fa-solid fa-umbrella-beach"></i> Вихідний</button>
                 <button class="in-btn in-btn-access" onclick="InternsPage._openApplyTemplateModal('${internId}')"><i class="fa-solid fa-layer-group"></i> Шаблон</button>
+                ${discs.length ? `<button class="in-btn in-btn-danger" onclick="InternsPage._openApplyTemplateModal('${internId}',true)"><i class="fa-solid fa-arrows-rotate"></i> Замінити</button>` : ''}
             </div>` : ''}
         </div>`;
         requestAnimationFrame(() => this._initTableResize(dc.querySelector('.isc-table')));
@@ -2396,7 +2398,7 @@ ${discs.length ? `<table>
                 <div class="inf-section">
                     <div class="inf-section-title"><i class="fa-solid fa-tag"></i> Тип рядка</div>
                     <div class="inf-status-group" style="margin-bottom:.25rem">
-                        ${[['normal','Заняття'],['holiday','Вихідний'],['highlight','Важливе']].map(([v,l]) =>
+                        ${[['normal','Заняття'],['holiday','Вихідний'],['highlight','Перевірка знань'],['info','Інфо']].map(([v,l]) =>
                             `<label class="inf-status-opt${rowType===v?' inf-status-opt-active':''}">
                                 <input type="radio" name="idf-rowtype" value="${v}" ${rowType===v?'checked':''} onchange="InternsPage._onDiscRowTypeChange(this.value)" style="display:none">${l}
                             </label>`).join('')}
@@ -2583,7 +2585,7 @@ ${discs.length ? `<table>
 
     // ── Schedule templates ────────────────────────────────────────────────────
 
-    _openApplyTemplateModal(internId) {
+    _openApplyTemplateModal(internId, replace = false) {
         const intern = this._interns.find(i => i.id === internId);
         const jobPos = intern?.profile?.job_position || intern?.profile_snapshot?.job_position || '';
         const templates = this._scheduleTemplates;
@@ -2605,37 +2607,56 @@ ${discs.length ? `<table>
             return `${fmtDate(s1)} – ${fmtDate(s2)}`;
         };
 
-        const renderGroup = (list, label) => list.length ? `
-            <div class="ist-group-label">${Fmt.esc(label)}</div>
+        const renderGroup = (list, label, accent) => list.length ? `
+            <div class="ist-apply-group-label${accent ? ' ist-apply-group-accent' : ''}">${Fmt.esc(label)}</div>
             ${list.map(t => {
                 const range = getDateRange(t);
-                return `<div class="ist-card" onclick="InternsPage._applyTemplate('${internId}','${t.id}')">
-                    <div>
-                        <div class="ist-card-name">${Fmt.esc(t.name)}</div>
-                        ${range ? `<div style="font-size:.75rem;color:var(--text-muted);margin-top:.1rem"><i class="fa-regular fa-calendar" style="font-size:.7rem"></i> ${range}</div>` : ''}
+                const cnt = (t.rows||[]).length;
+                return `<div class="ist-apply-card" onclick="InternsPage._applyTemplate('${internId}','${t.id}',${replace})">
+                    <div class="ist-apply-card-top">
+                        <i class="fa-solid fa-layer-group ist-apply-icon"></i>
+                        <span class="ist-apply-name">${Fmt.esc(t.name)}</span>
+                        <span class="ist-badge-rows">${cnt} рядк${cnt===1?'ок':cnt<5?'ки':'ів'}</span>
                     </div>
-                    <div class="ist-card-meta">
+                    ${(t.job_position || range) ? `<div class="ist-apply-card-foot">
                         ${t.job_position ? `<span class="ist-badge-job">${Fmt.esc(t.job_position)}</span>` : ''}
-                        <span class="ist-badge-rows">${(t.rows||[]).length} рядків</span>
-                    </div>
+                        ${range ? `<span class="ist-apply-range"><i class="fa-regular fa-calendar"></i> ${range}</span>` : ''}
+                    </div>` : ''}
                 </div>`;
             }).join('')}` : '';
 
+        const hint = replace
+            ? `<p class="ist-apply-hint ist-apply-hint-danger"><i class="fa-solid fa-triangle-exclamation"></i> Поточний розклад буде <strong>видалено</strong> і замінено шаблоном.</p>`
+            : `<p class="ist-apply-hint">Рядки шаблону будуть <strong>додані</strong> до поточного розкладу.</p>`;
+
         const body = templates.length ? `
-            <p style="font-size:.83rem;color:var(--text-muted);margin:0 0 .75rem">
-                Рядки шаблону будуть <strong>додані</strong> до поточного розкладу.
-            </p>
-            ${renderGroup(matched, `✅ Для посади: ${jobPos || '—'}`)}
-            ${renderGroup(other, 'Інші шаблони')}` :
+            ${hint}
+            ${renderGroup(matched, `Для посади: ${jobPos || '—'}`, true)}
+            ${renderGroup(other, 'Інші шаблони', false)}` :
             `<div style="text-align:center;padding:2rem;color:var(--text-muted)">
                 <i class="fa-solid fa-layer-group" style="font-size:2rem;margin-bottom:.5rem;display:block;opacity:.3"></i>
                 Шаблонів ще немає.<br>Створіть їх у <strong>Налаштуваннях</strong>.
             </div>`;
 
-        Modal.open({ title: '<i class="fa-solid fa-layer-group"></i> Завантажити шаблон', body, size: 'sm' });
+        const title = replace
+            ? '<i class="fa-solid fa-arrows-rotate"></i> Замінити шаблон'
+            : '<i class="fa-solid fa-layer-group"></i> Завантажити шаблон';
+
+        const overlay = document.createElement('div');
+        overlay.id = 'ist-tpl-overlay';
+        overlay.innerHTML = `
+            <div class="ist-tpl-overlay-backdrop" onclick="document.getElementById('ist-tpl-overlay')?.remove()"></div>
+            <div class="ist-tpl-overlay-panel">
+                <div class="ist-tpl-overlay-header">
+                    <span>${title}</span>
+                    <button class="btn btn-ghost btn-sm" onclick="document.getElementById('ist-tpl-overlay')?.remove()"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="ist-tpl-overlay-body">${body}</div>
+            </div>`;
+        document.body.appendChild(overlay);
     },
 
-    async _applyTemplate(internId, templateId) {
+    async _applyTemplate(internId, templateId, replace = false) {
         const tpl = this._scheduleTemplates.find(t => t.id === templateId);
         if (!tpl || !tpl.rows?.length) { Toast.warning('Шаблон порожній'); return; }
         const intern = this._interns.find(i => i.id === internId);
@@ -2643,14 +2664,14 @@ ${discs.length ? `<table>
             Toast.warning('Спочатку вкажіть дату початку стажування');
             return;
         }
-        Modal.close();
+        document.getElementById('ist-tpl-overlay')?.remove();
         Loader.show();
         try {
+            if (replace) await API.internDisciplines.removeByIntern(internId);
             const [sy, sm, sd] = intern.start_date.split('-').map(Number);
             const pad = n => String(n).padStart(2, '0');
-            const existing = this._disciplines;
-            let maxOrder = existing.length ? Math.max(...existing.map(d => d.order_index || 0)) : -1;
-            const toInsert = tpl.rows.map((r, i) => {
+            const sortedRows = [...tpl.rows].sort((a, b) => (a.day_offset ?? 0) - (b.day_offset ?? 0));
+            const toInsert = sortedRows.map((r, i) => {
                 const dt = new Date(Date.UTC(sy, sm - 1, sd + (r.day_offset ?? i + 1) - 1));
                 const date = `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth()+1)}-${pad(dt.getUTCDate())}`;
                 return {
@@ -2662,7 +2683,7 @@ ${discs.length ? `<table>
                     row_type:        r.row_type || 'normal',
                     notes:           r.notes    || null,
                     date,
-                    order_index:  maxOrder + 1 + i,
+                    order_index:  i,
                     is_completed: false
                 };
             });
@@ -2702,6 +2723,7 @@ ${discs.length ? `<table>
                         <div class="ist-mgr-name">${Fmt.esc(t.name)}</div>
                         <div class="ist-mgr-meta">${t.job_position ? Fmt.esc(t.job_position) + ' · ' : ''}${(t.rows||[]).length} рядків</div>
                     </div>
+                    <button class="btn btn-ghost btn-sm" title="Копіювати" onclick="InternsPage._duplicateTemplate('${t.id}')"><i class="fa-solid fa-copy"></i></button>
                     <button class="btn btn-ghost btn-sm" onclick="InternsPage._openTemplateEditor('${t.id}')"><i class="fa-solid fa-pen"></i></button>
                     <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="InternsPage._deleteTemplate('${t.id}',this)" data-name="${Fmt.esc(t.name)}"><i class="fa-solid fa-trash"></i></button>
                 </div>`).join('') :
@@ -2709,65 +2731,69 @@ ${discs.length ? `<table>
     },
 
     _openTemplateEditor(templateId) {
+        const area = document.getElementById('ist-manager-area');
+        if (!area) return;
         const tpl = templateId ? this._scheduleTemplates.find(t => t.id === templateId) : null;
         const positions = [...new Set(this._jobSettings.map(s => s.job_position).filter(Boolean))].sort();
         const posOpts = positions.map(p => `<option value="${Fmt.esc(p)}" ${tpl?.job_position===p?'selected':''}>${Fmt.esc(p)}</option>`).join('');
         const rows = tpl?.rows || [];
 
-        const rowsHtml = rows.map((r, i) => this._tplRowHtml(i, r)).join('');
-        const dowOpts = [['1','Понеділок'],['2','Вівторок'],['3','Середа'],['4','Четвер'],['5','П’ятниця'],['6','Субота'],['0','Неділя']]
-            .map(([v,l]) => `<option value="${v}">${l}</option>`).join('');
+        const savedDow = String(tpl?.preview_dow ?? '1');
+        const rowsHtml = rows.map((r, i) => this._tplRowHtml(i, r, parseInt(savedDow))).join('');
+        const dowOpts = [['1','Понеділок'],['2','Вівторок'],['3','Середа'],['4','Четвер'],['5','П\'ятниця'],['6','Субота'],['0','Неділя']]
+            .map(([v,l]) => `<option value="${v}"${savedDow===v?' selected':''}>${l}</option>`).join('');
 
-        Modal.open({
-            title: templateId ? '<i class="fa-solid fa-pen"></i> Редагувати шаблон' : '<i class="fa-solid fa-plus"></i> Новий шаблон',
-            size: 'xl',
-            body: `
-                <div style="display:flex;flex-direction:column;gap:1rem">
-                    <div style="display:flex;gap:.75rem;flex-wrap:wrap">
-                        <div style="flex:1;min-width:180px">
-                            <label class="inf-label">Назва шаблону <span class="inf-required">*</span></label>
-                            <input id="ist-name" class="inf-input" placeholder="Наприклад: Касир 21 день" value="${Fmt.esc(tpl?.name||'')}">
-                        </div>
-                        <div style="min-width:180px">
-                            <label class="inf-label">Посада</label>
-                            <select id="ist-job" class="inf-select" onchange="const n=document.getElementById('ist-name');if(!n.value.trim())n.value=this.value;InternsPage._tplRefreshDows();">
-                                <option value="">— Будь-яка —</option>
-                                ${posOpts}
-                            </select>
-                        </div>
-                        <div style="min-width:150px">
-                            <label class="inf-label">Превью з дня</label>
-                            <select id="ist-preview-dow" class="inf-select" onchange="InternsPage._tplRefreshDows()">${dowOpts}</select>
-                        </div>
+        area.innerHTML = `
+            <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.85rem">
+                <button class="btn btn-ghost btn-sm" onclick="InternsPage._renderTemplateManager()" title="Назад до списку"><i class="fa-solid fa-arrow-left"></i></button>
+                <span style="font-weight:700;font-size:.9rem">${templateId ? 'Редагувати шаблон' : 'Новий шаблон'}</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:1rem">
+                <div style="display:flex;gap:.75rem;flex-wrap:wrap">
+                    <div style="flex:1;min-width:180px">
+                        <label class="inf-label">Назва шаблону <span class="inf-required">*</span></label>
+                        <input id="ist-name" class="inf-input" placeholder="Наприклад: Касир 21 день" value="${Fmt.esc(tpl?.name||'')}">
                     </div>
-                    <div>
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem">
-                            <label class="inf-label" style="margin:0">Рядки розкладу</label>
-                            <button class="btn btn-ghost btn-sm" onclick="InternsPage._tplAddRow()"><i class="fa-solid fa-plus"></i> Рядок</button>
-                        </div>
-                        <div class="ist-tpl-table-wrap">
-                            <table id="ist-tpl-table" class="ist-tpl-table">
-                                <thead><tr>
-                                    <th class="ist-col-day" style="width:46px">День</th>
-                                    <th class="ist-col-dow" style="width:88px">День тижня</th>
-                                    <th class="ist-col-type" style="width:104px">Тип</th>
-                                    <th class="ist-col-name">Назва / тема</th>
-                                    <th class="ist-col-hours" style="width:188px">Години</th>
-                                    <th class="ist-col-place" style="width:86px">Місце</th>
-                                    <th style="width:34px"></th>
-                                </tr></thead>
-                                <tbody id="ist-rows-wrap">
-                                    ${rowsHtml || '<tr><td colspan="7" id="ist-empty" style="text-align:center;color:var(--text-muted);padding:.75rem;font-size:.85rem">Немає рядків — натисніть «Рядок»</td></tr>'}
-                                </tbody>
-                            </table>
-                        </div>
+                    <div style="min-width:180px">
+                        <label class="inf-label">Посада</label>
+                        <select id="ist-job" class="inf-select" onchange="const n=document.getElementById('ist-name');if(!n.value.trim())n.value=this.value;InternsPage._tplRefreshDows();">
+                            <option value="">— Будь-яка —</option>
+                            ${posOpts}
+                        </select>
                     </div>
-                </div>`,
-            footer: `
-                <button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
-                <button class="btn btn-primary" onclick="InternsPage._saveTemplate(${templateId ? `'${templateId}'` : 'null'})"><i class="fa-solid fa-floppy-disk"></i> Зберегти</button>`
-        });
-        requestAnimationFrame(() => this._initTplTableResize());
+                    <div style="min-width:150px">
+                        <label class="inf-label">Старт з дня тижня <span style="font-weight:400;color:var(--text-muted)">(для перегляду)</span></label>
+                        <select id="ist-preview-dow" class="inf-select" onchange="InternsPage._tplRefreshDows()">${dowOpts}</select>
+                    </div>
+                </div>
+                <div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem">
+                        <label class="inf-label" style="margin:0">Рядки розкладу</label>
+                        <button class="btn btn-ghost btn-sm" onclick="InternsPage._tplAddRow()"><i class="fa-solid fa-plus"></i> Рядок</button>
+                    </div>
+                    <div class="ist-tpl-table-wrap" style="overflow-x:auto">
+                        <table id="ist-tpl-table" class="ist-tpl-table">
+                            <thead><tr>
+                                <th style="width:20px"></th>
+                                <th class="ist-col-dow" style="width:90px">День</th>
+                                <th class="ist-col-type" style="width:130px">Тип</th>
+                                <th class="ist-col-name">Назва / тема</th>
+                                <th class="ist-col-hours" style="width:160px">Години</th>
+                                <th class="ist-col-place" style="width:90px">Місце</th>
+                                <th style="width:50px;overflow:hidden"></th>
+                            </tr></thead>
+                            <tbody id="ist-rows-wrap">
+                                ${rowsHtml || '<tr><td colspan="7" id="ist-empty" style="text-align:center;color:var(--text-muted);padding:.75rem;font-size:.85rem">Немає рядків — натисніть «Рядок»</td></tr>'}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div style="display:flex;justify-content:flex-end;gap:.5rem;padding-top:.25rem">
+                    <button class="btn btn-secondary" onclick="InternsPage._renderTemplateManager()">Скасувати</button>
+                    <button class="btn btn-primary" onclick="InternsPage._saveTemplate(${templateId ? `'${templateId}'` : 'null'})"><i class="fa-solid fa-floppy-disk"></i> Зберегти</button>
+                </div>
+            </div>`;
+        requestAnimationFrame(() => { this._initTplTableResize(); this._initTplDragDrop(); });
     },
 
     // day_offset is 1-based: day 1 = start_date, day 2 = start_date+1, etc.
@@ -2778,35 +2804,20 @@ ${discs.length ? `<table>
 
     _tplRefreshDows() {
         const startDow = parseInt(document.getElementById('ist-preview-dow')?.value ?? '1');
+        const dowNames = ['Нд','Пн','Вт','Ср','Чт','Пт','Сб'];
         document.querySelectorAll('#ist-rows-wrap .ist-tpl-row').forEach(row => {
             const day = parseInt(row.querySelector('.ist-r-offset')?.value) || 1;
-            const sel = row.querySelector('.ist-r-dow');
-            if (sel) {
+            const badge = row.querySelector('.ist-dow-badge');
+            if (badge) {
                 const idx = this._tplDowIdx(day, startDow);
-                sel.value = String(idx);
-                sel.style.color = idx === 0 ? 'var(--danger)' : '';
-                sel.style.fontWeight = idx === 0 ? '700' : '';
+                badge.textContent = dowNames[idx];
+                badge.classList.toggle('ist-dow-weekend', idx === 0);
             }
         });
     },
 
-    _tplDowChanged(select) {
-        const row = select.closest('.ist-tpl-row');
-        const offsetInput = row.querySelector('.ist-r-offset');
-        const startDow = parseInt(document.getElementById('ist-preview-dow')?.value ?? '1');
-        const targetDow = parseInt(select.value);
-        const allRows = [...document.querySelectorAll('#ist-rows-wrap .ist-tpl-row')];
-        const myIdx = allRows.indexOf(row);
-        let minDay = myIdx > 0 ? (parseInt(allRows[myIdx-1].querySelector('.ist-r-offset')?.value) || 1) + 1 : 1;
-        let day = minDay;
-        while (this._tplDowIdx(day, startDow) !== targetDow && day < minDay + 7) day++;
-        offsetInput.value = day;
-        select.style.color = targetDow === 0 ? 'var(--danger)' : '';
-        select.style.fontWeight = targetDow === 0 ? '700' : '';
-    },
-
-    _tplRowHtml(i, r = {}) {
-        const startDow = parseInt(document.getElementById('ist-preview-dow')?.value ?? '1');
+    _tplRowHtml(i, r = {}, startDow = null) {
+        if (startDow === null) startDow = parseInt(document.getElementById('ist-preview-dow')?.value ?? '1');
         const day = r.day_offset ?? (i + 1);
         const hoursMatch = (r.hours||'').match(/(\d{1,2}:\d{2})[–\-](\d{1,2}:\d{2})/);
         const timeFrom = hoursMatch ? hoursMatch[1] : (r.hours && !r.hours.includes('-') && !r.hours.includes('–') ? r.hours.trim() : '');
@@ -2815,14 +2826,19 @@ ${discs.length ? `<table>
         const isWeekend = dowIdx === 0;
         const dowSel = ['Нд','Пн','Вт','Ср','Чт','Пт','Сб'].map((n,v) =>
             `<option value="${v}"${dowIdx===v?' selected':''}>${n}</option>`).join('');
-        return `<tr class="ist-tpl-row" data-idx="${i}">
-            <td><input class="inf-input ist-r-offset" type="number" min="1" max="366" value="${day}"
-                   style="width:100%;text-align:center;padding:.3rem .2rem"
-                   oninput="InternsPage._tplRefreshDows()"></td>
-            <td><select class="inf-select ist-r-dow" style="${isWeekend?'color:var(--danger);font-weight:700':''}"
-                   onchange="InternsPage._tplDowChanged(this)">${dowSel}</select></td>
-            <td><select class="inf-select ist-r-type">
-                ${[['normal','Заняття'],['holiday','Вихідний'],['highlight','Важливе']].map(([v,l])=>`<option value="${v}" ${(r.row_type||'normal')===v?'selected':''}>${l}</option>`).join('')}
+        const rowType = r.row_type || 'normal';
+        const dowNames = ['Нд','Пн','Вт','Ср','Чт','Пт','Сб'];
+        const rowCls = rowType === 'highlight' ? ' ist-tpl-highlight' : rowType === 'holiday' ? ' ist-tpl-holiday' : rowType === 'info' ? ' ist-tpl-info' : '';
+        return `<tr class="ist-tpl-row${rowCls}" data-idx="${i}" draggable="true">
+            <td class="ist-drag-handle" title="Перетягнути"><i class="fa-solid fa-grip-vertical"></i></td>
+            <td>
+                <div class="ist-day-cell">
+                    <input class="inf-input ist-r-offset" type="number" min="1" max="999" value="${day}" style="width:48px;text-align:center;padding:.25rem .2rem" onchange="InternsPage._tplRefreshDows()">
+                    <span class="ist-dow-badge${isWeekend?' ist-dow-weekend':''}">${dowNames[dowIdx]}</span>
+                </div>
+            </td>
+            <td><select class="inf-select ist-r-type" onchange="const tr=this.closest('tr');tr.classList.remove('ist-tpl-highlight','ist-tpl-holiday','ist-tpl-info');if(this.value==='highlight')tr.classList.add('ist-tpl-highlight');else if(this.value==='holiday')tr.classList.add('ist-tpl-holiday');else if(this.value==='info')tr.classList.add('ist-tpl-info');">
+                ${[['normal','Заняття'],['holiday','Вихідний'],['highlight','Перевірка знань'],['info','Інфо']].map(([v,l])=>`<option value="${v}" ${rowType===v?'selected':''}>${l}</option>`).join('')}
             </select></td>
             <td><input class="inf-input ist-r-name" placeholder="Назва / тема…" value="${Fmt.esc(r.discipline_name||'')}" style="width:100%"></td>
             <td><div class="ist-time-wrap">
@@ -2831,7 +2847,7 @@ ${discs.length ? `<table>
                 <input class="inf-input ist-r-time-to" type="time" value="${timeTo}" title="Кінець">
             </div></td>
             <td><input class="inf-input ist-r-place" placeholder="УЦ/ЛФ…" value="${Fmt.esc(r.place||'')}" style="width:100%"></td>
-            <td style="text-align:center"><button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="this.closest('tr').remove()"><i class="fa-solid fa-xmark"></i></button></td>
+            <td style="text-align:center"><button class="btn btn-ghost btn-sm ist-tpl-del-btn" style="color:var(--danger)" onclick="this.closest('tr').remove()"><i class="fa-solid fa-trash"></i></button></td>
         </tr>`;
     },
 
@@ -2843,14 +2859,14 @@ ${discs.length ? `<table>
         const rows = wrap.querySelectorAll('.ist-tpl-row');
         const lastOffset = rows.length ? (parseInt(rows[rows.length-1].querySelector('.ist-r-offset')?.value) || 1) + 1 : 1;
         wrap.insertAdjacentHTML('beforeend', this._tplRowHtml(rows.length, { day_offset: lastOffset }));
-        requestAnimationFrame(() => this._initTplTableResize());
+        requestAnimationFrame(() => { this._initTplTableResize(); this._initTplDragDrop(); });
     },
 
     _initTplTableResize() {
         const table = document.getElementById('ist-tpl-table');
         if (!table) return;
         table.querySelectorAll('thead th').forEach((th, i, ths) => {
-            if (i === ths.length - 1) return; // skip last (delete btn col)
+            if (i === 0 || i === ths.length - 1) return; // skip drag handle + delete btn cols
             const existing = th.querySelector('.ist-th-resizer');
             if (existing) existing.remove();
             const handle = document.createElement('div');
@@ -2878,10 +2894,55 @@ ${discs.length ? `<table>
         });
     },
 
+    _initTplDragDrop() {
+        const tbody = document.getElementById('ist-rows-wrap');
+        if (!tbody) return;
+        let dragSrc = null;
+        tbody.querySelectorAll('.ist-tpl-row').forEach(row => {
+            row.addEventListener('dragstart', e => {
+                dragSrc = row;
+                row.classList.add('ist-row-dragging');
+                e.dataTransfer.effectAllowed = 'move';
+            });
+            row.addEventListener('dragend', () => {
+                dragSrc = null;
+                tbody.querySelectorAll('.ist-tpl-row').forEach(r => {
+                    r.classList.remove('ist-row-dragging', 'ist-row-dragover');
+                });
+            });
+            row.addEventListener('dragover', e => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                if (dragSrc && row !== dragSrc) {
+                    tbody.querySelectorAll('.ist-tpl-row').forEach(r => r.classList.remove('ist-row-dragover'));
+                    row.classList.add('ist-row-dragover');
+                }
+            });
+            row.addEventListener('dragleave', () => row.classList.remove('ist-row-dragover'));
+            row.addEventListener('drop', e => {
+                e.preventDefault();
+                if (!dragSrc || dragSrc === row) return;
+                row.classList.remove('ist-row-dragover');
+                const rows = [...tbody.querySelectorAll('.ist-tpl-row')];
+                const fromIdx = rows.indexOf(dragSrc);
+                const toIdx   = rows.indexOf(row);
+                if (fromIdx < toIdx) row.after(dragSrc);
+                else row.before(dragSrc);
+            });
+        });
+        // only drag handle initiates drag, rest of row is non-draggable to allow text input
+        tbody.querySelectorAll('.ist-drag-handle').forEach(handle => {
+            handle.addEventListener('mousedown', () => handle.closest('tr').setAttribute('draggable', 'true'));
+            handle.addEventListener('mouseup',   () => handle.closest('tr').setAttribute('draggable', 'false'));
+        });
+        tbody.querySelectorAll('.ist-tpl-row').forEach(row => row.setAttribute('draggable', 'false'));
+    },
+
     async _saveTemplate(templateId) {
         const name = document.getElementById('ist-name')?.value.trim();
         if (!name) { Toast.warning('Введіть назву шаблону'); return; }
         const job_position = document.getElementById('ist-job')?.value || '';
+        const preview_dow  = parseInt(document.getElementById('ist-preview-dow')?.value ?? '1');
         const rowEls = document.querySelectorAll('#ist-rows-wrap .ist-tpl-row');
         const rows = [...rowEls].map(el => ({
             day_offset:      parseInt(el.querySelector('.ist-r-offset')?.value) || 1,
@@ -2889,17 +2950,15 @@ ${discs.length ? `<table>
             discipline_name: el.querySelector('.ist-r-name')?.value.trim()  || '',
             hours:           (() => { const f = el.querySelector('.ist-r-time-from')?.value; const t = el.querySelector('.ist-r-time-to')?.value; return f && t ? `${f}-${t}` : (f || t || null); })(),
             place:           el.querySelector('.ist-r-place')?.value.trim() || null
-        })).filter(r => r.row_type === 'holiday' || r.discipline_name)
-           .sort((a, b) => a.day_offset - b.day_offset);
+        })).filter(r => r.row_type === 'holiday' || r.discipline_name);
         Loader.show();
         try {
             if (templateId) {
-                await API.internScheduleTemplates.update(templateId, { name, job_position, rows });
+                await API.internScheduleTemplates.update(templateId, { name, job_position, preview_dow, rows });
             } else {
-                await API.internScheduleTemplates.create({ name, job_position, rows });
+                await API.internScheduleTemplates.create({ name, job_position, preview_dow, rows });
             }
             this._scheduleTemplates = await API.internScheduleTemplates.getAll();
-            Modal.close();
             Toast.success('Збережено');
             this._renderTemplateManager();
         } catch(e) {
@@ -2918,6 +2977,26 @@ ${discs.length ? `<table>
             await API.internScheduleTemplates.remove(templateId);
             this._scheduleTemplates = await API.internScheduleTemplates.getAll();
             Toast.success('Видалено');
+            this._renderTemplateManager();
+        } catch(e) {
+            Toast.error('Помилка', e.message);
+        } finally {
+            Loader.hide();
+        }
+    },
+
+    async _duplicateTemplate(templateId) {
+        const tpl = this._scheduleTemplates.find(t => t.id === templateId);
+        if (!tpl) return;
+        Loader.show();
+        try {
+            await API.internScheduleTemplates.create({
+                name: tpl.name + ' (копія)',
+                job_position: tpl.job_position || '',
+                rows: tpl.rows || []
+            });
+            this._scheduleTemplates = await API.internScheduleTemplates.getAll();
+            Toast.success('Скопійовано', `«${tpl.name}» → «${tpl.name} (копія)»`);
             this._renderTemplateManager();
         } catch(e) {
             Toast.error('Помилка', e.message);
@@ -2978,7 +3057,8 @@ ${discs.length ? `<table>
             await API.internDisciplines.remove(discId);
             if (internId) {
                 API.internLogs.add(internId, 'delete_discipline', { discipline: name });
-                await this._backToDetail(internId);
+                this._detailTab = 'schedule';
+                await this._openDetail(internId);
             }
         } catch (e) { Toast.error('Помилка', e.message); }
         finally { Loader.hide(); }
@@ -4048,6 +4128,8 @@ ${discs.length ? `<table>
 .in-btn-primary:active:not(:disabled) { background:#173A8E; box-shadow:inset 0 2px 6px rgba(0,0,0,.3); transform:translateY(0); }
 .in-btn-access { background:transparent; color:var(--text-secondary); border:1px solid var(--border); }
 .in-btn-access:hover:not(:disabled) { background:var(--bg-hover); color:var(--text-primary); }
+.in-btn-danger { background:transparent; color:var(--danger); border:1px solid var(--danger); }
+.in-btn-danger:hover:not(:disabled) { background:rgba(239,68,68,.08); }
 .in-tabs { display:flex; gap:.25rem; margin-bottom:1.25rem; border-bottom:1px solid var(--border); flex-shrink:0; }
 .in-tab { padding:.55rem 1.1rem; background:none; border:none; border-bottom:2px solid transparent; color:var(--text-muted); font-size:.88rem; font-weight:600; cursor:pointer; transition:color .15s,border-color .15s; display:flex; align-items:center; gap:.4rem; margin-bottom:-1px; }
 .in-tab:hover { color:var(--text-primary); }
@@ -4214,6 +4296,8 @@ mark.in-hl { background:color-mix(in srgb,#f59e0b 35%,transparent); color:inheri
 .isc-row-holiday:hover td { background:rgba(148,163,184,.13); }
 .isc-row-highlight td { background:rgba(245,158,11,.07); }
 .isc-row-highlight:hover td { background:rgba(245,158,11,.12); }
+.isc-row-info td { background:rgba(59,130,246,.07); }
+.isc-row-info:hover td { background:rgba(59,130,246,.12); }
 .isc-row-done td { opacity:.55; }
 .isc-done-btn { background:none; border:none; cursor:pointer; font-size:1rem; padding:.1rem .25rem; color:var(--text-muted); transition:color .15s; }
 .isc-done-btn:hover { color:#10b981; }
@@ -4334,14 +4418,26 @@ mark.in-hl { background:color-mix(in srgb,#f59e0b 35%,transparent); color:inheri
 .in-dov-item { display:flex; align-items:center; gap:.5rem; padding:.35rem .4rem; border-radius:6px; cursor:pointer; font-size:.875rem; transition:background .12s; }
 .in-dov-item:hover { background:var(--bg-hover); }
 .in-dov-item input { cursor:pointer; accent-color:var(--primary); }
-/* ── Template apply modal ───────────────────────────────────────────────── */
-.ist-group-label { font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin:.75rem 0 .35rem; }
-.ist-card { display:flex; align-items:center; justify-content:space-between; gap:.75rem; padding:.65rem .9rem; border:1px solid var(--border); border-radius:var(--radius-md); cursor:pointer; transition:all .15s; background:var(--bg-surface); }
-.ist-card:hover { border-color:var(--primary); background:rgba(42,94,232,.04); }
-.ist-card-name { font-weight:600; font-size:.875rem; color:var(--text-primary); }
-.ist-card-meta { display:flex; gap:.4rem; align-items:center; flex-shrink:0; }
-.ist-badge-job { font-size:.72rem; padding:.15rem .5rem; border-radius:20px; background:rgba(42,94,232,.1); color:var(--primary); font-weight:600; }
-.ist-badge-rows { font-size:.72rem; padding:.15rem .5rem; border-radius:20px; background:var(--bg-hover); color:var(--text-muted); }
+/* ── Template apply overlay (stacked above main modal) ─────────────────── */
+#ist-tpl-overlay { position:fixed; inset:0; z-index:10100; display:flex; align-items:center; justify-content:center; }
+.ist-tpl-overlay-backdrop { position:absolute; inset:0; background:rgba(0,0,0,.45); backdrop-filter:blur(2px); }
+.ist-tpl-overlay-panel { position:relative; z-index:1; background:var(--bg-surface); border-radius:var(--radius-lg); box-shadow:0 20px 60px rgba(0,0,0,.35); width:360px; max-width:calc(100vw - 2rem); max-height:80vh; display:flex; flex-direction:column; }
+.ist-tpl-overlay-header { display:flex; align-items:center; justify-content:space-between; padding:.75rem 1rem; border-bottom:1px solid var(--border); font-weight:600; font-size:.9rem; flex-shrink:0; }
+.ist-tpl-overlay-body { overflow-y:auto; padding:1rem; }
+/* ── Template apply cards ───────────────────────────────────────────────── */
+.ist-apply-hint { font-size:.82rem; color:var(--text-muted); margin:0 0 .85rem; }
+.ist-apply-hint-danger { color:var(--danger); background:rgba(239,68,68,.07); border:1px solid rgba(239,68,68,.2); border-radius:var(--radius-sm); padding:.4rem .65rem; }
+.ist-apply-group-label { font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin:.85rem 0 .4rem; }
+.ist-apply-group-accent { color:var(--primary); }
+.ist-apply-card { padding:.6rem .75rem; border:1px solid var(--border); border-radius:var(--radius-md); cursor:pointer; transition:border-color .15s,background .15s; background:var(--bg-surface); margin-bottom:.4rem; }
+.ist-apply-card:hover { border-color:var(--primary); background:rgba(42,94,232,.04); }
+.ist-apply-card-top { display:flex; align-items:center; gap:.5rem; }
+.ist-apply-icon { font-size:.8rem; color:var(--primary); opacity:.6; flex-shrink:0; }
+.ist-apply-name { flex:1; font-weight:600; font-size:.875rem; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+.ist-apply-card-foot { display:flex; align-items:center; gap:.4rem; margin-top:.35rem; flex-wrap:wrap; }
+.ist-apply-range { font-size:.72rem; color:var(--text-muted); display:flex; align-items:center; gap:.25rem; }
+.ist-badge-job { font-size:.72rem; padding:.15rem .5rem; border-radius:20px; background:rgba(42,94,232,.1); color:var(--primary); font-weight:600; white-space:nowrap; }
+.ist-badge-rows { font-size:.72rem; padding:.15rem .45rem; border-radius:20px; background:var(--bg-hover); color:var(--text-muted); white-space:nowrap; flex-shrink:0; }
 /* ── Template manager ───────────────────────────────────────────────────── */
 .ist-js-tab { background:transparent; color:var(--text-secondary); border:1px solid var(--border); }
 .ist-js-tab.active { background:var(--primary); color:#fff; border-color:var(--primary); }
@@ -4351,10 +4447,34 @@ mark.in-hl { background:color-mix(in srgb,#f59e0b 35%,transparent); color:inheri
 /* ── Template editor table ──────────────────────────────────────────────── */
 .ist-tpl-table-wrap { border:1px solid rgba(201,162,39,.3); border-radius:var(--radius-md); overflow:hidden; }
 .ist-tpl-table { width:100%; border-collapse:collapse; table-layout:fixed; font-size:.83rem; }
-.ist-tpl-table thead th { position:relative; background:linear-gradient(135deg,#1a2e5a 0%,#0f1e3d 100%); color:#C9A227; padding:.45rem .5rem; font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; border-bottom:2px solid rgba(201,162,39,.4); user-select:none; white-space:nowrap; }
-.ist-tpl-table td { padding:.25rem .4rem; border-bottom:1px solid var(--border); vertical-align:middle; }
+.ist-tpl-table thead th { position:relative; background:linear-gradient(135deg,#1a2e5a 0%,#0f1e3d 100%); color:#C9A227; padding:.45rem .5rem; font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; border-bottom:2px solid rgba(201,162,39,.4); user-select:none; white-space:normal; line-height:1.2; text-align:center; overflow:hidden; }
+.ist-tpl-table thead th.ist-col-name { text-align:left; }
+.ist-tpl-del-btn { visibility:hidden; }
+.ist-tpl-row:hover .ist-tpl-del-btn { visibility:visible; }
+.ist-tpl-row:not(.ist-tpl-highlight):not(.ist-tpl-holiday) td { background:rgba(16,185,129,.06); }
+.ist-tpl-row:not(.ist-tpl-highlight):not(.ist-tpl-holiday):hover td { background:rgba(16,185,129,.12); }
+.ist-tpl-highlight td { background:rgba(245,158,11,.09); }
+.ist-tpl-highlight:hover td { background:rgba(245,158,11,.15); }
+.ist-tpl-holiday td { background:rgba(148,163,184,.08); color:var(--text-muted); font-style:italic; }
+.ist-tpl-holiday:hover td { background:rgba(148,163,184,.13); }
+.ist-tpl-info td { background:rgba(59,130,246,.07); }
+.ist-tpl-info:hover td { background:rgba(59,130,246,.13); }
+.ist-tpl-table td { padding:.35rem .5rem; border-bottom:1px solid var(--border); vertical-align:middle; }
 .ist-tpl-table tbody tr:last-child td { border-bottom:none; }
 .ist-tpl-row .inf-input, .ist-tpl-row .inf-select { font-size:.8rem; padding:.3rem .4rem; }
+.ist-r-time-from::-webkit-calendar-picker-indicator, .ist-r-time-to::-webkit-calendar-picker-indicator { display:none; width:0; opacity:0; }
+        .ist-day-cell { display:flex; align-items:center; gap:.3rem; }
+        .ist-r-offset::-webkit-inner-spin-button, .ist-r-offset::-webkit-outer-spin-button { opacity:.4; }
+        .ist-dow-badge { font-size:.7rem; font-weight:700; padding:.1rem .35rem; border-radius:4px; background:var(--bg-hover); color:var(--text-muted); white-space:nowrap; flex-shrink:0; }
+        .ist-dow-weekend { background:rgba(239,68,68,.12); color:var(--danger); }
+        .ist-drag-handle { cursor:grab; color:var(--text-muted); text-align:center; padding:0 .25rem !important; user-select:none; }
+        .ist-drag-handle:active { cursor:grabbing; }
+        .ist-row-dragging { opacity:.45; }
+        .ist-row-dragover td { border-top:2px solid var(--primary) !important; }
+.ist-tpl-row:not(.ist-tpl-highlight):not(.ist-tpl-holiday):not(.ist-tpl-info) td:first-child { border-left:3px solid #10b981; }
+.ist-tpl-highlight td:first-child { border-left:3px solid #f59e0b; }
+.ist-tpl-holiday td:first-child { border-left:3px solid #94a3b8; }
+.ist-tpl-info td:first-child { border-left:3px solid #3b82f6; }
 .ist-th-resizer { position:absolute; right:0; top:15%; bottom:15%; width:4px; cursor:col-resize; background:rgba(201,162,39,.3); border-radius:2px; transition:background .15s; }
 .ist-th-resizer:hover, .ist-th-resizer.active { background:#C9A227; }
 .ist-time-wrap { display:flex; align-items:center; gap:3px; }

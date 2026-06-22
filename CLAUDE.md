@@ -108,7 +108,7 @@ Full namespace list: `API.profiles`, `API.courses`, `API.enrollments`, `API.less
 
 ### Database migrations
 
-`sql/schema.sql` — consolidated schema snapshot of the current DB state. All migrations v2–v109 have been merged into this single file. When adding a new column/table, create `sql/migration_v110.sql` (increment from 110) and run it in the Supabase SQL Editor. **Latest is v109**.
+`sql/schema.sql` — consolidated schema snapshot of the current DB state. All migrations v2–v109 have been merged into this single file. When adding a new column/table, create `sql/migration_v124.sql` (increment from 124) and run it in the Supabase SQL Editor. **Latest is v123**.
 
 When writing a migration, always include `IF NOT EXISTS` / `IF EXISTS` guards and end with RLS + policies.
 

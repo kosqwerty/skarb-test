@@ -4801,7 +4801,6 @@ const AdminPage = {
         <div style="height:calc(100vh - 280px);min-height:500px">
             <iframe src="/admin_pleso.html"
                 style="width:100%;height:100%;border:none;border-radius:var(--radius-lg);display:block"
-                allow="same-origin">
             </iframe>
         </div>`;
     },

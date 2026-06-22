@@ -2299,7 +2299,7 @@ const API = {
                  status, status_changed_at, employment_info, characteristic, mentors_info, notes, created_at, updated_at, profile_snapshot,
                  profile:profiles!interns_profile_id_fkey(id, full_name, email, phone, job_position, city, avatar_url, gender, manager_id),
                  manager:profiles!interns_manager_id_fkey(id, full_name),
-                 intern_disciplines(id, discipline_name, date, hours, place, cabinet, address, row_type, mentor_id, is_completed, notes, order_index, created_at,
+                 intern_disciplines(id, intern_id, discipline_name, date, hours, place, cabinet, address, row_type, mentor_id, is_completed, notes, order_index, created_at,
                      mentor:profiles!intern_disciplines_mentor_id_fkey(id, full_name))`
             ).eq('id', id).single();
             if (error) throw error;
@@ -2561,6 +2561,44 @@ const API = {
         async remove(id) {
             const { error } = await supabase
                 .from('intern_job_settings')
+                .delete()
+                .eq('id', id);
+            if (error) throw error;
+        }
+    },
+
+    internScheduleTemplates: {
+        async getAll() {
+            const { data, error } = await supabase
+                .from('intern_schedule_templates')
+                .select('*')
+                .order('job_position')
+                .order('name');
+            if (error) throw error;
+            return data || [];
+        },
+
+        async create(fields) {
+            const { data, error } = await supabase
+                .from('intern_schedule_templates')
+                .insert(fields)
+                .select()
+                .single();
+            if (error) throw error;
+            return data;
+        },
+
+        async update(id, fields) {
+            const { error } = await supabase
+                .from('intern_schedule_templates')
+                .update(fields)
+                .eq('id', id);
+            if (error) throw error;
+        },
+
+        async remove(id) {
+            const { error } = await supabase
+                .from('intern_schedule_templates')
                 .delete()
                 .eq('id', id);
             if (error) throw error;

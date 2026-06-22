@@ -19,6 +19,7 @@
     _disciplines: [],
     _editingDisciplineId: null,
     _jobSettings: [],       // [{ job_position, training_days }]
+    _scheduleTemplates: [], // [{ id, name, job_position, rows }]
 
     // ── helpers ───────────────────────────────────────────────────────────────
     _calcPlannedEnd(job_position, start_date) {
@@ -55,14 +56,16 @@
         try {
             Loader.show();
             const managerId = this._isManager ? AppState.profile.id : null;
-            const [{ data: interns }, profiles, jobSettings] = await Promise.all([
+            const [{ data: interns }, profiles, jobSettings, scheduleTemplates] = await Promise.all([
                 API.interns.getAll({ managerId, pageSize: 500 }),
                 (this._canManage || this._isViewer) ? API.profiles.getAll({ pageSize: 500 }).then(r => r.data || []) : Promise.resolve([]),
-                API.internJobSettings.getAll().catch(() => [])
+                API.internJobSettings.getAll().catch(() => []),
+                API.internScheduleTemplates.getAll().catch(() => [])
             ]);
             this._interns = interns;
             this._allProfiles = profiles;
             this._jobSettings = jobSettings;
+            this._scheduleTemplates = scheduleTemplates;
         } catch (e) {
             container.innerHTML = `<div style="text-align:center;padding:3rem;color:var(--danger)">${Fmt.esc(e.message)}</div>`;
             return;
@@ -1099,6 +1102,7 @@
                     <td colspan="4" style="text-align:center;font-style:italic;color:var(--text-muted)">${Fmt.esc(d.discipline_name || 'Вихідний')}</td>
                     <td style="text-align:center">
                         ${this._canManage ? `<button class="in-icon-btn" onclick="InternsPage._editDisc('${d.id}')" title="Редагувати"><i class="fa-solid fa-pen"></i></button>
+                        <button class="in-icon-btn" onclick="InternsPage._duplicateDisc('${d.id}')" title="Копіювати"><i class="fa-solid fa-copy"></i></button>
                         <button class="in-icon-btn in-icon-btn-danger" data-name="${Fmt.esc(d.discipline_name)}" onclick="InternsPage._deleteDisc('${d.id}',this.dataset.name)" title="Видалити"><i class="fa-solid fa-trash"></i></button>` : ''}
                     </td>
                 </tr>`;
@@ -1115,6 +1119,7 @@
                         <i class="fa-solid ${d.is_completed ? 'fa-circle-check' : 'fa-circle'}"></i>
                     </button>
                     ${this._canManage ? `<button class="in-icon-btn" onclick="InternsPage._editDisc('${d.id}')" title="Редагувати"><i class="fa-solid fa-pen"></i></button>
+                    <button class="in-icon-btn" onclick="InternsPage._duplicateDisc('${d.id}')" title="Копіювати"><i class="fa-solid fa-copy"></i></button>
                     <button class="in-icon-btn in-icon-btn-danger" data-name="${Fmt.esc(d.discipline_name)}" onclick="InternsPage._deleteDisc('${d.id}',this.dataset.name)" title="Видалити"><i class="fa-solid fa-trash"></i></button>` : ''}
                 </td>
             </tr>`;
@@ -1148,8 +1153,10 @@
             ${this._canManage ? `<div class="isc-footer-actions">
                 <button class="in-btn in-btn-primary" onclick="InternsPage._addDiscModal('${internId}')"><i class="fa-solid fa-plus"></i> Додати рядок</button>
                 <button class="in-btn in-btn-access" onclick="InternsPage._addHolidayRow('${internId}')"><i class="fa-solid fa-umbrella-beach"></i> Вихідний</button>
+                <button class="in-btn in-btn-access" onclick="InternsPage._openApplyTemplateModal('${internId}')"><i class="fa-solid fa-layer-group"></i> Шаблон</button>
             </div>` : ''}
         </div>`;
+        requestAnimationFrame(() => this._initTableResize(dc.querySelector('.isc-table')));
     },
 
     async _toggleDisc(discId, current, internId) {
@@ -2346,13 +2353,43 @@ ${discs.length ? `<table>
         this._renderDiscModal(disc.intern_id, disc);
     },
 
-    _renderDiscModal(internId, disc) {
-        const profiles = this._allProfiles;
-        const rowType  = disc?.row_type || 'normal';
-        const placeOpts = ['УЦ','ЛФ','МАГ','ЛФ/МАГ','УЦ/ЛФ'].map(v =>
-            `<option value="${v}" ${(disc?.place||'')===v?'selected':''}>${v}</option>`).join('');
+    _renderDiscModal(internId, disc, isDuplicate = false) {
+        const profiles  = this._allProfiles;
+        const rowType   = disc?.row_type || 'normal';
+
+        // Parse "08:00–17:00" into two time inputs
+        const hoursStr   = disc?.hours || '';
+        const hoursMatch = hoursStr.match(/(\d{1,2}:\d{2})[–\-](\d{1,2}:\d{2})/);
+        let timeFrom = hoursMatch ? hoursMatch[1] : '';
+        let timeTo   = hoursMatch ? hoursMatch[2] : '';
+
+        // Auto-fill date: last disc date + 1 day (for new rows only)
+        let defaultDate = disc?.date || '';
+        if (!disc?.id && !defaultDate && this._disciplines.length) {
+            const lastWithDate = [...this._disciplines].reverse().find(d => d.date);
+            if (lastWithDate?.date) {
+                const [y, m, d] = lastWithDate.date.split('-').map(Number);
+                const next = new Date(Date.UTC(y, m - 1, d + 1));
+                const pad = n => String(n).padStart(2, '0');
+                defaultDate = `${next.getUTCFullYear()}-${pad(next.getUTCMonth()+1)}-${pad(next.getUTCDate())}`;
+            }
+        }
+
+        // Auto-fill hours: last disc hours (for new rows only)
+        if (!disc?.id && !timeFrom && this._disciplines.length) {
+            const lastHours = [...this._disciplines].reverse().find(d => d.hours)?.hours || '';
+            const lm = lastHours.match(/(\d{1,2}:\d{2})[–\-](\d{1,2}:\d{2})/);
+            if (lm) { timeFrom = lm[1]; timeTo = lm[2]; }
+        }
+
+        // Place: detect custom (not in preset list)
+        const knownPlaces   = ['УЦ','ЛФ','МАГ','ЛФ/МАГ','УЦ/ЛФ'];
+        const placeVal      = disc?.place || '';
+        const isCustomPlace = placeVal && !knownPlaces.includes(placeVal);
+        const placeOpts     = knownPlaces.map(v =>
+            `<option value="${v}" ${placeVal===v?'selected':''}>${v}</option>`).join('');
         Modal.open({
-            title: `<i class="fa-solid fa-calendar-days" style="color:#8b5cf6"></i> ${disc ? 'Редагування рядка' : 'Новий рядок'}`,
+            title: `<i class="fa-solid fa-calendar-days" style="color:#8b5cf6"></i> ${isDuplicate ? 'Копія рядка' : disc?.id ? 'Редагування рядка' : 'Новий рядок'}`,
             size: 'lg',
             body: `
             <div class="inf-form">
@@ -2375,21 +2412,35 @@ ${discs.length ? `<table>
                     <div class="inf-grid-2">
                         <div class="inf-field">
                             <label class="inf-label">Дата</label>
-                            <input id="idf-date" type="date" class="inf-input" value="${disc?.date||''}">
+                            <div class="idp-wrap">
+                                <input type="hidden" id="idf-date" value="${defaultDate}">
+                                <input id="idf-date-disp" class="inf-input idp-disp" readonly
+                                       placeholder="ДД.ММ.РРРР"
+                                       value="${defaultDate ? defaultDate.split('-').reverse().join('.') : ''}"
+                                       onclick="InternsPage._dpToggle(event)">
+                                <div id="idf-date-popup" class="idp-popup" style="display:none"></div>
+                            </div>
                         </div>
                         <div class="inf-field">
                             <label class="inf-label">Години</label>
-                            <input id="idf-hours" class="inf-input" placeholder="08:00–17:00" value="${Fmt.esc(disc?.hours||'')}">
+                            <div style="display:flex;gap:.5rem;align-items:center">
+                                <input id="idf-time-from" type="time" class="inf-input" value="${timeFrom}" style="flex:1">
+                                <span style="color:var(--text-muted);padding:0 2px">–</span>
+                                <input id="idf-time-to" type="time" class="inf-input" value="${timeTo}" style="flex:1">
+                            </div>
                         </div>
                     </div>
                     <div class="inf-grid-2">
                         <div class="inf-field">
                             <label class="inf-label">Місце</label>
-                            <select id="idf-place" class="inf-select">
+                            <select id="idf-place" class="inf-select" onchange="InternsPage._onPlaceChange(this.value)">
                                 <option value="">— Оберіть —</option>
                                 ${placeOpts}
-                                <option value="інше" ${!['УЦ','ЛФ','МАГ','ЛФ/МАГ','УЦ/ЛФ',''].includes(disc?.place||'')?'selected':''}>Інше…</option>
+                                <option value="інше" ${isCustomPlace?'selected':''}>Інше…</option>
                             </select>
+                            <input id="idf-place-custom" class="inf-input" placeholder="Вкажіть місце…"
+                                   value="${isCustomPlace ? Fmt.esc(placeVal) : ''}"
+                                   style="margin-top:.4rem;${isCustomPlace?'':'display:none'}">
                         </div>
                         <div class="inf-field">
                             <label class="inf-label">Кабінет</label>
@@ -2415,8 +2466,8 @@ ${discs.length ? `<table>
             </div>`,
             footer: `
             <button class="btn btn-ghost btn-sm" onclick="InternsPage._backToDetail('${internId}')">Скасувати</button>
-            <button class="in-btn in-btn-primary" onclick="InternsPage._saveDisc('${internId}', ${disc ? `'${disc.id}'` : 'null'})">
-                <i class="fa-solid ${disc ? 'fa-floppy-disk' : 'fa-plus'}"></i> ${disc ? 'Зберегти' : 'Додати'}
+            <button class="in-btn in-btn-primary" onclick="InternsPage._saveDisc('${internId}', ${disc?.id ? `'${disc.id}'` : 'null'})">
+                <i class="fa-solid ${disc?.id ? 'fa-floppy-disk' : 'fa-plus'}"></i> ${disc?.id ? 'Зберегти' : 'Додати'}
             </button>`
         });
     },
@@ -2428,18 +2479,462 @@ ${discs.length ? `<table>
         });
     },
 
+    _onPlaceChange(val) {
+        const custom = document.getElementById('idf-place-custom');
+        if (!custom) return;
+        custom.style.display = val === 'інше' ? '' : 'none';
+        if (val !== 'інше') custom.value = '';
+    },
+
+    _dpToggle(e) {
+        e.stopPropagation();
+        const popup = document.getElementById('idf-date-popup');
+        if (!popup) return;
+        popup.style.display === 'none' ? this._dpOpen() : this._dpClose();
+    },
+
+    _dpOpen() {
+        const val = document.getElementById('idf-date')?.value;
+        const d = val ? new Date(val + 'T00:00:00') : new Date();
+        this._dpYear  = d.getFullYear();
+        this._dpMonth = d.getMonth();
+        this._dpSel   = val || null;
+        this._dpRender();
+        const popup = document.getElementById('idf-date-popup');
+        if (popup) popup.style.display = 'block';
+        this._dpOutsideFn = (e) => {
+            if (!e.target.closest('#idf-date-popup') && e.target.id !== 'idf-date-disp') this._dpClose();
+        };
+        setTimeout(() => document.addEventListener('click', this._dpOutsideFn), 0);
+    },
+
+    _dpClose() {
+        const popup = document.getElementById('idf-date-popup');
+        if (popup) popup.style.display = 'none';
+        if (this._dpOutsideFn) { document.removeEventListener('click', this._dpOutsideFn); this._dpOutsideFn = null; }
+    },
+
+    _dpNav(dir) {
+        this._dpMonth += dir;
+        if (this._dpMonth > 11) { this._dpMonth = 0; this._dpYear++; }
+        if (this._dpMonth < 0)  { this._dpMonth = 11; this._dpYear--; }
+        this._dpRender();
+    },
+
+    _dpPick(ds) {
+        document.getElementById('idf-date').value = ds;
+        document.getElementById('idf-date-disp').value = ds ? ds.split('-').reverse().join('.') : '';
+        this._dpSel = ds || null;
+        this._dpClose();
+    },
+
+    _dpRender() {
+        const popup = document.getElementById('idf-date-popup');
+        if (!popup) return;
+        const MN = ['Січень','Лютий','Березень','Квітень','Травень','Червень',
+                    'Липень','Серпень','Вересень','Жовтень','Листопад','Грудень'];
+        const DN = ['Пн','Вт','Ср','Чт','Пт','Сб','Нд'];
+        const y = this._dpYear, m = this._dpMonth;
+        const pad = n => String(n).padStart(2,'0');
+        const td = new Date(); td.setHours(0,0,0,0);
+        const todayStr = `${td.getFullYear()}-${pad(td.getMonth()+1)}-${pad(td.getDate())}`;
+        let dow = new Date(y, m, 1).getDay(); dow = dow === 0 ? 6 : dow - 1;
+        const dim = new Date(y, m+1, 0).getDate();
+        const prevDim = new Date(y, m, 0).getDate();
+        let cells = '';
+        for (let i = dow-1; i >= 0; i--) cells += `<div class="idp-cell idp-other">${prevDim-i}</div>`;
+        for (let d = 1; d <= dim; d++) {
+            const ds = `${y}-${pad(m+1)}-${pad(d)}`;
+            cells += `<div class="idp-cell${ds===todayStr?' idp-today':''}${ds===this._dpSel?' idp-sel':''}" onclick="InternsPage._dpPick('${ds}')">${d}</div>`;
+        }
+        const rem = (dow + dim) % 7; if (rem) for (let d=1; d<=7-rem; d++) cells += `<div class="idp-cell idp-other">${d}</div>`;
+        popup.innerHTML = `
+            <div class="idp-header">
+                <button class="idp-nav" onclick="InternsPage._dpNav(-1);event.stopPropagation()">‹</button>
+                <span class="idp-month-lbl">${MN[m]} ${y}</span>
+                <button class="idp-nav" onclick="InternsPage._dpNav(1);event.stopPropagation()">›</button>
+            </div>
+            <div class="idp-grid-head">${DN.map(d=>`<div class="idp-dow">${d}</div>`).join('')}</div>
+            <div class="idp-grid">${cells}</div>
+            <div class="idp-footer">
+                <button class="idp-fb" onclick="InternsPage._dpPick('')">Очистити</button>
+                <button class="idp-fb idp-fb-today" onclick="InternsPage._dpPick('${todayStr}')">Сьогодні</button>
+            </div>`;
+    },
+
+    _duplicateDisc(discId) {
+        const disc = this._disciplines.find(d => d.id === discId);
+        if (!disc) return;
+        let nextDate = disc.date || '';
+        if (disc.date) {
+            const [y, m, d] = disc.date.split('-').map(Number);
+            const next = new Date(Date.UTC(y, m - 1, d + 1));
+            const pad = n => String(n).padStart(2, '0');
+            nextDate = `${next.getUTCFullYear()}-${pad(next.getUTCMonth()+1)}-${pad(next.getUTCDate())}`;
+        }
+        this._renderDiscModal(disc.intern_id, { ...disc, id: null, date: nextDate }, true);
+    },
+
     _addHolidayRow(internId) {
         this._editingDisciplineId = null;
         const disc = { discipline_name: 'Вихідний', row_type: 'holiday' };
         this._renderDiscModal(internId, disc);
     },
 
+    // ── Schedule templates ────────────────────────────────────────────────────
+
+    _openApplyTemplateModal(internId) {
+        const intern = this._interns.find(i => i.id === internId);
+        const jobPos = intern?.profile?.job_position || intern?.profile_snapshot?.job_position || '';
+        const templates = this._scheduleTemplates;
+        const matched = templates.filter(t => t.job_position === jobPos);
+        const other   = templates.filter(t => t.job_position !== jobPos);
+
+        const pad = n => String(n).padStart(2,'0');
+        const fmtDate = ds => { const [y,m,d] = ds.split('-'); return `${d}.${m}.${y}`; };
+        const getDateRange = (t) => {
+            const rows = t.rows || [];
+            if (!rows.length || !intern?.start_date) return '';
+            const [sy,sm,sd] = intern.start_date.split('-').map(Number);
+            const offsets = rows.map(r => r.day_offset ?? 1);
+            const minO = Math.min(...offsets), maxO = Math.max(...offsets);
+            const d1 = new Date(Date.UTC(sy,sm-1,sd+minO-1));
+            const d2 = new Date(Date.UTC(sy,sm-1,sd+maxO-1));
+            const s1 = `${d1.getUTCFullYear()}-${pad(d1.getUTCMonth()+1)}-${pad(d1.getUTCDate())}`;
+            const s2 = `${d2.getUTCFullYear()}-${pad(d2.getUTCMonth()+1)}-${pad(d2.getUTCDate())}`;
+            return `${fmtDate(s1)} – ${fmtDate(s2)}`;
+        };
+
+        const renderGroup = (list, label) => list.length ? `
+            <div class="ist-group-label">${Fmt.esc(label)}</div>
+            ${list.map(t => {
+                const range = getDateRange(t);
+                return `<div class="ist-card" onclick="InternsPage._applyTemplate('${internId}','${t.id}')">
+                    <div>
+                        <div class="ist-card-name">${Fmt.esc(t.name)}</div>
+                        ${range ? `<div style="font-size:.75rem;color:var(--text-muted);margin-top:.1rem"><i class="fa-regular fa-calendar" style="font-size:.7rem"></i> ${range}</div>` : ''}
+                    </div>
+                    <div class="ist-card-meta">
+                        ${t.job_position ? `<span class="ist-badge-job">${Fmt.esc(t.job_position)}</span>` : ''}
+                        <span class="ist-badge-rows">${(t.rows||[]).length} рядків</span>
+                    </div>
+                </div>`;
+            }).join('')}` : '';
+
+        const body = templates.length ? `
+            <p style="font-size:.83rem;color:var(--text-muted);margin:0 0 .75rem">
+                Рядки шаблону будуть <strong>додані</strong> до поточного розкладу.
+            </p>
+            ${renderGroup(matched, `✅ Для посади: ${jobPos || '—'}`)}
+            ${renderGroup(other, 'Інші шаблони')}` :
+            `<div style="text-align:center;padding:2rem;color:var(--text-muted)">
+                <i class="fa-solid fa-layer-group" style="font-size:2rem;margin-bottom:.5rem;display:block;opacity:.3"></i>
+                Шаблонів ще немає.<br>Створіть їх у <strong>Налаштуваннях</strong>.
+            </div>`;
+
+        Modal.open({ title: '<i class="fa-solid fa-layer-group"></i> Завантажити шаблон', body, size: 'sm' });
+    },
+
+    async _applyTemplate(internId, templateId) {
+        const tpl = this._scheduleTemplates.find(t => t.id === templateId);
+        if (!tpl || !tpl.rows?.length) { Toast.warning('Шаблон порожній'); return; }
+        const intern = this._interns.find(i => i.id === internId);
+        if (!intern?.start_date) {
+            Toast.warning('Спочатку вкажіть дату початку стажування');
+            return;
+        }
+        Modal.close();
+        Loader.show();
+        try {
+            const [sy, sm, sd] = intern.start_date.split('-').map(Number);
+            const pad = n => String(n).padStart(2, '0');
+            const existing = this._disciplines;
+            let maxOrder = existing.length ? Math.max(...existing.map(d => d.order_index || 0)) : -1;
+            const toInsert = tpl.rows.map((r, i) => {
+                const dt = new Date(Date.UTC(sy, sm - 1, sd + (r.day_offset ?? i + 1) - 1));
+                const date = `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth()+1)}-${pad(dt.getUTCDate())}`;
+                return {
+                    intern_id:       internId,
+                    discipline_name: r.discipline_name || '',
+                    hours:           r.hours    || null,
+                    place:           r.place    || null,
+                    cabinet:         r.cabinet  || null,
+                    row_type:        r.row_type || 'normal',
+                    notes:           r.notes    || null,
+                    date,
+                    order_index:  maxOrder + 1 + i,
+                    is_completed: false
+                };
+            });
+            for (const row of toInsert) await API.internDisciplines.create(row);
+            const discs = await API.internDisciplines.getByIntern(internId);
+            this._disciplines = discs.sort((a,b) => a.order_index - b.order_index);
+            this._renderDetailSchedule(internId);
+            Toast.success('Шаблон застосовано', `Додано ${toInsert.length} рядків`);
+        } catch(e) {
+            Toast.error('Помилка', e.message);
+        } finally {
+            Loader.hide();
+        }
+    },
+
+    // ── Template management (called from Job Settings modal) ──────────────────
+
+    async _openTemplateManager() {
+        this._scheduleTemplates = await API.internScheduleTemplates.getAll().catch(() => []);
+        this._renderTemplateManager();
+    },
+
+    _renderTemplateManager() {
+        const area = document.getElementById('ist-manager-area');
+        if (!area) return;
+        const tpls = this._scheduleTemplates;
+        const positions = [...new Set(this._jobSettings.map(s => s.job_position).filter(Boolean))].sort();
+
+        area.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem">
+                <span style="font-weight:700;font-size:.9rem">Шаблони розкладу</span>
+                <button class="btn btn-primary btn-sm" onclick="InternsPage._openTemplateEditor(null)"><i class="fa-solid fa-plus"></i> Новий шаблон</button>
+            </div>
+            ${tpls.length ? tpls.map(t => `
+                <div class="ist-mgr-row">
+                    <div style="flex:1;min-width:0">
+                        <div class="ist-mgr-name">${Fmt.esc(t.name)}</div>
+                        <div class="ist-mgr-meta">${t.job_position ? Fmt.esc(t.job_position) + ' · ' : ''}${(t.rows||[]).length} рядків</div>
+                    </div>
+                    <button class="btn btn-ghost btn-sm" onclick="InternsPage._openTemplateEditor('${t.id}')"><i class="fa-solid fa-pen"></i></button>
+                    <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="InternsPage._deleteTemplate('${t.id}',this)" data-name="${Fmt.esc(t.name)}"><i class="fa-solid fa-trash"></i></button>
+                </div>`).join('') :
+                `<div style="text-align:center;padding:1.5rem;color:var(--text-muted)">Шаблонів немає</div>`}`;
+    },
+
+    _openTemplateEditor(templateId) {
+        const tpl = templateId ? this._scheduleTemplates.find(t => t.id === templateId) : null;
+        const positions = [...new Set(this._jobSettings.map(s => s.job_position).filter(Boolean))].sort();
+        const posOpts = positions.map(p => `<option value="${Fmt.esc(p)}" ${tpl?.job_position===p?'selected':''}>${Fmt.esc(p)}</option>`).join('');
+        const rows = tpl?.rows || [];
+
+        const rowsHtml = rows.map((r, i) => this._tplRowHtml(i, r)).join('');
+        const dowOpts = [['1','Понеділок'],['2','Вівторок'],['3','Середа'],['4','Четвер'],['5','П’ятниця'],['6','Субота'],['0','Неділя']]
+            .map(([v,l]) => `<option value="${v}">${l}</option>`).join('');
+
+        Modal.open({
+            title: templateId ? '<i class="fa-solid fa-pen"></i> Редагувати шаблон' : '<i class="fa-solid fa-plus"></i> Новий шаблон',
+            size: 'xl',
+            body: `
+                <div style="display:flex;flex-direction:column;gap:1rem">
+                    <div style="display:flex;gap:.75rem;flex-wrap:wrap">
+                        <div style="flex:1;min-width:180px">
+                            <label class="inf-label">Назва шаблону <span class="inf-required">*</span></label>
+                            <input id="ist-name" class="inf-input" placeholder="Наприклад: Касир 21 день" value="${Fmt.esc(tpl?.name||'')}">
+                        </div>
+                        <div style="min-width:180px">
+                            <label class="inf-label">Посада</label>
+                            <select id="ist-job" class="inf-select" onchange="const n=document.getElementById('ist-name');if(!n.value.trim())n.value=this.value;InternsPage._tplRefreshDows();">
+                                <option value="">— Будь-яка —</option>
+                                ${posOpts}
+                            </select>
+                        </div>
+                        <div style="min-width:150px">
+                            <label class="inf-label">Превью з дня</label>
+                            <select id="ist-preview-dow" class="inf-select" onchange="InternsPage._tplRefreshDows()">${dowOpts}</select>
+                        </div>
+                    </div>
+                    <div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem">
+                            <label class="inf-label" style="margin:0">Рядки розкладу</label>
+                            <button class="btn btn-ghost btn-sm" onclick="InternsPage._tplAddRow()"><i class="fa-solid fa-plus"></i> Рядок</button>
+                        </div>
+                        <div class="ist-tpl-table-wrap">
+                            <table id="ist-tpl-table" class="ist-tpl-table">
+                                <thead><tr>
+                                    <th class="ist-col-day" style="width:46px">День</th>
+                                    <th class="ist-col-dow" style="width:88px">День тижня</th>
+                                    <th class="ist-col-type" style="width:104px">Тип</th>
+                                    <th class="ist-col-name">Назва / тема</th>
+                                    <th class="ist-col-hours" style="width:188px">Години</th>
+                                    <th class="ist-col-place" style="width:86px">Місце</th>
+                                    <th style="width:34px"></th>
+                                </tr></thead>
+                                <tbody id="ist-rows-wrap">
+                                    ${rowsHtml || '<tr><td colspan="7" id="ist-empty" style="text-align:center;color:var(--text-muted);padding:.75rem;font-size:.85rem">Немає рядків — натисніть «Рядок»</td></tr>'}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>`,
+            footer: `
+                <button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
+                <button class="btn btn-primary" onclick="InternsPage._saveTemplate(${templateId ? `'${templateId}'` : 'null'})"><i class="fa-solid fa-floppy-disk"></i> Зберегти</button>`
+        });
+        requestAnimationFrame(() => this._initTplTableResize());
+    },
+
+    // day_offset is 1-based: day 1 = start_date, day 2 = start_date+1, etc.
+    _tplDowIdx(day, startDow) { return (startDow + day - 1) % 7; },
+    _tplDowName(day, startDow) {
+        return ['Нд','Пн','Вт','Ср','Чт','Пт','Сб'][this._tplDowIdx(day, startDow)];
+    },
+
+    _tplRefreshDows() {
+        const startDow = parseInt(document.getElementById('ist-preview-dow')?.value ?? '1');
+        document.querySelectorAll('#ist-rows-wrap .ist-tpl-row').forEach(row => {
+            const day = parseInt(row.querySelector('.ist-r-offset')?.value) || 1;
+            const sel = row.querySelector('.ist-r-dow');
+            if (sel) {
+                const idx = this._tplDowIdx(day, startDow);
+                sel.value = String(idx);
+                sel.style.color = idx === 0 ? 'var(--danger)' : '';
+                sel.style.fontWeight = idx === 0 ? '700' : '';
+            }
+        });
+    },
+
+    _tplDowChanged(select) {
+        const row = select.closest('.ist-tpl-row');
+        const offsetInput = row.querySelector('.ist-r-offset');
+        const startDow = parseInt(document.getElementById('ist-preview-dow')?.value ?? '1');
+        const targetDow = parseInt(select.value);
+        const allRows = [...document.querySelectorAll('#ist-rows-wrap .ist-tpl-row')];
+        const myIdx = allRows.indexOf(row);
+        let minDay = myIdx > 0 ? (parseInt(allRows[myIdx-1].querySelector('.ist-r-offset')?.value) || 1) + 1 : 1;
+        let day = minDay;
+        while (this._tplDowIdx(day, startDow) !== targetDow && day < minDay + 7) day++;
+        offsetInput.value = day;
+        select.style.color = targetDow === 0 ? 'var(--danger)' : '';
+        select.style.fontWeight = targetDow === 0 ? '700' : '';
+    },
+
+    _tplRowHtml(i, r = {}) {
+        const startDow = parseInt(document.getElementById('ist-preview-dow')?.value ?? '1');
+        const day = r.day_offset ?? (i + 1);
+        const hoursMatch = (r.hours||'').match(/(\d{1,2}:\d{2})[–\-](\d{1,2}:\d{2})/);
+        const timeFrom = hoursMatch ? hoursMatch[1] : (r.hours && !r.hours.includes('-') && !r.hours.includes('–') ? r.hours.trim() : '');
+        const timeTo   = hoursMatch ? hoursMatch[2] : '';
+        const dowIdx = this._tplDowIdx(day, startDow);
+        const isWeekend = dowIdx === 0;
+        const dowSel = ['Нд','Пн','Вт','Ср','Чт','Пт','Сб'].map((n,v) =>
+            `<option value="${v}"${dowIdx===v?' selected':''}>${n}</option>`).join('');
+        return `<tr class="ist-tpl-row" data-idx="${i}">
+            <td><input class="inf-input ist-r-offset" type="number" min="1" max="366" value="${day}"
+                   style="width:100%;text-align:center;padding:.3rem .2rem"
+                   oninput="InternsPage._tplRefreshDows()"></td>
+            <td><select class="inf-select ist-r-dow" style="${isWeekend?'color:var(--danger);font-weight:700':''}"
+                   onchange="InternsPage._tplDowChanged(this)">${dowSel}</select></td>
+            <td><select class="inf-select ist-r-type">
+                ${[['normal','Заняття'],['holiday','Вихідний'],['highlight','Важливе']].map(([v,l])=>`<option value="${v}" ${(r.row_type||'normal')===v?'selected':''}>${l}</option>`).join('')}
+            </select></td>
+            <td><input class="inf-input ist-r-name" placeholder="Назва / тема…" value="${Fmt.esc(r.discipline_name||'')}" style="width:100%"></td>
+            <td><div class="ist-time-wrap">
+                <input class="inf-input ist-r-time-from" type="time" value="${timeFrom}" title="Початок">
+                <span class="ist-time-sep">–</span>
+                <input class="inf-input ist-r-time-to" type="time" value="${timeTo}" title="Кінець">
+            </div></td>
+            <td><input class="inf-input ist-r-place" placeholder="УЦ/ЛФ…" value="${Fmt.esc(r.place||'')}" style="width:100%"></td>
+            <td style="text-align:center"><button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="this.closest('tr').remove()"><i class="fa-solid fa-xmark"></i></button></td>
+        </tr>`;
+    },
+
+    _tplAddRow() {
+        const wrap = document.getElementById('ist-rows-wrap');
+        if (!wrap) return;
+        const emptyRow = document.getElementById('ist-empty');
+        if (emptyRow) emptyRow.closest('tr')?.remove() || emptyRow.remove();
+        const rows = wrap.querySelectorAll('.ist-tpl-row');
+        const lastOffset = rows.length ? (parseInt(rows[rows.length-1].querySelector('.ist-r-offset')?.value) || 1) + 1 : 1;
+        wrap.insertAdjacentHTML('beforeend', this._tplRowHtml(rows.length, { day_offset: lastOffset }));
+        requestAnimationFrame(() => this._initTplTableResize());
+    },
+
+    _initTplTableResize() {
+        const table = document.getElementById('ist-tpl-table');
+        if (!table) return;
+        table.querySelectorAll('thead th').forEach((th, i, ths) => {
+            if (i === ths.length - 1) return; // skip last (delete btn col)
+            const existing = th.querySelector('.ist-th-resizer');
+            if (existing) existing.remove();
+            const handle = document.createElement('div');
+            handle.className = 'ist-th-resizer';
+            th.style.position = 'relative';
+            th.appendChild(handle);
+            let startX, startW;
+            handle.addEventListener('mousedown', e => {
+                e.preventDefault();
+                startX = e.clientX;
+                startW = th.offsetWidth;
+                handle.classList.add('active');
+                const onMove = ev => {
+                    const w = Math.max(50, startW + ev.clientX - startX);
+                    th.style.width = w + 'px';
+                };
+                const onUp = () => {
+                    handle.classList.remove('active');
+                    document.removeEventListener('mousemove', onMove);
+                    document.removeEventListener('mouseup', onUp);
+                };
+                document.addEventListener('mousemove', onMove);
+                document.addEventListener('mouseup', onUp);
+            });
+        });
+    },
+
+    async _saveTemplate(templateId) {
+        const name = document.getElementById('ist-name')?.value.trim();
+        if (!name) { Toast.warning('Введіть назву шаблону'); return; }
+        const job_position = document.getElementById('ist-job')?.value || '';
+        const rowEls = document.querySelectorAll('#ist-rows-wrap .ist-tpl-row');
+        const rows = [...rowEls].map(el => ({
+            day_offset:      parseInt(el.querySelector('.ist-r-offset')?.value) || 1,
+            row_type:        el.querySelector('.ist-r-type')?.value  || 'normal',
+            discipline_name: el.querySelector('.ist-r-name')?.value.trim()  || '',
+            hours:           (() => { const f = el.querySelector('.ist-r-time-from')?.value; const t = el.querySelector('.ist-r-time-to')?.value; return f && t ? `${f}-${t}` : (f || t || null); })(),
+            place:           el.querySelector('.ist-r-place')?.value.trim() || null
+        })).filter(r => r.row_type === 'holiday' || r.discipline_name)
+           .sort((a, b) => a.day_offset - b.day_offset);
+        Loader.show();
+        try {
+            if (templateId) {
+                await API.internScheduleTemplates.update(templateId, { name, job_position, rows });
+            } else {
+                await API.internScheduleTemplates.create({ name, job_position, rows });
+            }
+            this._scheduleTemplates = await API.internScheduleTemplates.getAll();
+            Modal.close();
+            Toast.success('Збережено');
+            this._renderTemplateManager();
+        } catch(e) {
+            Toast.error('Помилка', e.message);
+        } finally {
+            Loader.hide();
+        }
+    },
+
+    async _deleteTemplate(templateId, btn) {
+        const name = btn?.dataset.name || 'шаблон';
+        const ok = await Modal.confirm({ message: `Видалити шаблон «${name}»?`, confirmText: 'Видалити', danger: true });
+        if (!ok) return;
+        Loader.show();
+        try {
+            await API.internScheduleTemplates.remove(templateId);
+            this._scheduleTemplates = await API.internScheduleTemplates.getAll();
+            Toast.success('Видалено');
+            this._renderTemplateManager();
+        } catch(e) {
+            Toast.error('Помилка', e.message);
+        } finally {
+            Loader.hide();
+        }
+    },
+
     async _saveDisc(internId, discId) {
-        const name    = Dom.val('idf-name').trim();
-        const date    = Dom.val('idf-date');
-        const hours   = Dom.val('idf-hours').trim();
-        const place   = Dom.val('idf-place');
-        const cabinet = Dom.val('idf-cabinet').trim();
+        const name     = Dom.val('idf-name').trim();
+        const date     = Dom.val('idf-date');
+        const timeFrom = Dom.val('idf-time-from');
+        const timeTo   = Dom.val('idf-time-to');
+        const hours    = timeFrom && timeTo ? `${timeFrom}–${timeTo}` : (timeFrom || timeTo || '');
+        const placeRaw = Dom.val('idf-place');
+        const place    = placeRaw === 'інше' ? (Dom.val('idf-place-custom').trim() || '') : placeRaw;
+        const cabinet  = Dom.val('idf-cabinet').trim();
         const mentor  = Dom.val('idf-mentor');
         const notes   = Dom.val('idf-notes').trim();
         const rowType = document.getElementById('idf-rowtype')?.value || 'normal';
@@ -2456,7 +2951,7 @@ ${discs.length ? `<table>
             mentor_id:       mentor  || null,
             notes:           notes   || null,
             row_type:        rowType,
-            order_index:     discId ? (this._disciplines.find(d => d.id === discId)?.order_index ?? 0) : this._disciplines.length
+            order_index:     discId ? (this._disciplines.find(d => d.id === discId)?.order_index ?? 0) : (this._disciplines.reduce((m, d) => Math.max(m, d.order_index ?? 0), -1) + 1)
         };
 
         try {
@@ -3288,16 +3783,28 @@ ${discs.length ? `<table>
     // ── Job settings modal ────────────────────────────────────────────────────
     async _openJobSettingsModal() {
         Modal.open({
-            title: '<i class="fa-solid fa-sliders" style="color:#8b5cf6"></i> Кількість днів навчання за посадою',
+            title: '<i class="fa-solid fa-sliders" style="color:var(--primary)"></i> Налаштування стажування',
             size: 'lg',
-            body: '<div style="text-align:center;padding:2rem"><i class="fa-solid fa-spinner fa-spin"></i></div>',
+            body: `<div style="display:flex;gap:.35rem;margin-bottom:1rem">
+                <button class="btn btn-sm ist-js-tab active" data-tab="days" onclick="InternsPage._switchJobSettingsTab('days',this)"><i class="fa-solid fa-calendar-days"></i> Днів навчання</button>
+                <button class="btn btn-sm ist-js-tab" data-tab="templates" onclick="InternsPage._switchJobSettingsTab('templates',this)"><i class="fa-solid fa-layer-group"></i> Шаблони розкладу</button>
+            </div>
+            <div id="ist-tab-days"><div style="text-align:center;padding:2rem"><i class="fa-solid fa-spinner fa-spin"></i></div></div>
+            <div id="ist-tab-templates" style="display:none"><div id="ist-manager-area"><div style="text-align:center;padding:2rem"><i class="fa-solid fa-spinner fa-spin"></i></div></div></div>`,
         });
-        await this._renderJobSettingsBody();
+        await Promise.all([this._renderJobSettingsBody(), this._openTemplateManager()]);
+    },
+
+    _switchJobSettingsTab(tab, btn) {
+        document.querySelectorAll('.ist-js-tab').forEach(b => b.classList.remove('active','btn-primary'));
+        btn.classList.add('active', 'btn-primary');
+        document.getElementById('ist-tab-days').style.display      = tab === 'days'      ? '' : 'none';
+        document.getElementById('ist-tab-templates').style.display = tab === 'templates' ? '' : 'none';
     },
 
     async _renderJobSettingsBody() {
-        const mb = document.querySelector('.modal-body');
-        if (!mb) return;
+        const area = document.getElementById('ist-tab-days');
+        if (!area) return;
         let rows, profilePositions;
         try {
             [rows, profilePositions] = await Promise.all([
@@ -3306,14 +3813,14 @@ ${discs.length ? `<table>
                     .then(({ data }) => [...new Set((data || []).map(p => p.job_position).filter(Boolean))].sort())
             ]);
         } catch(e) {
-            mb.innerHTML = `<div style="color:var(--danger);padding:1rem">Помилка: ${Fmt.esc(e.message)}</div>`;
+            area.innerHTML = `<div style="color:var(--danger);padding:1rem">Помилка: ${Fmt.esc(e.message)}</div>`;
             return;
         }
         // merge: profile positions + any custom ones already in settings
         const settingsPositions = rows.map(r => r.job_position);
         const allPositions = [...new Set([...profilePositions, ...settingsPositions])].sort();
 
-        mb.innerHTML = `
+        area.innerHTML = `
             <div id="ijs-wrap">
                 <table class="in-table" style="margin-bottom:1.2rem;width:100%">
                     <thead><tr>
@@ -3534,10 +4041,13 @@ ${discs.length ? `<table>
 .in-title { font-size:1.25rem; font-weight:800; color:var(--text-primary); display:flex; align-items:center; gap:.5rem; }
 .in-title i { color:#8b5cf6; }
 .in-header-actions { display:flex; gap:.5rem; }
-.in-btn { display:inline-flex; align-items:center; gap:.4rem; padding:.45rem .9rem; border-radius:8px; font-size:.85rem; font-weight:600; cursor:pointer; border:none; transition:opacity .15s; }
-.in-btn:hover { opacity:.88; }
-.in-btn-primary { background:linear-gradient(135deg,#8b5cf6,#6d28d9); color:#fff; box-shadow:0 3px 10px rgba(139,92,246,.3); }
-.in-btn-access { background:var(--bg-hover); color:var(--text-secondary); border:1px solid var(--border); }
+.in-btn { display:inline-flex; align-items:center; gap:.4rem; padding:.55rem 1.2rem; border-radius:var(--radius-md); font-size:.875rem; font-weight:500; cursor:pointer; border:none; transition:all var(--transition); white-space:nowrap; user-select:none; font-family:'Inter',sans-serif; }
+.in-btn:disabled { opacity:.5; cursor:not-allowed; }
+.in-btn-primary { background:var(--primary); color:#fff; }
+.in-btn-primary:hover:not(:disabled) { background:var(--primary-dark); box-shadow:var(--shadow-glow); transform:translateY(-1px); }
+.in-btn-primary:active:not(:disabled) { background:#173A8E; box-shadow:inset 0 2px 6px rgba(0,0,0,.3); transform:translateY(0); }
+.in-btn-access { background:transparent; color:var(--text-secondary); border:1px solid var(--border); }
+.in-btn-access:hover:not(:disabled) { background:var(--bg-hover); color:var(--text-primary); }
 .in-tabs { display:flex; gap:.25rem; margin-bottom:1.25rem; border-bottom:1px solid var(--border); flex-shrink:0; }
 .in-tab { padding:.55rem 1.1rem; background:none; border:none; border-bottom:2px solid transparent; color:var(--text-muted); font-size:.88rem; font-weight:600; cursor:pointer; transition:color .15s,border-color .15s; display:flex; align-items:center; gap:.4rem; margin-bottom:-1px; }
 .in-tab:hover { color:var(--text-primary); }
@@ -3589,8 +4099,8 @@ ${discs.length ? `<table>
 .in-table thead tr { background:var(--bg-raised); }
 .in-table th { padding:.65rem .85rem; text-align:left; font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--text-muted); position:sticky; top:0; z-index:2; background:var(--bg-raised); min-width:0; overflow:hidden; white-space:nowrap; }
 .in-table td { padding:.65rem .85rem; border-bottom:1px solid var(--border); vertical-align:middle; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.in-col-resizer { position:absolute; right:0; top:20%; bottom:20%; width:3px; cursor:col-resize; user-select:none; z-index:1; background:var(--border); border-radius:2px; transition:background .15s; }
-.in-col-resizer:hover, .in-col-resizer.active { background:#8b5cf6; }
+.in-col-resizer { position:absolute; right:0; top:20%; bottom:20%; width:3px; cursor:col-resize; user-select:none; z-index:1; background:rgba(201,162,39,.35); border-radius:2px; transition:background .15s; }
+.in-col-resizer:hover, .in-col-resizer.active { background:#C9A227; }
 .in-tr { cursor:pointer; transition:background .12s; }
 .in-tr:hover td { background:var(--bg-hover); }
 .in-tr-dropped td { background:color-mix(in srgb,#ef4444 6%,transparent); }
@@ -3683,29 +4193,28 @@ mark.in-hl { background:color-mix(in srgb,#f59e0b 35%,transparent); color:inheri
 .ichr-summary-text:focus { outline:none; border-color:#8b5cf6; }
 /* ── Schedule grid ──────────────────────────────────────────────────────── */
 .isc-wrap { display:flex; flex-direction:column; gap:.75rem; }
-.isc-header-block { background:linear-gradient(135deg,#8b5cf610,#6d28d908); border:1px solid #8b5cf630; border-radius:var(--radius-lg); padding:.85rem 1.1rem; text-align:center; }
+.isc-header-block { background:linear-gradient(135deg,rgba(42,94,232,.08),rgba(42,94,232,.03)); border:1px solid rgba(201,162,39,.25); border-radius:var(--radius-lg); padding:.85rem 1.1rem; text-align:center; }
 .isc-header-title { font-size:.95rem; font-weight:800; color:var(--text-primary); letter-spacing:.01em; }
 .isc-header-sub { font-size:.85rem; color:var(--text-secondary); margin-top:.2rem; }
 .isc-header-contact { font-size:.8rem; color:var(--text-muted); margin-top:.25rem; display:flex; align-items:center; justify-content:center; gap:.35rem; }
-.isc-table-wrap { border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; }
+.isc-table-wrap { border:1px solid rgba(201,162,39,.3); border-radius:var(--radius-lg); overflow:hidden; }
 .isc-table { width:100%; border-collapse:collapse; font-size:.83rem; table-layout:fixed; }
-.isc-table thead tr { background:var(--bg-raised); }
-.isc-table th { padding:.5rem .65rem; text-align:left; font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); border-bottom:2px solid var(--border); }
+.isc-table thead th { position:relative; background:linear-gradient(135deg,#1a2e5a 0%,#0f1e3d 100%) !important; color:#C9A227 !important; padding:.55rem .65rem; font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; border-bottom:2px solid rgba(201,162,39,.4) !important; user-select:none; white-space:nowrap; }
 .isc-table td { padding:.5rem .65rem; border-bottom:1px solid var(--border); vertical-align:middle; }
 .isc-table tr:last-child td { border-bottom:none; }
 .isc-num  { width:38px; text-align:center; color:var(--text-muted); font-size:.78rem; }
-.isc-date { width:105px; white-space:nowrap; color:var(--text-secondary); font-size:.8rem; }
-.isc-hours { width:110px; white-space:nowrap; font-weight:600; font-size:.8rem; color:var(--text-primary); }
+.isc-date { width:110px; white-space:nowrap; color:var(--text-secondary); font-size:.8rem; }
+.isc-hours { width:120px; white-space:nowrap; font-weight:600; font-size:.8rem; color:var(--text-primary); }
 .isc-name { color:var(--text-primary); font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.isc-place { width:72px; text-align:center; font-weight:700; font-size:.8rem; color:#6d28d9; }
+.isc-place { width:72px; text-align:center; font-weight:700; font-size:.8rem; color:var(--primary); }
 .isc-cabinet { width:52px; text-align:center; font-size:.8rem; color:var(--text-muted); }
-.isc-actions { width:100px; text-align:right; white-space:nowrap; }
+.isc-actions { width:116px; text-align:right; white-space:nowrap; }
 .isc-row:hover td { background:var(--bg-hover); }
-.isc-row-holiday td { background:#f8fafc; color:var(--text-muted); font-style:italic; }
-.isc-row-holiday:hover td { background:#f1f5f9; }
-.isc-row-highlight td { background:#fefce8; }
-.isc-row-highlight:hover td { background:#fef9c3; }
-.isc-row-done td { opacity:.6; }
+.isc-row-holiday td { background:rgba(148,163,184,.08); color:var(--text-muted); font-style:italic; }
+.isc-row-holiday:hover td { background:rgba(148,163,184,.13); }
+.isc-row-highlight td { background:rgba(245,158,11,.07); }
+.isc-row-highlight:hover td { background:rgba(245,158,11,.12); }
+.isc-row-done td { opacity:.55; }
 .isc-done-btn { background:none; border:none; cursor:pointer; font-size:1rem; padding:.1rem .25rem; color:var(--text-muted); transition:color .15s; }
 .isc-done-btn:hover { color:#10b981; }
 .isc-done-active { color:#10b981 !important; }
@@ -3806,24 +4315,70 @@ mark.in-hl { background:color-mix(in srgb,#f59e0b 35%,transparent); color:inheri
 .inf-label { font-size:.72rem; font-weight:600; color:var(--text-muted); letter-spacing:.02em; }
 .inf-required { color:#ef4444; }
 .inf-input,.inf-select,.inf-textarea { width:100%; padding:.45rem .65rem; background:var(--bg-surface); border:1.5px solid var(--border); border-radius:8px; color:var(--text-primary); font-size:.875rem; outline:none; box-sizing:border-box; transition:border-color .15s,box-shadow .15s; }
-.inf-input:focus,.inf-select:focus,.inf-textarea:focus { border-color:#8b5cf6; box-shadow:0 0 0 3px color-mix(in srgb,#8b5cf6 15%,transparent); }
+.inf-input:focus,.inf-select:focus,.inf-textarea:focus { border-color:var(--primary); box-shadow:0 0 0 3px rgba(42,94,232,.12); }
 .inf-textarea { resize:vertical; font-family:inherit; }
-.inf-auto-btn { background:none; border:none; cursor:pointer; color:#8b5cf6; font-size:.75rem; padding:0; display:flex; align-items:center; gap:.25rem; font-weight:600; }
+.inf-auto-btn { background:none; border:none; cursor:pointer; color:var(--primary); font-size:.75rem; padding:0; display:flex; align-items:center; gap:.25rem; font-weight:600; }
 .inf-auto-btn:hover { opacity:.75; }
 .inf-status-group { display:flex; gap:.4rem; flex-wrap:wrap; }
 .inf-status-opt { display:inline-flex; align-items:center; padding:.35rem .8rem; border-radius:20px; font-size:.8rem; font-weight:600; cursor:pointer; border:1.5px solid var(--border); color:var(--text-muted); background:var(--bg-surface); transition:all .15s; user-select:none; }
-.inf-status-opt:hover { border-color:#8b5cf6; color:#8b5cf6; }
-.inf-status-opt-active { background:color-mix(in srgb,#8b5cf6 12%,transparent); border-color:#8b5cf6; color:#7c3aed; }
+.inf-status-opt:hover { border-color:var(--primary); color:var(--primary); }
+.inf-status-opt-active { background:rgba(42,94,232,.1); border-color:var(--primary); color:var(--primary); }
 .inf-hint { font-size:12px; color:var(--text-muted); margin-top:4px; display:block; min-height:16px; }
 .in-viewer-row { display:flex; align-items:center; gap:.6rem; padding:.5rem 0; border-bottom:1px solid var(--border); }
 .in-viewer-row:last-child { border-bottom:none; }
 .badge-danger { background:rgba(239,68,68,.15); color:#ef4444; }
 .badge-info { background:rgba(59,130,246,.15); color:#3b82f6; }
-.in-btn-graduate { background:linear-gradient(135deg,#10b981,#059669); color:#fff; box-shadow:0 3px 10px rgba(16,185,129,.3); }
+.in-btn-graduate { background:var(--success); color:#fff; }
+.in-btn-graduate:hover:not(:disabled) { filter:brightness(1.1); }
 .in-dov-list { display:flex; flex-direction:column; gap:.35rem; max-height:200px; overflow-y:auto; padding:.5rem; background:var(--bg-raised); border:1px solid var(--border); border-radius:8px; }
 .in-dov-item { display:flex; align-items:center; gap:.5rem; padding:.35rem .4rem; border-radius:6px; cursor:pointer; font-size:.875rem; transition:background .12s; }
 .in-dov-item:hover { background:var(--bg-hover); }
-.in-dov-item input { cursor:pointer; accent-color:#8b5cf6; }
+.in-dov-item input { cursor:pointer; accent-color:var(--primary); }
+/* ── Template apply modal ───────────────────────────────────────────────── */
+.ist-group-label { font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin:.75rem 0 .35rem; }
+.ist-card { display:flex; align-items:center; justify-content:space-between; gap:.75rem; padding:.65rem .9rem; border:1px solid var(--border); border-radius:var(--radius-md); cursor:pointer; transition:all .15s; background:var(--bg-surface); }
+.ist-card:hover { border-color:var(--primary); background:rgba(42,94,232,.04); }
+.ist-card-name { font-weight:600; font-size:.875rem; color:var(--text-primary); }
+.ist-card-meta { display:flex; gap:.4rem; align-items:center; flex-shrink:0; }
+.ist-badge-job { font-size:.72rem; padding:.15rem .5rem; border-radius:20px; background:rgba(42,94,232,.1); color:var(--primary); font-weight:600; }
+.ist-badge-rows { font-size:.72rem; padding:.15rem .5rem; border-radius:20px; background:var(--bg-hover); color:var(--text-muted); }
+/* ── Template manager ───────────────────────────────────────────────────── */
+.ist-js-tab { background:transparent; color:var(--text-secondary); border:1px solid var(--border); }
+.ist-js-tab.active { background:var(--primary); color:#fff; border-color:var(--primary); }
+.ist-mgr-row { display:flex; align-items:center; gap:.5rem; padding:.55rem .6rem; border:1px solid var(--border); border-radius:var(--radius-md); margin-bottom:.35rem; background:var(--bg-surface); }
+.ist-mgr-name { font-weight:600; font-size:.875rem; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ist-mgr-meta { font-size:.75rem; color:var(--text-muted); margin-top:.1rem; }
+/* ── Template editor table ──────────────────────────────────────────────── */
+.ist-tpl-table-wrap { border:1px solid rgba(201,162,39,.3); border-radius:var(--radius-md); overflow:hidden; }
+.ist-tpl-table { width:100%; border-collapse:collapse; table-layout:fixed; font-size:.83rem; }
+.ist-tpl-table thead th { position:relative; background:linear-gradient(135deg,#1a2e5a 0%,#0f1e3d 100%); color:#C9A227; padding:.45rem .5rem; font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; border-bottom:2px solid rgba(201,162,39,.4); user-select:none; white-space:nowrap; }
+.ist-tpl-table td { padding:.25rem .4rem; border-bottom:1px solid var(--border); vertical-align:middle; }
+.ist-tpl-table tbody tr:last-child td { border-bottom:none; }
+.ist-tpl-row .inf-input, .ist-tpl-row .inf-select { font-size:.8rem; padding:.3rem .4rem; }
+.ist-th-resizer { position:absolute; right:0; top:15%; bottom:15%; width:4px; cursor:col-resize; background:rgba(201,162,39,.3); border-radius:2px; transition:background .15s; }
+.ist-th-resizer:hover, .ist-th-resizer.active { background:#C9A227; }
+.ist-time-wrap { display:flex; align-items:center; gap:3px; }
+.ist-time-wrap .inf-input { flex:1; min-width:0; padding:.3rem .25rem; text-align:center; font-size:.78rem; }
+.ist-time-sep { color:var(--text-muted); font-weight:700; flex-shrink:0; font-size:.85rem; }
+/* ── Custom datepicker ──────────────────────────────────────────────────── */
+.idp-wrap { position:relative; }
+.idp-disp { cursor:pointer !important; }
+.idp-popup { position:absolute; top:calc(100% + 4px); left:0; z-index:1100; background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--radius-lg); box-shadow:var(--shadow-lg); width:256px; padding:.5rem; }
+.idp-header { display:flex; align-items:center; justify-content:space-between; padding:.2rem .1rem .45rem; }
+.idp-nav { background:none; border:none; cursor:pointer; font-size:1.3rem; line-height:1; color:var(--text-secondary); padding:.1rem .35rem; border-radius:6px; transition:background .12s; }
+.idp-nav:hover { background:var(--bg-hover); color:var(--text-primary); }
+.idp-month-lbl { font-size:.88rem; font-weight:700; color:var(--text-primary); }
+.idp-grid-head,.idp-grid { display:grid; grid-template-columns:repeat(7,1fr); }
+.idp-dow { text-align:center; font-size:.68rem; font-weight:600; color:var(--text-muted); padding:.15rem 0 .3rem; }
+.idp-cell { text-align:center; font-size:.82rem; padding:.28rem 0; border-radius:6px; cursor:pointer; color:var(--text-primary); transition:background .1s,color .1s; }
+.idp-cell:hover:not(.idp-sel) { background:rgba(42,94,232,.1); color:var(--primary); }
+.idp-other { color:var(--text-muted); }
+.idp-today { font-weight:700; color:var(--primary); }
+.idp-sel { background:var(--primary) !important; color:#fff !important; font-weight:700; }
+.idp-footer { display:flex; justify-content:space-between; padding:.35rem .1rem 0; border-top:1px solid var(--border); margin-top:.3rem; }
+.idp-fb { background:none; border:none; cursor:pointer; font-size:.78rem; color:var(--text-muted); padding:.2rem .35rem; border-radius:4px; transition:background .1s,color .1s; }
+.idp-fb:hover { background:var(--bg-hover); color:var(--text-primary); }
+.idp-fb-today { color:var(--primary); font-weight:600; }
         `;
         document.head.appendChild(s);
     }

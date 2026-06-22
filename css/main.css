@@ -1342,7 +1342,7 @@ input#uf-select-all {
 .auth-card input:-webkit-autofill,
 .auth-card input:-webkit-autofill:hover,
 .auth-card input:-webkit-autofill:focus {
-    -webkit-box-shadow: 0 0 0 1000px rgba(255,255,255,0.06) inset;
+    -webkit-box-shadow: 0 0 0 1000px #131f3a inset;
     -webkit-text-fill-color: #fff;
     border-color: rgba(255,255,255,0.11);
     caret-color: #fff;

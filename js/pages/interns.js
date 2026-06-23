@@ -4310,13 +4310,13 @@ ${discs.length ? `<table>
             title: `Масове редагування — ${list.length} стажерів`,
             size: 'lg',
             body: `
-            <div style="font-size:.85rem;color:var(--text-muted);margin-bottom:1rem">
+            <div style="font-size:.85rem;color:var(--text-muted);margin-bottom:1.25rem">
                 Зміни застосуються до <strong style="color:var(--text-primary)">${list.length}</strong> стажерів за поточними фільтрами.
                 Залиште поле порожнім — воно не буде змінено.
             </div>
-            <div style="display:flex;flex-direction:column;gap:1rem">
+            <div style="display:flex;flex-direction:column;gap:1.25rem">
                 <div>
-                    <label style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);display:block;margin-bottom:.35rem">Статус</label>
+                    <label class="be-label">Статус</label>
                     <select id="be-status" class="form-control" style="max-width:260px">
                         <option value="">— не змінювати —</option>
                         <option value="active">Навчається</option>
@@ -4325,18 +4325,42 @@ ${discs.length ? `<table>
                     </select>
                 </div>
                 <div>
-                    <label style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);display:block;margin-bottom:.35rem">Фактична дата випуску (actual_end_date)</label>
-                    <input type="date" id="be-actual-end" class="form-control" style="max-width:200px">
+                    <label class="be-label">Фактична дата випуску</label>
+                    <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
+                        <select id="be-actual-mode" class="form-control" style="max-width:260px" onchange="InternsPage._beToggleActual()">
+                            <option value="">— не змінювати —</option>
+                            <option value="formula">планова дата + N днів</option>
+                            <option value="fixed">фіксована дата</option>
+                        </select>
+                        <span id="be-actual-extra" style="display:none;align-items:center;gap:.5rem">
+                            <input type="number" id="be-actual-days" value="1" min="0" max="30" style="width:70px" class="form-control">
+                            <span style="font-size:.83rem;color:var(--text-muted)">днів після планової</span>
+                        </span>
+                        <input type="date" id="be-actual-fixed" class="form-control" style="max-width:180px;display:none">
+                    </div>
+                    <div id="be-actual-preview" style="font-size:.78rem;color:var(--text-muted);margin-top:.35rem"></div>
                 </div>
                 <div>
-                    <label style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);display:block;margin-bottom:.35rem">Працює з (employed_since)</label>
-                    <input type="date" id="be-employed-since" class="form-control" style="max-width:200px">
+                    <label class="be-label">Дата прийняття на роботу (працює з)</label>
+                    <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
+                        <select id="be-empl-mode" class="form-control" style="max-width:260px" onchange="InternsPage._beToggleEmpl()">
+                            <option value="">— не змінювати —</option>
+                            <option value="eq-actual">= дата випуску (після обчислення)</option>
+                            <option value="formula">планова дата + N днів</option>
+                            <option value="fixed">фіксована дата</option>
+                        </select>
+                        <span id="be-empl-extra" style="display:none;align-items:center;gap:.5rem">
+                            <input type="number" id="be-empl-days" value="1" min="0" max="30" style="width:70px" class="form-control">
+                            <span style="font-size:.83rem;color:var(--text-muted)">днів після планової</span>
+                        </span>
+                        <input type="date" id="be-empl-fixed" class="form-control" style="max-width:180px;display:none">
+                    </div>
                 </div>
                 <div>
-                    <label style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);display:block;margin-bottom:.35rem">Керівник</label>
+                    <label class="be-label">Керівник</label>
                     <select id="be-manager" class="form-control" style="max-width:320px">
                         <option value="">— не змінювати —</option>
-                        ${this._allProfiles.filter(p => p.role === 'manager' || p.role === 'admin' || p.role === 'owner').sort((a,b)=>(a.full_name||'').localeCompare(b.full_name||'')).map(p => `<option value="${p.id}">${Fmt.esc(p.full_name)}</option>`).join('')}
+                        ${this._allProfiles.filter(p => ['manager','admin','owner'].includes(p.role)).sort((a,b)=>(a.full_name||'').localeCompare(b.full_name||'')).map(p => `<option value="${p.id}">${Fmt.esc(p.full_name)}</option>`).join('')}
                     </select>
                 </div>
             </div>`,
@@ -4346,13 +4370,62 @@ ${discs.length ? `<table>
         });
     },
 
-    async _applyBulkEdit() {
-        const status       = Dom.val('be-status');
-        const actualEnd    = Dom.val('be-actual-end');
-        const employedSince = Dom.val('be-employed-since');
-        const managerId    = Dom.val('be-manager');
+    _beToggleActual() {
+        const mode = Dom.val('be-actual-mode');
+        const extra = document.getElementById('be-actual-extra');
+        const fixed = document.getElementById('be-actual-fixed');
+        if (extra) extra.style.display = mode === 'formula' ? 'flex' : 'none';
+        if (fixed) fixed.style.display = mode === 'fixed' ? '' : 'none';
+    },
 
-        if (!status && !actualEnd && !employedSince && !managerId) {
+    _beToggleEmpl() {
+        const mode = Dom.val('be-empl-mode');
+        const extra = document.getElementById('be-empl-extra');
+        const fixed = document.getElementById('be-empl-fixed');
+        if (extra) extra.style.display = mode === 'formula' ? 'flex' : 'none';
+        if (fixed) fixed.style.display = mode === 'fixed' ? '' : 'none';
+    },
+
+    _beCalcActualDate(intern) {
+        const mode = Dom.val('be-actual-mode');
+        if (!mode) return null;
+        if (mode === 'fixed') return Dom.val('be-actual-fixed') || null;
+        if (mode === 'formula') {
+            const base = intern.planned_end_date;
+            if (!base) return null;
+            const days = parseInt(Dom.val('be-actual-days') || '0', 10);
+            const d = new Date(base);
+            d.setDate(d.getDate() + days);
+            const pad = n => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+        }
+        return null;
+    },
+
+    _beCalcEmplDate(intern, actualDate) {
+        const mode = Dom.val('be-empl-mode');
+        if (!mode) return null;
+        if (mode === 'fixed') return Dom.val('be-empl-fixed') || null;
+        if (mode === 'eq-actual') return actualDate || null;
+        if (mode === 'formula') {
+            const base = intern.planned_end_date;
+            if (!base) return null;
+            const days = parseInt(Dom.val('be-empl-days') || '0', 10);
+            const d = new Date(base);
+            d.setDate(d.getDate() + days);
+            const pad = n => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+        }
+        return null;
+    },
+
+    async _applyBulkEdit() {
+        const status    = Dom.val('be-status');
+        const managerId = Dom.val('be-manager');
+        const actualMode = Dom.val('be-actual-mode');
+        const emplMode   = Dom.val('be-empl-mode');
+
+        if (!status && !actualMode && !emplMode && !managerId) {
             Toast.warning('Нічого не вибрано для зміни'); return;
         }
 
@@ -4361,7 +4434,6 @@ ${discs.length ? `<table>
             title: 'Підтвердити масове редагування',
             message: `Змінити дані для ${list.length} стажерів?`,
             confirmText: 'Застосувати',
-            danger: false,
         });
         if (!ok) return;
 
@@ -4372,14 +4444,21 @@ ${discs.length ? `<table>
             try {
                 const patch = {};
                 if (status) patch.status = status;
-                // always pass actual_end_date when changing status to avoid API auto-setting today's date
-                if (actualEnd) patch.actual_end_date = actualEnd;
-                else if (status && status !== 'active') patch.actual_end_date = intern.actual_end_date || intern.planned_end_date || null;
-                if (managerId) patch.manager_id = managerId;
-                if (employedSince) {
-                    const existing = intern.employment_info || {};
-                    patch.employment_info = { ...existing, employed_since: employedSince };
+
+                const actualDate = this._beCalcActualDate(intern);
+                if (actualDate) patch.actual_end_date = actualDate;
+                else if (status && status !== 'active') {
+                    // preserve existing date to avoid API auto-setting today
+                    patch.actual_end_date = intern.actual_end_date || intern.planned_end_date || null;
                 }
+
+                const emplDate = this._beCalcEmplDate(intern, actualDate || intern.actual_end_date);
+                if (emplDate) {
+                    patch.employment_info = { ...(intern.employment_info || {}), employed_since: emplDate };
+                }
+
+                if (managerId) patch.manager_id = managerId;
+
                 if (Object.keys(patch).length) {
                     await API.interns.update(intern.id, patch);
                     updated++;
@@ -4394,11 +4473,10 @@ ${discs.length ? `<table>
         if (errors) Toast.warning(`Оновлено: ${updated}, помилок: ${errors}`);
         else Toast.success(`Оновлено ${updated} стажерів`);
 
-        // reload
         try {
             Loader.show();
-            const managerId2 = this._isManager ? AppState.profile.id : null;
-            const { data } = await API.interns.getAll({ managerId: managerId2, pageSize: 500 });
+            const mid = this._isManager ? AppState.profile.id : null;
+            const { data } = await API.interns.getAll({ managerId: mid, pageSize: 500 });
             this._interns = data;
         } catch(e) { console.error(e); } finally { Loader.hide(); }
         this._renderTable();
@@ -4963,6 +5041,7 @@ mark.in-hl { background:color-mix(in srgb,#f59e0b 35%,transparent); color:inheri
 .irp-mentor-name { font-weight:600; font-size:.9rem; display:flex; align-items:center; gap:.4rem; color:var(--text-primary); }
 .irp-mentor-feedback { font-size:.83rem; color:var(--text-muted); margin-top:.3rem; line-height:1.5; }
 .irp-chr-text { font-size:.9rem; color:var(--text-primary); line-height:1.6; background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--radius-md); padding:.75rem 1rem; white-space:pre-wrap; }
+.be-label { font-size:.78rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--text-muted); display:block; margin-bottom:.35rem; }
 /* ── Report side-nav layout ── */
 .irp-layout { display:flex; gap:0; min-height:340px; background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; }
 .irp-sidenav { width:148px; flex-shrink:0; display:flex; flex-direction:column; border-right:1px solid var(--border); background:var(--bg-raised); padding:.5rem 0; gap:2px; }

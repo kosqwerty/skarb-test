@@ -1091,15 +1091,18 @@
         const intern = this._currentIntern;
         const p = intern?.profile || intern?.profile_snapshot || {};
 
+        let prevDate = null;
         const rows = discs.map((d, idx) => {
             const isHoliday   = d.row_type === 'holiday';
             const isHighlight = d.row_type === 'highlight';
             const isInfo      = d.row_type === 'info';
             const rowClass    = isHoliday ? 'isc-row-holiday' : isHighlight ? 'isc-row-highlight' : isInfo ? 'isc-row-info' : d.is_completed ? 'isc-row-done' : '';
+            const showDate    = d.date !== prevDate;
+            prevDate = d.date;
             if (isHoliday) {
                 return `<tr class="isc-row ${rowClass}">
                     <td>${idx + 1}</td>
-                    <td>${d.date ? Fmt.date(d.date) : ''}</td>
+                    <td>${showDate && d.date ? Fmt.date(d.date) : ''}</td>
                     <td colspan="4" style="text-align:center;font-style:italic;color:var(--text-muted)">${Fmt.esc(d.discipline_name || 'Вихідний')}</td>
                     <td style="text-align:center">
                         ${this._canManage ? `<button class="in-icon-btn" onclick="InternsPage._editDisc('${d.id}')" title="Редагувати"><i class="fa-solid fa-pen"></i></button>
@@ -1110,7 +1113,7 @@
             }
             return `<tr class="isc-row ${rowClass}">
                 <td class="isc-num">${idx + 1}</td>
-                <td class="isc-date">${d.date ? Fmt.date(d.date) : '—'}</td>
+                <td class="isc-date">${showDate ? (d.date ? Fmt.date(d.date) : '—') : ''}</td>
                 <td class="isc-hours">${Fmt.esc(d.hours || '')}</td>
                 <td class="isc-name">${Fmt.esc(d.discipline_name)}</td>
                 <td class="isc-place">${Fmt.esc(d.place || d.address || '')}</td>

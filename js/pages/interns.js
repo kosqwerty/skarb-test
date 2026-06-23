@@ -1552,18 +1552,24 @@
                 return rows.join('');
             };
 
-            const renderPraktykaBlock = (field, value) => {
-                const val = value != null ? value : '';
+            const renderPraktykaBlock = (scoreField, scoreVal, commentField, commentVal) => {
+                const val  = scoreVal   != null ? scoreVal   : '';
+                const comm = commentVal != null ? commentVal : '';
                 if (!this._canManage) {
                     return `<div class="itb-prak-display">
-                        <span class="itb-prak-val ${val !== '' ? 'itb-score-pass' : ''}">${val !== '' ? val : '—'}</span>
+                        <span class="itb-prak-val ${val !== '' ? 'itb-score-pass' : ''}">${val !== '' ? Fmt.esc(val) : '—'}</span>
                         <span class="itb-prak-unit">${val !== '' ? '/ 5' : 'не виставлено'}</span>
-                    </div>`;
+                    </div>
+                    ${comm ? `<div class="itb-prak-comm-view"><i class="fa-regular fa-comment"></i> ${Fmt.esc(comm)}</div>` : ''}`;
                 }
-                return `<div class="itb-prak-row">
-                    <input class="inf-input itb-prak-input" type="text" maxlength="4"
-                        placeholder="напр. 4+" value="${val}" id="itb-prak-${field}" onkeydown="if(event.key==='Enter')InternsPage._savePraktykaField('${intern.id}','${field}')">
-                    <button class="btn btn-primary btn-xs" onclick="InternsPage._savePraktykaField('${intern.id}','${field}')">
+                return `<div class="itb-prak-edit">
+                    <div class="itb-prak-row">
+                        <input class="inf-input itb-prak-input" type="text" maxlength="4"
+                            placeholder="напр. 4+" value="${Fmt.esc(val)}" id="itb-prak-${scoreField}">
+                        <span class="itb-prak-unit-label">/ 5</span>
+                    </div>
+                    <textarea class="inf-input itb-prak-textarea" placeholder="Коментар до практики…" id="itb-prak-${commentField}">${Fmt.esc(comm)}</textarea>
+                    <button class="btn btn-primary btn-xs itb-prak-save-btn" onclick="InternsPage._savePraktykaFields('${intern.id}','${scoreField}','${commentField}')">
                         <i class="fa-solid fa-floppy-disk"></i> Зберегти
                     </button>
                 </div>`;
@@ -1582,7 +1588,7 @@
                         </div>
                         <div class="itb-sub">
                             <div class="itb-sub-label"><i class="fa-solid fa-screwdriver-wrench"></i> Практика</div>
-                            <div class="itb-sub-content itb-sub-prak">${renderPraktykaBlock('praktyka_score', intern.praktyka_score)}</div>
+                            <div class="itb-sub-content itb-sub-prak">${renderPraktykaBlock('praktyka_score', intern.praktyka_score, 'praktyka_comment', intern.praktyka_comment)}</div>
                         </div>
                     </div>
                 </div>`;
@@ -1612,7 +1618,7 @@
                         </div>
                         <div class="itb-sub">
                             <div class="itb-sub-label"><i class="fa-solid fa-screwdriver-wrench"></i> Практика</div>
-                            <div class="itb-sub-content itb-sub-prak">${renderPraktykaBlock('praktyka_dm_score', intern.praktyka_dm_score)}</div>
+                            <div class="itb-sub-content itb-sub-prak">${renderPraktykaBlock('praktyka_dm_score', intern.praktyka_dm_score, 'praktyka_dm_comment', intern.praktyka_dm_comment)}</div>
                         </div>
                     </div>
                 </div>`;
@@ -1636,13 +1642,17 @@
         }
     },
 
-    async _savePraktykaField(internId, field) {
-        const input = document.getElementById(`itb-prak-${field}`);
-        if (!input) return;
-        const val = input.value.trim();
-        const score = val !== '' ? val : null;
+    async _savePraktykaFields(internId, scoreField, commentField) {
+        const scoreInput   = document.getElementById(`itb-prak-${scoreField}`);
+        const commentInput = document.getElementById(`itb-prak-${commentField}`);
+        if (!scoreInput) return;
+        const score   = scoreInput.value.trim() || null;
+        const comment = commentInput ? (commentInput.value.trim() || null) : null;
         try {
-            await API.interns.savePraktykaField(internId, field, score);
+            await Promise.all([
+                API.interns.savePraktykaField(internId, scoreField, score),
+                API.interns.savePraktykaField(internId, commentField, comment),
+            ]);
             this._currentIntern = await API.interns.getById(internId);
             Toast.success('Збережено');
         } catch(e) { Toast.error('Помилка', e.message); }
@@ -1712,7 +1722,13 @@
             }).join('');
         };
 
-        const prakVal = (v) => v != null && v !== '' ? `<strong>${Fmt.esc(String(v))}</strong> / 5` : '<span style="color:var(--text-muted)">не виставлено</span>';
+        const prakVal = (score, comment) => {
+            const scoreHtml = score != null && score !== ''
+                ? `<strong>${Fmt.esc(String(score))}</strong> / 5`
+                : '<span style="color:var(--text-muted)">не виставлено</span>';
+            const commHtml = comment ? `<span style="color:var(--text-muted);margin-left:.75rem"><i class="fa-regular fa-comment"></i> ${Fmt.esc(comment)}</span>` : '';
+            return scoreHtml + commHtml;
+        };
 
         const subjects = [];
 
@@ -1720,7 +1736,7 @@
             <div class="irp-tabel-subj-title" style="border-left:3px solid #3b82f6">Техніка</div>
             <table class="irp-tabel-table"><thead><tr><th>Тест</th><th>Дата</th><th>Результат</th><th>Здав</th></tr></thead>
             <tbody>${catRow('техніка')}</tbody></table>
-            <div class="irp-tabel-prak"><i class="fa-solid fa-screwdriver-wrench"></i> Практика: ${prakVal(intern.praktyka_score)}</div>
+            <div class="irp-tabel-prak"><i class="fa-solid fa-screwdriver-wrench"></i> Практика: ${prakVal(intern.praktyka_score, intern.praktyka_comment)}</div>
         </div>`);
 
         if (hasMagazyn) subjects.push(`<div class="irp-tabel-subject">
@@ -1733,7 +1749,7 @@
             <div class="irp-tabel-subj-title" style="border-left:3px solid #f59e0b">Дорогоцінні метали</div>
             <table class="irp-tabel-table"><thead><tr><th>Тест</th><th>Дата</th><th>Результат</th><th>Здав</th></tr></thead>
             <tbody>${catRow('драг_метали')}</tbody></table>
-            <div class="irp-tabel-prak"><i class="fa-solid fa-screwdriver-wrench"></i> Практика: ${prakVal(intern.praktyka_dm_score)}</div>
+            <div class="irp-tabel-prak"><i class="fa-solid fa-screwdriver-wrench"></i> Практика: ${prakVal(intern.praktyka_dm_score, intern.praktyka_dm_comment)}</div>
         </div>`);
 
         subjects.push(`<div class="irp-tabel-subject">
@@ -4837,12 +4853,17 @@ mark.in-hl { background:color-mix(in srgb,#f59e0b 35%,transparent); color:inheri
 /* empty state */
 .itb-sub-empty { display:flex; align-items:center; gap:.4rem; padding:.6rem .9rem; font-size:.83rem; color:var(--text-muted); font-style:italic; }
 /* praktyka manual input */
+.itb-prak-edit { display:flex; flex-direction:column; gap:.4rem; }
 .itb-prak-row { display:flex; align-items:center; gap:.5rem; }
-.itb-prak-input { width:100px; }
+.itb-prak-input { width:80px; }
+.itb-prak-unit-label { font-size:.83rem; color:var(--text-muted); }
+.itb-prak-textarea { width:100%; min-height:56px; resize:vertical; font-size:.83rem; }
+.itb-prak-save-btn { align-self:flex-start; }
 .itb-prak-display { display:flex; align-items:baseline; gap:.4rem; }
 .itb-prak-val { font-size:1.4rem; font-weight:800; color:var(--text-muted); }
 .itb-prak-val.itb-score-pass { color:#059669; font-size:1.6rem; }
 .itb-prak-unit { font-size:.8rem; color:var(--text-muted); }
+.itb-prak-comm-view { font-size:.82rem; color:var(--text-muted); margin-top:.3rem; display:flex; align-items:flex-start; gap:.35rem; line-height:1.5; }
 /* protocol btn */
 .itb-protocol-btn { flex-shrink:0; color:var(--text-muted); }
 .itb-protocol-btn:hover { color:var(--primary); }

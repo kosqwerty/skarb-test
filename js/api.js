@@ -2297,7 +2297,7 @@ const API = {
             const { data, error } = await supabase.from('interns').select(
                 `id, profile_id, manager_id, start_date, planned_end_date, actual_end_date,
                  status, status_changed_at, employment_info, characteristic, mentors_info, notes, created_at, updated_at, profile_snapshot,
-                 praktyka_score, praktyka_dm_score,
+                 praktyka_score, praktyka_dm_score, praktyka_comment, praktyka_dm_comment,
                  profile:profiles!interns_profile_id_fkey(id, full_name, email, phone, job_position, city, avatar_url, gender, manager_id),
                  manager:profiles!interns_manager_id_fkey(id, full_name),
                  intern_disciplines(id, intern_id, discipline_name, date, hours, place, cabinet, address, row_type, mentor_id, is_completed, notes, order_index, created_at,
@@ -2444,7 +2444,7 @@ const API = {
         },
 
         async savePraktykaField(internId, field, value) {
-            const allowed = ['praktyka_score', 'praktyka_dm_score'];
+            const allowed = ['praktyka_score', 'praktyka_dm_score', 'praktyka_comment', 'praktyka_dm_comment'];
             if (!allowed.includes(field)) throw new Error('Invalid field');
             const { error } = await supabase.from('interns')
                 .update({ [field]: value }).eq('id', internId);

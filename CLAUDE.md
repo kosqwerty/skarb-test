@@ -104,11 +104,11 @@ const SomePage = {
 
 All Supabase calls live here, grouped by domain. Always throws on error so callers can try/catch.
 
-Full namespace list: `API.profiles`, `API.courses`, `API.enrollments`, `API.lessons`, `API.resources`, `API.scorm`, `API.tests`, `API.questions`, `API.testImages`, `API.notifications`, `API.attempts`, `API.progress`, `API.pages`, `API.pageAttachments`, `API.news`, `API.directories`, `API.dovirenosti`, `API.documentDownloads`, `API.birthdays`, `API.accessGroups`, `API.analytics`, `API.system`, `API.surveys`, `API.redFolderItems`, `API.companyBdayMessages`.
+Full namespace list: `API.profiles`, `API.courses`, `API.enrollments`, `API.lessons`, `API.resources`, `API.scorm`, `API.tests`, `API.questions`, `API.testImages`, `API.notifications`, `API.attempts`, `API.progress`, `API.pages`, `API.pageAttachments`, `API.news`, `API.directories`, `API.dovirenosti`, `API.documentDownloads`, `API.birthdays`, `API.accessGroups`, `API.analytics`, `API.system`, `API.surveys`, `API.redFolderItems`, `API.companyBdayMessages`, `API.interns`, `API.internLogs`, `API.internTabель`, `API.internDisciplines`, `API.internViewers`.
 
 ### Database migrations
 
-`sql/schema.sql` — consolidated schema snapshot of the current DB state. All migrations v2–v109 have been merged into this single file. When adding a new column/table, create `sql/migration_v124.sql` (increment from 124) and run it in the Supabase SQL Editor. **Latest is v123**.
+`sql/schema.sql` — consolidated schema snapshot of the current DB state. All migrations v2–v109 have been merged into this single file. When adding a new column/table, create `sql/migration_v131.sql` (increment from 131) and run it in the Supabase SQL Editor. **Latest is v130**.
 
 When writing a migration, always include `IF NOT EXISTS` / `IF EXISTS` guards and end with RLS + policies.
 
@@ -163,7 +163,7 @@ All PKs are UUID. All tables have `created_at TIMESTAMPTZ DEFAULT NOW()`. Tables
 | `resources` | `lesson_id`, `course_id`, `title`, `type` (pdf/video/link/scorm/file/image/document), `storage_path`, `url`, `requires_ack`, `deadline_days`, `is_deleted`, `display_block` (branch-docs block key), `dovirenost_id` (direct FK for branch-docs/red-folder uploads), `red_folder_item_id` (FK → red_folder_items) | Used for KB, documents, branch-docs, and red-folder |
 | `red_folder_items` | `id`, `number`, `title`, `documents`, `responsible`, `icon` | Items in Червона папка; resources linked via `red_folder_item_id` |
 | `resource_dovirenosti` | `resource_id`, `dovirenost_id` | Many-to-many for regular docs (documents view); branch-docs and red-folder use direct `dovirenost_id` on resources instead |
-| `tests` | `course_id`, `lesson_id`, `title`, `passing_score`, `max_attempts`, `time_limit_minutes`, `randomize_questions`, `is_published`, `allow_skip` | |
+| `tests` | `course_id`, `lesson_id`, `title`, `passing_score`, `max_attempts`, `time_limit_minutes`, `randomize_questions`, `is_published`, `allow_skip`, `intern_category` | `intern_category`: `техніка`\|`оцінка_техніки`\|`магазин`\|`драг_метали`\|`оцінка_драг_метали`\|`загальний`\|null — maps test to Табель section |
 | `questions` | `test_id`, `question_text`, `question_type` (single/multiple/true_false), `points`, `order_index` | |
 | `answers` | `question_id`, `answer_text`, `is_correct`, `order_index`, `image_url`, `image_align` | `answer_text` stores Quill HTML |
 | `test_attempts` | `user_id`, `test_id`, `attempt_number`, `score`, `percentage`, `passed`, `completed_at` | |
@@ -178,6 +178,10 @@ All PKs are UUID. All tables have `created_at TIMESTAMPTZ DEFAULT NOW()`. Tables
 | `survey_questions` | `survey_id`, `text`, `type` (`single`\|`multiple`\|`text`\|`rating`\|`scale`), `options` (jsonb), `is_required`, `order_index` | |
 | `survey_responses` | `survey_id`, `user_id`, `session_id`, `submitted_at` | |
 | `survey_answers` | `response_id`, `question_id`, `value`, `selected_options` (jsonb) | |
+
+| `interns` | `profile_id`, `manager_id`, `start_date`, `planned_end_date`, `actual_end_date`, `status`, `employment_info` (jsonb), `characteristic` (jsonb), `mentors_info` (jsonb), `notes`, `profile_snapshot` (jsonb), `praktyka_score` (text), `praktyka_dm_score` (text), `praktyka_comment` (text), `praktyka_dm_comment` (text) | `characteristic` stores `{criteria, summary, author_id, author_name, updated_at}`. Criteria keys prefixed: `tekh_*` (Техніка), `dm_*` (ДМ), `dia_*` (Діаманти), unprefixed (Загальна). `praktyka_*` — manual score (0–5 scale, text to support "4-"/"4+" notation) |
+| `intern_disciplines` | `intern_id`, `discipline_name`, `date`, `hours`, `place`, `cabinet`, `address`, `row_type`, `mentor_id`, `is_completed`, `notes`, `order_index` | Schedule rows for intern training |
+| `intern_logs` | `actor_id`, `intern_id`, `action`, `details` (jsonb) | Activity log; RLS: `actor_id = auth.uid()`. Use `AppState._realProfile?.id \|\| AppState.profile?.id` for actor (sync, works during impersonation) |
 
 > `schema.sql` is the baseline. Migrations `v2–v50` add columns — check the latest migration for the most current column list on any table.
 
@@ -700,3 +704,44 @@ if (btn) {
 |---------|------|----------------|
 | `admin?tab=pleso` | admin/owner | iframe `/admin_pleso.html` |
 | `admin?tab=trusted-ips` | admin/owner | `AdminPage._renderTrustedIps()` напряму |
+
+## interns.js specifics
+
+`js/pages/interns.js` — модуль стажерів (~4700+ рядків).
+
+### Tabs in intern detail card
+`_detailTab`: `'info'` | `'schedule'` | `'characteristic'` | `'mentors'` | `'report'` | `'tabel'`
+
+Табель і Характеристика видимі тільки для `_canManage` (admin/owner).
+
+### Табель (`_renderDetailTabel`)
+- Секції залежать від посади: **Техніка** (всі) + **Магазин** (продавець/універсал) + **Дорогоцінні метали** (університет) + **Загальний** (всі)
+- Теорія — результати тестів з `intern_category` через `API.internTabель.getAttemptsByUser(userId)`
+- Практика — ручний ввід: `praktyka_score` (техніка) і `praktyka_dm_score` (ДМ), тип `text` (підтримує "4-", "4+")
+- Коментарі практики: `praktyka_comment`, `praktyka_dm_comment`
+- Toggle edit/view: `_togglePraktykaEdit(btn, scoreField)` / `_savePraktykaFields(internId, scoreField, commentField)`
+- Протокол помилок: `_openWrongAnswers(attemptId, testTitle)` — модал з невірними відповідями
+
+### Характеристика (`_renderDetailCharacteristic`)
+Side-nav layout: ліва панель (`ichr-nav`) з секціями, права (`ichr-content`) з критеріями активної секції.
+
+Секції (4 набори критеріїв):
+| Поле | Ключі | Для кого |
+|------|-------|---------|
+| `_CRITERIA_TEKH` | `tekh_*` (5 критеріїв) | всі |
+| `_CRITERIA_DM` | `dm_*` (5 критеріїв) | Універсал |
+| `_CRITERIA_DIAMONDS` | `dia_*` (5 критеріїв) | Універсал |
+| `_CRITERIA` | без префікса (7 критеріїв) | всі |
+
+Переключення секцій: `_chrSwitchSection(secId)` — показує/ховає `.ichr-panel` без перерендеру.
+Збереження: `_chrSave(internId)` — зберігає всі критерії з усіх 4 наборів одним jsonb в `characteristic.criteria`.
+
+### API.interns key methods
+- `getById(id)` — повертає інтерна з `praktyka_score`, `praktyka_dm_score`, `praktyka_comment`, `praktyka_dm_comment`
+- `savePraktykaField(internId, field, value)` — whitelist: `praktyka_score`, `praktyka_dm_score`, `praktyka_comment`, `praktyka_dm_comment`
+- `API.internTabель.getAttemptsByUser(userId)` — останні спроби по тестах з `intern_category`
+- `API.internTabель.getWrongAnswers(attemptId)` — невірні відповіді для протоколу помилок
+- `API.internLogs.add(internId, action, details)` — `actor_id` береться з `AppState._realProfile?.id || AppState.profile?.id`
+
+### tests-manager — intern_category
+В налаштуваннях тесту є select "Категорія для табелю стажера" з 6 значеннями. Зберігається в `tests.intern_category`.

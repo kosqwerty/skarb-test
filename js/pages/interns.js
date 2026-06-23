@@ -1509,10 +1509,8 @@
         const p = intern.profile || intern.profile_snapshot || {};
         const jobPos = (p.job_position || '').toLowerCase();
 
-        // determine which fields to show based on job position
-        const hasMagazyn  = jobPos.includes('продавець') || jobPos.includes('продавец') || jobPos.includes('універсал') || jobPos.includes('универсал');
-        const hasDrag     = jobPos.includes('універсал') || jobPos.includes('универсал');
-        const hasPrakDrag = hasDrag; // практика драг. металів — тільки для універсал
+        const hasMagazyn = jobPos.includes('продавець') || jobPos.includes('продавец') || jobPos.includes('універсал') || jobPos.includes('универсал');
+        const hasDrag    = jobPos.includes('універсал') || jobPos.includes('универсал');
 
         dc.innerHTML = `<div class="itb-wrap"><div style="text-align:center;padding:2rem"><i class="fa-solid fa-spinner fa-spin"></i></div></div>`;
 
@@ -1520,10 +1518,10 @@
             const userId = intern.profile_id;
             const attempts = await API.internTabель.getAttemptsByUser(userId);
 
-            // group by intern_category, keep last attempt per test, pick best percentage per category
             const byCategory = {};
             for (const a of attempts) {
                 const cat = a.test?.intern_category;
+                if (!cat) continue;
                 if (!byCategory[cat]) byCategory[cat] = [];
                 byCategory[cat].push(a);
             }
@@ -1533,45 +1531,121 @@
                 const pct = attempt.percentage != null ? Math.round(attempt.percentage) : '—';
                 const passed = attempt.passed;
                 const date = attempt.completed_at ? Fmt.dateShort(attempt.completed_at) : '—';
+                const passLabel = attempt.test?.passing_score ? `прохідний ${attempt.test.passing_score}%` : '';
+                const cntLabel = `${cnt} спроб${cnt===1?'а':cnt<5?'и':''}`;
                 return `<div class="itb-test-row">
                     <div class="itb-test-info">
                         <span class="itb-test-title">${Fmt.esc(attempt.test?.title || '')}</span>
-                        <span class="itb-test-meta">${date} · ${cnt} спроб${cnt===1?'а':cnt<5?'и':''}` +
-                        (attempt.test?.passing_score ? ` · прохідний ${attempt.test.passing_score}%` : '') +
-                        `</span>
+                        <span class="itb-test-meta">${date} · ${cntLabel}${passLabel ? ' · ' + passLabel : ''}</span>
                     </div>
-                    <div class="itb-test-score ${passed ? 'itb-pass' : 'itb-fail'}">${pct}%</div>
-                    <button class="btn btn-ghost btn-sm itb-protocol-btn" onclick="InternsPage._openWrongAnswers('${attempt.id}',${JSON.stringify(attempt.test?.title||'').replace(/"/g,'&quot;')})" title="Протокол помилок">
+                    <div class="itb-score-badge ${passed ? 'itb-score-pass' : 'itb-score-fail'}">${pct}%</div>
+                    <button class="btn btn-ghost btn-xs itb-protocol-btn" onclick="InternsPage._openWrongAnswers('${attempt.id}',${JSON.stringify(attempt.test?.title||'').replace(/"/g,'&quot;')})" title="Протокол помилок">
                         <i class="fa-solid fa-list-check"></i>
                     </button>
                 </div>`;
             };
 
-            const renderCategory = async (label, cat) => {
+            const renderTheoryBlock = async (cat) => {
                 const list = byCategory[cat] || [];
-                if (!list.length) return `<div class="itb-section">
-                    <div class="itb-section-label">${label}</div>
-                    <div class="itb-empty">Тестів не проходилось</div>
-                </div>`;
+                if (!list.length) return `<div class="itb-sub-empty"><i class="fa-regular fa-circle-xmark"></i> Тест не проходився</div>`;
                 const rows = await Promise.all(list.map(a => renderTestRow(a)));
-                return `<div class="itb-section">
-                    <div class="itb-section-label">${label}</div>
-                    ${rows.join('')}
+                return rows.join('');
+            };
+
+            const renderPraktykaBlock = (field, value) => {
+                const val = value != null ? value : '';
+                if (!this._canManage) {
+                    return `<div class="itb-prak-display">
+                        <span class="itb-prak-val ${val !== '' ? 'itb-score-pass' : ''}">${val !== '' ? val : '—'}</span>
+                        <span class="itb-prak-unit">${val !== '' ? 'балів' : 'не виставлено'}</span>
+                    </div>`;
+                }
+                return `<div class="itb-prak-row">
+                    <input class="inf-input itb-prak-input" type="number" min="0" max="100" step="0.1"
+                        placeholder="0–100" value="${val}" id="itb-prak-${field}" onkeydown="if(event.key==='Enter')InternsPage._savePraktykaField('${intern.id}','${field}')">
+                    <button class="btn btn-primary btn-xs" onclick="InternsPage._savePraktykaField('${intern.id}','${field}')">
+                        <i class="fa-solid fa-floppy-disk"></i> Зберегти
+                    </button>
                 </div>`;
             };
 
-            const sections = await Promise.all([
-                renderCategory('Теорія техніки', 'техніка'),
-                renderCategory('Практика — оцінка техніки', 'оцінка_техніки'),
-                hasMagazyn   ? renderCategory('Магазин', 'магазин') : Promise.resolve(''),
-                hasDrag      ? renderCategory('Дорогоцінні метали — теорія', 'драг_метали') : Promise.resolve(''),
-                hasPrakDrag  ? renderCategory('Дорогоцінні метали — практика (оцінка)', 'оцінка_драг_метали') : Promise.resolve(''),
-            ]);
+            // Build subject cards
+            const tekhnikaCard = `
+                <div class="itb-card">
+                    <div class="itb-card-header itb-hdr-blue">
+                        <i class="fa-solid fa-wrench"></i> Техніка
+                    </div>
+                    <div class="itb-card-body">
+                        <div class="itb-sub">
+                            <div class="itb-sub-label"><i class="fa-solid fa-book-open"></i> Теорія</div>
+                            <div class="itb-sub-content">${await renderTheoryBlock('техніка')}</div>
+                        </div>
+                        <div class="itb-sub">
+                            <div class="itb-sub-label"><i class="fa-solid fa-screwdriver-wrench"></i> Практика</div>
+                            <div class="itb-sub-content itb-sub-prak">${renderPraktykaBlock('praktyka_score', intern.praktyka_score)}</div>
+                        </div>
+                    </div>
+                </div>`;
 
-            dc.innerHTML = `<div class="itb-wrap">${sections.join('')}</div>`;
+            const magazynCard = !hasMagazyn ? '' : `
+                <div class="itb-card">
+                    <div class="itb-card-header itb-hdr-green">
+                        <i class="fa-solid fa-store"></i> Магазин
+                    </div>
+                    <div class="itb-card-body">
+                        <div class="itb-sub">
+                            <div class="itb-sub-label"><i class="fa-solid fa-book-open"></i> Тест</div>
+                            <div class="itb-sub-content">${await renderTheoryBlock('магазин')}</div>
+                        </div>
+                    </div>
+                </div>`;
+
+            const dragCard = !hasDrag ? '' : `
+                <div class="itb-card">
+                    <div class="itb-card-header itb-hdr-amber">
+                        <i class="fa-solid fa-gem"></i> Дорогоцінні метали
+                    </div>
+                    <div class="itb-card-body">
+                        <div class="itb-sub">
+                            <div class="itb-sub-label"><i class="fa-solid fa-book-open"></i> Теорія</div>
+                            <div class="itb-sub-content">${await renderTheoryBlock('драг_метали')}</div>
+                        </div>
+                        <div class="itb-sub">
+                            <div class="itb-sub-label"><i class="fa-solid fa-screwdriver-wrench"></i> Практика</div>
+                            <div class="itb-sub-content itb-sub-prak">${renderPraktykaBlock('praktyka_dm_score', intern.praktyka_dm_score)}</div>
+                        </div>
+                    </div>
+                </div>`;
+
+            const zagCard = `
+                <div class="itb-card">
+                    <div class="itb-card-header itb-hdr-purple">
+                        <i class="fa-solid fa-clipboard-check"></i> Загальний тест
+                    </div>
+                    <div class="itb-card-body">
+                        <div class="itb-sub">
+                            <div class="itb-sub-label"><i class="fa-solid fa-book-open"></i> Результат</div>
+                            <div class="itb-sub-content">${await renderTheoryBlock('загальний')}</div>
+                        </div>
+                    </div>
+                </div>`;
+
+            dc.innerHTML = `<div class="itb-wrap">${tekhnikaCard}${magazynCard}${dragCard}${zagCard}</div>`;
         } catch(e) {
             dc.innerHTML = `<div style="padding:2rem;color:var(--danger)">${Fmt.esc(e.message)}</div>`;
         }
+    },
+
+    async _savePraktykaField(internId, field) {
+        const input = document.getElementById(`itb-prak-${field}`);
+        if (!input) return;
+        const val = input.value.trim();
+        const score = val !== '' ? parseFloat(val) : null;
+        try {
+            await API.interns.savePraktykaField(internId, field, score);
+            this._currentIntern = await API.interns.getById(internId);
+            Toast.success('Збережено');
+        } catch(e) { Toast.error('Помилка', e.message); }
     },
 
     async _openWrongAnswers(attemptId, testTitle) {
@@ -4649,20 +4723,41 @@ mark.in-hl { background:color-mix(in srgb,#f59e0b 35%,transparent); color:inheri
 .idp-fb:hover { background:var(--bg-hover); color:var(--text-primary); }
 .idp-fb-today { color:var(--primary); font-weight:600; }
 /* ── Табель ─────────────────────────────────────────────────────────────── */
-.itb-wrap { padding:.75rem 0; display:flex; flex-direction:column; gap:.75rem; }
-.itb-section { border:1px solid var(--border); border-radius:var(--radius-md); overflow:hidden; }
-.itb-section-label { font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; padding:.45rem .75rem; background:var(--bg-hover); color:var(--text-muted); border-bottom:1px solid var(--border); }
-.itb-test-row { display:flex; align-items:center; gap:.5rem; padding:.55rem .75rem; border-bottom:1px solid var(--border); }
+.itb-wrap { padding:.5rem 0 1rem; display:flex; flex-direction:column; gap:.75rem; }
+/* subject card */
+.itb-card { border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; background:var(--bg-surface); }
+.itb-card-header { display:flex; align-items:center; gap:.5rem; padding:.6rem .9rem; font-size:.8rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:#fff; }
+.itb-hdr-blue   { background:linear-gradient(90deg,#3b82f6,#6366f1); }
+.itb-hdr-green  { background:linear-gradient(90deg,#10b981,#059669); }
+.itb-hdr-amber  { background:linear-gradient(90deg,#f59e0b,#d97706); }
+.itb-hdr-purple { background:linear-gradient(90deg,#8b5cf6,#7c3aed); }
+.itb-card-body { display:flex; flex-direction:column; }
+/* subsection */
+.itb-sub { border-top:1px solid var(--border); }
+.itb-sub:first-child { border-top:none; }
+.itb-sub-label { display:flex; align-items:center; gap:.4rem; font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); padding:.45rem .9rem; background:var(--bg-hover); border-bottom:1px solid var(--border); }
+.itb-sub-content { padding:0; }
+.itb-sub-prak { padding:.6rem .9rem; }
+/* test rows */
+.itb-test-row { display:flex; align-items:center; gap:.5rem; padding:.55rem .9rem; border-bottom:1px solid var(--border); }
 .itb-test-row:last-child { border-bottom:none; }
 .itb-test-info { flex:1; min-width:0; }
 .itb-test-title { display:block; font-weight:600; font-size:.85rem; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.itb-test-meta { font-size:.75rem; color:var(--text-muted); }
-.itb-test-score { font-size:1.1rem; font-weight:800; width:52px; text-align:right; flex-shrink:0; }
-.itb-pass { color:var(--success, #10b981); }
-.itb-fail { color:var(--danger); }
-.itb-empty { padding:.6rem .75rem; font-size:.83rem; color:var(--text-muted); font-style:italic; }
-.itb-praktyka-row { display:flex; align-items:center; gap:.5rem; padding:.55rem .75rem; }
-.itb-praktyka-input { width:100px; }
+.itb-test-meta { font-size:.73rem; color:var(--text-muted); }
+/* score badge */
+.itb-score-badge { font-size:.9rem; font-weight:800; min-width:50px; text-align:center; padding:.2rem .45rem; border-radius:6px; flex-shrink:0; }
+.itb-score-pass { background:rgba(16,185,129,.12); color:#059669; }
+.itb-score-fail { background:rgba(239,68,68,.1); color:var(--danger); }
+/* empty state */
+.itb-sub-empty { display:flex; align-items:center; gap:.4rem; padding:.6rem .9rem; font-size:.83rem; color:var(--text-muted); font-style:italic; }
+/* praktyka manual input */
+.itb-prak-row { display:flex; align-items:center; gap:.5rem; }
+.itb-prak-input { width:100px; }
+.itb-prak-display { display:flex; align-items:baseline; gap:.4rem; }
+.itb-prak-val { font-size:1.4rem; font-weight:800; color:var(--text-muted); }
+.itb-prak-val.itb-score-pass { color:#059669; font-size:1.6rem; }
+.itb-prak-unit { font-size:.8rem; color:var(--text-muted); }
+/* protocol btn */
 .itb-protocol-btn { flex-shrink:0; color:var(--text-muted); }
 .itb-protocol-btn:hover { color:var(--primary); }
 /* wrong answers modal */

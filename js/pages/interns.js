@@ -2822,6 +2822,24 @@ ${discs.length ? `<table>
         return ['Нд','Пн','Вт','Ср','Чт','Пт','Сб'][this._tplDowIdx(day, startDow)];
     },
 
+    _tplRenumberOffsets() {
+        const rows = [...document.querySelectorAll('#ist-rows-wrap .ist-tpl-row')];
+        let day = 1;
+        let prevOldVal = null;
+        rows.forEach(row => {
+            const input = row.querySelector('.ist-r-offset');
+            if (!input) return;
+            const oldVal = parseInt(input.value) || 1;
+            if (prevOldVal !== null && oldVal === prevOldVal) {
+                // same day as previous row — keep same offset
+            } else {
+                if (prevOldVal !== null) day++;
+            }
+            input.value = day;
+            prevOldVal = oldVal;
+        });
+    },
+
     _tplRefreshDows() {
         const startDow = parseInt(document.getElementById('ist-preview-dow')?.value ?? '1');
         const dowNames = ['Нд','Пн','Вт','Ср','Чт','Пт','Сб'];
@@ -2948,6 +2966,9 @@ ${discs.length ? `<table>
                 const toIdx   = rows.indexOf(row);
                 if (fromIdx < toIdx) row.after(dragSrc);
                 else row.before(dragSrc);
+                // renumber offsets sequentially after reorder
+                InternsPage._tplRenumberOffsets();
+                InternsPage._tplRefreshDows();
             });
         });
         // only drag handle initiates drag, rest of row is non-draggable to allow text input

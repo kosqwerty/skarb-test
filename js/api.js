@@ -2594,11 +2594,14 @@ const API = {
         },
 
         async update(id, fields) {
-            const { error } = await supabase
+            const { data, error } = await supabase
                 .from('intern_schedule_templates')
                 .update(fields)
-                .eq('id', id);
+                .eq('id', id)
+                .select()
+                .single();
             if (error) throw error;
+            return data;
         },
 
         async remove(id) {

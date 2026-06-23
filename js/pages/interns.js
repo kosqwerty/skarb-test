@@ -2671,9 +2671,11 @@ ${discs.length ? `<table>
             if (replace) await API.internDisciplines.removeByIntern(internId);
             const [sy, sm, sd] = intern.start_date.split('-').map(Number);
             const pad = n => String(n).padStart(2, '0');
-            const sortedRows = [...tpl.rows].sort((a, b) => (a.day_offset ?? 0) - (b.day_offset ?? 0));
+            const sortedRows = [...tpl.rows].sort((a, b) => (a.day_offset ?? 1) - (b.day_offset ?? 1));
+            const minOffset = sortedRows.length ? (sortedRows[0].day_offset ?? 1) : 1;
             const toInsert = sortedRows.map((r, i) => {
-                const dt = new Date(Date.UTC(sy, sm - 1, sd + i));
+                const relOffset = (r.day_offset ?? 1) - minOffset; // normalize: first row = day 0
+                const dt = new Date(Date.UTC(sy, sm - 1, sd + relOffset));
                 const date = `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth()+1)}-${pad(dt.getUTCDate())}`;
                 return {
                     intern_id:       internId,
@@ -2754,7 +2756,7 @@ ${discs.length ? `<table>
         const tpl = templateId ? this._scheduleTemplates.find(t => t.id === templateId) : null;
         const positions = [...new Set(this._jobSettings.map(s => s.job_position).filter(Boolean))].sort();
         const posOpts = positions.map(p => `<option value="${Fmt.esc(p)}" ${tpl?.job_position===p?'selected':''}>${Fmt.esc(p)}</option>`).join('');
-        const rows = (tpl?.rows || []).map((r, i) => ({ ...r, day_offset: i + 1 }));
+        const rows = tpl?.rows || [];
 
         const savedDow = String(tpl?.preview_dow ?? '1');
         const rowsHtml = rows.map((r, i) => this._tplRowHtml(i, r, parseInt(savedDow))).join('');

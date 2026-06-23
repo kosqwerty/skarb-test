@@ -1561,8 +1561,8 @@
                     </div>`;
                 }
                 return `<div class="itb-prak-row">
-                    <input class="inf-input itb-prak-input" type="number" min="0" max="5" step="0.5"
-                        placeholder="0–5" value="${val}" id="itb-prak-${field}" onkeydown="if(event.key==='Enter')InternsPage._savePraktykaField('${intern.id}','${field}')">
+                    <input class="inf-input itb-prak-input" type="text" maxlength="4"
+                        placeholder="напр. 4+" value="${val}" id="itb-prak-${field}" onkeydown="if(event.key==='Enter')InternsPage._savePraktykaField('${intern.id}','${field}')">
                     <button class="btn btn-primary btn-xs" onclick="InternsPage._savePraktykaField('${intern.id}','${field}')">
                         <i class="fa-solid fa-floppy-disk"></i> Зберегти
                     </button>
@@ -1640,7 +1640,7 @@
         const input = document.getElementById(`itb-prak-${field}`);
         if (!input) return;
         const val = input.value.trim();
-        const score = val !== '' ? parseFloat(val) : null;
+        const score = val !== '' ? val : null;
         try {
             await API.interns.savePraktykaField(internId, field, score);
             this._currentIntern = await API.interns.getById(internId);

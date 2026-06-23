@@ -91,7 +91,8 @@
                     ${AppState.isAdmin() ? `<button class="in-btn in-btn-access" onclick="InternsPage._recalcAllDates()" title="Перерахувати планові дати для всіх стажерів з порожньою датою"><i class="fa-solid fa-rotate"></i> Дати</button>
                     <button class="in-btn in-btn-access" onclick="InternsPage._fixJobPositions()" title="Додати префікс Стажер до посад"><i class="fa-solid fa-tag"></i> Посади</button>
                     <button class="in-btn in-btn-access" onclick="InternsPage._openJobSettingsModal()"><i class="fa-solid fa-sliders"></i> Налаштування</button>
-                    <button class="in-btn in-btn-access" onclick="InternsPage._archiveAllDropped()" title="Зберегти дані і видалити акаунти всіх відсіяних стажерів"><i class="fa-solid fa-box-archive"></i> Архів відсіяних</button>` : ''}
+                    <button class="in-btn in-btn-access" onclick="InternsPage._archiveAllDropped()" title="Зберегти дані і видалити акаунти всіх відсіяних стажерів"><i class="fa-solid fa-box-archive"></i> Архів відсіяних</button>
+                    <button class="in-btn in-btn-access" onclick="InternsPage._openBulkEditModal()" title="Масове редагування відфільтрованих стажерів"><i class="fa-solid fa-pen-to-square"></i> Масове редагування</button>` : ''}
                     ${this._canManage ? `<button class="in-btn in-btn-access" onclick="InternsPage._openAccessModal()"><i class="fa-solid fa-shield-halved"></i> Доступ</button>
                     <button class="in-btn in-btn-access" onclick="InternsPage._openImportModal()"><i class="fa-solid fa-file-import"></i> Імпорт</button>
                     <button class="in-btn in-btn-primary" onclick="InternsPage._openAddModal()"><i class="fa-solid fa-plus"></i> Додати стажера</button>` : ''}
@@ -4301,6 +4302,108 @@ ${discs.length ? `<table>
     },
 
     // ── Archive all dropped interns ───────────────────────────────────────────
+    _openBulkEditModal() {
+        const list = this._filtered();
+        if (!list.length) { Toast.warning('Немає стажерів для редагування (перевірте фільтри)'); return; }
+
+        Modal.open({
+            title: `Масове редагування — ${list.length} стажерів`,
+            size: 'lg',
+            body: `
+            <div style="font-size:.85rem;color:var(--text-muted);margin-bottom:1rem">
+                Зміни застосуються до <strong style="color:var(--text-primary)">${list.length}</strong> стажерів за поточними фільтрами.
+                Залиште поле порожнім — воно не буде змінено.
+            </div>
+            <div style="display:flex;flex-direction:column;gap:1rem">
+                <div>
+                    <label style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);display:block;margin-bottom:.35rem">Статус</label>
+                    <select id="be-status" class="form-control" style="max-width:260px">
+                        <option value="">— не змінювати —</option>
+                        <option value="active">Навчається</option>
+                        <option value="completed">Завершив навчання</option>
+                        <option value="dropped">Відмовився</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);display:block;margin-bottom:.35rem">Фактична дата випуску (actual_end_date)</label>
+                    <input type="date" id="be-actual-end" class="form-control" style="max-width:200px">
+                </div>
+                <div>
+                    <label style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);display:block;margin-bottom:.35rem">Працює з (employed_since)</label>
+                    <input type="date" id="be-employed-since" class="form-control" style="max-width:200px">
+                </div>
+                <div>
+                    <label style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);display:block;margin-bottom:.35rem">Керівник</label>
+                    <select id="be-manager" class="form-control" style="max-width:320px">
+                        <option value="">— не змінювати —</option>
+                        ${this._allProfiles.filter(p => p.role === 'manager' || p.role === 'admin' || p.role === 'owner').sort((a,b)=>(a.full_name||'').localeCompare(b.full_name||'')).map(p => `<option value="${p.id}">${Fmt.esc(p.full_name)}</option>`).join('')}
+                    </select>
+                </div>
+            </div>`,
+            footer: `
+            <button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
+            <button class="btn btn-primary" onclick="InternsPage._applyBulkEdit()"><i class="fa-solid fa-check"></i> Застосувати</button>`,
+        });
+    },
+
+    async _applyBulkEdit() {
+        const status       = Dom.val('be-status');
+        const actualEnd    = Dom.val('be-actual-end');
+        const employedSince = Dom.val('be-employed-since');
+        const managerId    = Dom.val('be-manager');
+
+        if (!status && !actualEnd && !employedSince && !managerId) {
+            Toast.warning('Нічого не вибрано для зміни'); return;
+        }
+
+        const list = this._filtered();
+        const ok = await Modal.confirm({
+            title: 'Підтвердити масове редагування',
+            message: `Змінити дані для ${list.length} стажерів?`,
+            confirmText: 'Застосувати',
+            danger: false,
+        });
+        if (!ok) return;
+
+        Modal.close();
+        Loader.show();
+        let updated = 0, errors = 0;
+        for (const intern of list) {
+            try {
+                const patch = {};
+                if (status) patch.status = status;
+                // always pass actual_end_date when changing status to avoid API auto-setting today's date
+                if (actualEnd) patch.actual_end_date = actualEnd;
+                else if (status && status !== 'active') patch.actual_end_date = intern.actual_end_date || intern.planned_end_date || null;
+                if (managerId) patch.manager_id = managerId;
+                if (employedSince) {
+                    const existing = intern.employment_info || {};
+                    patch.employment_info = { ...existing, employed_since: employedSince };
+                }
+                if (Object.keys(patch).length) {
+                    await API.interns.update(intern.id, patch);
+                    updated++;
+                }
+            } catch (e) {
+                console.error('bulk edit error', intern.id, e);
+                errors++;
+            }
+        }
+        Loader.hide();
+
+        if (errors) Toast.warning(`Оновлено: ${updated}, помилок: ${errors}`);
+        else Toast.success(`Оновлено ${updated} стажерів`);
+
+        // reload
+        try {
+            Loader.show();
+            const managerId2 = this._isManager ? AppState.profile.id : null;
+            const { data } = await API.interns.getAll({ managerId: managerId2, pageSize: 500 });
+            this._interns = data;
+        } catch(e) { console.error(e); } finally { Loader.hide(); }
+        this._renderTable();
+    },
+
     async _archiveAllDropped() {
         const toArchive = this._interns.filter(i => i.status === 'dropped' && i.profile_id);
         if (!toArchive.length) {

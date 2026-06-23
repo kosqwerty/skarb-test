@@ -1242,6 +1242,24 @@
           warn: 'Помилка на 0.1 г при великій кількості транзакцій за день — значна сума.' },
     ],
 
+    _CRITERIA_DIAMONDS: [
+        { key: 'dia_knowledge',  label: 'Знання характеристик діамантів', weight: 25, icon: 'fa-diamond',
+          desc: 'Знає систему 4C: Cut (огранка), Color (колір), Clarity (чистота), Carat (вага). Розуміє як кожен параметр впливає на вартість каменю.',
+          warn: 'Неправильна оцінка хоча б одного з 4C може суттєво занизити або завищити ціну.' },
+        { key: 'dia_loupe',      label: 'Робота з лупою та мікроскопом',  weight: 25, icon: 'fa-microscope',
+          desc: 'Вміє правильно тримати лупу 10x, фокусуватись на камені, ідентифікувати включення, тріщини, сколи. Може оцінити огранку за симетрією та пропорціями.',
+          warn: 'Неправильна техніка роботи з лупою призводить до систематичних помилок при оцінці чистоти.' },
+        { key: 'dia_accuracy',   label: 'Точність оцінки каменю',         weight: 20, icon: 'fa-magnifying-glass',
+          desc: 'Правильно визначає групу кольору (D–Z), ступінь чистоти (FL–I3), тип огранки. Не плутає природний діамант зі синтетичним або імітацією (CZ, муассаніт).',
+          warn: 'Прийняти CZ або муассаніт як діамант — критична помилка з великими фінансовими наслідками.' },
+        { key: 'dia_cert',       label: 'Знання сертифікатів (GIA, IGI)',  weight: 15, icon: 'fa-certificate',
+          desc: 'Розуміє структуру сертифіката GIA/IGI, вміє звірити параметри каменю з документом. Знає як перевірити автентичність сертифіката.',
+          warn: 'Підроблені сертифікати існують — завжди звіряти параметри фізично.' },
+        { key: 'dia_explain',    label: 'Пояснення клієнту',              weight: 15, icon: 'fa-comments',
+          desc: 'Пояснює клієнту чому однакові на вигляд діаманти мають різну ціну, що означають цифри в сертифікаті, як формується оцінка.',
+          warn: '' },
+    ],
+
     _chrScoreLabel(s) {
         return ['', 'Дуже низько', 'Нижче норми', 'Задовільно', 'Добре', 'Відмінно'][s] || '';
     },
@@ -1373,6 +1391,7 @@
             ${canEdit ? `
                 ${renderSection('Навчання по техніці', 'fa-wrench', '#3b82f6', this._CRITERIA_TEKH)}
                 ${hasDrag ? renderSection('Навчання по дорогоцінних металах', 'fa-gem', '#f59e0b', this._CRITERIA_DM) : ''}
+                ${hasDrag ? renderSection('Навчання по діамантах', 'fa-diamond', '#06b6d4', this._CRITERIA_DIAMONDS) : ''}
                 ${renderSection('Загальна оцінка', 'fa-star', '#8b5cf6', this._CRITERIA)}
             <div class="ichr-actions">
                 <button class="in-btn in-btn-access" onclick="InternsPage._chrGenerate('${intern.id}')"><i class="fa-solid fa-wand-magic-sparkles"></i> Сформувати характеристику</button>
@@ -1464,6 +1483,7 @@
             </div>
             ${renderSectionRo('Навчання по техніці', 'fa-wrench', '#3b82f6', this._CRITERIA_TEKH)}
             ${hasDrag ? renderSectionRo('Навчання по дорогоцінних металах', 'fa-gem', '#f59e0b', this._CRITERIA_DM) : ''}
+            ${hasDrag ? renderSectionRo('Навчання по діамантах', 'fa-diamond', '#06b6d4', this._CRITERIA_DIAMONDS) : ''}
             ${renderSectionRo('Загальна оцінка', 'fa-star', '#8b5cf6', this._CRITERIA)}
             <div class="ichr-ro-verdict" style="background:${verdictBg};border-color:${verdictBorder}">
                 <i class="fa-solid fa-circle-info" style="color:${overallColor}"></i>
@@ -1533,7 +1553,7 @@
     async _chrSave(internId) {
         const chr = this._currentIntern?.characteristic || {};
         const criteriaData = {};
-        [...this._CRITERIA, ...this._CRITERIA_TEKH, ...this._CRITERIA_DM].forEach(c => {
+        [...this._CRITERIA, ...this._CRITERIA_TEKH, ...this._CRITERIA_DM, ...this._CRITERIA_DIAMONDS].forEach(c => {
             criteriaData[c.key] = chr.criteria?.[c.key] || 0;
             criteriaData[c.key + '_notes'] = document.getElementById(`ichr-notes-${c.key}`)?.value.trim() || '';
         });

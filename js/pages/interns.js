@@ -1356,7 +1356,17 @@
         };
         const scoreColor = (s) => s >= 4 ? '#10b981' : s >= 3 ? '#eab308' : s ? '#ef4444' : 'var(--text-muted)';
 
-        const renderCriteriaGrid = (list) => list.map(c => {
+        // build sections list
+        const allSections = [
+            { id: 'tekh',     label: 'Техніка',           icon: 'fa-wrench',   color: '#3b82f6', list: this._CRITERIA_TEKH },
+            ...(hasDrag ? [
+                { id: 'dm',   label: 'Дорог. метали',     icon: 'fa-gem',      color: '#f59e0b', list: this._CRITERIA_DM },
+                { id: 'dia',  label: 'Діаманти',          icon: 'fa-diamond',  color: '#06b6d4', list: this._CRITERIA_DIAMONDS },
+            ] : []),
+            { id: 'general',  label: 'Загальна',          icon: 'fa-star',     color: '#8b5cf6', list: this._CRITERIA },
+        ];
+
+        const renderCriteriaPanel = (list) => list.map(c => {
             const score = criteria[c.key] || 0;
             const stars = [1,2,3,4,5].map(n =>
                 `<button class="ichr-star ${n <= score ? 'ichr-star-on' : ''}" data-key="${c.key}" data-val="${n}" onclick="InternsPage._chrSetScore('${intern.id}','${c.key}',${n})" ${!canEdit?'disabled':''}>${n <= score ? '★' : '☆'}</button>`
@@ -1374,34 +1384,45 @@
             </div>`;
         }).join('');
 
-        const renderSection = (label, icon, color, list) => {
-            const sc = makeSectionScore(list);
+        const navItems = allSections.map((s, i) => {
+            const sc = makeSectionScore(s.list);
+            const scStr = sc !== null ? sc.toFixed(1) : '—';
+            const scCol = sc !== null ? scoreColor(sc) : 'var(--text-muted)';
             return `
-            <div class="ichr-section">
-                <div class="ichr-section-hdr" style="border-left:3px solid ${color}">
-                    <div class="ichr-section-title"><i class="fa-solid ${icon}"></i> ${label}</div>
-                    ${sc !== null ? `<div class="ichr-section-score" style="color:${scoreColor(sc)}">${sc.toFixed(1)} <span class="ichr-section-score-sub">/ 5</span></div>` : ''}
+            <button class="ichr-nav-item ${i === 0 ? 'ichr-nav-active' : ''}" data-sec="${s.id}"
+                onclick="InternsPage._chrSwitchSection('${s.id}')"
+                style="--sec-color:${s.color}">
+                <div class="ichr-nav-icon" style="background:${s.color}18;color:${s.color}"><i class="fa-solid ${s.icon}"></i></div>
+                <div class="ichr-nav-body">
+                    <div class="ichr-nav-label">${Fmt.esc(s.label)}</div>
+                    <div class="ichr-nav-score" style="color:${scCol}">${scStr}<span class="ichr-nav-score-sub"> / 5</span></div>
                 </div>
-                <div class="ichr-grid">${renderCriteriaGrid(list)}</div>
-            </div>`;
-        };
+            </button>`;
+        }).join('');
+
+        const panels = allSections.map((s, i) => `
+            <div class="ichr-panel ${i === 0 ? '' : 'ichr-panel-hidden'}" data-sec="${s.id}">
+                <div class="ichr-grid">${renderCriteriaPanel(s.list)}</div>
+            </div>`).join('');
 
         dc.innerHTML = `
         <div class="ichr-wrap">
             ${canEdit ? `
-                ${renderSection('Навчання по техніці', 'fa-wrench', '#3b82f6', this._CRITERIA_TEKH)}
-                ${hasDrag ? renderSection('Навчання по дорогоцінних металах', 'fa-gem', '#f59e0b', this._CRITERIA_DM) : ''}
-                ${hasDrag ? renderSection('Навчання по діамантах', 'fa-diamond', '#06b6d4', this._CRITERIA_DIAMONDS) : ''}
-                ${renderSection('Загальна оцінка', 'fa-star', '#8b5cf6', this._CRITERIA)}
-            <div class="ichr-actions">
-                <button class="in-btn in-btn-access" onclick="InternsPage._chrGenerate('${intern.id}')"><i class="fa-solid fa-wand-magic-sparkles"></i> Сформувати характеристику</button>
-                <button class="in-btn in-btn-primary" onclick="InternsPage._chrSave('${intern.id}')"><i class="fa-solid fa-floppy-disk"></i> Зберегти</button>
+            <div class="ichr-layout">
+                <nav class="ichr-nav">${navItems}</nav>
+                <div class="ichr-content">
+                    ${panels}
+                    <div class="ichr-actions">
+                        <button class="in-btn in-btn-access" onclick="InternsPage._chrGenerate('${intern.id}')"><i class="fa-solid fa-wand-magic-sparkles"></i> Сформувати характеристику</button>
+                        <button class="in-btn in-btn-primary" onclick="InternsPage._chrSave('${intern.id}')"><i class="fa-solid fa-floppy-disk"></i> Зберегти</button>
+                    </div>
+                    ${chr.summary ? `
+                    <div class="ichr-summary-block">
+                        <div class="ichr-summary-title"><i class="fa-solid fa-file-lines"></i> Сформована характеристика</div>
+                        <textarea class="ichr-summary-text" id="ichr-summary" rows="8">${Fmt.esc(chr.summary)}</textarea>
+                    </div>` : `<div id="ichr-summary-placeholder"></div>`}
+                </div>
             </div>
-            ${chr.summary ? `
-            <div class="ichr-summary-block">
-                <div class="ichr-summary-title"><i class="fa-solid fa-file-lines"></i> Сформована характеристика</div>
-                <textarea class="ichr-summary-text" id="ichr-summary" rows="8">${Fmt.esc(chr.summary)}</textarea>
-            </div>` : `<div id="ichr-summary-placeholder"></div>`}
             ` : (chr.summary ? `
             ${this._renderCharReadOnly(chr, intern)}` : `<div class="in-stub-wrap" style="padding:2rem"><div class="in-stub-icon"><i class="fa-solid fa-star"></i></div><div class="in-stub-title">Характеристику ще не заповнено</div></div>`)}
         </div>`;
@@ -1494,6 +1515,11 @@
                 ${chr.updated_at ? `<span><i class="fa-regular fa-calendar"></i> ${Fmt.date(chr.updated_at)}</span>` : ''}
             </div>
         </div>`;
+    },
+
+    _chrSwitchSection(secId) {
+        document.querySelectorAll('.ichr-nav-item').forEach(b => b.classList.toggle('ichr-nav-active', b.dataset.sec === secId));
+        document.querySelectorAll('.ichr-panel').forEach(p => p.classList.toggle('ichr-panel-hidden', p.dataset.sec !== secId));
     },
 
     _chrSetScore(internId, key, val) {
@@ -4664,13 +4690,26 @@ mark.in-hl { background:color-mix(in srgb,#f59e0b 35%,transparent); color:inheri
 .in-stub-data { margin-top:.75rem; background:var(--bg-main,var(--bg-surface)); border:1px solid var(--border); border-radius:8px; padding:.75rem 1rem; font-size:.78rem; color:var(--text-muted); text-align:left; max-width:400px; overflow:auto; }
 .in-disc-count { background:var(--bg-raised); border-radius:10px; padding:.1rem .45rem; font-size:.75rem; margin-left:.3rem; }
 /* ── Characteristic tab ─────────────────────────────────────────────────── */
-.ichr-wrap { display:flex; flex-direction:column; gap:1.25rem; }
-/* criteria sections */
-.ichr-section { display:flex; flex-direction:column; gap:.6rem; }
-.ichr-section-hdr { display:flex; align-items:center; justify-content:space-between; padding:.55rem .85rem; background:var(--bg-hover); border-radius:var(--radius-md); padding-left:.75rem; }
+.ichr-wrap { display:flex; flex-direction:column; gap:1rem; }
+/* side-nav layout */
+.ichr-layout { display:flex; gap:.75rem; align-items:flex-start; }
+.ichr-nav { display:flex; flex-direction:column; gap:.35rem; width:148px; flex-shrink:0; position:sticky; top:0; }
+.ichr-nav-item { display:flex; align-items:center; gap:.55rem; padding:.55rem .6rem; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--bg-surface); cursor:pointer; transition:border-color .15s,background .15s; text-align:left; width:100%; }
+.ichr-nav-item:hover { background:var(--bg-hover); border-color:var(--sec-color,var(--border)); }
+.ichr-nav-item.ichr-nav-active { background:var(--bg-hover); border-color:var(--sec-color,var(--primary)); border-left-width:3px; }
+.ichr-nav-icon { width:28px; height:28px; border-radius:7px; display:flex; align-items:center; justify-content:center; font-size:.8rem; flex-shrink:0; }
+.ichr-nav-body { min-width:0; flex:1; }
+.ichr-nav-label { font-size:.78rem; font-weight:600; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ichr-nav-score { font-size:.95rem; font-weight:800; line-height:1.2; }
+.ichr-nav-score-sub { font-size:.7rem; font-weight:400; color:var(--text-muted); }
+.ichr-content { flex:1; min-width:0; display:flex; flex-direction:column; gap:.75rem; }
+.ichr-panel { display:flex; flex-direction:column; gap:.5rem; }
+.ichr-panel-hidden { display:none; }
+/* section header (used in read-only view) */
+.ichr-section-hdr { display:flex; align-items:center; justify-content:space-between; padding:.5rem .8rem; background:var(--bg-hover); border-radius:var(--radius-md); padding-left:.7rem; }
 .ichr-section-title { font-size:.85rem; font-weight:700; color:var(--text-primary); display:flex; align-items:center; gap:.45rem; }
-.ichr-section-score { font-size:1.15rem; font-weight:800; }
-.ichr-section-score-sub { font-size:.75rem; font-weight:400; color:var(--text-muted); }
+.ichr-section-score { font-size:1.1rem; font-weight:800; }
+.ichr-section-score-sub { font-size:.72rem; font-weight:400; color:var(--text-muted); }
 .ichr-overall { background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:.85rem 1.1rem; display:flex; align-items:center; gap:1rem; }
 .ichr-overall-label { font-size:.8rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); flex-shrink:0; }
 .ichr-overall-score { font-size:1.6rem; font-weight:800; flex-shrink:0; min-width:80px; }

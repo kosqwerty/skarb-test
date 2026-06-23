@@ -209,7 +209,7 @@
         { key: 'pct',     label: '% плану' },
     ],
     _colVisKey: 'in_col_vis',
-    _filtersKey: 'in_filters',
+    get _filtersKey() { return `in_filters_${AppState.profile?.id || 'x'}`; },
 
     _getColVis() {
         try {
@@ -370,7 +370,7 @@
             const saved = JSON.parse(localStorage.getItem(this._filtersKey) || '{}');
             this._filterStatus  = saved.status  || '';
             this._filterCities  = Array.isArray(saved.cities) ? saved.cities : (saved.city ? [saved.city] : []);
-            this._filterManager = saved.manager  || (this._isManager ? AppState.profile.id : '');
+            this._filterManager = this._isManager ? AppState.profile.id : (saved.manager || '');
             this._search        = saved.search   || '';
         } catch { this._filterStatus = ''; this._filterCities = []; this._filterManager = ''; this._search = ''; }
     },

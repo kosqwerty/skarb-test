@@ -1206,6 +1206,42 @@
           warn: 'Спочатку якість — потім швидкість.' },
     ],
 
+    _CRITERIA_TEKH: [
+        { key: 'tekh_knowledge', label: 'Знання несправностей',        weight: 25, icon: 'fa-microchip',
+          desc: 'Орієнтується в типових несправностях: розбитий дисплей, не заряджається, не вмикається, замінені компоненти. Знає різницю між "економ" і "складний" ремонтом.',
+          warn: 'Не має права оцінювати техніку, якщо не розуміє причини несправності.' },
+        { key: 'tekh_accuracy',  label: 'Якість оцінки техніки',       weight: 25, icon: 'fa-magnifying-glass',
+          desc: 'Правильно перевіряє IMEI, серійний номер, комплектацію, сліди вологи. Помічає прихований ремонт, заміну корпусу, підробні деталі.',
+          warn: 'Пропущений замінений дисплей або неоригінальна плата — пряме фінансове збитки.' },
+        { key: 'tekh_checklist', label: 'Дотримання чек-листа',        weight: 20, icon: 'fa-list-check',
+          desc: 'Не пропускає жодного кроку при прийомі: перевірка акаунтів, функцій, стану батареї, корпусу. Дотримується послідовності навіть при черзі.',
+          warn: 'Пропущений крок — потенційна суперечка з клієнтом після видачі.' },
+        { key: 'tekh_explain',   label: 'Пояснення клієнту',           weight: 15, icon: 'fa-comments',
+          desc: 'Вміє пояснити чому пристрій оцінений саме так, що впливає на ціну, чого очікувати при ремонті. Говорить просто, без технічного жаргону.',
+          warn: '' },
+        { key: 'tekh_speed',     label: 'Швидкість оцінки',            weight: 15, icon: 'fa-gauge-high',
+          desc: 'Смартфон: 15–20 хв, ноутбук: 20–30 хв, оформлення договору: до 10 хв. Не поспішає на шкоду якості.',
+          warn: 'Спочатку якість — потім швидкість.' },
+    ],
+
+    _CRITERIA_DM: [
+        { key: 'dm_knowledge',  label: 'Знання проб та сплавів',       weight: 25, icon: 'fa-gem',
+          desc: 'Знає основні проби золота (375, 585, 750), срібла, платини. Розрізняє вироби за виглядом клейм. Орієнтується в різновидах позолоти, білого золота, біжутерії.',
+          warn: 'Прийняти бронзу як золото — репутаційний і фінансовий удар по відділенню.' },
+        { key: 'dm_accuracy',   label: 'Якість оцінки виробів',        weight: 25, icon: 'fa-magnifying-glass',
+          desc: 'Правильно зважує, перевіряє пробу, оцінює дефекти (надламана застібка, пайка, чужорідний метал, каміння). Не пропускає підробки під виглядом золота.',
+          warn: 'Будь-яка помилка при зважуванні або визначенні проби — пряма фінансова відповідальність.' },
+        { key: 'dm_reagents',   label: 'Робота з реактивами',          weight: 20, icon: 'fa-flask',
+          desc: 'Правильно і безпечно використовує кислоти для перевірки проби. Знає реакцію різних металів. Дотримується техніки безпеки та інструкції.',
+          warn: 'Неправильне використання реактивів небезпечне і може пошкодити виріб.' },
+        { key: 'dm_explain',    label: 'Пояснення клієнту',            weight: 15, icon: 'fa-comments',
+          desc: 'Пояснює як формується ціна, чому виріб з тією ж пробою оцінений менше (дефекти, вага паяних швів, каміння). Говорить впевнено і доступно.',
+          warn: '' },
+        { key: 'dm_attention',  label: 'Уважність при зважуванні',     weight: 15, icon: 'fa-scale-balanced',
+          desc: 'Не допускає помилок при зважуванні: враховує вагу вставок, правильно обнуляє терези, окремо зважує вироби різних проб.',
+          warn: 'Помилка на 0.1 г при великій кількості транзакцій за день — значна сума.' },
+    ],
+
     _chrScoreLabel(s) {
         return ['', 'Дуже низько', 'Нижче норми', 'Задовільно', 'Добре', 'Відмінно'][s] || '';
     },
@@ -1293,12 +1329,16 @@
         const criteria = chr.criteria || {};
         const canEdit = AppState.isAdmin();
         const p = intern.profile || intern.profile_snapshot || {};
+        const jobPos = (p.job_position || '').toLowerCase();
+        const hasDrag = jobPos.includes('універсал') || jobPos.includes('универсал');
 
-        const weighted = this._CRITERIA.reduce((sum, c) => sum + (criteria[c.key] || 0) * c.weight, 0) / 100;
-        const overall  = weighted > 0 ? Math.round(weighted * 10) / 10 : null;
-        const overallColor = overall >= 4 ? '#10b981' : overall >= 3 ? '#eab308' : overall ? '#ef4444' : 'var(--text-muted)';
+        const makeSectionScore = (list) => {
+            const w = list.reduce((sum, c) => sum + (criteria[c.key] || 0) * c.weight, 0) / 100;
+            return w > 0 ? Math.round(w * 10) / 10 : null;
+        };
+        const scoreColor = (s) => s >= 4 ? '#10b981' : s >= 3 ? '#eab308' : s ? '#ef4444' : 'var(--text-muted)';
 
-        const criteriaCards = this._CRITERIA.map(c => {
+        const renderCriteriaGrid = (list) => list.map(c => {
             const score = criteria[c.key] || 0;
             const stars = [1,2,3,4,5].map(n =>
                 `<button class="ichr-star ${n <= score ? 'ichr-star-on' : ''}" data-key="${c.key}" data-val="${n}" onclick="InternsPage._chrSetScore('${intern.id}','${c.key}',${n})" ${!canEdit?'disabled':''}>${n <= score ? '★' : '☆'}</button>`
@@ -1306,7 +1346,7 @@
             return `
             <div class="ichr-card" id="ichr-card-${c.key}">
                 <div class="ichr-card-header">
-                    <div class="ichr-card-title"><i class="fa-solid ${c.icon}"></i> ${c.label} <span class="ichr-weight">${c.weight}%</span></div>
+                    <div class="ichr-card-title"><i class="fa-solid ${c.icon}"></i> ${Fmt.esc(c.label)} <span class="ichr-weight">${c.weight}%</span></div>
                     <div class="ichr-stars">${stars}</div>
                     <div class="ichr-score-label" id="ichr-lbl-${c.key}" style="color:${this._chrScoreColor(score)}">${score ? this._chrScoreLabel(score) : ''}</div>
                 </div>
@@ -1316,15 +1356,24 @@
             </div>`;
         }).join('');
 
+        const renderSection = (label, icon, color, list) => {
+            const sc = makeSectionScore(list);
+            return `
+            <div class="ichr-section">
+                <div class="ichr-section-hdr" style="border-left:3px solid ${color}">
+                    <div class="ichr-section-title"><i class="fa-solid ${icon}"></i> ${label}</div>
+                    ${sc !== null ? `<div class="ichr-section-score" style="color:${scoreColor(sc)}">${sc.toFixed(1)} <span class="ichr-section-score-sub">/ 5</span></div>` : ''}
+                </div>
+                <div class="ichr-grid">${renderCriteriaGrid(list)}</div>
+            </div>`;
+        };
+
         dc.innerHTML = `
         <div class="ichr-wrap">
-            ${overall !== null ? `
-            <div class="ichr-overall">
-                <div class="ichr-overall-label">Загальна оцінка</div>
-                <div class="ichr-overall-score" style="color:${overallColor}">${overall.toFixed(1)}<span style="font-size:.9rem;color:var(--text-muted)"> / 5.0</span></div>
-                <div class="ichr-overall-bar"><div class="ichr-overall-fill" style="width:${overall/5*100}%;background:${overallColor}"></div></div>
-            </div>` : ''}
-            ${canEdit ? `<div class="ichr-grid">${criteriaCards}</div>
+            ${canEdit ? `
+                ${renderSection('Навчання по техніці', 'fa-wrench', '#3b82f6', this._CRITERIA_TEKH)}
+                ${hasDrag ? renderSection('Навчання по дорогоцінних металах', 'fa-gem', '#f59e0b', this._CRITERIA_DM) : ''}
+                ${renderSection('Загальна оцінка', 'fa-star', '#8b5cf6', this._CRITERIA)}
             <div class="ichr-actions">
                 <button class="in-btn in-btn-access" onclick="InternsPage._chrGenerate('${intern.id}')"><i class="fa-solid fa-wand-magic-sparkles"></i> Сформувати характеристику</button>
                 <button class="in-btn in-btn-primary" onclick="InternsPage._chrSave('${intern.id}')"><i class="fa-solid fa-floppy-disk"></i> Зберегти</button>
@@ -1342,51 +1391,58 @@
     _renderCharReadOnly(chr, intern) {
         const criteria = chr.criteria || {};
         const p = intern?.profile || intern?.profile_snapshot || {};
+        const jobPos = (p.job_position || '').toLowerCase();
+        const hasDrag = jobPos.includes('універсал') || jobPos.includes('универсал');
+
+        const makeSectionScore = (list) => {
+            const w = list.reduce((s, c) => s + (criteria[c.key] || 0) * c.weight, 0) / 100;
+            return w > 0 ? Math.round(w * 10) / 10 : null;
+        };
+        const scoreColor = (s) => s >= 4 ? '#10b981' : s >= 3 ? '#eab308' : s ? '#ef4444' : 'var(--text-muted)';
+
         const weighted = this._CRITERIA.reduce((sum, c) => sum + (criteria[c.key] || 0) * c.weight, 0) / 100;
         const overall  = Math.round(weighted * 10) / 10;
-        const overallColor = overall >= 4 ? '#10b981' : overall >= 3 ? '#eab308' : '#ef4444';
+        const overallColor = scoreColor(overall);
         const verdict  = overall >= 4.5 ? 'Рекомендується до самостійної роботи.' :
                          overall >= 3.5 ? 'Рекомендується продовжити навчання з подальшою оцінкою.' :
                          overall >= 2.5 ? 'Потребує додаткової підготовки та контролю.' :
                                           'Не рекомендується до самостійної роботи на даному етапі.';
         const authorName = chr.author_name || this._allProfiles.find(p2 => p2.id === chr.author_id)?.full_name || '';
 
-        const byScore = (key, hi5, hi4, hi3, lo) => {
-            const s = criteria[key] || 0;
-            return s >= 5 ? hi5 : s >= 4 ? hi4 : s >= 3 ? hi3 : lo;
-        };
-        const texts = {
-            learning: byScore('learning','Демонструє відмінну здатність до навчання: швидко засвоює матеріал, задає правильні запитання та робить висновки з помилок.','Навчається добре, засвоює матеріал без зайвих повторень.','Навчається задовільно, іноді потребує додаткових пояснень.','Засвоєння матеріалу відбувається повільно, потребує постійного контролю.'),
-            attention: byScore('attention','Виявляє надзвичайну уважність до деталей: ретельно перевіряє комплектацію, IMEI та дефекти.','Достатньо уважний, зрідка пропускає дрібні деталі.','Уважність задовільна, деякі перевірки виконує не в повному обсязі.','Припускається помилок через неуважність, потребує додаткового контролю.'),
-            honesty:   byScore('honesty','Повністю відповідальний та чесний: визнає помилки, виконує завдання самостійно.','Відповідальний, здебільшого чесний у роботі.','Загалом чесний, проте іноді уникає відповідальності.','Мають місце випадки приховування помилок або недостатньої відповідальності.'),
-            client:    byScore('client','Відмінно працює з клієнтами: ввічливий, впевнений, витримує тиск.','Добре взаємодіє з клієнтами, рідко виникають труднощі.','Спілкування з клієнтами задовільне, є над чим попрацювати.','Відчуває труднощі у роботі з клієнтами, потребує розвитку комунікативних навичок.'),
-            logic:     byScore('logic','Демонструє відмінне логічне мислення у нестандартних ситуаціях.','Добре справляється з нетиповими кейсами.','Логічне мислення на задовільному рівні.','Важко орієнтується у нестандартних ситуаціях.'),
-            stress:    byScore('stress','Відмінно витримує стресові ситуації: черги, кілька клієнтів одночасно.','Добре справляється з навантаженням.','Стресостійкість задовільна, іноді потребує підтримки.','Важко переносить робоче навантаження та стресові ситуації.'),
-            speed:     byScore('speed','Працює швидко без втрати якості.','Швидкість роботи відповідає нормі.','Темп роботи задовільний, є потенціал для прискорення.','Працює повільно, потребує відпрацювання швидкості.'),
-        };
-
-        const criteriaRows = this._CRITERIA.map(c => {
-            const score = criteria[c.key] || 0;
-            if (!score) return '';
-            const notes = (criteria[c.key + '_notes'] || '').trim();
-            const color = this._chrScoreColor(score);
-            const stars = '★'.repeat(score) + '☆'.repeat(5 - score);
-            return `
-            <div class="ichr-ro-row">
-                <div class="ichr-ro-left">
-                    <div class="ichr-ro-icon" style="background:${color}20;color:${color}"><i class="fa-solid ${c.icon}"></i></div>
-                </div>
-                <div class="ichr-ro-body">
-                    <div class="ichr-ro-header">
-                        <span class="ichr-ro-label">${Fmt.esc(c.label)}</span>
-                        <span class="ichr-ro-stars" style="color:${color}">${stars}</span>
-                        <span class="ichr-ro-score-lbl" style="color:${color}">${this._chrScoreLabel(score)}</span>
-                        <span class="ichr-ro-weight">${c.weight}%</span>
+        const renderSectionRo = (label, icon, color, list) => {
+            const sc = makeSectionScore(list);
+            const rows = list.map(c => {
+                const score = criteria[c.key] || 0;
+                if (!score) return '';
+                const notes = (criteria[c.key + '_notes'] || '').trim();
+                const col = this._chrScoreColor(score);
+                const stars = '★'.repeat(score) + '☆'.repeat(5 - score);
+                return `
+                <div class="ichr-ro-row">
+                    <div class="ichr-ro-left">
+                        <div class="ichr-ro-icon" style="background:${col}20;color:${col}"><i class="fa-solid ${c.icon}"></i></div>
                     </div>
-                    <div class="ichr-ro-text">${Fmt.esc(texts[c.key])}${notes ? ` <span class="ichr-ro-note">${Fmt.esc(notes)}</span>` : ''}</div>
+                    <div class="ichr-ro-body">
+                        <div class="ichr-ro-header">
+                            <span class="ichr-ro-label">${Fmt.esc(c.label)}</span>
+                            <span class="ichr-ro-stars" style="color:${col}">${stars}</span>
+                            <span class="ichr-ro-score-lbl" style="color:${col}">${this._chrScoreLabel(score)}</span>
+                            <span class="ichr-ro-weight">${c.weight}%</span>
+                        </div>
+                        ${notes ? `<div class="ichr-ro-note-line">${Fmt.esc(notes)}</div>` : ''}
+                    </div>
+                </div>`;
+            }).join('');
+            if (!rows.trim()) return '';
+            return `
+            <div class="ichr-ro-section">
+                <div class="ichr-section-hdr" style="border-left:3px solid ${color}">
+                    <div class="ichr-section-title"><i class="fa-solid ${icon}"></i> ${Fmt.esc(label)}</div>
+                    ${sc !== null ? `<div class="ichr-section-score" style="color:${scoreColor(sc)}">${sc.toFixed(1)} <span class="ichr-section-score-sub">/ 5</span></div>` : ''}
                 </div>
+                <div class="ichr-ro-rows">${rows}</div>
             </div>`;
-        }).join('');
+        };
 
         const verdictBg = overall >= 4 ? '#f0fdf4' : overall >= 3 ? '#fefce8' : '#fef2f2';
         const verdictBorder = overall >= 4 ? '#bbf7d0' : overall >= 3 ? '#fde68a' : '#fecaca';
@@ -1406,7 +1462,9 @@
             <div class="ichr-ro-bar-wrap">
                 <div class="ichr-ro-bar-fill" style="width:${overall/5*100}%;background:${overallColor}"></div>
             </div>
-            <div class="ichr-ro-rows">${criteriaRows}</div>
+            ${renderSectionRo('Навчання по техніці', 'fa-wrench', '#3b82f6', this._CRITERIA_TEKH)}
+            ${hasDrag ? renderSectionRo('Навчання по дорогоцінних металах', 'fa-gem', '#f59e0b', this._CRITERIA_DM) : ''}
+            ${renderSectionRo('Загальна оцінка', 'fa-star', '#8b5cf6', this._CRITERIA)}
             <div class="ichr-ro-verdict" style="background:${verdictBg};border-color:${verdictBorder}">
                 <i class="fa-solid fa-circle-info" style="color:${overallColor}"></i>
                 <span>${Fmt.esc(verdict)}</span>
@@ -1475,7 +1533,7 @@
     async _chrSave(internId) {
         const chr = this._currentIntern?.characteristic || {};
         const criteriaData = {};
-        this._CRITERIA.forEach(c => {
+        [...this._CRITERIA, ...this._CRITERIA_TEKH, ...this._CRITERIA_DM].forEach(c => {
             criteriaData[c.key] = chr.criteria?.[c.key] || 0;
             criteriaData[c.key + '_notes'] = document.getElementById(`ichr-notes-${c.key}`)?.value.trim() || '';
         });
@@ -4586,7 +4644,13 @@ mark.in-hl { background:color-mix(in srgb,#f59e0b 35%,transparent); color:inheri
 .in-stub-data { margin-top:.75rem; background:var(--bg-main,var(--bg-surface)); border:1px solid var(--border); border-radius:8px; padding:.75rem 1rem; font-size:.78rem; color:var(--text-muted); text-align:left; max-width:400px; overflow:auto; }
 .in-disc-count { background:var(--bg-raised); border-radius:10px; padding:.1rem .45rem; font-size:.75rem; margin-left:.3rem; }
 /* ── Characteristic tab ─────────────────────────────────────────────────── */
-.ichr-wrap { display:flex; flex-direction:column; gap:1rem; }
+.ichr-wrap { display:flex; flex-direction:column; gap:1.25rem; }
+/* criteria sections */
+.ichr-section { display:flex; flex-direction:column; gap:.6rem; }
+.ichr-section-hdr { display:flex; align-items:center; justify-content:space-between; padding:.55rem .85rem; background:var(--bg-hover); border-radius:var(--radius-md); padding-left:.75rem; }
+.ichr-section-title { font-size:.85rem; font-weight:700; color:var(--text-primary); display:flex; align-items:center; gap:.45rem; }
+.ichr-section-score { font-size:1.15rem; font-weight:800; }
+.ichr-section-score-sub { font-size:.75rem; font-weight:400; color:var(--text-muted); }
 .ichr-overall { background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:.85rem 1.1rem; display:flex; align-items:center; gap:1rem; }
 .ichr-overall-label { font-size:.8rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); flex-shrink:0; }
 .ichr-overall-score { font-size:1.6rem; font-weight:800; flex-shrink:0; min-width:80px; }
@@ -4623,6 +4687,7 @@ mark.in-hl { background:color-mix(in srgb,#f59e0b 35%,transparent); color:inheri
 .ichr-ro-overall-sub { font-size:.75rem; color:var(--text-muted); }
 .ichr-ro-bar-wrap { height:6px; background:var(--border); border-radius:3px; overflow:hidden; }
 .ichr-ro-bar-fill { height:6px; border-radius:3px; transition:width .4s; }
+.ichr-ro-section { display:flex; flex-direction:column; gap:.5rem; }
 .ichr-ro-rows { display:flex; flex-direction:column; gap:.5rem; }
 .ichr-ro-row { display:flex; gap:.75rem; align-items:flex-start; }
 .ichr-ro-left { flex-shrink:0; }
@@ -4635,6 +4700,7 @@ mark.in-hl { background:color-mix(in srgb,#f59e0b 35%,transparent); color:inheri
 .ichr-ro-weight { font-size:.72rem; color:var(--text-muted); background:var(--bg-raised); padding:.1rem .35rem; border-radius:5px; margin-left:auto; }
 .ichr-ro-text { font-size:.83rem; color:var(--text-secondary); line-height:1.55; }
 .ichr-ro-note { color:var(--text-primary); font-style:italic; }
+.ichr-ro-note-line { font-size:.8rem; color:var(--text-muted); font-style:italic; margin-top:.2rem; line-height:1.4; }
 .ichr-ro-verdict { display:flex; align-items:flex-start; gap:.5rem; font-size:.83rem; color:var(--text-primary); border:1px solid; border-radius:var(--radius-md); padding:.6rem .85rem; line-height:1.5; }
 .ichr-actions { display:flex; gap:.5rem; }
 .ichr-summary-block { background:var(--bg-surface); border:1.5px solid var(--border); border-radius:var(--radius-lg); padding:.85rem 1rem; display:flex; flex-direction:column; gap:.5rem; }

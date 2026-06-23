@@ -4357,6 +4357,22 @@ ${discs.length ? `<table>
                     </div>
                 </div>
                 <div>
+                    <label class="be-label">Посада (job_position у профілі)</label>
+                    <select id="be-job" class="form-control" style="max-width:320px">
+                        <option value="">— не змінювати —</option>
+                        <option value="remove-prefix">Зняти префікс "Стажер" (напр. "Стажер Продавець" → "Продавець")</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="be-label">Мітка профілю (label)</label>
+                    <select id="be-label" class="form-control" style="max-width:260px">
+                        <option value="">— не змінювати —</option>
+                        <option value="clear">Зняти мітку стажера</option>
+                        <option value="intern">🌱 Стажер</option>
+                        <option value="mentor">⭐ Наставник</option>
+                    </select>
+                </div>
+                <div>
                     <label class="be-label">Керівник</label>
                     <select id="be-manager" class="form-control" style="max-width:320px">
                         <option value="">— не змінювати —</option>
@@ -4424,8 +4440,10 @@ ${discs.length ? `<table>
         const managerId = Dom.val('be-manager');
         const actualMode = Dom.val('be-actual-mode');
         const emplMode   = Dom.val('be-empl-mode');
+        const jobMode    = Dom.val('be-job');
+        const labelMode  = Dom.val('be-label');
 
-        if (!status && !actualMode && !emplMode && !managerId) {
+        if (!status && !actualMode && !emplMode && !managerId && !jobMode && !labelMode) {
             Toast.warning('Нічого не вибрано для зміни'); return;
         }
 
@@ -4461,8 +4479,27 @@ ${discs.length ? `<table>
 
                 if (Object.keys(patch).length) {
                     await API.interns.update(intern.id, patch);
-                    updated++;
                 }
+
+                // profile-level changes (job_position, label)
+                const profileId = intern.profile_id;
+                if (profileId) {
+                    const profilePatch = {};
+                    if (jobMode === 'remove-prefix') {
+                        const cur = intern.profile?.job_position || '';
+                        if (cur.startsWith('Стажер ')) profilePatch.job_position = cur.slice(7).trim();
+                        else if (cur === 'Стажер') profilePatch.job_position = '';
+                    }
+                    if (labelMode === 'clear') profilePatch.label = null;
+                    else if (labelMode === 'intern') profilePatch.label = 'intern';
+                    else if (labelMode === 'mentor') profilePatch.label = 'mentor';
+                    if (Object.keys(profilePatch).length) {
+                        const { error: pe } = await supabase.from('profiles').update(profilePatch).eq('id', profileId);
+                        if (pe) throw pe;
+                    }
+                }
+
+                updated++;
             } catch (e) {
                 console.error('bulk edit error', intern.id, e);
                 errors++;

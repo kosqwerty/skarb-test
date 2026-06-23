@@ -1552,26 +1552,21 @@
                 return rows.join('');
             };
 
+            const renderPraktykaView = (scoreField, val, comm) => `
+                <div class="itb-prak-display">
+                    <span class="itb-prak-val ${val !== '' ? 'itb-score-pass' : ''}">${val !== '' ? Fmt.esc(val) : '—'}</span>
+                    <span class="itb-prak-unit">${val !== '' ? '/ 5' : 'не виставлено'}</span>
+                    ${this._canManage ? `<button class="btn btn-ghost btn-xs itb-prak-edit-btn" onclick="InternsPage._togglePraktykaEdit(this,'${scoreField}')"><i class="fa-solid fa-pen"></i> Редагувати</button>` : ''}
+                </div>
+                ${comm ? `<div class="itb-prak-comm-view"><i class="fa-regular fa-comment"></i> ${Fmt.esc(comm)}</div>` : ''}`;
+
             const renderPraktykaBlock = (scoreField, scoreVal, commentField, commentVal) => {
                 const val  = scoreVal   != null ? scoreVal   : '';
                 const comm = commentVal != null ? commentVal : '';
-                if (!this._canManage) {
-                    return `<div class="itb-prak-display">
-                        <span class="itb-prak-val ${val !== '' ? 'itb-score-pass' : ''}">${val !== '' ? Fmt.esc(val) : '—'}</span>
-                        <span class="itb-prak-unit">${val !== '' ? '/ 5' : 'не виставлено'}</span>
-                    </div>
-                    ${comm ? `<div class="itb-prak-comm-view"><i class="fa-regular fa-comment"></i> ${Fmt.esc(comm)}</div>` : ''}`;
-                }
-                return `<div class="itb-prak-edit">
-                    <div class="itb-prak-row">
-                        <input class="inf-input itb-prak-input" type="text" maxlength="4"
-                            placeholder="напр. 4+" value="${Fmt.esc(val)}" id="itb-prak-${scoreField}">
-                        <span class="itb-prak-unit-label">/ 5</span>
-                    </div>
-                    <textarea class="inf-input itb-prak-textarea" placeholder="Коментар до практики…" id="itb-prak-${commentField}">${Fmt.esc(comm)}</textarea>
-                    <button class="btn btn-primary btn-xs itb-prak-save-btn" onclick="InternsPage._savePraktykaFields('${intern.id}','${scoreField}','${commentField}')">
-                        <i class="fa-solid fa-floppy-disk"></i> Зберегти
-                    </button>
+                return `<div class="itb-prak-wrap" id="itb-pw-${scoreField}"
+                    data-score-field="${scoreField}" data-comment-field="${commentField}"
+                    data-intern-id="${intern.id}">
+                    ${renderPraktykaView(scoreField, val, comm)}
                 </div>`;
             };
 
@@ -1642,6 +1637,52 @@
         }
     },
 
+    _togglePraktykaEdit(btn, scoreField) {
+        const wrap = document.getElementById(`itb-pw-${scoreField}`);
+        if (!wrap) return;
+        const commentField = wrap.dataset.commentField;
+        const internId     = wrap.dataset.internId;
+        // read current displayed values
+        const curScore = wrap.querySelector('.itb-prak-val')?.textContent?.trim();
+        const curComm  = wrap.querySelector('.itb-prak-comm-view')?.textContent?.trim() || '';
+        const val  = curScore === '—' ? '' : (curScore || '');
+        wrap.innerHTML = `
+            <div class="itb-prak-edit">
+                <div class="itb-prak-row">
+                    <input class="inf-input itb-prak-input" type="text" maxlength="4"
+                        placeholder="напр. 4+" value="${Fmt.esc(val)}" id="itb-prak-${scoreField}">
+                    <span class="itb-prak-unit-label">/ 5</span>
+                </div>
+                <textarea class="inf-input itb-prak-textarea" placeholder="Коментар до практики…" id="itb-prak-${commentField}">${Fmt.esc(curComm)}</textarea>
+                <div style="display:flex;gap:.4rem">
+                    <button class="btn btn-primary btn-xs" onclick="InternsPage._savePraktykaFields('${internId}','${scoreField}','${commentField}')">
+                        <i class="fa-solid fa-floppy-disk"></i> Зберегти
+                    </button>
+                    <button class="btn btn-ghost btn-xs" onclick="InternsPage._cancelPraktykaEdit('${scoreField}')">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+            </div>`;
+        document.getElementById(`itb-prak-${scoreField}`)?.focus();
+    },
+
+    _cancelPraktykaEdit(scoreField) {
+        const intern = this._currentIntern;
+        if (!intern) return;
+        const wrap = document.getElementById(`itb-pw-${scoreField}`);
+        if (!wrap) return;
+        const commentField = wrap.dataset.commentField;
+        const val  = intern[scoreField]   != null ? intern[scoreField]   : '';
+        const comm = intern[commentField] != null ? intern[commentField] : '';
+        wrap.innerHTML = `
+            <div class="itb-prak-display">
+                <span class="itb-prak-val ${val !== '' ? 'itb-score-pass' : ''}">${val !== '' ? Fmt.esc(val) : '—'}</span>
+                <span class="itb-prak-unit">${val !== '' ? '/ 5' : 'не виставлено'}</span>
+                <button class="btn btn-ghost btn-xs itb-prak-edit-btn" onclick="InternsPage._togglePraktykaEdit(this,'${scoreField}')"><i class="fa-solid fa-pen"></i> Редагувати</button>
+            </div>
+            ${comm ? `<div class="itb-prak-comm-view"><i class="fa-regular fa-comment"></i> ${Fmt.esc(comm)}</div>` : ''}`;
+    },
+
     async _savePraktykaFields(internId, scoreField, commentField) {
         const scoreInput   = document.getElementById(`itb-prak-${scoreField}`);
         const commentInput = document.getElementById(`itb-prak-${commentField}`);
@@ -1654,6 +1695,19 @@
                 API.interns.savePraktykaField(internId, commentField, comment),
             ]);
             this._currentIntern = await API.interns.getById(internId);
+            // restore view mode
+            const wrap = document.getElementById(`itb-pw-${scoreField}`);
+            if (wrap) {
+                const val  = score   || '';
+                const comm = comment || '';
+                wrap.innerHTML = `
+                    <div class="itb-prak-display">
+                        <span class="itb-prak-val ${val !== '' ? 'itb-score-pass' : ''}">${val !== '' ? Fmt.esc(val) : '—'}</span>
+                        <span class="itb-prak-unit">${val !== '' ? '/ 5' : 'не виставлено'}</span>
+                        <button class="btn btn-ghost btn-xs itb-prak-edit-btn" onclick="InternsPage._togglePraktykaEdit(this,'${scoreField}')"><i class="fa-solid fa-pen"></i> Редагувати</button>
+                    </div>
+                    ${comm ? `<div class="itb-prak-comm-view"><i class="fa-regular fa-comment"></i> ${Fmt.esc(comm)}</div>` : ''}`;
+            }
             Toast.success('Збережено');
         } catch(e) { Toast.error('Помилка', e.message); }
     },
@@ -4853,17 +4907,19 @@ mark.in-hl { background:color-mix(in srgb,#f59e0b 35%,transparent); color:inheri
 /* empty state */
 .itb-sub-empty { display:flex; align-items:center; gap:.4rem; padding:.6rem .9rem; font-size:.83rem; color:var(--text-muted); font-style:italic; }
 /* praktyka manual input */
+.itb-prak-wrap { display:flex; flex-direction:column; gap:.3rem; }
 .itb-prak-edit { display:flex; flex-direction:column; gap:.4rem; }
 .itb-prak-row { display:flex; align-items:center; gap:.5rem; }
 .itb-prak-input { width:80px; }
 .itb-prak-unit-label { font-size:.83rem; color:var(--text-muted); }
 .itb-prak-textarea { width:100%; min-height:56px; resize:vertical; font-size:.83rem; }
-.itb-prak-save-btn { align-self:flex-start; }
-.itb-prak-display { display:flex; align-items:baseline; gap:.4rem; }
+.itb-prak-display { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
 .itb-prak-val { font-size:1.4rem; font-weight:800; color:var(--text-muted); }
 .itb-prak-val.itb-score-pass { color:#059669; font-size:1.6rem; }
 .itb-prak-unit { font-size:.8rem; color:var(--text-muted); }
-.itb-prak-comm-view { font-size:.82rem; color:var(--text-muted); margin-top:.3rem; display:flex; align-items:flex-start; gap:.35rem; line-height:1.5; }
+.itb-prak-edit-btn { margin-left:.25rem; opacity:.6; font-size:.75rem; }
+.itb-prak-edit-btn:hover { opacity:1; }
+.itb-prak-comm-view { font-size:.82rem; color:var(--text-muted); display:flex; align-items:flex-start; gap:.35rem; line-height:1.5; }
 /* protocol btn */
 .itb-protocol-btn { flex-shrink:0; color:var(--text-muted); }
 .itb-protocol-btn:hover { color:var(--primary); }

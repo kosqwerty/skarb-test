@@ -1557,12 +1557,12 @@
                 if (!this._canManage) {
                     return `<div class="itb-prak-display">
                         <span class="itb-prak-val ${val !== '' ? 'itb-score-pass' : ''}">${val !== '' ? val : '—'}</span>
-                        <span class="itb-prak-unit">${val !== '' ? 'балів' : 'не виставлено'}</span>
+                        <span class="itb-prak-unit">${val !== '' ? '/ 5' : 'не виставлено'}</span>
                     </div>`;
                 }
                 return `<div class="itb-prak-row">
-                    <input class="inf-input itb-prak-input" type="number" min="0" max="100" step="0.1"
-                        placeholder="0–100" value="${val}" id="itb-prak-${field}" onkeydown="if(event.key==='Enter')InternsPage._savePraktykaField('${intern.id}','${field}')">
+                    <input class="inf-input itb-prak-input" type="number" min="0" max="5" step="0.5"
+                        placeholder="0–5" value="${val}" id="itb-prak-${field}" onkeydown="if(event.key==='Enter')InternsPage._savePraktykaField('${intern.id}','${field}')">
                     <button class="btn btn-primary btn-xs" onclick="InternsPage._savePraktykaField('${intern.id}','${field}')">
                         <i class="fa-solid fa-floppy-disk"></i> Зберегти
                     </button>

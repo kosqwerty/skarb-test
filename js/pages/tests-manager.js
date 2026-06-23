@@ -479,10 +479,12 @@ const TestsManagerPage = {
             <div class="form-group" style="margin-top:8px"><label>Категорія для табелю стажера</label>
                 <select id="tm-intern-cat">
                     <option value="">— Не використовується —</option>
-                    <option value="техніка"     ${test?.intern_category==='техніка'    ?'selected':''}>Техніка (теорія)</option>
-                    <option value="магазин"     ${test?.intern_category==='магазин'    ?'selected':''}>Магазин</option>
-                    <option value="драг_метали" ${test?.intern_category==='драг_метали'?'selected':''}>Дорогоцінні метали</option>
-                    <option value="загальний"   ${test?.intern_category==='загальний'  ?'selected':''}>Загальний</option>
+                    <option value="техніка"            ${test?.intern_category==='техніка'           ?'selected':''}>Техніка — теорія</option>
+                    <option value="оцінка_техніки"    ${test?.intern_category==='оцінка_техніки'   ?'selected':''}>Техніка — практика (оцінка)</option>
+                    <option value="магазин"            ${test?.intern_category==='магазин'           ?'selected':''}>Магазин</option>
+                    <option value="драг_метали"        ${test?.intern_category==='драг_метали'       ?'selected':''}>Дорогоцінні метали — теорія</option>
+                    <option value="оцінка_драг_метали" ${test?.intern_category==='оцінка_драг_метали'?'selected':''}>Дорогоцінні метали — практика (оцінка)</option>
+                    <option value="загальний"          ${test?.intern_category==='загальний'         ?'selected':''}>Загальний</option>
                 </select>
             </div>
             <div style="display:flex;align-items:center;gap:10px;margin-top:4px">

@@ -2523,11 +2523,6 @@ const API = {
             return data || [];
         },
 
-        async savePraktyka(internId, score) {
-            const { error } = await supabase.from('interns')
-                .update({ praktyka_score: score }).eq('id', internId);
-            if (error) throw error;
-        },
     },
 
     // ── Intern Disciplines ────────────────────────────────────────────────────

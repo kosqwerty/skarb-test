@@ -1512,6 +1512,7 @@
         // determine which fields to show based on job position
         const hasMagazyn  = jobPos.includes('продавець') || jobPos.includes('продавец') || jobPos.includes('універсал') || jobPos.includes('универсал');
         const hasDrag     = jobPos.includes('універсал') || jobPos.includes('универсал');
+        const hasPrakDrag = hasDrag; // практика драг. металів — тільки для універсал
 
         dc.innerHTML = `<div class="itb-wrap"><div style="text-align:center;padding:2rem"><i class="fa-solid fa-spinner fa-spin"></i></div></div>`;
 
@@ -1559,41 +1560,18 @@
                 </div>`;
             };
 
-            const praktyka = intern.praktyka_score != null ? intern.praktyka_score : '';
-            const praktykaHtml = this._canManage ? `
-                <div class="itb-section">
-                    <div class="itb-section-label">Практика</div>
-                    <div class="itb-praktyka-row">
-                        <input class="inf-input itb-praktyka-input" type="number" min="0" max="100" placeholder="Оцінка…" value="${praktyka}" id="itb-praktyka-val">
-                        <button class="btn btn-primary btn-sm" onclick="InternsPage._savePraktyka('${intern.id}')"><i class="fa-solid fa-floppy-disk"></i> Зберегти</button>
-                    </div>
-                </div>` : `<div class="itb-section">
-                    <div class="itb-section-label">Практика</div>
-                    <div class="itb-test-row"><div class="itb-test-info"><span class="itb-test-title">Практична оцінка</span></div>
-                    <div class="itb-test-score ${praktyka ? 'itb-pass' : ''}">${praktyka || '—'}</div></div>
-                </div>`;
-
             const sections = await Promise.all([
-                renderCategory('Теорія — Техніка', 'техніка'),
-                Promise.resolve(praktykaHtml),
-                hasMagazyn ? renderCategory('Магазин', 'магазин') : Promise.resolve(''),
-                hasDrag    ? renderCategory('Дорогоцінні метали', 'драг_метали') : Promise.resolve(''),
+                renderCategory('Теорія техніки', 'техніка'),
+                renderCategory('Практика — оцінка техніки', 'оцінка_техніки'),
+                hasMagazyn   ? renderCategory('Магазин', 'магазин') : Promise.resolve(''),
+                hasDrag      ? renderCategory('Дорогоцінні метали — теорія', 'драг_метали') : Promise.resolve(''),
+                hasPrakDrag  ? renderCategory('Дорогоцінні метали — практика (оцінка)', 'оцінка_драг_метали') : Promise.resolve(''),
             ]);
 
             dc.innerHTML = `<div class="itb-wrap">${sections.join('')}</div>`;
         } catch(e) {
             dc.innerHTML = `<div style="padding:2rem;color:var(--danger)">${Fmt.esc(e.message)}</div>`;
         }
-    },
-
-    async _savePraktyka(internId) {
-        const val = document.getElementById('itb-praktyka-val')?.value;
-        const score = val !== '' ? parseFloat(val) : null;
-        try {
-            await API.internTabель.savePraktyka(internId, score);
-            this._currentIntern = await API.interns.getById(internId);
-            Toast.success('Збережено');
-        } catch(e) { Toast.error('Помилка', e.message); }
     },
 
     async _openWrongAnswers(attemptId, testTitle) {

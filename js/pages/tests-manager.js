@@ -476,6 +476,15 @@ const TestsManagerPage = {
                     <label for="tm-shuffle" style="cursor:pointer;font-weight:500">Перемішати питання</label>
                 </div>
             </div>
+            <div class="form-group" style="margin-top:8px"><label>Категорія для табелю стажера</label>
+                <select id="tm-intern-cat">
+                    <option value="">— Не використовується —</option>
+                    <option value="техніка"     ${test?.intern_category==='техніка'    ?'selected':''}>Техніка (теорія)</option>
+                    <option value="магазин"     ${test?.intern_category==='магазин'    ?'selected':''}>Магазин</option>
+                    <option value="драг_метали" ${test?.intern_category==='драг_метали'?'selected':''}>Дорогоцінні метали</option>
+                    <option value="загальний"   ${test?.intern_category==='загальний'  ?'selected':''}>Загальний</option>
+                </select>
+            </div>
             <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
                 <input type="checkbox" id="tm-restart" ${test?.allow_restart?'checked':''} style="width:18px;height:18px;cursor:pointer">
                 <label for="tm-restart" style="cursor:pointer;font-weight:500">Дозволити почати заново (скинути прогрес)</label>
@@ -549,6 +558,7 @@ const TestsManagerPage = {
             allow_skip:             document.getElementById('tm-skip')?.checked      || false,
             show_answer_feedback:   document.getElementById('tm-feedback')?.checked  || false,
             show_wrong_answers:     document.getElementById('tm-wrong')?.checked     || false,
+            intern_category:        document.getElementById('tm-intern-cat')?.value  || null,
             is_published:           document.getElementById('tm-pub')?.checked || false,
             auto_assign_positions:  autoPositions,
             course_id:              null,

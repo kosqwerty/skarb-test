@@ -2477,6 +2477,59 @@ const API = {
         },
     },
 
+    // ── Intern Tabель ─────────────────────────────────────────────────────────
+    internTabель: {
+        // Last attempt per test for a given user, for tests with intern_category set
+        async getAttemptsByUser(userId) {
+            const { data, error } = await supabase
+                .from('test_attempts')
+                .select(`id, test_id, attempt_number, score, percentage, passed, completed_at,
+                    test:tests!test_id(id, title, intern_category, passing_score)`)
+                .eq('user_id', userId)
+                .not('test.intern_category', 'is', null)
+                .order('completed_at', { ascending: false });
+            if (error) throw error;
+            // keep only last attempt per test
+            const seen = new Set();
+            return (data || []).filter(a => {
+                if (!a.test?.intern_category) return false;
+                if (seen.has(a.test_id)) return false;
+                seen.add(a.test_id);
+                return true;
+            });
+        },
+
+        // Count all attempts for a user on a specific test
+        async getAttemptCount(userId, testId) {
+            const { count, error } = await supabase
+                .from('test_attempts')
+                .select('id', { count: 'exact', head: true })
+                .eq('user_id', userId)
+                .eq('test_id', testId);
+            if (error) throw error;
+            return count || 0;
+        },
+
+        // Wrong answers for a specific attempt
+        async getWrongAnswers(attemptId) {
+            const { data, error } = await supabase
+                .from('attempt_answers')
+                .select(`id, is_correct, selected_answer_ids, points_earned,
+                    question:questions!question_id(id, question_text, question_type, points,
+                        answers(id, answer_text, is_correct, order_index))`)
+                .eq('attempt_id', attemptId)
+                .eq('is_correct', false);
+            if (error) throw error;
+            return data || [];
+        },
+
+        async savePraktyka(internId, score) {
+            const { error } = await supabase.from('interns')
+                .update({ praktyka_score: score }).eq('id', internId);
+            if (error) throw error;
+        },
+    },
+
     // ── Intern Disciplines ────────────────────────────────────────────────────
     internDisciplines: {
         async getByIntern(internId) {

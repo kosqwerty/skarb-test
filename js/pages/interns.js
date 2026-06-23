@@ -15,7 +15,7 @@
     _search: '',
     _currentInternId: null,
     _currentIntern: null,
-    _detailTab: 'info',    // 'info' | 'schedule' | 'characteristic' | 'mentors'
+    _detailTab: 'info',    // 'info' | 'schedule' | 'characteristic' | 'mentors' | 'report' | 'tabel'
     _disciplines: [],
     _editingDisciplineId: null,
     _jobSettings: [],       // [{ job_position, training_days }]
@@ -867,6 +867,7 @@
             <button class="in-detail-tab ${this._detailTab==='characteristic'?'active':''}" onclick="InternsPage._switchDetailTabById('characteristic','${intern.id}')"><i class="fa-solid fa-star"></i> Характеристика</button>
             <button class="in-detail-tab ${this._detailTab==='mentors'?'active':''}" onclick="InternsPage._switchDetailTabById('mentors','${intern.id}')"><i class="fa-solid fa-users"></i> Наставники</button>
             ${(this._canManage || this._isManager) ? `<button class="in-detail-tab ${this._detailTab==='report'?'active':''}" onclick="InternsPage._switchDetailTabById('report','${intern.id}')"><i class="fa-solid fa-file-lines"></i> Звіт</button>` : ''}
+            ${this._canManage ? `<button class="in-detail-tab ${this._detailTab==='tabel'?'active':''}" onclick="InternsPage._switchDetailTabById('tabel','${intern.id}')"><i class="fa-solid fa-table-list"></i> Табель</button>` : ''}
         </div>
         <div id="in-detail-content"></div>`;
         if (this._detailTab === 'info') this._renderDetailInfo(intern);
@@ -874,6 +875,7 @@
         else if (this._detailTab === 'characteristic') this._renderDetailCharacteristic(intern);
         else if (this._detailTab === 'mentors') this._renderDetailMentors(intern);
         else if (this._detailTab === 'report') this._renderDetailReport(intern);
+        else if (this._detailTab === 'tabel') this._renderDetailTabel(intern);
     },
 
     async _switchDetailTabById(tab, internId) {
@@ -1499,6 +1501,128 @@
             <div class="in-stub-text">Розділ у розробці. Тут відображатиметься список наставників, закріплених за стажером, та їхні відгуки.</div>
             ${list.length ? `<pre class="in-stub-data">${Fmt.esc(JSON.stringify(list, null, 2))}</pre>` : ''}
         </div>`;
+    },
+
+    async _renderDetailTabel(intern) {
+        const dc = document.getElementById('in-detail-content');
+        if (!dc) return;
+        const p = intern.profile || intern.profile_snapshot || {};
+        const jobPos = (p.job_position || '').toLowerCase();
+
+        // determine which fields to show based on job position
+        const hasMagazyn  = jobPos.includes('продавець') || jobPos.includes('продавец') || jobPos.includes('універсал') || jobPos.includes('универсал');
+        const hasDrag     = jobPos.includes('універсал') || jobPos.includes('универсал');
+
+        dc.innerHTML = `<div class="itb-wrap"><div style="text-align:center;padding:2rem"><i class="fa-solid fa-spinner fa-spin"></i></div></div>`;
+
+        try {
+            const userId = intern.profile_id;
+            const attempts = await API.internTabель.getAttemptsByUser(userId);
+
+            // group by intern_category, keep last attempt per test, pick best percentage per category
+            const byCategory = {};
+            for (const a of attempts) {
+                const cat = a.test?.intern_category;
+                if (!byCategory[cat]) byCategory[cat] = [];
+                byCategory[cat].push(a);
+            }
+
+            const renderTestRow = async (attempt) => {
+                const cnt = await API.internTabель.getAttemptCount(userId, attempt.test_id);
+                const pct = attempt.percentage != null ? Math.round(attempt.percentage) : '—';
+                const passed = attempt.passed;
+                const date = attempt.completed_at ? Fmt.dateShort(attempt.completed_at) : '—';
+                return `<div class="itb-test-row">
+                    <div class="itb-test-info">
+                        <span class="itb-test-title">${Fmt.esc(attempt.test?.title || '')}</span>
+                        <span class="itb-test-meta">${date} · ${cnt} спроб${cnt===1?'а':cnt<5?'и':''}` +
+                        (attempt.test?.passing_score ? ` · прохідний ${attempt.test.passing_score}%` : '') +
+                        `</span>
+                    </div>
+                    <div class="itb-test-score ${passed ? 'itb-pass' : 'itb-fail'}">${pct}%</div>
+                    <button class="btn btn-ghost btn-sm itb-protocol-btn" onclick="InternsPage._openWrongAnswers('${attempt.id}',${JSON.stringify(attempt.test?.title||'').replace(/"/g,'&quot;')})" title="Протокол помилок">
+                        <i class="fa-solid fa-list-check"></i>
+                    </button>
+                </div>`;
+            };
+
+            const renderCategory = async (label, cat) => {
+                const list = byCategory[cat] || [];
+                if (!list.length) return `<div class="itb-section">
+                    <div class="itb-section-label">${label}</div>
+                    <div class="itb-empty">Тестів не проходилось</div>
+                </div>`;
+                const rows = await Promise.all(list.map(a => renderTestRow(a)));
+                return `<div class="itb-section">
+                    <div class="itb-section-label">${label}</div>
+                    ${rows.join('')}
+                </div>`;
+            };
+
+            const praktyka = intern.praktyka_score != null ? intern.praktyka_score : '';
+            const praktykaHtml = this._canManage ? `
+                <div class="itb-section">
+                    <div class="itb-section-label">Практика</div>
+                    <div class="itb-praktyka-row">
+                        <input class="inf-input itb-praktyka-input" type="number" min="0" max="100" placeholder="Оцінка…" value="${praktyka}" id="itb-praktyka-val">
+                        <button class="btn btn-primary btn-sm" onclick="InternsPage._savePraktyka('${intern.id}')"><i class="fa-solid fa-floppy-disk"></i> Зберегти</button>
+                    </div>
+                </div>` : `<div class="itb-section">
+                    <div class="itb-section-label">Практика</div>
+                    <div class="itb-test-row"><div class="itb-test-info"><span class="itb-test-title">Практична оцінка</span></div>
+                    <div class="itb-test-score ${praktyka ? 'itb-pass' : ''}">${praktyka || '—'}</div></div>
+                </div>`;
+
+            const sections = await Promise.all([
+                renderCategory('Теорія — Техніка', 'техніка'),
+                Promise.resolve(praktykaHtml),
+                hasMagazyn ? renderCategory('Магазин', 'магазин') : Promise.resolve(''),
+                hasDrag    ? renderCategory('Дорогоцінні метали', 'драг_метали') : Promise.resolve(''),
+            ]);
+
+            dc.innerHTML = `<div class="itb-wrap">${sections.join('')}</div>`;
+        } catch(e) {
+            dc.innerHTML = `<div style="padding:2rem;color:var(--danger)">${Fmt.esc(e.message)}</div>`;
+        }
+    },
+
+    async _savePraktyka(internId) {
+        const val = document.getElementById('itb-praktyka-val')?.value;
+        const score = val !== '' ? parseFloat(val) : null;
+        try {
+            await API.internTabель.savePraktyka(internId, score);
+            this._currentIntern = await API.interns.getById(internId);
+            Toast.success('Збережено');
+        } catch(e) { Toast.error('Помилка', e.message); }
+    },
+
+    async _openWrongAnswers(attemptId, testTitle) {
+        Modal.open({ title: `<i class="fa-solid fa-list-check"></i> Протокол помилок — ${Fmt.esc(testTitle)}`, size: 'lg',
+            body: `<div style="text-align:center;padding:2rem"><i class="fa-solid fa-spinner fa-spin"></i></div>`,
+            footer: `<button class="btn btn-ghost btn-sm" onclick="Modal.close()">Закрити</button>` });
+        try {
+            const wrongs = await API.internTabель.getWrongAnswers(attemptId);
+            const mb = document.getElementById('modal-body');
+            if (!mb) return;
+            if (!wrongs.length) { mb.innerHTML = `<div style="text-align:center;padding:2rem;color:var(--text-muted)"><i class="fa-solid fa-circle-check" style="font-size:2rem;color:var(--success);display:block;margin-bottom:.5rem"></i>Всі відповіді правильні!</div>`; return; }
+            mb.innerHTML = wrongs.map((w, idx) => {
+                const q = w.question;
+                const correctIds = new Set((q.answers||[]).filter(a => a.is_correct).map(a => a.id));
+                const selectedIds = new Set(w.selected_answer_ids || []);
+                const answers = [...(q.answers||[])].sort((a,b) => a.order_index - b.order_index);
+                return `<div class="itb-wrong-block">
+                    <div class="itb-wrong-num">Питання ${idx+1}</div>
+                    <div class="itb-wrong-q">${q.question_text}</div>
+                    <div class="itb-wrong-answers">${answers.map(a => {
+                        const isCor = correctIds.has(a.id);
+                        const isSel = selectedIds.has(a.id);
+                        const cls = isCor ? 'itb-ans-correct' : isSel ? 'itb-ans-wrong' : 'itb-ans-neutral';
+                        const icon = isCor ? '✓' : isSel ? '✗' : '·';
+                        return `<div class="itb-ans-row ${cls}"><span class="itb-ans-icon">${icon}</span><span>${a.answer_text}</span></div>`;
+                    }).join('')}</div>
+                </div>`;
+            }).join('');
+        } catch(e) { Toast.error('Помилка', e.message); }
     },
 
     _renderDetailReport(intern) {
@@ -4546,6 +4670,33 @@ mark.in-hl { background:color-mix(in srgb,#f59e0b 35%,transparent); color:inheri
 .idp-fb { background:none; border:none; cursor:pointer; font-size:.78rem; color:var(--text-muted); padding:.2rem .35rem; border-radius:4px; transition:background .1s,color .1s; }
 .idp-fb:hover { background:var(--bg-hover); color:var(--text-primary); }
 .idp-fb-today { color:var(--primary); font-weight:600; }
+/* ── Табель ─────────────────────────────────────────────────────────────── */
+.itb-wrap { padding:.75rem 0; display:flex; flex-direction:column; gap:.75rem; }
+.itb-section { border:1px solid var(--border); border-radius:var(--radius-md); overflow:hidden; }
+.itb-section-label { font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; padding:.45rem .75rem; background:var(--bg-hover); color:var(--text-muted); border-bottom:1px solid var(--border); }
+.itb-test-row { display:flex; align-items:center; gap:.5rem; padding:.55rem .75rem; border-bottom:1px solid var(--border); }
+.itb-test-row:last-child { border-bottom:none; }
+.itb-test-info { flex:1; min-width:0; }
+.itb-test-title { display:block; font-weight:600; font-size:.85rem; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.itb-test-meta { font-size:.75rem; color:var(--text-muted); }
+.itb-test-score { font-size:1.1rem; font-weight:800; width:52px; text-align:right; flex-shrink:0; }
+.itb-pass { color:var(--success, #10b981); }
+.itb-fail { color:var(--danger); }
+.itb-empty { padding:.6rem .75rem; font-size:.83rem; color:var(--text-muted); font-style:italic; }
+.itb-praktyka-row { display:flex; align-items:center; gap:.5rem; padding:.55rem .75rem; }
+.itb-praktyka-input { width:100px; }
+.itb-protocol-btn { flex-shrink:0; color:var(--text-muted); }
+.itb-protocol-btn:hover { color:var(--primary); }
+/* wrong answers modal */
+.itb-wrong-block { padding:.75rem 0; border-bottom:1px solid var(--border); }
+.itb-wrong-block:last-child { border-bottom:none; }
+.itb-wrong-num { font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); margin-bottom:.25rem; }
+.itb-wrong-q { font-weight:600; font-size:.88rem; margin-bottom:.5rem; color:var(--text-primary); }
+.itb-ans-row { display:flex; align-items:flex-start; gap:.4rem; font-size:.83rem; padding:.15rem 0; }
+.itb-ans-icon { font-weight:700; width:14px; flex-shrink:0; }
+.itb-ans-correct { color:var(--success,#10b981); }
+.itb-ans-wrong { color:var(--danger); text-decoration:line-through; }
+.itb-ans-neutral { color:var(--text-muted); }
         `;
         document.head.appendChild(s);
     }

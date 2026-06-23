@@ -1677,7 +1677,75 @@
         } catch(e) { Toast.error('Помилка', e.message); }
     },
 
-    _renderDetailReport(intern) {
+    async _buildTabelSectionHtml(intern) {
+        const p = intern.profile || intern.profile_snapshot || {};
+        const jobPos = (p.job_position || '').toLowerCase();
+        const hasMagazyn = jobPos.includes('продавець') || jobPos.includes('продавец') || jobPos.includes('універсал') || jobPos.includes('универсал');
+        const hasDrag    = jobPos.includes('універсал') || jobPos.includes('универсал');
+
+        let attempts = [];
+        try {
+            if (intern.profile_id) attempts = await API.internTabель.getAttemptsByUser(intern.profile_id);
+        } catch(e) { /* non-critical */ }
+
+        const byCategory = {};
+        for (const a of attempts) {
+            const cat = a.test?.intern_category;
+            if (!cat) continue;
+            if (!byCategory[cat]) byCategory[cat] = [];
+            byCategory[cat].push(a);
+        }
+
+        const catRow = (cat) => {
+            const list = byCategory[cat] || [];
+            if (!list.length) return `<tr><td colspan="4" style="color:var(--text-muted);font-style:italic">не проходився</td></tr>`;
+            return list.map(a => {
+                const pct = a.percentage != null ? Math.round(a.percentage) + '%' : '—';
+                const date = a.completed_at ? Fmt.dateShort(a.completed_at) : '—';
+                const passColor = a.passed ? '#059669' : 'var(--danger)';
+                return `<tr>
+                    <td>${Fmt.esc(a.test?.title || '')}</td>
+                    <td style="text-align:center">${date}</td>
+                    <td style="text-align:center;font-weight:700;color:${passColor}">${pct}</td>
+                    <td style="text-align:center">${a.passed ? '✓' : '✗'}</td>
+                </tr>`;
+            }).join('');
+        };
+
+        const prakVal = (v) => v != null && v !== '' ? `<strong>${Fmt.esc(String(v))}</strong> / 5` : '<span style="color:var(--text-muted)">не виставлено</span>';
+
+        const subjects = [];
+
+        subjects.push(`<div class="irp-tabel-subject">
+            <div class="irp-tabel-subj-title" style="border-left:3px solid #3b82f6">Техніка</div>
+            <table class="irp-tabel-table"><thead><tr><th>Тест</th><th>Дата</th><th>Результат</th><th>Здав</th></tr></thead>
+            <tbody>${catRow('техніка')}</tbody></table>
+            <div class="irp-tabel-prak"><i class="fa-solid fa-screwdriver-wrench"></i> Практика: ${prakVal(intern.praktyka_score)}</div>
+        </div>`);
+
+        if (hasMagazyn) subjects.push(`<div class="irp-tabel-subject">
+            <div class="irp-tabel-subj-title" style="border-left:3px solid #10b981">Магазин</div>
+            <table class="irp-tabel-table"><thead><tr><th>Тест</th><th>Дата</th><th>Результат</th><th>Здав</th></tr></thead>
+            <tbody>${catRow('магазин')}</tbody></table>
+        </div>`);
+
+        if (hasDrag) subjects.push(`<div class="irp-tabel-subject">
+            <div class="irp-tabel-subj-title" style="border-left:3px solid #f59e0b">Дорогоцінні метали</div>
+            <table class="irp-tabel-table"><thead><tr><th>Тест</th><th>Дата</th><th>Результат</th><th>Здав</th></tr></thead>
+            <tbody>${catRow('драг_метали')}</tbody></table>
+            <div class="irp-tabel-prak"><i class="fa-solid fa-screwdriver-wrench"></i> Практика: ${prakVal(intern.praktyka_dm_score)}</div>
+        </div>`);
+
+        subjects.push(`<div class="irp-tabel-subject">
+            <div class="irp-tabel-subj-title" style="border-left:3px solid #8b5cf6">Загальний тест</div>
+            <table class="irp-tabel-table"><thead><tr><th>Тест</th><th>Дата</th><th>Результат</th><th>Здав</th></tr></thead>
+            <tbody>${catRow('загальний')}</tbody></table>
+        </div>`);
+
+        return `<div class="irp-tabel-wrap">${subjects.join('')}</div>`;
+    },
+
+    async _renderDetailReport(intern) {
         const dc = document.getElementById('in-detail-content');
         if (!dc) return;
         const p   = intern.profile || intern.profile_snapshot || {};
@@ -1713,6 +1781,8 @@
             </div>`).join('') : `<div class="irp-empty">Наставників не призначено</div>`;
 
         const hasChr = chr.summary || (chr.criteria && Object.values(chr.criteria).some(v => typeof v === 'number' && v > 0));
+
+        const tabelHtml = await this._buildTabelSectionHtml(intern);
 
         dc.innerHTML = `
         <div class="irp-wrap">
@@ -1759,6 +1829,11 @@
                     ? this._renderCharReadOnly(chr, intern)
                     : `<div class="irp-empty">Характеристику ще не заповнено</div>`}
                 ${AppState.isAdmin() ? `<button class="in-btn in-btn-access" style="margin-top:.75rem" onclick="InternsPage._switchDetailTabById('characteristic','${intern.id}')"><i class="fa-solid fa-pen"></i> Заповнити характеристику</button>` : ''}
+            </div>
+
+            <div class="irp-section">
+                <div class="irp-section-title"><i class="fa-solid fa-table-list"></i> Табель</div>
+                ${tabelHtml}
             </div>
         </div>`;
     },
@@ -4722,6 +4797,17 @@ mark.in-hl { background:color-mix(in srgb,#f59e0b 35%,transparent); color:inheri
 .idp-fb { background:none; border:none; cursor:pointer; font-size:.78rem; color:var(--text-muted); padding:.2rem .35rem; border-radius:4px; transition:background .1s,color .1s; }
 .idp-fb:hover { background:var(--bg-hover); color:var(--text-primary); }
 .idp-fb-today { color:var(--primary); font-weight:600; }
+/* ── Звіт — Табель секція ───────────────────────────────────────────────── */
+.irp-tabel-wrap { display:flex; flex-direction:column; gap:.75rem; }
+.irp-tabel-subject { border:1px solid var(--border); border-radius:var(--radius-md); overflow:hidden; background:var(--bg-surface); }
+.irp-tabel-subj-title { font-weight:700; font-size:.83rem; padding:.45rem .75rem; background:var(--bg-hover); color:var(--text-primary); border-bottom:1px solid var(--border); padding-left:.65rem; }
+.irp-tabel-table { width:100%; border-collapse:collapse; font-size:.83rem; }
+.irp-tabel-table thead tr { background:transparent; }
+.irp-tabel-table th { padding:.35rem .6rem; text-align:left; font-size:.72rem; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; border-bottom:1px solid var(--border); }
+.irp-tabel-table td { padding:.45rem .6rem; border-bottom:1px solid var(--border); color:var(--text-primary); }
+.irp-tabel-table tr:last-child td { border-bottom:none; }
+.irp-tabel-prak { display:flex; align-items:center; gap:.4rem; padding:.45rem .75rem; font-size:.83rem; color:var(--text-muted); border-top:1px solid var(--border); background:var(--bg-hover); }
+.irp-tabel-prak strong { color:var(--text-primary); font-size:.95rem; }
 /* ── Табель ─────────────────────────────────────────────────────────────── */
 .itb-wrap { padding:.5rem 0 1rem; display:flex; flex-direction:column; gap:.75rem; }
 /* subject card */

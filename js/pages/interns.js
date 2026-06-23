@@ -4329,10 +4329,10 @@ mark.in-hl { background:color-mix(in srgb,#f59e0b 35%,transparent); color:inheri
 .isc-table td { padding:.5rem .65rem; border-bottom:1px solid var(--border); vertical-align:middle; }
 .isc-table tr:last-child td { border-bottom:none; }
 .isc-num  { width:38px; text-align:center; color:var(--text-muted); font-size:.78rem; }
-.isc-date { width:110px; white-space:nowrap; color:var(--text-secondary); font-size:.8rem; }
+.isc-date { width:141px; white-space:nowrap; color:var(--text-secondary); font-size:.8rem; }
 .isc-hours { width:120px; white-space:nowrap; font-weight:600; font-size:.8rem; color:var(--text-primary); }
-.isc-name { color:var(--text-primary); font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.isc-place { width:72px; text-align:center; font-weight:700; font-size:.8rem; color:var(--primary); }
+.isc-name { width:270px; color:var(--text-primary); font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.isc-place { width:86px; text-align:center; font-weight:700; font-size:.8rem; color:var(--primary); }
 .isc-cabinet { width:52px; text-align:center; font-size:.8rem; color:var(--text-muted); }
 .isc-actions { width:116px; text-align:right; white-space:nowrap; }
 .isc-row:hover td { background:var(--bg-hover); }

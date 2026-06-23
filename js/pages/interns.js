@@ -4335,7 +4335,7 @@ mark.in-hl { background:color-mix(in srgb,#f59e0b 35%,transparent); color:inheri
 .isc-date { width:141px; white-space:nowrap; color:var(--text-secondary); font-size:.8rem; }
 .isc-hours { width:120px; white-space:nowrap; font-weight:600; font-size:.8rem; color:var(--text-primary); }
 .isc-name { width:270px; color:var(--text-primary); font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.isc-place { width:86px; text-align:center; font-weight:700; font-size:.8rem; color:var(--primary); }
+.isc-place { width:126px; text-align:center; font-weight:700; font-size:.8rem; color:var(--primary); }
 .isc-cabinet { width:52px; text-align:center; font-size:.8rem; color:var(--text-muted); }
 .isc-actions { width:116px; text-align:right; white-space:nowrap; }
 .isc-row:hover td { background:var(--bg-hover); }

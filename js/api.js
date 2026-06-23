@@ -2456,8 +2456,9 @@ const API = {
     // ── Intern Logs ───────────────────────────────────────────────────────────
     internLogs: {
         async add(internId, action, details = {}) {
+            const actorId = AppState._realProfile?.id || AppState.profile?.id || null;
             const { error } = await supabase.from('intern_logs').insert({
-                actor_id:  (await supabase.auth.getUser()).data.user?.id || null,
+                actor_id:  actorId,
                 intern_id: internId,
                 action,
                 details,

@@ -1050,7 +1050,17 @@ ${this._styles()}`;
             <div class="sg-v2-loc-name">
                 <span class="sg-loc-name-ico">🏪</span>
                 <span class="sg-loc-name-text">${Fmt.esc(locName)}</span>
-                ${viewOnly ? `<span class="sg-view-only-badge"><i class="fa-solid fa-eye"></i> Перегляд</span>` : `
+                ${viewOnly ? `
+                ${loc?.node_type ? `<span class="sg-node-badge sg-node-${loc.node_type.replace(/_/g,'-')}">${{universal:'Універсал',technical:'Технічний',gold:'Золотий',universal_seller:'Універсал + продавець',technical_seller:'Технічний + продавець'}[loc.node_type]||''}</span>` : ''}
+                <span class="sg-view-only-badge"><i class="fa-solid fa-eye"></i> Перегляд</span>` : `
+                <select class="sg-node-select" onchange="ScheduleGraphPage._saveNodeType(this.value)">
+                    <option value="">Вузол</option>
+                    <option value="universal" ${loc?.node_type==='universal'?'selected':''}>Універсал</option>
+                    <option value="universal_seller" ${loc?.node_type==='universal_seller'?'selected':''}>Універсал + продавець</option>
+                    <option value="technical" ${loc?.node_type==='technical'?'selected':''}>Технік</option>
+                    <option value="technical_seller" ${loc?.node_type==='technical_seller'?'selected':''}>Технік + продавець</option>
+                    <option value="gold" ${loc?.node_type==='gold'?'selected':''}>Золотик</option>
+                </select>
                 <button class="sg-loc-name-edit" onclick="ScheduleGraphPage._renameLocation('${this._locId}',${JSON.stringify(locName||'').replace(/"/g,'&quot;')})" title="Перейменувати"><i class="fa-solid fa-pen"></i></button>`}
             </div>
             ${loc?.address ? `<div class="sg-v2-loc-address"><i class="fa-solid fa-location-dot" style="color:var(--text-muted);font-size:.75rem"></i> ${Fmt.esc(loc.address)}</div>` : ''}
@@ -1406,6 +1416,15 @@ ${this._styles()}`;
                 Toast.success('Локацію додано');
             }
         });
+    },
+
+    async _saveNodeType(nodeType) {
+        const loc = this._locations.find(l => l.id === this._locId);
+        if (!loc) return;
+        const { error } = await supabase.from('schedule_locations')
+            .update({ node_type: nodeType || null }).eq('id', this._locId);
+        if (error) { Toast.error('Помилка', error.message); return; }
+        loc.node_type = nodeType || null;
     },
 
     async _renameLocation(id, currentName) {
@@ -4194,6 +4213,11 @@ ${this._styles()}`;
         this._render(this._container);
     },
 
+    _selectQuickType(val) {
+        this._quickType = val || null;
+        this._render(this._container);
+    },
+
     _showShiftModal(userId, date, entry, profile, isEmployee) {
         document.getElementById('sg-shift-modal')?.remove();
         const dateObj = new Date(date + 'T00:00:00');
@@ -5337,6 +5361,18 @@ ${this._styles()}`;
     width:1px;background:var(--border);align-self:stretch;margin:4px 0;flex-shrink:0;
 }
 .sg-legend { display:flex;flex-wrap:wrap;gap:5px;align-items:center; }
+.sg-node-select {
+    padding:3px 8px;border-radius:12px;font-size:.75rem;font-weight:600;
+    border:1.5px solid var(--border);background:var(--bg-raised);color:var(--text-secondary);
+    cursor:pointer;transition:border-color .18s;outline:none;
+}
+.sg-node-select:hover,.sg-node-select:focus { border-color:#6366f1;color:#6366f1; }
+.sg-node-badge { padding:2px 9px;border-radius:12px;font-size:.72rem;font-weight:700; }
+.sg-node-badge.sg-node-universal         { background:rgba(16,185,129,.14);color:#059669; }
+.sg-node-badge.sg-node-universal-seller  { background:rgba(16,185,129,.14);color:#059669; }
+.sg-node-badge.sg-node-technical         { background:rgba(99,102,241,.14);color:#6366f1; }
+.sg-node-badge.sg-node-technical-seller  { background:rgba(99,102,241,.14);color:#6366f1; }
+.sg-node-badge.sg-node-gold              { background:rgba(245,158,11,.14);color:#d97706; }
 .sg-tb-section .sg-legend { display:grid;grid-template-columns:repeat(3,auto);gap:5px 8px;align-items:center; }
 .sg-leg-btn {
     display:inline-flex;align-items:center;gap:6px;

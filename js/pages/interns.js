@@ -863,9 +863,9 @@
         mb.innerHTML = `
         <div class="in-detail-tabs">
             <button class="in-detail-tab ${this._detailTab==='info'?'active':''}" onclick="InternsPage._switchDetailTabById('info','${intern.id}')"><i class="fa-solid fa-circle-info"></i> Інфо</button>
-            <button class="in-detail-tab ${this._detailTab==='schedule'?'active':''}" onclick="InternsPage._switchDetailTabById('schedule','${intern.id}')"><i class="fa-solid fa-calendar-days"></i> Розклад <span class="in-disc-count">${this._disciplines.length}</span></button>
-            <button class="in-detail-tab ${this._detailTab==='characteristic'?'active':''}" onclick="InternsPage._switchDetailTabById('characteristic','${intern.id}')"><i class="fa-solid fa-star"></i> Характеристика</button>
-            <button class="in-detail-tab ${this._detailTab==='mentors'?'active':''}" onclick="InternsPage._switchDetailTabById('mentors','${intern.id}')"><i class="fa-solid fa-users"></i> Наставники</button>
+            ${!this._isManager ? `<button class="in-detail-tab ${this._detailTab==='schedule'?'active':''}" onclick="InternsPage._switchDetailTabById('schedule','${intern.id}')"><i class="fa-solid fa-calendar-days"></i> Розклад <span class="in-disc-count">${this._disciplines.length}</span></button>` : ''}
+            ${!this._isManager ? `<button class="in-detail-tab ${this._detailTab==='characteristic'?'active':''}" onclick="InternsPage._switchDetailTabById('characteristic','${intern.id}')"><i class="fa-solid fa-star"></i> Характеристика</button>` : ''}
+            ${!this._isManager ? `<button class="in-detail-tab ${this._detailTab==='mentors'?'active':''}" onclick="InternsPage._switchDetailTabById('mentors','${intern.id}')"><i class="fa-solid fa-users"></i> Наставники</button>` : ''}
             ${(this._canManage || this._isManager) ? `<button class="in-detail-tab ${this._detailTab==='report'?'active':''}" onclick="InternsPage._switchDetailTabById('report','${intern.id}')"><i class="fa-solid fa-file-lines"></i> Звіт</button>` : ''}
             ${this._canManage ? `<button class="in-detail-tab ${this._detailTab==='tabel'?'active':''}" onclick="InternsPage._switchDetailTabById('tabel','${intern.id}')"><i class="fa-solid fa-table-list"></i> Табель</button>` : ''}
         </div>
@@ -1958,58 +1958,95 @@
 
         const tabelHtml = await this._buildTabelSectionHtml(intern);
 
+        const navItems = [
+            { id: 'overview',  icon: 'fa-id-card',       label: 'Огляд' },
+            { id: 'schedule',  icon: 'fa-calendar-days', label: 'Розклад' },
+            { id: 'mentors',   icon: 'fa-users',         label: 'Наставники' },
+            { id: 'char',      icon: 'fa-star',          label: 'Характеристика' },
+            { id: 'tabel',     icon: 'fa-table-list',    label: 'Табель' },
+        ];
+        const activePanel = 'overview';
+
         dc.innerHTML = `
         <div class="irp-wrap">
             <div class="irp-topbar">
-                <div class="irp-topbar-title"><i class="fa-solid fa-file-lines"></i> Звіт по випуску стажера</div>
+                <div class="irp-topbar-title"><i class="fa-solid fa-file-lines"></i> Звіт по стажеру</div>
                 <button class="in-btn in-btn-primary" onclick="InternsPage._printReport('${intern.id}')"><i class="fa-solid fa-print"></i> Друк / PDF</button>
             </div>
 
-            <div class="irp-header">
-                <div class="irp-header-left">
-                    <div class="irp-name">${Fmt.esc(p.full_name || '—')}</div>
-                    <div class="irp-meta-row"><i class="fa-solid fa-briefcase"></i> ${Fmt.esc(p.job_position || '—')}</div>
-                    <div class="irp-meta-row"><i class="fa-solid fa-location-dot"></i> ${Fmt.esc(p.city || '—')}</div>
-                    <div class="irp-meta-row"><i class="fa-solid fa-user-tie"></i> Керівник: ${Fmt.esc(managerName)}</div>
+            <div class="irp-layout">
+                <nav class="irp-sidenav">
+                    ${navItems.map(n => `
+                    <button class="irp-nav-item${n.id === activePanel ? ' irp-nav-active' : ''}"
+                            onclick="InternsPage._irpSwitch('${n.id}')"
+                            data-irp="${n.id}">
+                        <i class="fa-solid ${n.icon}"></i>
+                        <span>${n.label}</span>
+                    </button>`).join('')}
+                </nav>
+
+                <div class="irp-panels">
+
+                    <div class="irp-panel" data-irp-panel="overview">
+                        <div class="irp-panel-title"><i class="fa-solid fa-id-card"></i> Огляд</div>
+                        <div class="irp-overview-grid">
+                            <div class="irp-ov-left">
+                                <div class="irp-name">${Fmt.esc(p.full_name || '—')}</div>
+                                <div class="irp-meta-row"><i class="fa-solid fa-briefcase"></i> ${Fmt.esc(p.job_position || '—')}</div>
+                                <div class="irp-meta-row"><i class="fa-solid fa-location-dot"></i> ${Fmt.esc(p.city || '—')}</div>
+                                <div class="irp-meta-row"><i class="fa-solid fa-user-tie"></i> Керівник: ${Fmt.esc(managerName)}</div>
+                            </div>
+                            <div class="irp-ov-right">
+                                <div class="irp-status-badge" style="background:${statusColor}20;color:${statusColor};border:1.5px solid ${statusColor}40">${Fmt.esc(statusLabel)}</div>
+                                <div class="irp-kpi-row"><span>Виконано дисциплін</span><strong>${done} / ${discs.length}</strong></div>
+                                <div class="irp-kpi-row"><span>Прогрес</span><strong>${pct}%</strong></div>
+                                <div class="irp-kpi-row"><span>Термін навчання</span><strong>${Fmt.esc(periodStr)}</strong></div>
+                                ${intern.actual_end_date ? `<div class="irp-kpi-row"><span>Фактичний випуск</span><strong style="color:${statusColor}">${Fmt.esc(actualEnd)}</strong></div>` : ''}
+                                ${intern.status === 'completed' ? `<div class="irp-kpi-row"><span>Працює з</span><strong>${Fmt.esc(emplSince)}${months ? ` · ${months}` : ''}</strong></div>` : ''}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="irp-panel irp-panel-hidden" data-irp-panel="schedule">
+                        <div class="irp-panel-title"><i class="fa-solid fa-calendar-days"></i> Розклад навчання</div>
+                        ${discs.length ? `
+                        <div class="irp-progress-bar"><div class="irp-progress-fill" style="width:${pct}%"></div></div>
+                        <table class="irp-table">
+                            <thead><tr><th>#</th><th>Дисципліна</th><th>Дата</th><th>Наставник</th><th>✓</th></tr></thead>
+                            <tbody>${discRows}</tbody>
+                        </table>` : `<div class="irp-empty">Дисциплін немає</div>`}
+                    </div>
+
+                    <div class="irp-panel irp-panel-hidden" data-irp-panel="mentors">
+                        <div class="irp-panel-title"><i class="fa-solid fa-users"></i> Наставники</div>
+                        <div class="irp-mentors">${mentorRows}</div>
+                    </div>
+
+                    <div class="irp-panel irp-panel-hidden" data-irp-panel="char">
+                        <div class="irp-panel-title"><i class="fa-solid fa-star"></i> Характеристика</div>
+                        ${hasChr
+                            ? this._renderCharReadOnly(chr, intern)
+                            : `<div class="irp-empty">Характеристику ще не заповнено</div>`}
+                        ${AppState.isAdmin() ? `<button class="in-btn in-btn-access" style="margin-top:.75rem" onclick="InternsPage._switchDetailTabById('characteristic','${intern.id}')"><i class="fa-solid fa-pen"></i> Заповнити характеристику</button>` : ''}
+                    </div>
+
+                    <div class="irp-panel irp-panel-hidden" data-irp-panel="tabel">
+                        <div class="irp-panel-title"><i class="fa-solid fa-table-list"></i> Табель</div>
+                        ${tabelHtml}
+                    </div>
+
                 </div>
-                <div class="irp-header-right">
-                    <div class="irp-status-badge" style="background:${statusColor}20;color:${statusColor};border:1.5px solid ${statusColor}40">${Fmt.esc(statusLabel)}</div>
-                    <div class="irp-kpi-row"><span>Виконано дисциплін</span><strong>${done} / ${discs.length}</strong></div>
-                    <div class="irp-kpi-row"><span>Прогрес</span><strong>${pct}%</strong></div>
-                    <div class="irp-kpi-row"><span>Термін навчання</span><strong>${Fmt.esc(periodStr)}</strong></div>
-                    ${intern.actual_end_date ? `<div class="irp-kpi-row"><span>Фактичний випуск</span><strong style="color:${statusColor}">${Fmt.esc(actualEnd)}</strong></div>` : ''}
-                    ${intern.status === 'completed' ? `<div class="irp-kpi-row"><span>Працює з</span><strong>${Fmt.esc(emplSince)}${months ? ` · ${months}` : ''}</strong></div>` : ''}
-                </div>
-            </div>
-
-            <div class="irp-section">
-                <div class="irp-section-title"><i class="fa-solid fa-calendar-days"></i> Розклад навчання</div>
-                ${discs.length ? `
-                <div class="irp-progress-bar"><div class="irp-progress-fill" style="width:${pct}%"></div></div>
-                <table class="irp-table">
-                    <thead><tr><th>#</th><th>Дисципліна</th><th>Дата</th><th>Наставник</th><th>✓</th></tr></thead>
-                    <tbody>${discRows}</tbody>
-                </table>` : `<div class="irp-empty">Дисциплін немає</div>`}
-            </div>
-
-            <div class="irp-section">
-                <div class="irp-section-title"><i class="fa-solid fa-users"></i> Наставники</div>
-                <div class="irp-mentors">${mentorRows}</div>
-            </div>
-
-            <div class="irp-section">
-                <div class="irp-section-title"><i class="fa-solid fa-star"></i> Характеристика</div>
-                ${hasChr
-                    ? this._renderCharReadOnly(chr, intern)
-                    : `<div class="irp-empty">Характеристику ще не заповнено</div>`}
-                ${AppState.isAdmin() ? `<button class="in-btn in-btn-access" style="margin-top:.75rem" onclick="InternsPage._switchDetailTabById('characteristic','${intern.id}')"><i class="fa-solid fa-pen"></i> Заповнити характеристику</button>` : ''}
-            </div>
-
-            <div class="irp-section">
-                <div class="irp-section-title"><i class="fa-solid fa-table-list"></i> Табель</div>
-                ${tabelHtml}
             </div>
         </div>`;
+    },
+
+    _irpSwitch(panelId) {
+        document.querySelectorAll('.irp-nav-item').forEach(b => {
+            b.classList.toggle('irp-nav-active', b.dataset.irp === panelId);
+        });
+        document.querySelectorAll('[data-irp-panel]').forEach(p => {
+            p.classList.toggle('irp-panel-hidden', p.dataset.irpPanel !== panelId);
+        });
     },
 
     _printReport(internId) {
@@ -4823,6 +4860,20 @@ mark.in-hl { background:color-mix(in srgb,#f59e0b 35%,transparent); color:inheri
 .irp-mentor-name { font-weight:600; font-size:.9rem; display:flex; align-items:center; gap:.4rem; color:var(--text-primary); }
 .irp-mentor-feedback { font-size:.83rem; color:var(--text-muted); margin-top:.3rem; line-height:1.5; }
 .irp-chr-text { font-size:.9rem; color:var(--text-primary); line-height:1.6; background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--radius-md); padding:.75rem 1rem; white-space:pre-wrap; }
+/* ── Report side-nav layout ── */
+.irp-layout { display:flex; gap:0; min-height:340px; background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; }
+.irp-sidenav { width:148px; flex-shrink:0; display:flex; flex-direction:column; border-right:1px solid var(--border); background:var(--bg-raised); padding:.5rem 0; gap:2px; }
+.irp-nav-item { display:flex; align-items:center; gap:.55rem; padding:.6rem .85rem; font-size:.83rem; font-weight:500; color:var(--text-muted); background:none; border:none; cursor:pointer; text-align:left; border-radius:0; transition:background .15s,color .15s; }
+.irp-nav-item i { width:15px; text-align:center; }
+.irp-nav-item:hover { background:var(--bg-surface); color:var(--text-primary); }
+.irp-nav-active { color:var(--primary) !important; background:var(--primary-soft,rgba(99,102,241,.1)) !important; font-weight:700 !important; }
+.irp-panels { flex:1; overflow:hidden; padding:1.1rem 1.25rem; }
+.irp-panel { display:flex; flex-direction:column; gap:1rem; }
+.irp-panel-hidden { display:none; }
+.irp-panel-title { font-size:.85rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin-bottom:.25rem; display:flex; align-items:center; gap:.4rem; border-bottom:1px solid var(--border); padding-bottom:.4rem; }
+.irp-overview-grid { display:flex; gap:1.5rem; }
+.irp-ov-left { flex:1; display:flex; flex-direction:column; gap:.35rem; }
+.irp-ov-right { min-width:200px; display:flex; flex-direction:column; gap:.35rem; }
 .in-info-grid { display:grid; grid-template-columns:1fr 1fr; gap:.6rem; }
 .in-info-full { grid-column:1/-1; }
 .in-info-row { display:flex; flex-direction:column; gap:.2rem; }

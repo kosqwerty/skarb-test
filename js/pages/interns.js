@@ -2754,7 +2754,7 @@ ${discs.length ? `<table>
         const tpl = templateId ? this._scheduleTemplates.find(t => t.id === templateId) : null;
         const positions = [...new Set(this._jobSettings.map(s => s.job_position).filter(Boolean))].sort();
         const posOpts = positions.map(p => `<option value="${Fmt.esc(p)}" ${tpl?.job_position===p?'selected':''}>${Fmt.esc(p)}</option>`).join('');
-        const rows = tpl?.rows || [];
+        const rows = (tpl?.rows || []).map((r, i) => ({ ...r, day_offset: i + 1 }));
 
         const savedDow = String(tpl?.preview_dow ?? '1');
         const rowsHtml = rows.map((r, i) => this._tplRowHtml(i, r, parseInt(savedDow))).join('');

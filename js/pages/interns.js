@@ -2803,10 +2803,11 @@ ${discs.length ? `<table>
                                 <th class="ist-col-name">Назва / тема</th>
                                 <th class="ist-col-hours" style="width:160px">Години</th>
                                 <th class="ist-col-place" style="width:90px">Місце</th>
+                                <th class="ist-col-cabinet" style="width:70px">Кабінет</th>
                                 <th style="width:50px;overflow:hidden"></th>
                             </tr></thead>
                             <tbody id="ist-rows-wrap">
-                                ${rowsHtml || '<tr><td colspan="7" id="ist-empty" style="text-align:center;color:var(--text-muted);padding:.75rem;font-size:.85rem">Немає рядків — натисніть «Рядок»</td></tr>'}
+                                ${rowsHtml || '<tr><td colspan="8" id="ist-empty" style="text-align:center;color:var(--text-muted);padding:.75rem;font-size:.85rem">Немає рядків — натисніть «Рядок»</td></tr>'}
                             </tbody>
                         </table>
                     </div>
@@ -2888,6 +2889,7 @@ ${discs.length ? `<table>
                 <input class="inf-input ist-r-time-to" type="time" value="${timeTo}" title="Кінець">
             </div></td>
             <td><input class="inf-input ist-r-place" placeholder="УЦ/ЛФ…" value="${Fmt.esc(r.place||'')}" style="width:100%"></td>
+            <td><input class="inf-input ist-r-cabinet" placeholder="каб…" value="${Fmt.esc(r.cabinet||'')}" style="width:100%"></td>
             <td style="text-align:center"><button class="btn btn-ghost btn-sm ist-tpl-del-btn" style="color:var(--danger)" onclick="this.closest('tr').remove()"><i class="fa-solid fa-trash"></i></button></td>
         </tr>`;
     },
@@ -2993,7 +2995,8 @@ ${discs.length ? `<table>
             row_type:        el.querySelector('.ist-r-type')?.value  || 'normal',
             discipline_name: el.querySelector('.ist-r-name')?.value.trim()  || '',
             hours:           (() => { const f = el.querySelector('.ist-r-time-from')?.value; const t = el.querySelector('.ist-r-time-to')?.value; return f && t ? `${f}-${t}` : (f || t || null); })(),
-            place:           el.querySelector('.ist-r-place')?.value.trim() || null
+            place:           el.querySelector('.ist-r-place')?.value.trim() || null,
+            cabinet:         el.querySelector('.ist-r-cabinet')?.value.trim() || null
         })).filter(r => r.row_type === 'holiday' || r.discipline_name);
         Loader.show();
         try {

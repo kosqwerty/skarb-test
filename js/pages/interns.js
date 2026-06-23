@@ -2673,7 +2673,7 @@ ${discs.length ? `<table>
             const pad = n => String(n).padStart(2, '0');
             const sortedRows = [...tpl.rows].sort((a, b) => (a.day_offset ?? 0) - (b.day_offset ?? 0));
             const toInsert = sortedRows.map((r, i) => {
-                const dt = new Date(Date.UTC(sy, sm - 1, sd + (r.day_offset ?? i + 1) - 1));
+                const dt = new Date(Date.UTC(sy, sm - 1, sd + i));
                 const date = `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth()+1)}-${pad(dt.getUTCDate())}`;
                 return {
                     intern_id:       internId,

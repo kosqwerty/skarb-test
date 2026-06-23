@@ -1423,7 +1423,7 @@
                     </div>` : `<div id="ichr-summary-placeholder"></div>`}
                 </div>
             </div>
-            ` : (chr.summary ? `
+            ` : (Object.keys(chr.criteria || {}).some(k => chr.criteria[k] > 0) || chr.summary ? `
             ${this._renderCharReadOnly(chr, intern)}` : `<div class="in-stub-wrap" style="padding:2rem"><div class="in-stub-icon"><i class="fa-solid fa-star"></i></div><div class="in-stub-title">Характеристику ще не заповнено</div></div>`)}
         </div>`;
     },

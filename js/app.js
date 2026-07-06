@@ -53,9 +53,21 @@ const App = {
         // Check if user is on a trusted network (IP whitelist)
         await AppState.checkTrustedNetwork();
 
-        // Init AI assistant (hidden by default — shown only on dashboard + trusted network)
-        Assistant.init();
-        Assistant.setVisible(false);
+        // Init AI assistant (owner only, shown on dashboard + trusted network)
+        if (AppState.isOwner()) {
+            Assistant.init();
+            Assistant.setVisible(false);
+        }
+
+        // Init global feedback FAB (all authenticated users)
+        if (typeof FeedbackFab !== 'undefined') FeedbackFab.init();
+
+        // Admin feedback bell in top bar
+        if (AppState.isAdmin()) {
+            const bell = document.getElementById('feedback-admin-bell');
+            if (bell) bell.style.display = '';
+            App._pollFeedbackBell();
+        }
         // Rebuild nav + mob-nav after network check so blocked icons appear
         UI.renderNavigation(profile.role);
         UI.applyMobNavRestrictions();
@@ -219,7 +231,6 @@ const App = {
             },
 
             'bookmarks': async ({ container }) => {
-                if (!requireNotIntern()) return;
                 if (!requireTrusted()) return;
                 await BookmarksPage.init(container);
             },
@@ -486,6 +497,21 @@ function fieldStyled(label, value) {
         await ProfilePage.openAsSelf(container, () => App.renderProfile(container));
     },
 
+    async _pollFeedbackBell() {
+        try {
+            const count = await API.feedback.getUnreadCount();
+            const badge = document.getElementById('feedback-admin-badge');
+            const bell  = document.getElementById('feedback-admin-bell');
+            if (!bell) return;
+            if (badge) {
+                badge.textContent = count;
+                badge.classList.toggle('hidden', count === 0);
+            }
+        } catch(_) {}
+        if (document.getElementById('feedback-admin-bell')) {
+            setTimeout(() => App._pollFeedbackBell(), 60000);
+        }
+    },
 
 };
 
@@ -543,7 +569,7 @@ const ActivityTracker = {
         this._lastKeyTime = now;
 
         // Show AI assistant button only on dashboard and only for trusted network
-        if (typeof Assistant !== 'undefined') {
+        if (typeof Assistant !== 'undefined' && AppState.isOwner()) {
             Assistant.setVisible(base === 'dashboard' && AppState.isTrustedNetwork);
         }
 

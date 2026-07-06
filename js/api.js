@@ -2159,7 +2159,203 @@ const API = {
         }
     },
 
-    // ── User Sessions ──────────────────────────────────────────────────
+    // ── Login Sessions (history) ───────────────────────────────────────
+    loginSessions: {
+        async start() {
+            const uid = AppState.user?.id;
+            if (!uid) return null;
+            const sessionId = crypto.randomUUID();
+            const { error } = await supabase.from('user_login_sessions')
+                .insert({ id: sessionId, user_id: uid, ua: navigator.userAgent });
+            if (error) { console.error('[loginSessions] start:', error); return null; }
+            return sessionId;
+        },
+
+        async end(sessionId) {
+            if (!sessionId) return;
+            await supabase.from('user_login_sessions')
+                .update({ ended_at: new Date().toISOString() })
+                .eq('id', sessionId)
+                .catch(e => console.error('[loginSessions] end:', e));
+        },
+
+        async getAll({ userId, dateFrom, dateTo, limit = 50, offset = 0 } = {}) {
+            let q = supabase
+                .from('user_login_sessions')
+                .select('id,user_id,started_at,ended_at,ua', { count: 'exact' })
+                .order('started_at', { ascending: false })
+                .range(offset, offset + limit - 1);
+            if (userId)   q = q.eq('user_id', userId);
+            if (dateFrom) q = q.gte('started_at', dateFrom + 'T00:00:00');
+            if (dateTo)   q = q.lte('started_at', dateTo   + 'T23:59:59');
+            const { data, error, count } = await q;
+            if (error) throw error;
+            return { data: data || [], count: count || 0 };
+        },
+    },
+
+    // ── User Navigation Log ────────────────────────────────────────────
+    userNavLog: {
+        log(fromRoute, toRoute, sessionId) {
+            const uid = AppState.user?.id;
+            if (!uid || !toRoute) return;
+            supabase.from('user_nav_log').insert({
+                user_id:    uid,
+                from_route: fromRoute || null,
+                to_route:   toRoute,
+                session_id: sessionId || null,
+            }).then(() => {});
+        },
+
+        async getTransitions({ userId, dateFrom, dateTo, limit = 3000 } = {}) {
+            let q = supabase
+                .from('user_nav_log')
+                .select('from_route,to_route,ts,user_id')
+                .order('ts', { ascending: false })
+                .limit(limit);
+            if (userId)   q = q.eq('user_id', userId);
+            if (dateFrom) q = q.gte('ts', dateFrom + 'T00:00:00');
+            if (dateTo)   q = q.lte('ts', dateTo   + 'T23:59:59');
+            const { data, error } = await q;
+            if (error) throw error;
+            return data || [];
+        },
+    },
+
+    // ── Test Attempt Report ────────────────────────────────────────────
+    testAttemptReport: {
+        async get({ dateFrom, dateTo } = {}) {
+            let q = supabase
+                .from('test_attempts')
+                .select(`id,test_id,user_id,score,percentage,passed,completed_at,attempt_number,
+                    tests:test_id(title,passing_score)`)
+                .order('completed_at', { ascending: false })
+                .limit(5000);
+            if (dateFrom) q = q.gte('completed_at', dateFrom + 'T00:00:00');
+            if (dateTo)   q = q.lte('completed_at', dateTo   + 'T23:59:59');
+            const { data, error } = await q;
+            if (error) throw error;
+            return data || [];
+        },
+    },
+
+    // ── Feedback ───────────────────────────────────────────────────────
+    feedback: {
+        async submit({ type, priority, title, message, screenshotUrls = [], context = {} }) {
+            const uid = AppState.user?.id;
+            if (!uid) throw new Error('Not authenticated');
+            const { data, error } = await supabase.from('feedback_reports')
+                .insert({
+                    user_id: uid, type, priority, title: title || null,
+                    message, screenshot_urls: screenshotUrls, context,
+                })
+                .select('id').single();
+            if (error) throw error;
+            // Notify all owners
+            return data?.id;
+        },
+
+        async uploadScreenshot(file) {
+            const uid = AppState.user?.id;
+            if (!uid) throw new Error('Not authenticated');
+            const ext  = file.name.split('.').pop().replace(/[^a-z0-9]/gi, '').toLowerCase() || 'png';
+            const path = `${uid}/${Date.now()}.${ext}`;
+            const { error } = await supabase.storage
+                .from('feedback-screenshots').upload(path, file, { upsert: false });
+            if (error) throw error;
+            const { data } = await supabase.storage
+                .from('feedback-screenshots').createSignedUrl(path, 3600 * 24 * 7);
+            return { path, url: data?.signedUrl || '' };
+        },
+
+        async getMessages(feedbackId) {
+            const { data, error } = await supabase
+                .from('feedback_messages')
+                .select('id,sender_id,sender_role,body,created_at')
+                .eq('feedback_id', feedbackId)
+                .order('created_at', { ascending: true });
+            if (error) throw error;
+            return data || [];
+        },
+
+        async getUnreadCount() {
+            const { count, error } = await supabase
+                .from('feedback_reports')
+                .select('id', { count: 'exact', head: true })
+                .eq('status', 'new');
+            if (error) return 0;
+            return count || 0;
+        },
+
+        async sendMessage(feedbackId, body) {
+            const uid = AppState.user?.id;
+            if (!uid) throw new Error('Not authenticated');
+            const { error } = await supabase.from('feedback_messages').insert({
+                feedback_id: feedbackId, sender_id: uid, sender_role: 'user', body,
+            });
+            if (error) throw error;
+            await supabase.from('feedback_reports').update({ status: 'new' }).eq('id', feedbackId);
+        },
+
+        async getMine() {
+            const uid = AppState.user?.id;
+            if (!uid) return [];
+            const { data, error } = await supabase
+                .from('feedback_reports')
+                .select('id,type,priority,title,message,screenshot_urls,context,status,reply,replied_at,created_at')
+                .eq('user_id', uid)
+                .eq('is_deleted', false)
+                .order('created_at', { ascending: false });
+            if (error) throw error;
+            return data || [];
+        },
+
+        async remove(id) {
+            const { error } = await supabase.from('feedback_reports').update({ is_deleted: true }).eq('id', id);
+            if (error) throw error;
+        },
+
+        async getAll({ status, limit = 30, offset = 0 } = {}) {
+            let q = supabase
+                .from('feedback_reports')
+                .select('id,user_id,type,priority,title,message,screenshot_urls,context,status,reply,replied_at,created_at,is_deleted', { count: 'exact' })
+                .order('created_at', { ascending: false })
+                .range(offset, offset + limit - 1);
+            if (status) q = q.eq('status', status);
+            const { data, error, count } = await q;
+            if (error) throw error;
+            return data || [];
+        },
+
+        async setStatus(id, status) {
+            const { error } = await supabase.from('feedback_reports')
+                .update({ status }).eq('id', id);
+            if (error) throw error;
+        },
+
+        async reply(id, reply) {
+            const { data: report, error: fetchErr } = await supabase
+                .from('feedback_reports').select('user_id,type,title,message').eq('id', id).single();
+            if (fetchErr) throw fetchErr;
+
+            const { error } = await supabase.from('feedback_reports')
+                .update({ reply, replied_by: AppState.user?.id, replied_at: new Date().toISOString(), status: 'in_progress' })
+                .eq('id', id);
+            if (error) throw error;
+
+            // Insert into thread so user sees it in chat
+            const { error: fmErr } = await supabase.from('feedback_messages').insert({
+                feedback_id: id,
+                sender_id:   AppState.user?.id,
+                sender_role: 'admin',
+                body:        reply,
+            });
+            if (fmErr) throw fmErr;
+
+        },
+    },
+
+    // ── Trusted IPs ────────────────────────────────────────────────────
     trustedIps: {
         async requestAccess(ip) {
             // Отримуємо всіх адмінів та овнерів
@@ -2272,13 +2468,22 @@ const API = {
         }
     },
 
+    // ── Positions reference ───────────────────────────────────────────────────
+    positions: {
+        async getAll() {
+            const { data, error } = await supabase.from('positions').select('id, name').order('name');
+            if (error) throw error;
+            return data || [];
+        }
+    },
+
     // ── Interns ───────────────────────────────────────────────────────────────
     interns: {
         async getAll({ search, status, city, managerId, page = 0, pageSize = 50 } = {}) {
             let q = supabase.from('interns').select(
-                `id, profile_id, manager_id, start_date, planned_end_date, actual_end_date,
+                `id, profile_id, manager_id, position_id, start_date, planned_end_date, actual_end_date,
                  status, status_changed_at, employment_info, characteristic, mentors_info, notes, created_at, profile_snapshot,
-                 profile:profiles!interns_profile_id_fkey(id, full_name, email, phone, job_position, city, avatar_url, gender, manager_id),
+                 profile:profiles!interns_profile_id_fkey(id, full_name, email, phone, job_position, position_id, city, avatar_url, gender, manager_id),
                  manager:profiles!interns_manager_id_fkey(id, full_name)`,
                 { count: 'exact' }
             );
@@ -2295,10 +2500,10 @@ const API = {
 
         async getById(id) {
             const { data, error } = await supabase.from('interns').select(
-                `id, profile_id, manager_id, start_date, planned_end_date, actual_end_date,
+                `id, profile_id, manager_id, position_id, start_date, planned_end_date, actual_end_date,
                  status, status_changed_at, employment_info, characteristic, mentors_info, notes, created_at, updated_at, profile_snapshot,
                  praktyka_score, praktyka_dm_score, praktyka_comment, praktyka_dm_comment,
-                 profile:profiles!interns_profile_id_fkey(id, full_name, email, phone, job_position, city, avatar_url, gender, manager_id),
+                 profile:profiles!interns_profile_id_fkey(id, full_name, email, phone, job_position, position_id, city, avatar_url, gender, manager_id),
                  manager:profiles!interns_manager_id_fkey(id, full_name),
                  intern_disciplines(id, intern_id, discipline_name, date, hours, place, cabinet, address, row_type, mentor_id, is_completed, notes, order_index, created_at,
                      mentor:profiles!intern_disciplines_mentor_id_fkey(id, full_name))`
@@ -2614,10 +2819,12 @@ const API = {
             return data || [];
         },
 
-        async upsert(job_position, training_days) {
+        async upsert(job_position, training_days, position_id = null) {
+            const payload = { job_position, training_days };
+            if (position_id) payload.position_id = position_id;
             const { error } = await supabase
                 .from('intern_job_settings')
-                .upsert({ job_position, training_days }, { onConflict: 'job_position' });
+                .upsert(payload, { onConflict: 'job_position' });
             if (error) throw error;
         },
 

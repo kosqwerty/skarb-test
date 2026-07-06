@@ -197,6 +197,8 @@ const Auth = {
     listen() {
         supabase.auth.onAuthStateChange((event, session) => {
             if (event === 'SIGNED_OUT') {
+                try { API.loginSessions.end(AppState._sessionId); } catch(_) {}
+                AppState._sessionId = null;
                 this._signingOut = false;
                 AppState._realRole = null;
                 RolePreviewBanner.hide();
@@ -251,6 +253,12 @@ const Auth = {
         await Heartbeat.start();
         App.start();
         setTimeout(() => { try { API.activityLog.log('login'); } catch(_) {} }, 1000);
+        setTimeout(async () => {
+            try {
+                const sid = await API.loginSessions.start();
+                if (sid) AppState._sessionId = sid;
+            } catch(_) {}
+        }, 1200);
     }
 };
 

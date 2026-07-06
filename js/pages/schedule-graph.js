@@ -947,7 +947,7 @@ ${this._styles()}`;
             <button class="sg-loc-item ${isActive ? 'active' : ''}${hasHelp ? ' has-help' : ''}"
                 onclick="ScheduleGraphPage._selectLocation('${l.id}')">
                 <span class="sg-loc-item-ico">${viewOnly ? '<i class="fa-solid fa-eye"></i>' : '🏪'}</span>
-                <span class="sg-loc-item-name" title="${l.name}">${l.name.slice(0,3)}</span>
+                <span class="sg-loc-item-name" title="${Fmt.esc(l.name)}">${Fmt.esc(l.name).slice(0,3)}</span>
                 <span class="sg-loc-item-meta">
                     ${hasHelp ? `<span class="sg-loc-item-helpdot"></span>` : ''}
                     ${viewOnly ? `<span class="sg-loc-item-ro" title="Тільки перегляд"><i class="fa-solid fa-eye"></i></span>` : ''}
@@ -1050,18 +1050,10 @@ ${this._styles()}`;
             <div class="sg-v2-loc-name">
                 <span class="sg-loc-name-ico">🏪</span>
                 <span class="sg-loc-name-text">${Fmt.esc(locName)}</span>
+                ${loc?.node_type ? `<span class="sg-node-badge sg-node-${loc.node_type.replace(/_/g,'-')}">${{universal:'Універсальний',technical:'Технічний',gold:'Золотий',universal_seller:'Універсальний + магазин',technical_seller:'Технічний + магазин'}[loc.node_type]||''}</span>` : ''}
                 ${viewOnly ? `
-                ${loc?.node_type ? `<span class="sg-node-badge sg-node-${loc.node_type.replace(/_/g,'-')}">${{universal:'Універсал',technical:'Технічний',gold:'Золотий',universal_seller:'Універсал + продавець',technical_seller:'Технічний + продавець'}[loc.node_type]||''}</span>` : ''}
                 <span class="sg-view-only-badge"><i class="fa-solid fa-eye"></i> Перегляд</span>` : `
-                <select class="sg-node-select" onchange="ScheduleGraphPage._saveNodeType(this.value)">
-                    <option value="">Вузол</option>
-                    <option value="universal" ${loc?.node_type==='universal'?'selected':''}>Універсал</option>
-                    <option value="universal_seller" ${loc?.node_type==='universal_seller'?'selected':''}>Універсал + продавець</option>
-                    <option value="technical" ${loc?.node_type==='technical'?'selected':''}>Технік</option>
-                    <option value="technical_seller" ${loc?.node_type==='technical_seller'?'selected':''}>Технік + продавець</option>
-                    <option value="gold" ${loc?.node_type==='gold'?'selected':''}>Золотик</option>
-                </select>
-                <button class="sg-loc-name-edit" onclick="ScheduleGraphPage._renameLocation('${this._locId}',${JSON.stringify(locName||'').replace(/"/g,'&quot;')})" title="Перейменувати"><i class="fa-solid fa-pen"></i></button>`}
+                <button class="sg-loc-name-edit" onclick="ScheduleGraphPage._renameLocation('${this._locId}',${JSON.stringify(locName||'').replace(/"/g,'&quot;')})" title="Редагувати локацію"><i class="fa-solid fa-pen"></i></button>`}
             </div>
             ${loc?.address ? `<div class="sg-v2-loc-address"><i class="fa-solid fa-location-dot" style="color:var(--text-muted);font-size:.75rem"></i> ${Fmt.esc(loc.address)}</div>` : ''}
             ${loc?.phone ? `<div class="sg-v2-loc-address"><i class="fa-solid fa-phone" style="color:var(--text-muted);font-size:.75rem"></i> ${Fmt.esc(loc.phone)}</div>` : ''}
@@ -1069,17 +1061,8 @@ ${this._styles()}`;
             <div class="sg-v2-loc-row">
                 <i class="fa-regular fa-clock" style="color:var(--text-muted)"></i>
                 <span>Робочий час</span>
-                <span class="sg-v2-loc-val" id="sg-wh-display">${wStart} — ${wEnd}</span>
-                ${viewOnly ? '' : `<button class="sg-wh-edit" onclick="ScheduleGraphPage._editWorkHours()" title="Редагувати"><i class="fa-solid fa-pen"></i></button>`}
+                <span class="sg-v2-loc-val">${wStart} — ${wEnd}</span>
             </div>
-            ${viewOnly ? '' : `
-            <div class="sg-wh-inputs" id="sg-wh-inputs" style="display:none;gap:6px;align-items:center;flex-wrap:wrap;padding:.5rem 0">
-                <input type="time" id="sg-wh-start" class="sg-tinput" style="width:110px">
-                <span style="color:var(--text-muted)">—</span>
-                <input type="time" id="sg-wh-end" class="sg-tinput" style="width:110px">
-                <button class="sg-wh-save" onclick="ScheduleGraphPage._saveWorkHours()"><i class="fa-regular fa-floppy-disk"></i> Зберегти</button>
-                <button class="sg-wh-cancel" onclick="ScheduleGraphPage._cancelWorkHours()">✕</button>
-            </div>`}
             <div class="sg-v2-loc-row">
                 <i class="fa-solid fa-users" style="color:var(--text-muted)"></i>
                 <span>Співробітників</span>
@@ -1349,35 +1332,73 @@ ${this._styles()}`;
         input.value = r;
     },
 
-    _showLocModal({ title, placeholder, value = '', address = '', phone = '', onSave }) {
+    _showLocModal({ title, placeholder, value = '', address = '', phone = '', nodeType = '', workStart = '', workEnd = '', onSave }) {
         document.getElementById('sg-loc-modal')?.remove();
+        const NODE_LABELS = { universal:'Універсальний', universal_seller:'Універсальний + магазин', technical:'Технічний', technical_seller:'Технічний + магазин', gold:'Золотник' };
+        const nodeOptions = [['','— Вузол не вказано —'], ...Object.entries(NODE_LABELS)]
+            .map(([v, l]) => `<option value="${v}"${v === nodeType ? ' selected' : ''}>${l}</option>`).join('');
         const el = document.createElement('div');
         el.id = 'sg-loc-modal';
         el.className = 'sg-overlay';
         el.innerHTML = `
 <div class="sg-modal sg-loc-modal-box">
-    <div class="sg-mhdr">
-        <div class="sg-loc-modal-icon">🏪</div>
-        <div style="flex:1">
-            <h3 class="sg-loc-modal-title">${title}</h3>
+    <div class="sg-loc-modal-hero">
+        <div class="sg-loc-modal-hero-icon">🏪</div>
+        <div class="sg-loc-modal-hero-text">
+            <div class="sg-loc-modal-hero-title">${title}</div>
+            <div class="sg-loc-modal-hero-sub">Налаштування філії</div>
         </div>
-        <button class="sg-mclose" onclick="document.getElementById('sg-loc-modal').remove()">✕</button>
+        <button class="sg-loc-modal-close" onclick="document.getElementById('sg-loc-modal').remove()">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
     </div>
     <div class="sg-loc-modal-body">
-        <label class="sg-loc-label">Назва філії</label>
-        <input id="sg-loc-input" class="sg-loc-input" placeholder="${placeholder}"
-            value="${value.replace(/"/g,'&quot;')}" autocomplete="off" spellcheck="false">
-        <label class="sg-loc-label" style="margin-top:10px">Адреса</label>
-        <input id="sg-loc-address" class="sg-loc-input" placeholder="вул. Хрещатик, 1"
-            value="${address.replace(/"/g,'&quot;')}" autocomplete="off" spellcheck="false">
-        <label class="sg-loc-label" style="margin-top:10px">Телефон</label>
-        <input id="sg-loc-phone" class="sg-loc-input" placeholder="+38 (050) 000-00-00"
-            value="${phone.replace(/"/g,'&quot;')}" autocomplete="off" spellcheck="false" maxlength="19"
-            oninput="ScheduleGraphPage._fmtPhone(this)">
+        <div class="sg-loc-field">
+            <label class="sg-loc-label"><i class="fa-solid fa-store sg-loc-lbl-ico"></i>Назва філії</label>
+            <input id="sg-loc-input" class="sg-loc-input" placeholder="${placeholder}"
+                value="${value.replace(/"/g,'&quot;')}" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="sg-loc-field">
+            <label class="sg-loc-label"><i class="fa-solid fa-sitemap sg-loc-lbl-ico"></i>Тип вузла</label>
+            <select id="sg-loc-node-type" class="sg-loc-input sg-loc-select">${nodeOptions}</select>
+        </div>
+        <div class="sg-loc-row2">
+            <div class="sg-loc-field">
+                <label class="sg-loc-label"><i class="fa-solid fa-location-dot sg-loc-lbl-ico"></i>Адреса</label>
+                <input id="sg-loc-address" class="sg-loc-input" placeholder="вул. Хрещатик, 1"
+                    value="${address.replace(/"/g,'&quot;')}" autocomplete="off" spellcheck="false">
+            </div>
+            <div class="sg-loc-field">
+                <label class="sg-loc-label"><i class="fa-solid fa-phone sg-loc-lbl-ico"></i>Телефон</label>
+                <input id="sg-loc-phone" class="sg-loc-input" placeholder="+38 (050) 000-00-00"
+                    value="${phone.replace(/"/g,'&quot;')}" autocomplete="off" spellcheck="false" maxlength="19"
+                    oninput="ScheduleGraphPage._fmtPhone(this)">
+            </div>
+        </div>
+        <div class="sg-loc-field">
+            <label class="sg-loc-label"><i class="fa-regular fa-clock sg-loc-lbl-ico"></i>Час роботи</label>
+            <div class="sg-loc-time-row">
+                <div class="sg-loc-time-box">
+                    <span class="sg-loc-time-lbl">Відкриття</span>
+                    <input type="time" id="sg-loc-wh-start" class="sg-loc-input sg-loc-time-input"
+                        value="${workStart.slice(0,5) || '09:00'}">
+                </div>
+                <div class="sg-loc-time-arrow"><i class="fa-solid fa-arrow-right"></i></div>
+                <div class="sg-loc-time-box">
+                    <span class="sg-loc-time-lbl">Закриття</span>
+                    <input type="time" id="sg-loc-wh-end" class="sg-loc-input sg-loc-time-input"
+                        value="${workEnd.slice(0,5) || '18:00'}">
+                </div>
+            </div>
+        </div>
     </div>
-    <div class="sg-modal-actions">
-        <button class="sg-btn-save" id="sg-loc-save-btn"><i class="fa-regular fa-floppy-disk"></i> Зберегти</button>
-        <button class="sg-btn-cancel" onclick="document.getElementById('sg-loc-modal').remove()">Скасувати</button>
+    <div class="sg-loc-modal-footer">
+        <button class="sg-loc-save-btn" id="sg-loc-save-btn">
+            <i class="fa-solid fa-check"></i> Зберегти
+        </button>
+        <button class="sg-loc-cancel-btn" onclick="document.getElementById('sg-loc-modal').remove()">
+            Скасувати
+        </button>
     </div>
 </div>`;
         document.body.appendChild(el);
@@ -1390,10 +1411,13 @@ ${this._styles()}`;
         const save = () => {
             const v = input.value.trim();
             if (!v) { input.classList.add('sg-input-error'); input.focus(); return; }
-            const addr = document.getElementById('sg-loc-address')?.value.trim() || '';
-            const ph   = document.getElementById('sg-loc-phone')?.value.trim() || '';
+            const addr  = document.getElementById('sg-loc-address')?.value.trim() || '';
+            const ph    = document.getElementById('sg-loc-phone')?.value.trim() || '';
+            const nt    = document.getElementById('sg-loc-node-type')?.value || '';
+            const whs   = document.getElementById('sg-loc-wh-start')?.value || '';
+            const whe   = document.getElementById('sg-loc-wh-end')?.value || '';
             el.remove();
-            onSave(v, addr, ph);
+            onSave(v, addr, ph, nt, whs, whe);
         };
         document.getElementById('sg-loc-save-btn').onclick = save;
         input.addEventListener('keydown', e => { if (e.key === 'Enter') save(); });
@@ -1403,9 +1427,9 @@ ${this._styles()}`;
         this._showLocModal({
             title: 'Нова локація',
             placeholder: 'Назва філії…',
-            onSave: async (name, address, phone) => {
+            onSave: async (name, address, phone, nodeType, workStart, workEnd) => {
                 const { data, error } = await supabase.from('schedule_locations')
-                    .insert({ name, address: address || null, phone: phone || null, created_by: AppState.user.id })
+                    .insert({ name, address: address || null, phone: phone || null, node_type: nodeType || null, work_start: workStart || null, work_end: workEnd || null, created_by: AppState.user.id })
                     .select().single();
                 if (error) { Toast.error('Помилка', error.message); return; }
                 this._locations.push(data);
@@ -1418,15 +1442,6 @@ ${this._styles()}`;
         });
     },
 
-    async _saveNodeType(nodeType) {
-        const loc = this._locations.find(l => l.id === this._locId);
-        if (!loc) return;
-        const { error } = await supabase.from('schedule_locations')
-            .update({ node_type: nodeType || null }).eq('id', this._locId);
-        if (error) { Toast.error('Помилка', error.message); return; }
-        loc.node_type = nodeType || null;
-    },
-
     async _renameLocation(id, currentName) {
         const loc = this._locations.find(l => l.id === id);
         this._showLocModal({
@@ -1435,12 +1450,26 @@ ${this._styles()}`;
             value: currentName,
             address: loc?.address || '',
             phone: loc?.phone || '',
-            onSave: async (name, address, phone) => {
+            nodeType: loc?.node_type || '',
+            workStart: loc?.work_start || '',
+            workEnd: loc?.work_end || '',
+            onSave: async (name, address, phone, nodeType, workStart, workEnd) => {
                 const { error } = await supabase.from('schedule_locations')
-                    .update({ name, address: address || null, phone: phone || null })
+                    .update({
+                        name,
+                        address:    address   || null,
+                        phone:      phone     || null,
+                        node_type:  nodeType  || null,
+                        work_start: workStart || null,
+                        work_end:   workEnd   || null,
+                    })
                     .eq('id', id);
                 if (error) { Toast.error('Помилка', error.message); return; }
-                if (loc) { loc.name = name; loc.address = address || null; loc.phone = phone || null; }
+                if (loc) {
+                    loc.name = name; loc.address = address || null; loc.phone = phone || null;
+                    loc.node_type = nodeType || null;
+                    loc.work_start = workStart || null; loc.work_end = workEnd || null;
+                }
                 this._render(this._container);
                 Toast.success('Збережено');
             }
@@ -1464,7 +1493,7 @@ ${this._styles()}`;
         <div class="sg-del-modal-ico"><i class="fa-solid fa-trash"></i></div>
     </div>
     <h3 class="sg-del-modal-title">Перемістити в кошик?</h3>
-    <p class="sg-del-modal-desc">Локацію <strong>«${name}»</strong> буде переміщено в кошик.<br>Ви зможете відновити її протягом <strong>2 днів</strong>.</p>
+    <p class="sg-del-modal-desc">Локацію <strong>«${Fmt.esc(name)}»</strong> буде переміщено в кошик.<br>Ви зможете відновити її протягом <strong>2 днів</strong>.</p>
     <div class="sg-del-modal-note">
         <span class="sg-del-note-ico">💡</span>
         Всі дані графіку збережуться і будуть відновлені разом з локацією
@@ -1904,7 +1933,7 @@ ${this._styles()}`;
             return `<div class="sg-partners-row" id="sg-prow-${r.id}">
                 <div class="sg-av sm">${name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}</div>
                 <div class="sg-partners-info">
-                    <div class="sg-partners-name">${name}</div>
+                    <div class="sg-partners-name">${Fmt.esc(name)}</div>
                     <div class="sg-partners-status pending">очікує відповіді</div>
                 </div>
                 <button class="sg-partners-accept" onclick="ScheduleGraphPage._acceptPartner('${r.id}')">✓ Прийняти</button>
@@ -1921,7 +1950,7 @@ ${this._styles()}`;
             return `<div class="sg-partners-row" id="sg-prow-${r.id}">
                 <div class="sg-av sm">${name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}</div>
                 <div class="sg-partners-info">
-                    <div class="sg-partners-name">${name}</div>
+                    <div class="sg-partners-name">${Fmt.esc(name)}</div>
                     <div class="sg-partners-status pending">чекає на підтвердження</div>
                 </div>
                 <button class="sg-partners-del" onclick="ScheduleGraphPage._removePartner('${r.id}')" title="Скасувати запит">✕</button>
@@ -1940,8 +1969,8 @@ ${this._styles()}`;
             return `<div class="sg-partners-row" id="sg-prow-${r.id}">
                 <div class="sg-av sm">${name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}</div>
                 <div class="sg-partners-info">
-                    <div class="sg-partners-name">${name}</div>
-                    <div class="sg-partners-status accepted">${pos || 'партнер'}</div>
+                    <div class="sg-partners-name">${Fmt.esc(name)}</div>
+                    <div class="sg-partners-status accepted">${Fmt.esc(pos || 'партнер')}</div>
                 </div>
                 <button class="sg-partners-del" onclick="ScheduleGraphPage._removePartner('${r.id}')" title="Розірвати партнерство"><i class="fa-solid fa-trash"></i></button>
             </div>`;
@@ -1963,7 +1992,7 @@ ${this._styles()}`;
                     ${this._partnerAllProfiles.map(p => `
                     <div class="sg-viewer-drop-item" data-id="${p.id}" data-name="${(p.full_name||'').replace(/"/g,'&quot;')}"
                         onmousedown="ScheduleGraphPage._pickPartnerUser('${p.id}',${JSON.stringify(p.full_name||p.id).replace(/"/g,'&quot;')})">
-                        ${p.full_name || p.id}
+                        ${Fmt.esc(p.full_name || p.id)}
                     </div>`).join('')}
                 </div>
             </div>
@@ -2142,9 +2171,9 @@ ${this._styles()}`;
                 ${Object.entries(byLoc).sort(([a],[b])=>(_locOrder[a]??999)-(_locOrder[b]??999)).map(([locId, loc]) => `
                 <tr class="sg-loc-header-row${loc.isPartner?' sg-loc-header-partner':''}">
                     <td colspan="${days + 1}" class="sg-loc-group-header">
-                        ${loc.isPartner?'🤝':'🏪'} ${loc.name}
+                        ${loc.isPartner?'🤝':'🏪'} ${Fmt.esc(loc.name)}
                         ${(() => { const l = this._locations.find(l => l.id === locId); return (l?.address ? `<span class="sg-loc-acc-addr"><i class="fa-solid fa-location-dot"></i> ${Fmt.esc(l.address)}</span>` : '') + (l?.phone ? `<span class="sg-loc-acc-addr"><i class="fa-solid fa-phone"></i> ${Fmt.esc(l.phone)}</span>` : ''); })()}
-                        ${loc.isPartner ? `<span class="sg-partner-loc-badge">${loc.members[0]?.partnerOwnerLabel||'Керівник'}: ${loc.members[0]?.partnerOwnerName||''}</span>` : ''}
+                        ${loc.isPartner ? `<span class="sg-partner-loc-badge">${loc.members[0]?.partnerOwnerLabel||'Керівник'}: ${Fmt.esc(loc.members[0]?.partnerOwnerName||'')}</span>` : ''}
                     </td>
                 </tr>
                 ${loc.members.map(a => {
@@ -2326,9 +2355,9 @@ ${this._styles()}`;
                 : '';
 
             const extraInfo = `
-                ${managerName ? `<div class="sg-subst-meta">Керівник: <span class="sg-subst-meta-val">${managerName}</span></div>` : ''}
-                ${dovirenosti.length ? `<div class="sg-subst-meta">Довіреність: <span class="sg-subst-meta-val">${dovirenosti.join(', ')}</span></div>` : ''}
-                ${phone ? `<div class="sg-subst-meta">${phone}</div>` : ''}
+                ${managerName ? `<div class="sg-subst-meta">Керівник: <span class="sg-subst-meta-val">${Fmt.esc(managerName)}</span></div>` : ''}
+                ${dovirenosti.length ? `<div class="sg-subst-meta">Довіреність: <span class="sg-subst-meta-val">${Fmt.esc(dovirenosti.join(', '))}</span></div>` : ''}
+                ${phone ? `<div class="sg-subst-meta">${Fmt.esc(phone)}</div>` : ''}
             `;
 
             if (isFree) {
@@ -2339,8 +2368,8 @@ ${this._styles()}`;
                     onclick="${onclick}" title="Натисніть щоб призначити на підміну">
                     <div class="sg-av sm">${initials}</div>
                     <div style="flex:1;min-width:0">
-                        <div class="sg-subst-name">${name}</div>
-                        ${position ? `<div class="sg-subst-position">${position}</div>` : ''}
+                        <div class="sg-subst-name">${Fmt.esc(name)}</div>
+                        ${position ? `<div class="sg-subst-position">${Fmt.esc(position)}</div>` : ''}
                         ${extraInfo}
                         ${wantsSub ? `<div class="sg-sub-wants-badge">🙋 Пропонує підміну</div>` : ''}
                         ${lastShiftBadge}
@@ -2353,8 +2382,8 @@ ${this._styles()}`;
             return `<div class="sg-subst-person busy${needsSub?' sg-subst-needs-sub':''}${isPartner?' sg-subst-partner':''}">
                 <div class="sg-av sm">${initials}</div>
                 <div style="flex:1;min-width:0">
-                    <div class="sg-subst-name">${name}</div>
-                    ${position ? `<div class="sg-subst-position">${position}</div>` : ''}
+                    <div class="sg-subst-name">${Fmt.esc(name)}</div>
+                    ${position ? `<div class="sg-subst-position">${Fmt.esc(position)}</div>` : ''}
                     ${extraInfo}
                     ${needsSub ? `<div class="sg-needsub-badge">🆘 Потрібна підміна</div>` : ''}
                 </div>
@@ -2441,17 +2470,17 @@ ${this._styles()}`;
         <button class="sg-mclose" onclick="document.getElementById('sg-partner-confirm-modal').remove()">✕</button>
     </div>
     <p style="font-size:.88rem;line-height:1.55;margin:0 0 6px">
-        Ви додаєте <strong>${name}</strong> до свого графіку.
+        Ви додаєте <strong>${Fmt.esc(name)}</strong> до свого графіку.
     </p>
     <p style="font-size:.82rem;color:var(--text-muted);line-height:1.5;margin:0 0 ${dovirenosti.length ? '10px' : '20px'}">
         Цей співробітник належить до іншої локації.
-        ${managerName ? `<br>${managerLabel}: <strong style="color:var(--text)">${managerName}</strong>.` : ''}
+        ${managerName ? `<br>${managerLabel}: <strong style="color:var(--text)">${Fmt.esc(managerName)}</strong>.` : ''}
         <br>Переконайтесь, що ви попередньо погодили це з його керівником.
     </p>
     ${dovirenosti.length ? `
     <div style="font-size:.78rem;margin:0 0 20px;display:flex;flex-wrap:wrap;gap:5px">
         <span style="color:var(--text-muted);align-self:center">Довіреності:</span>
-        ${dovirenosti.map(d => `<span style="background:rgba(99,102,241,.12);color:#818cf8;border:1px solid rgba(99,102,241,.25);border-radius:6px;padding:2px 8px">${d}</span>`).join('')}
+        ${dovirenosti.map(d => `<span style="background:rgba(99,102,241,.12);color:#818cf8;border:1px solid rgba(99,102,241,.25);border-radius:6px;padding:2px 8px">${Fmt.esc(d)}</span>`).join('')}
     </div>` : ''}
     <div class="sg-modal-actions">
         <button class="sg-btn-save" onclick="document.getElementById('sg-partner-confirm-modal').remove();ScheduleGraphPage._assignSubstitute('${userId}')">Додати</button>
@@ -2475,7 +2504,7 @@ ${this._styles()}`;
             <div class="sg-av sm">${initials}</div>
             <div>
                 <h3 style="margin:0;font-size:1rem">Призначити на підміну</h3>
-                <p style="margin:2px 0 0;color:var(--text-muted);font-size:.82rem">${userName}</p>
+                <p style="margin:2px 0 0;color:var(--text-muted);font-size:.82rem">${Fmt.esc(userName)}</p>
             </div>
         </div>
         <button class="sg-mclose" onclick="document.getElementById('sg-subst-modal').remove()">✕</button>
@@ -2532,7 +2561,7 @@ ${this._styles()}`;
                 message:    `${AppState.profile?.full_name || 'Керівник'} додав вас як підміну до локації «${loc?.name || ''}»${dateLabel ? ` на ${dateLabel}` : ''}.`,
                 type:       'general',
                 created_by: AppState.user.id,
-            }).catch(() => {});
+            }).catch(e => console.error('[sg notify]', e));
         }
 
         Toast.success(`${prof?.full_name || 'Співробітника'} додано до "${loc?.name || 'локації'}"`);
@@ -2631,7 +2660,7 @@ ${this._styles()}`;
         <div>
             <h3 style="margin:0;font-size:1rem">🔄 Хто виходить на заміну?</h3>
             <p style="margin:3px 0 0;color:var(--text-muted);font-size:.8rem">
-                Замість <strong>${originalEmpName}</strong> · ${dateLabel}
+                Замість <strong>${Fmt.esc(originalEmpName)}</strong> · ${dateLabel}
             </p>
         </div>
         <button class="sg-mclose" onclick="document.getElementById('sg-subst-picker-modal').remove()">✕</button>
@@ -2647,7 +2676,7 @@ ${this._styles()}`;
                 onclick="ScheduleGraphPage._applySubstShift('${originalUserId}','${date}','${locId}','${p.id}',${JSON.stringify(originalEmpName||'').replace(/"/g,'&quot;')},${JSON.stringify(p.full_name||'').replace(/"/g,'&quot;')})">
                 <div class="sg-av sm" style="background:${color}">${initials}</div>
                 <div>
-                    <div class="sg-emp-fn">${p.full_name || 'Без імені'}</div>
+                    <div class="sg-emp-fn">${Fmt.esc(p.full_name || 'Без імені')}</div>
                     ${meta ? `<div class="sg-emp-meta">${meta}</div>` : ''}
                 </div>
                 <span class="sg-picker-arrow">→</span>
@@ -2757,7 +2786,7 @@ ${this._styles()}`;
         <h3 class="sg-reminder-title">Не забудьте зателефонувати!</h3>
     </div>
     <p class="sg-reminder-body">
-        Зв'яжіться з <strong>${empName}</strong> та повідомте про підтверджену ${context}.
+        Зв'яжіться з <strong>${Fmt.esc(empName)}</strong> та повідомте про підтверджену ${context}.
     </p>
     <p class="sg-reminder-sub">Сповіщення вже надіслано у додаток, але особистий дзвінок буде не зайвим.</p>
     <button class="sg-btn-save" style="width:100%;margin-top:4px"
@@ -3137,7 +3166,7 @@ ${this._styles()}`;
     </div>
     <label style="font-size:.82rem;color:var(--text-muted);display:block;margin-bottom:6px">Локація</label>
     <select id="sg-mgr-help-loc" class="sg-loc-input" style="margin-bottom:10px">
-        ${this._locations.map(l => `<option value="${l.id}"${l.id === defaultLoc ? ' selected' : ''}>🏪 ${l.name}</option>`).join('')}
+        ${this._locations.map(l => `<option value="${l.id}"${l.id === defaultLoc ? ' selected' : ''}>🏪 ${Fmt.esc(l.name)}</option>`).join('')}
     </select>
     <label style="font-size:.82rem;color:var(--text-muted);display:block;margin-bottom:6px">Дата підміни</label>
     <input type="date" id="sg-mgr-help-date" class="sg-loc-input" value="${defaultDate}">
@@ -3156,7 +3185,7 @@ ${this._styles()}`;
             return `<div class="sg-mgr-help-existing-row">
                 <div>
                     <div style="font-size:.875rem">📅 ${dl}</div>
-                    ${locName ? `<div style="font-size:.75rem;color:var(--text-muted);margin-top:1px">🏪 ${locName}</div>` : ''}
+                    ${locName ? `<div style="font-size:.75rem;color:var(--text-muted);margin-top:1px">🏪 ${Fmt.esc(locName)}</div>` : ''}
                 </div>
                 <button class="sg-mgr-help-cancel-btn" title="Скасувати"
                     onclick="ScheduleGraphPage._cancelManagerHelp('${e.id}')">✕</button>
@@ -3445,9 +3474,9 @@ ${this._styles()}`;
                         style="cursor:pointer" onclick="ScheduleGraphPage._toggleLoc('${locId}')">
                         <td colspan="${days + 2}" class="sg-loc-group-header">
                             <span class="sg-loc-chevron" data-loc-toggle="${locId}">${isCollapsed ? '▼' : '▲'}</span>
-                            ${loc.isPartner?'🤝':'🏪'} ${loc.name}
+                            ${loc.isPartner?'🤝':'🏪'} ${Fmt.esc(loc.name)}
                             ${(() => { const l = this._locations.find(l => l.id === locId); return (l?.address ? `<span class="sg-loc-acc-addr"><i class="fa-solid fa-location-dot"></i> ${Fmt.esc(l.address)}</span>` : '') + (l?.phone ? `<span class="sg-loc-acc-addr"><i class="fa-solid fa-phone"></i> ${Fmt.esc(l.phone)}</span>` : ''); })()}
-                            ${loc.isPartner ? `<span class="sg-partner-loc-badge">${loc.members[0]?.partnerOwnerLabel||'Керівник'}: ${loc.members[0]?.partnerOwnerName||''}</span>` : ''}
+                            ${loc.isPartner ? `<span class="sg-partner-loc-badge">${loc.members[0]?.partnerOwnerLabel||'Керівник'}: ${Fmt.esc(loc.members[0]?.partnerOwnerName||'')}</span>` : ''}
                             <span class="sg-loc-meta">
                                 <span class="sg-loc-emp-count" title="Співробітників">👤 ${loc.members.length}</span>
                                 <span class="sg-loc-work-count" title="Виходів цього місяця">📅 ${totalWork}</span>
@@ -3632,37 +3661,6 @@ ${this._styles()}`;
             : {};
     },
 
-    _editWorkHours() {
-        const wh = this._getWorkHours(this._locId);
-        document.getElementById('sg-wh-display').style.display = 'none';
-        document.querySelector('.sg-wh-edit').style.display = 'none';
-        document.getElementById('sg-wh-inputs').style.display = 'flex';
-        const s = document.getElementById('sg-wh-start');
-        const e = document.getElementById('sg-wh-end');
-        if (s) s.value = wh.start || '09:00';
-        if (e) e.value = wh.end   || '18:00';
-    },
-
-    _cancelWorkHours() {
-        document.getElementById('sg-wh-display').style.display = '';
-        document.querySelector('.sg-wh-edit').style.display = '';
-        document.getElementById('sg-wh-inputs').style.display = 'none';
-    },
-
-    async _saveWorkHours() {
-        const start = document.getElementById('sg-wh-start')?.value;
-        const end   = document.getElementById('sg-wh-end')?.value;
-        if (!start || !end) return;
-        const { error } = await supabase.from('schedule_locations')
-            .update({ work_start: start, work_end: end })
-            .eq('id', this._locId);
-        if (error) { Toast.error('Помилка збереження'); return; }
-        const loc = this._locations.find(l => l.id === this._locId);
-        if (loc) { loc.work_start = start; loc.work_end = end; }
-        this._cancelWorkHours();
-        this._render(this._container);
-        Toast.success('Час роботи збережено');
-    },
 
     _monthKey(year, month) {
         return `${year}-${String(month + 1).padStart(2, '0')}`;
@@ -3772,7 +3770,7 @@ ${this._styles()}`;
         <div class="sg-viewers-add-row">
             <select id="sg-viewer-loc" class="sg-viewers-select">
                 <option value="">Всі локації</option>
-                ${this._locations.map(l => `<option value="${l.id}">${l.name}</option>`).join('')}
+                ${this._locations.map(l => `<option value="${l.id}">${Fmt.esc(l.name)}</option>`).join('')}
             </select>
             <button class="sg-viewers-add-btn" onclick="ScheduleGraphPage._addViewer()">＋ Додати</button>
         </div>
@@ -3835,8 +3833,8 @@ ${this._styles()}`;
             <div class="sg-viewers-row" id="sg-vrow-${v.id}">
                 <div class="sg-av sm">${initials}</div>
                 <div class="sg-viewers-info">
-                    <div class="sg-viewers-name">${name}</div>
-                    <div class="sg-viewers-scope">🏪 ${locName}</div>
+                    <div class="sg-viewers-name">${Fmt.esc(name)}</div>
+                    <div class="sg-viewers-scope">🏪 ${Fmt.esc(locName)}</div>
                 </div>
                 <button class="sg-viewers-del" onclick="ScheduleGraphPage._removeViewer('${v.id}')" title="Видалити доступ">✕</button>
             </div>`;
@@ -3899,79 +3897,134 @@ ${this._styles()}`;
             p._dovirenosti = dovMap[p.id] || [];
         });
 
-        this._showEmpModal(profiles);
+        this._showEmpPanel(profiles);
     },
 
-    _showEmpModal(profiles) {
-        document.getElementById('sg-emp-modal')?.remove();
-        const el = document.createElement('div');
-        el.id = 'sg-emp-modal';
-        el.className = 'sg-overlay';
-        el.innerHTML = `
-<div class="sg-modal">
-    <div class="sg-mhdr">
-        <h3>Додати співробітника</h3>
-        <button class="sg-mclose" onclick="document.getElementById('sg-emp-modal').remove()">✕</button>
+    _showEmpPanel(profiles) {
+        document.getElementById('sg-emp-backdrop')?.remove();
+        document.getElementById('sg-emp-panel')?.remove();
+        this._empPanelSelected = new Set();
+        this._empPanelProfiles = Object.fromEntries(profiles.map(p => [p.id, p]));
+
+        const backdrop = document.createElement('div');
+        backdrop.id = 'sg-emp-backdrop';
+        backdrop.className = 'sg-emp-backdrop';
+        backdrop.onclick = () => ScheduleGraphPage._closeEmpPanel();
+        document.body.appendChild(backdrop);
+
+        const panel = document.createElement('div');
+        panel.id = 'sg-emp-panel';
+        panel.className = 'sg-emp-panel';
+        panel.innerHTML = `
+<div class="sg-emp-panel-header">
+    <div>
+        <div style="font-size:.95rem;font-weight:700">Додати співробітників</div>
+        <div style="font-size:.78rem;color:var(--text-muted);margin-top:2px">${profiles.length} доступних</div>
     </div>
-    <input class="sg-msearch" placeholder="🔍 Пошук за ім'ям..." id="sg-emp-q"
-        oninput="ScheduleGraphPage._filterEmp(this.value)">
-    <div class="sg-emp-list" id="sg-emp-list">
-        ${profiles.map(p => `
-        <div class="sg-emp-row" data-name="${(p.full_name||'').toLowerCase()}"
-            onclick="ScheduleGraphPage._confirmAddEmployee('${p.id}')">
-            <div class="sg-av sm">${(p.full_name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}</div>
-            <div style="flex:1;min-width:0">
-                <div class="sg-emp-fn">${Fmt.esc(p.full_name || 'Без імені')}</div>
-                ${p.job_position ? `<div class="sg-emp-meta">${Fmt.esc(p.job_position)}</div>` : ''}
-                ${p._managerName ? `<div class="sg-emp-meta sg-emp-mgr"><i class="fa-solid fa-user-tie"></i> ${Fmt.esc(p._managerName)}</div>` : ''}
-                ${p._dovirenosti.length ? `<div class="sg-emp-dovs">${p._dovirenosti.map((d, i) => `<span class="sg-emp-dov sg-emp-dov-${i % 4}">${Fmt.esc(d)}</span>`).join('')}</div>` : ''}
-            </div>
-        </div>`).join('')}
-    </div>
+    <button class="sg-mclose" onclick="ScheduleGraphPage._closeEmpPanel()">✕</button>
+</div>
+<div class="sg-emp-panel-search">
+    <input class="sg-msearch" style="margin:0" placeholder="🔍 Пошук за ім'ям..." id="sg-emp-q"
+        oninput="ScheduleGraphPage._filterEmp(this.value)" autocomplete="off">
+</div>
+<div class="sg-emp-panel-list" id="sg-emp-list">
+    ${profiles.map(p => {
+        const initials = (p.full_name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+        const color = ScheduleGraphPage._avatarColor(p.id);
+        return `
+    <div class="sg-emp-panel-row" data-id="${p.id}" data-name="${(p.full_name||'').toLowerCase()}"
+        onclick="ScheduleGraphPage._toggleEmpSelection('${p.id}')">
+        <div class="sg-emp-panel-check"><i class="fa-solid fa-check" style="font-size:.65rem"></i></div>
+        <div class="sg-av sm" style="background:${color}">${initials}</div>
+        <div style="flex:1;min-width:0">
+            <div class="sg-emp-fn">${Fmt.esc(p.full_name || 'Без імені')}</div>
+            ${p.job_position ? `<div class="sg-emp-meta">${Fmt.esc(p.job_position)}</div>` : ''}
+            ${p._managerName ? `<div class="sg-emp-meta sg-emp-mgr"><i class="fa-solid fa-user-tie"></i> ${Fmt.esc(p._managerName)}</div>` : ''}
+            ${p._dovirenosti.length ? `<div class="sg-emp-dovs">${p._dovirenosti.map((d,i)=>`<span class="sg-emp-dov sg-emp-dov-${i%4}">${Fmt.esc(d)}</span>`).join('')}</div>` : ''}
+        </div>
+    </div>`;
+    }).join('')}
+</div>
+<div class="sg-emp-panel-footer">
+    <button class="sg-btn-save" id="sg-emp-add-btn" disabled
+        onclick="ScheduleGraphPage._confirmAddEmployees()" style="flex:1">
+        <i class="fa-solid fa-plus"></i> Додати
+    </button>
+    <button class="sg-btn-cancel" onclick="ScheduleGraphPage._closeEmpPanel()">Скасувати</button>
 </div>`;
-        document.body.appendChild(el);
-        el.addEventListener('click', e => { if (e.target === el) el.remove(); });
+        document.body.appendChild(panel);
+        requestAnimationFrame(() => {
+            backdrop.classList.add('open');
+            panel.classList.add('open');
+        });
         document.getElementById('sg-emp-q')?.focus();
+    },
+
+    _closeEmpPanel() {
+        const panel    = document.getElementById('sg-emp-panel');
+        const backdrop = document.getElementById('sg-emp-backdrop');
+        if (panel)    { panel.classList.remove('open');    panel.addEventListener('transitionend', () => panel.remove(),    { once: true }); }
+        if (backdrop) { backdrop.classList.remove('open'); backdrop.addEventListener('transitionend', () => backdrop.remove(), { once: true }); }
+        this._empPanelSelected = new Set();
+    },
+
+    _toggleEmpSelection(id) {
+        if (this._empPanelSelected.has(id)) {
+            this._empPanelSelected.delete(id);
+        } else {
+            this._empPanelSelected.add(id);
+        }
+        const row = document.querySelector(`#sg-emp-list .sg-emp-panel-row[data-id="${id}"]`);
+        if (row) row.classList.toggle('selected', this._empPanelSelected.has(id));
+        const n   = this._empPanelSelected.size;
+        const btn = document.getElementById('sg-emp-add-btn');
+        if (btn) {
+            btn.disabled = n === 0;
+            btn.innerHTML = n > 0
+                ? `<i class="fa-solid fa-plus"></i> Додати (${n})`
+                : `<i class="fa-solid fa-plus"></i> Додати`;
+        }
     },
 
     _filterEmp(q) {
         const v = q.toLowerCase();
-        document.querySelectorAll('#sg-emp-list .sg-emp-row').forEach(r => {
+        document.querySelectorAll('#sg-emp-list .sg-emp-panel-row').forEach(r => {
             r.style.display = r.dataset.name.includes(v) ? '' : 'none';
         });
     },
 
-    async _confirmAddEmployee(userId) {
-        document.getElementById('sg-emp-modal')?.remove();
-        const { data: prof } = await supabase.from('profiles')
-            .select('id, full_name, avatar_url, role, label, manager_id')
-            .eq('id', userId)
-            .single();
-
-        const isForeign = prof?.manager_id && prof.manager_id !== AppState.user.id;
-        const isPrimary = !isForeign;
-
-        const { data, error } = await supabase.from('schedule_assignments')
-            .insert({ location_id: this._locId, user_id: userId, original_user_id: userId, created_by: AppState.user.id, employee_name: prof?.full_name || null, is_primary: isPrimary })
-            .select('id, user_id, original_user_id, employee_name, is_primary')
-            .single();
-        if (error) { Toast.error('Помилка', error.message); return; }
-
-        this._assignments.push({ id: data.id, user_id: data.user_id, original_user_id: data.original_user_id, employee_name: data.employee_name, is_primary: isPrimary, profile: prof });
-
-        if (isForeign) {
+    async _confirmAddEmployees() {
+        const ids = [...(this._empPanelSelected || [])];
+        if (!ids.length) return;
+        this._closeEmpPanel();
+        Loader.show();
+        let added = 0;
+        try {
             const loc = this._locations.find(l => l.id === this._locId);
-            await supabase.from('notifications').insert({
-                user_id:    userId,
-                title:      '📅 Вас додано до графіку',
-                message:    `${AppState.profile?.full_name || 'Керівник'} додав вас до локації «${loc?.name || ''}».`,
-                type:       'general',
-                created_by: AppState.user.id,
-            }).catch(() => {});
+            for (const userId of ids) {
+                const prof = this._empPanelProfiles?.[userId];
+                const isForeign = prof?.manager_id && prof.manager_id !== AppState.user.id;
+                const isPrimary = !isForeign;
+                const { data, error } = await supabase.from('schedule_assignments')
+                    .insert({ location_id: this._locId, user_id: userId, original_user_id: userId, created_by: AppState.user.id, employee_name: prof?.full_name || null, is_primary: isPrimary })
+                    .select('id, user_id, original_user_id, employee_name, is_primary')
+                    .single();
+                if (error) { Toast.error('Помилка', error.message); continue; }
+                this._assignments.push({ id: data.id, user_id: data.user_id, original_user_id: data.original_user_id, employee_name: data.employee_name, is_primary: isPrimary, profile: prof });
+                added++;
+                if (isForeign) {
+                    await supabase.from('notifications').insert({
+                        user_id: userId, title: '📅 Вас додано до графіку',
+                        message: `${AppState.profile?.full_name || 'Керівник'} додав вас до локації «${loc?.name || ''}».`,
+                        type: 'general', created_by: AppState.user.id,
+                    }).catch(e => console.error('[sg notify]', e));
+                }
+            }
+        } finally {
+            Loader.hide();
         }
-
         this._render(this._container);
-        Toast.success('Додано до графіку');
+        if (added > 0) Toast.success(added === 1 ? 'Додано до графіку' : `Додано ${added} співробітників`);
     },
 
     _removeEmployeeConfirm(assignId, userId, name) {
@@ -4498,17 +4551,17 @@ ${this._styles()}`;
             : '';
 
         const viewOnly = this._isViewOnlyLoc(this._locId);
-        const rmBtn = !viewOnly && !fired ? `<button class="sg-rm sg-rm-inline" title="Видалити зі списку"
+        const rmBtn = !viewOnly ? `<button class="sg-rm sg-rm-inline" title="Видалити зі списку"
             data-name="${Fmt.esc(name)}"
             onclick="event.stopPropagation();ScheduleGraphPage._removeEmployeeConfirm('${a.id}','${a.user_id}',this.dataset.name)">
             <i class="fa-solid fa-trash"></i>
         </button>` : '';
 
         return `
-<td class="sg-td-name" title="${name}${fired ? ' (звільнений співробітник)' : a.is_primary ? ' — основний' : ' — тимчасовий'}">
+<td class="sg-td-name" title="${Fmt.esc(name)}${fired ? ' (звільнений співробітник)' : a.is_primary ? ' — основний' : ' — тимчасовий'}">
     <span class="sg-drag-handle" title="Перетягнути">⠿</span>
     <div class="sg-name-full${fired ? ' sg-name-deleted' : ''}">
-        ${primaryBtn}${name}${fired
+        ${primaryBtn}${Fmt.esc(name)}${fired
         ? ` <span class="sg-deleted-badge">${firedBadge}</span>`
         : !a.is_primary ? ` <span class="sg-temp-badge">підміна</span>` : ''}
     </div>
@@ -4541,7 +4594,7 @@ ${this._styles()}`;
     title="${isFiltered ? 'Натисніть щоб скинути фільтр' : 'Натисніть щоб показати тільки цього співробітника'}"
     onclick="ScheduleGraphPage._filterByEmployee('${uid}')">
     <div class="sg-name-full${fired ? ' sg-name-deleted' : ''}">
-        ${name}${fired
+        ${Fmt.esc(name)}${fired
         ? ` <span class="sg-deleted-badge">${firedBadge}</span>`
         : !a.is_primary ? ` <span class="sg-temp-badge">підміна</span>` : ''}
         ${isFiltered ? ' <span class="sg-filter-active-badge">✓ фільтр</span>' : ''}
@@ -4627,7 +4680,7 @@ ${this._styles()}`;
         <div class="sg-trash-row">
             <div class="sg-trash-row-ico">🏪</div>
             <div class="sg-trash-row-info">
-                <div class="sg-trash-row-name">${loc.name}</div>
+                <div class="sg-trash-row-name">${Fmt.esc(loc.name)}</div>
                 <div class="sg-trash-row-expire${urgent ? ' urgent' : ''}">
                     ${urgent ? '⚠️' : '⏱'} Видалиться через ${timeLabel}
                 </div>
@@ -4644,6 +4697,17 @@ ${this._styles()}`;
         }).join('')}
     </div>
 </div>`;
+    },
+
+    // ── Feedback — delegated to global FeedbackFab ──────────────────
+    // Pass schedule context (location + month) so admin sees where the report came from.
+    _openFeedbackWithCtx() {
+        if (typeof FeedbackFab === 'undefined') return;
+        const loc = this._locations?.find(l => l.id === this._locId);
+        FeedbackFab.open({
+            location: loc?.name || null,
+            month: `${this._year}-${String(this._month + 1).padStart(2,'0')}`,
+        });
     },
 
     // ── Styles ────────────────────────────────────────────────────
@@ -5050,10 +5114,8 @@ ${this._styles()}`;
 .sg-loc-name-text { font-size:.95rem;font-weight:700;color:var(--text-primary); }
 .sg-wh-sep { color:var(--border);font-size:1rem;margin:0 2px; }
 .sg-v2-loc-card .sg-loc-name-edit,
-.sg-v2-loc-card .sg-wh-edit,
 .sg-v2-loc-card .sg-loc-del-btn { opacity:0;transition:opacity .15s,color .15s,background .15s; }
 .sg-v2-loc-card:hover .sg-loc-name-edit,
-.sg-v2-loc-card:hover .sg-wh-edit,
 .sg-v2-loc-card:hover .sg-loc-del-btn { opacity:1; }
 .sg-loc-name-edit {
     border:none;background:none;cursor:pointer;font-size:.9rem;
@@ -5075,21 +5137,6 @@ ${this._styles()}`;
 .sg-wh-label { color:var(--text-muted);font-weight:600; }
 .sg-loc-creator { display:inline-flex;align-items:center;gap:5px;font-size:.8rem;font-weight:600;color:var(--text-muted); }
 .sg-wh-time { color:var(--text-primary);font-weight:700;letter-spacing:.03em; }
-.sg-wh-edit {
-    border:none;background:none;cursor:pointer;font-size:.9rem;
-    opacity:.5;transition:opacity .15s;padding:2px 4px;border-radius:6px;
-}
-.sg-wh-edit:hover { opacity:1;background:var(--bg-hover); }
-.sg-wh-inputs { display:flex;align-items:center;gap:8px;flex-wrap:wrap; }
-.sg-wh-save {
-    padding:6px 14px;border-radius:8px;border:none;
-    background:linear-gradient(135deg,#10b981,#059669);
-    color:#fff;font-size:.82rem;font-weight:700;cursor:pointer;
-}
-.sg-wh-cancel {
-    width:28px;height:28px;border-radius:8px;border:1px solid var(--border);
-    background:var(--bg-raised);color:var(--text-muted);cursor:pointer;font-size:.85rem;
-}
 .sg-loc-del-btn {
     border:none;background:none;cursor:pointer;font-size:.9rem;
     opacity:.4;transition:opacity .15s;padding:2px 6px;border-radius:6px;
@@ -5361,12 +5408,6 @@ ${this._styles()}`;
     width:1px;background:var(--border);align-self:stretch;margin:4px 0;flex-shrink:0;
 }
 .sg-legend { display:flex;flex-wrap:wrap;gap:5px;align-items:center; }
-.sg-node-select {
-    padding:3px 8px;border-radius:12px;font-size:.75rem;font-weight:600;
-    border:1.5px solid var(--border);background:var(--bg-raised);color:var(--text-secondary);
-    cursor:pointer;transition:border-color .18s;outline:none;
-}
-.sg-node-select:hover,.sg-node-select:focus { border-color:#6366f1;color:#6366f1; }
 .sg-node-badge { padding:2px 9px;border-radius:12px;font-size:.72rem;font-weight:700; }
 .sg-node-badge.sg-node-universal         { background:rgba(16,185,129,.14);color:#059669; }
 .sg-node-badge.sg-node-universal-seller  { background:rgba(16,185,129,.14);color:#059669; }
@@ -5610,13 +5651,51 @@ tr:last-child td { border-bottom:none; }
     outline:none;margin-bottom:12px;box-sizing:border-box;
 }
 .sg-msearch:focus { border-color:var(--primary); }
-.sg-emp-list { display:flex;flex-direction:column;gap:4px;max-height:300px;overflow-y:auto; }
+/* sg-emp-row used by substitute picker modal */
+.sg-emp-list { display:flex;flex-direction:column;gap:4px;max-height:380px;overflow-y:auto;padding:4px 0; }
 .sg-emp-row {
     display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;
     cursor:pointer;transition:background .12s;
 }
 .sg-emp-row:hover { background:var(--bg-hover); }
-.sg-emp-fn { font-weight:700;color:#2563eb;font-size:.9rem; }
+/* Employee side panel */
+.sg-emp-backdrop {
+    position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:1000;
+    opacity:0;transition:opacity .25s ease;pointer-events:none;
+}
+.sg-emp-backdrop.open { opacity:1;pointer-events:auto; }
+.sg-emp-panel {
+    position:fixed;top:0;right:0;bottom:0;width:400px;max-width:100vw;
+    background:var(--bg-surface);z-index:1001;display:flex;flex-direction:column;
+    box-shadow:-6px 0 32px rgba(0,0,0,.18);border-left:1px solid var(--border);
+    transform:translateX(100%);transition:transform .25s ease;
+}
+.sg-emp-panel.open { transform:translateX(0); }
+.sg-emp-panel-header {
+    display:flex;align-items:center;justify-content:space-between;
+    padding:16px 20px;border-bottom:1px solid var(--border);flex-shrink:0;
+}
+.sg-emp-panel-search { padding:10px 14px;border-bottom:1px solid var(--border);flex-shrink:0; }
+.sg-emp-panel-list { flex:1;overflow-y:auto; }
+.sg-emp-panel-row {
+    display:flex;align-items:center;gap:10px;padding:9px 14px;
+    cursor:pointer;transition:background .12s;border-bottom:1px solid color-mix(in srgb,var(--border) 40%,transparent);
+    user-select:none;
+}
+.sg-emp-panel-row:hover { background:var(--bg-raised); }
+.sg-emp-panel-row.selected { background:color-mix(in srgb,var(--primary) 9%,var(--bg-surface)); }
+.sg-emp-panel-check {
+    width:18px;height:18px;border-radius:5px;border:2px solid var(--border);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+    transition:background .15s,border-color .15s;color:transparent;
+}
+.sg-emp-panel-row.selected .sg-emp-panel-check {
+    background:var(--primary);border-color:var(--primary);color:#fff;
+}
+.sg-emp-panel-footer {
+    padding:12px 14px;border-top:1px solid var(--border);display:flex;gap:8px;flex-shrink:0;
+}
+.sg-emp-fn { font-weight:600;font-size:.9rem; }
 .sg-emp-meta { font-size:.75rem;color:var(--text-secondary);margin-top:2px; }
 .sg-emp-mgr { font-size:.72rem;color:var(--text-muted);margin-top:2px;display:flex;align-items:center;gap:4px; }
 .sg-emp-dovs { display:flex;flex-wrap:wrap;gap:4px;margin-top:4px; }
@@ -5750,24 +5829,94 @@ tr:last-child td { border-bottom:none; }
 }
 
 /* Location modal */
-.sg-loc-modal-box { max-width:400px; }
-.sg-loc-modal-icon {
-    width:42px;height:42px;border-radius:12px;flex-shrink:0;font-size:1.3rem;
-    background:linear-gradient(135deg,color-mix(in srgb,var(--primary) 20%,transparent),color-mix(in srgb,var(--primary) 10%,transparent));
-    border:1.5px solid color-mix(in srgb,var(--primary) 30%,transparent);
-    display:flex;align-items:center;justify-content:center;margin-right:12px;
+.sg-loc-modal-box {
+    max-width:460px;width:100%;height:auto!important;
+    padding:0!important;overflow:hidden;
 }
-.sg-loc-modal-title { margin:0;font-size:1.05rem;font-weight:700;color:var(--text-primary); }
-.sg-loc-modal-body  { margin-bottom:4px; }
+.sg-loc-modal-hero {
+    display:flex;align-items:center;gap:14px;
+    padding:20px 22px 18px;
+    background:linear-gradient(135deg,color-mix(in srgb,var(--primary) 14%,var(--bg-raised)),var(--bg-raised));
+    border-bottom:1px solid var(--border);
+    position:relative;
+}
+.sg-loc-modal-hero-icon {
+    width:48px;height:48px;border-radius:14px;font-size:1.5rem;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(135deg,color-mix(in srgb,var(--primary) 25%,transparent),color-mix(in srgb,var(--primary) 12%,transparent));
+    border:1.5px solid color-mix(in srgb,var(--primary) 35%,transparent);
+    box-shadow:0 2px 8px color-mix(in srgb,var(--primary) 15%,transparent);
+}
+.sg-loc-modal-hero-text { flex:1;min-width:0; }
+.sg-loc-modal-hero-title { font-size:1.1rem;font-weight:700;color:var(--text-primary);line-height:1.2; }
+.sg-loc-modal-hero-sub { font-size:.75rem;color:var(--text-muted);margin-top:2px; }
+.sg-loc-modal-close {
+    width:32px;height:32px;border-radius:8px;border:1px solid var(--border);
+    background:var(--bg-surface);color:var(--text-muted);cursor:pointer;font-size:.85rem;
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+    transition:all .15s;
+}
+.sg-loc-modal-close:hover { background:var(--bg-hover);color:var(--text-primary);border-color:var(--text-muted); }
+.sg-loc-modal-body { padding:20px 22px 8px;display:flex;flex-direction:column;gap:14px; }
+.sg-loc-field { display:flex;flex-direction:column;gap:5px; }
+.sg-loc-row2 { display:grid;grid-template-columns:1fr 1fr;gap:12px; }
+.sg-loc-label {
+    font-size:.72rem;font-weight:700;color:var(--text-muted);
+    text-transform:uppercase;letter-spacing:.04em;
+    display:flex;align-items:center;gap:5px;
+}
+.sg-loc-lbl-ico { font-size:.7rem;color:var(--primary);opacity:.8; }
 .sg-loc-input {
-    width:100%;padding:12px 16px;border-radius:12px;
-    border:2px solid var(--border);background:var(--bg-raised);
-    color:var(--text-primary);font-size:.95rem;font-weight:500;
-    outline:none;box-sizing:border-box;transition:border-color .15s;
-    margin-bottom:8px;appearance:none;
+    width:100%;padding:10px 13px;border-radius:10px;
+    border:1.5px solid var(--border);background:var(--bg-raised);
+    color:var(--text-primary);font-size:.9rem;font-weight:500;
+    outline:none;box-sizing:border-box;transition:border-color .18s,box-shadow .18s;
+    appearance:none;
 }
-.sg-loc-input:focus { border-color:var(--primary); }
+.sg-loc-input:focus {
+    border-color:var(--primary);
+    box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 15%,transparent);
+}
 .sg-loc-input.sg-input-error { border-color:#ef4444;animation:shake .25s; }
+.sg-loc-select { cursor:pointer; }
+.sg-loc-time-row {
+    display:flex;align-items:center;gap:10px;
+    background:var(--bg-raised);border:1.5px solid var(--border);
+    border-radius:12px;padding:10px 14px;transition:border-color .18s,box-shadow .18s;
+}
+.sg-loc-time-row:focus-within {
+    border-color:var(--primary);
+    box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 15%,transparent);
+}
+.sg-loc-time-box { display:flex;flex-direction:column;align-items:center;gap:2px;flex:1; }
+.sg-loc-time-lbl { font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted); }
+.sg-loc-time-input {
+    border:none!important;background:transparent!important;box-shadow:none!important;
+    padding:4px 6px!important;font-size:1.05rem!important;font-weight:700!important;
+    color:var(--text-primary)!important;text-align:center;cursor:pointer;width:100%;
+}
+.sg-loc-time-arrow { color:var(--text-muted);font-size:.7rem;flex-shrink:0;padding:0 4px; }
+.sg-loc-modal-footer {
+    display:flex;gap:10px;padding:16px 22px 20px;
+    border-top:1px solid var(--border);margin-top:4px;flex-shrink:0;
+}
+.sg-loc-save-btn {
+    flex:1;padding:11px 20px;border-radius:10px;border:none;cursor:pointer;
+    background:linear-gradient(135deg,var(--primary),color-mix(in srgb,var(--primary) 75%,#6366f1));
+    color:#fff;font-size:.9rem;font-weight:700;font-family:inherit;
+    display:flex;align-items:center;justify-content:center;gap:7px;
+    transition:all .18s;box-shadow:0 3px 12px color-mix(in srgb,var(--primary) 30%,transparent);
+}
+.sg-loc-save-btn:hover { transform:translateY(-1px);box-shadow:0 6px 20px color-mix(in srgb,var(--primary) 40%,transparent); }
+.sg-loc-save-btn:active { transform:translateY(0); }
+.sg-loc-cancel-btn {
+    padding:11px 20px;border-radius:10px;cursor:pointer;font-family:inherit;
+    border:1.5px solid var(--border);background:transparent;
+    color:var(--text-secondary);font-size:.9rem;font-weight:600;
+    transition:all .15s;
+}
+.sg-loc-cancel-btn:hover { background:var(--bg-hover);border-color:var(--text-muted);color:var(--text-primary); }
+
 @keyframes shake {
     0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)}
 }
@@ -7280,7 +7429,7 @@ ${ScheduleGraphPage._styles()}${this._styles()}`;
                 ${p.avatar_url ? `<img src="${p.avatar_url}">` : initials}
             </div>
             <div class="sgv-manager-info">
-                <div class="sgv-manager-name">${p.full_name || 'Керівник'}</div>
+                <div class="sgv-manager-name">${Fmt.esc(p.full_name || 'Керівник')}</div>
                 <div class="sgv-manager-meta">${p.role ? Fmt.role(p.role) : ''}</div>
                 <div class="sgv-manager-locs">🏪 ${locCount}</div>
             </div>
@@ -7310,7 +7459,7 @@ ${ScheduleGraphPage._styles()}${this._styles()}`;
             <div class="sg-av sm" style="background:${mColor}">
                 ${mp.avatar_url ? `<img src="${mp.avatar_url}">` : mInit}
             </div>
-            <span>${mp.full_name || 'Керівник'}</span>
+            <span>${Fmt.esc(mp.full_name || 'Керівник')}</span>
         </div>
     `)}
 
@@ -7336,7 +7485,7 @@ ${ScheduleGraphPage._styles()}${this._styles()}`;
 
     <div class="sg-section">
         <div class="sgv-header-bar">
-            <span class="sgv-loc-name">🏪 ${locName}</span>
+            <span class="sgv-loc-name">🏪 ${Fmt.esc(locName)}</span>
             <div class="sg-month-nav" style="margin-left:auto">
                 <button class="sg-mnav" onclick="ScheduleViewPage._prevMonth()"><i class="fa-solid fa-angle-left"></i></button>
                 <span class="sg-mlabel" style="min-width:140px">${MONTHS_UA[this._month]} ${this._year}</span>
@@ -7383,14 +7532,14 @@ ${ScheduleGraphPage._styles()}${this._styles()}`;
                         </td>`;
                     }).join('');
                     return `<tr>
-                        <td class="sg-td-name" title="${p.full_name||''}">
+                        <td class="sg-td-name" title="${Fmt.esc(p.full_name||'')}">
                             <div class="sg-emp-chip">
                                 <div class="sg-av" style="flex-shrink:0;background:${color}">
                                     ${p.avatar_url ? `<img src="${p.avatar_url}">` : init}
                                 </div>
                                 <div class="sg-name-info">
                                     <div class="sg-name-full">
-                                        ${p.full_name||'Без імені'}
+                                        ${Fmt.esc(p.full_name||'Без імені')}
                                         ${!isPrimary ? `<span class="sg-temp-badge">підміна</span>` : ''}
                                     </div>
                                     ${sub ? `<div class="sg-name-sub">${sub}</div>` : ''}

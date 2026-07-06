@@ -4,6 +4,45 @@
 
 const AdminPage = {
     _tab: 'users',
+    _group: 'content',
+    _groups: [],
+
+    _buildGroups(canManageUsers) {
+        return [
+            {
+                id: 'content', label: 'Контент', icon: 'fa-layer-group', tabs: [
+                    { id: 'users',        label: 'Користувачі',      icon: 'fa-users',               show: canManageUsers },
+                    { id: 'courses',      label: 'Курси',             icon: 'fa-book-open',           show: true },
+                    { id: 'tests',        label: 'Тести',             icon: 'fa-file-pen',            show: true },
+                    { id: 'news',         label: 'Новини',            icon: 'fa-newspaper',           show: true },
+                ]
+            },
+            {
+                id: 'access', label: 'Доступ', icon: 'fa-shield-halved', tabs: [
+                    { id: 'access-groups', label: 'Групи доступу',   icon: 'fa-lock',                show: canManageUsers },
+                    { id: 'trusted-ips',   label: 'Довірені IP',     icon: 'fa-network-wired',       show: AppState.isAdmin() },
+                ]
+            },
+            {
+                id: 'monitor', label: 'Моніторинг', icon: 'fa-chart-line', tabs: [
+                    { id: 'activity',    label: 'Активність',         icon: 'fa-clock-rotate-left',  show: AppState.isOwner() },
+                    { id: 'sessions',    label: 'Сесії',              icon: 'fa-list-ul',             show: AppState.isOwner() },
+                    { id: 'nav-stats',   label: 'Навігація',          icon: 'fa-route',               show: AppState.isOwner() },
+                    { id: 'task-report', label: 'Завдання',           icon: 'fa-list-check',          show: AppState.isOwner() },
+                ]
+            },
+            {
+                id: 'tools', label: 'Інструменти', icon: 'fa-screwdriver-wrench', tabs: [
+                    { id: 'supersearch',  label: 'Супер пошук',      icon: 'fa-magnifying-glass-chart', show: canManageUsers },
+                    { id: 'trash',        label: 'Кошик',            icon: 'fa-trash',               show: AppState.isOwner() },
+                    { id: 'feedback',     label: "Зворотний зв'язок", icon: 'fa-comment-dots',       show: AppState.isAdmin() },
+                    { id: 'ai-assistant', label: 'AI Помічник',      icon: 'fa-robot',               show: AppState.isAdmin() },
+                    { id: 'pleso',        label: 'Pleso',            icon: 'fa-tag',                  show: AppState.isAdmin() },
+                ]
+            },
+        ].map(g => ({ ...g, tabs: g.tabs.filter(t => t.show) }))
+         .filter(g => g.tabs.length > 0);
+    },
 
     async init(container, params) {
         if (!AppState.isAdmin() && !AppState.isSmm() && !AppState.isCeo()) {
@@ -15,6 +54,24 @@ const AdminPage = {
         const canManageUsers = AppState.isAdmin() || AppState.isCeo();
         UI.setBreadcrumb([{ label: AppState.isSmm() ? 'Контент' : 'Адміністрування' }]);
 
+        this._groups = this._buildGroups(canManageUsers);
+        const initTab   = params.tab || (canManageUsers ? 'users' : 'courses');
+        const initGroup = this._groups.find(g => g.tabs.some(t => t.id === initTab))?.id || this._groups[0]?.id;
+        this._tab   = initTab;
+        this._group = initGroup;
+
+        const groupsHtml = this._groups.map(g => `
+            <button class="adm-grp-btn${g.id === initGroup ? ' active' : ''}" data-group="${g.id}" onclick="AdminPage.switchGroup('${g.id}')">
+                <i class="fa-solid ${g.icon}"></i> ${g.label}
+            </button>`).join('');
+
+        const tabsHtml = this._groups.map(g => g.tabs.map(t => `
+            <button class="tab${t.id === initTab ? ' active' : ''}" data-tab="${t.id}" data-group="${g.id}"
+                    style="${g.id !== initGroup ? 'display:none' : ''}"
+                    onclick="AdminPage.switchTab('${t.id}', this)">
+                <i class="fa-solid ${t.icon}"></i> ${t.label}
+            </button>`).join('')).join('');
+
         container.innerHTML = `
             <div class="page-header">
                 <div class="page-title">
@@ -22,28 +79,39 @@ const AdminPage = {
                     <p>Керування системою</p>
                 </div>
             </div>
+            <div class="adm-groups" id="adm-groups">${groupsHtml}</div>
+            <div class="tabs" id="admin-tabs">${tabsHtml}</div>
+            <div id="admin-content"></div>
+            <style>
+.adm-groups {
+    display:flex;gap:6px;padding:0 0 0 0;margin-bottom:4px;
+}
+.adm-grp-btn {
+    display:flex;align-items:center;gap:7px;padding:8px 16px;border-radius:10px;
+    border:1.5px solid var(--border);background:transparent;
+    color:var(--text-secondary);font-size:.82rem;font-weight:600;cursor:pointer;
+    transition:all .15s;font-family:inherit;
+}
+.adm-grp-btn:hover:not(.active) { border-color:var(--primary);color:var(--primary);background:rgba(99,102,241,.05); }
+.adm-grp-btn.active { background:var(--primary);border-color:var(--primary);color:#fff;box-shadow:0 3px 10px rgba(99,102,241,.3); }
+.adm-grp-btn i { font-size:.8rem; }
+            </style>`;
 
-            <div class="tabs">
-                ${canManageUsers ? `<button class="tab" data-tab="users" onclick="AdminPage.switchTab('users', this)">👥 Користувачі</button>` : ''}
-                <button class="tab" data-tab="courses" onclick="AdminPage.switchTab('courses', this)">📚 Курси</button>
-                <button class="tab" data-tab="tests" onclick="AdminPage.switchTab('tests', this)">📝 Тести</button>
-                <button class="tab" data-tab="news" onclick="AdminPage.switchTab('news', this)">📰 Новини</button>
-                ${canManageUsers ? `<button class="tab" data-tab="access-groups" onclick="AdminPage.switchTab('access-groups', this)">🔐 Доступ до ресурсів</button>` : ''}
-                ${AppState.isOwner() ? `<button class="tab" data-tab="trash" onclick="AdminPage.switchTab('trash', this)"><i class="fa-solid fa-trash"></i> Кошик</button>` : ''}
-                ${canManageUsers ? `<button class="tab" data-tab="supersearch" onclick="AdminPage.switchTab('supersearch', this)"><i class="fa-solid fa-magnifying-glass-chart"></i> Супер пошук</button>` : ''}
-                ${AppState.isOwner() ? `<button class="tab" data-tab="activity" onclick="AdminPage.switchTab('activity', this)"><i class="fa-solid fa-clock-rotate-left"></i> Активність</button>` : ''}
-                ${AppState.isAdmin() ? `<button class="tab" data-tab="trusted-ips" onclick="AdminPage.switchTab('trusted-ips', this)"><i class="fa-solid fa-shield-halved"></i> Довірені IP</button>` : ''}
-                ${AppState.isAdmin() ? `<button class="tab" data-tab="ai-assistant" onclick="AdminPage.switchTab('ai-assistant', this)"><i class="fa-solid fa-robot"></i> AI Помічник</button>` : ''}
-                ${AppState.isAdmin() ? `<button class="tab" data-tab="pleso" onclick="AdminPage.switchTab('pleso', this)"><i class="fa-solid fa-tag"></i> Pleso</button>` : ''}
-            </div>
-
-            <div id="admin-content"></div>`;
-
-        this._tab = params.tab || (canManageUsers ? 'users' : 'courses');
         this._editCourseId = params.edit || null;
-        const activeBtn = container.querySelector(`.tab[data-tab="${this._tab}"]`);
-        if (activeBtn) activeBtn.classList.add('active');
         await this._loadTab();
+    },
+
+    switchGroup(groupId) {
+        if (this._group === groupId) return;
+        this._group = groupId;
+        document.querySelectorAll('.adm-grp-btn').forEach(b => b.classList.toggle('active', b.dataset.group === groupId));
+        document.querySelectorAll('#admin-tabs .tab').forEach(t => { t.style.display = t.dataset.group === groupId ? '' : 'none'; });
+        // Auto-select first tab of new group if current is in another group
+        const currentInGroup = document.querySelector(`#admin-tabs .tab[data-tab="${this._tab}"][data-group="${groupId}"]`);
+        if (!currentInGroup) {
+            const firstTab = document.querySelector(`#admin-tabs .tab[data-group="${groupId}"]`);
+            if (firstTab) firstTab.click();
+        }
     },
 
     async switchTab(tab, el) {
@@ -56,14 +124,21 @@ const AdminPage = {
             return;
         }
         this._tab = tab;
-        document.querySelectorAll('.tabs .tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('#admin-tabs .tab').forEach(t => t.classList.remove('active'));
         if (el) el.classList.add('active');
+        // Sync group selector if tab belongs to different group
+        const tabGroup = this._groups?.find(g => g.tabs.some(t => t.id === tab))?.id;
+        if (tabGroup && tabGroup !== this._group) {
+            this._group = tabGroup;
+            document.querySelectorAll('.adm-grp-btn').forEach(b => b.classList.toggle('active', b.dataset.group === tabGroup));
+            document.querySelectorAll('#admin-tabs .tab').forEach(t => { t.style.display = t.dataset.group === tabGroup ? '' : 'none'; });
+        }
         const tabLabels = {
             'users': 'Користувачі', 'courses': 'Курси', 'tests': 'Тести', 'news': 'Новини',
-            'access-groups': 'Доступ до ресурсів',
-            'trash': 'Кошик', 'logs': 'Логи', 'supersearch': 'Супер пошук', 'activity': 'Активність',
-            'trusted-ips': 'Довірені IP',
-            'ai-assistant': 'AI Помічник',
+            'access-groups': 'Групи доступу', 'trash': 'Кошик', 'supersearch': 'Супер пошук',
+            'activity': 'Активність', 'sessions': 'Сесії', 'nav-stats': 'Навігація',
+            'task-report': 'Завдання', 'feedback': "Зворотний зв'язок",
+            'trusted-ips': 'Довірені IP', 'ai-assistant': 'AI Помічник',
         };
         ActivityTracker.track('page_view', {
             page: `admin|${tab}`,
@@ -87,6 +162,10 @@ const AdminPage = {
                 case 'trash':         await this._renderTrash(el);                  break;
                 case 'supersearch':   await this._renderSuperSearch(el);            break;
                 case 'activity':      await this._renderActivity(el);               break;
+                case 'sessions':      await this._renderSessions(el);               break;
+                case 'nav-stats':     await this._renderNavStats(el);               break;
+                case 'task-report':   await this._renderTaskReport(el);             break;
+                case 'feedback':      await this._renderFeedback(el);               break;
                 case 'trusted-ips':   await this._renderTrustedIps(el);             break;
                 case 'ai-assistant':  await this._renderAiAssistant(el);            break;
                 case 'pleso':         this._renderPleso(el);                        break;
@@ -948,7 +1027,7 @@ const AdminPage = {
                     ${canSetBdReminder ? `<div class="up-section">${this._birthdayReminderBlock(u, bdReminder)}</div>` : ''}
                     ${AppState.isOwner() ? `<div class="up-section">
                         <button class="btn btn-ghost btn-sm" style="width:100%;justify-content:center;gap:.4rem"
-                            onclick="Modal.close();AdminPage.switchTab('activity',document.querySelector('.tab[data-tab=activity]'));AdminPage._ualPreselect('${u.id}')">
+                            onclick="Modal.close();AdminPage.switchTab('activity',document.querySelector('#admin-tabs .tab[data-tab=activity]'));AdminPage._ualPreselect('${u.id}')">
                             <i class="fa-solid fa-clock-rotate-left"></i> Переглянути активність
                         </button>
                     </div>` : ''}
@@ -1411,7 +1490,6 @@ const AdminPage = {
     },
 
     async openCreateUser() {
-        this._internOn = false;
         const el = document.getElementById('admin-content');
         el.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
         const [{ cities, positions, subdivisions, users }, allDovirenosti] = await Promise.all([
@@ -1519,8 +1597,9 @@ const AdminPage = {
                     <label class="input-label">
                         <span>Роль</span>
                         <div class="custom-select-wrapper">
-                            <select id="cu-role">
+                            <select id="cu-role" onchange="AdminPage._onRoleChange(this.value)">
                                 <option value="user">👤 Користувач</option>
+                                <option value="intern">🌱 Стажер</option>
                                 <option value="teacher">📚 Викладач</option>
                                 <option value="smm">📱 SMM-менеджер</option>
                                 <option value="manager">👔 Керівник</option>
@@ -1539,16 +1618,6 @@ const AdminPage = {
                     <h4>Робоча інформація</h4>
                 </div>
                 <div class="input-group">
-                        <!-- Intern toggle -->
-                        <div id="cu-intern-toggle-wrap" style="grid-column:1/-1;display:flex;align-items:center;gap:.9rem;padding:.75rem 1rem;background:color-mix(in srgb,#8b5cf6 8%,var(--bg-surface));border:1.5px solid color-mix(in srgb,#8b5cf6 25%,var(--border));border-radius:10px;cursor:pointer" onclick="AdminPage._toggleIntern()">
-                            <div id="cu-intern-knob" style="position:relative;width:40px;height:22px;background:var(--bg-hover);border:1.5px solid var(--border);border-radius:11px;transition:background .2s,border-color .2s;flex-shrink:0">
-                                <div style="position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .2s" id="cu-intern-dot"></div>
-                            </div>
-                            <div>
-                                <div style="font-weight:700;font-size:.9rem;color:var(--text-primary);display:flex;align-items:center;gap:.4rem"><i class="fa-solid fa-user-graduate" style="color:#8b5cf6"></i> Стажер</div>
-                                <div style="font-size:.78rem;color:var(--text-muted);margin-top:.1rem">Автоматично встановить посаду "Стажер" та обмежить доступ до розділів</div>
-                            </div>
-                        </div>
                         <label class="input-label">
                         <span>Місто</span>
                         ${CreatableSelect.html('cu-city', 'cities', cities.map(i=>i.name), '')}
@@ -1868,44 +1937,10 @@ const AdminPage = {
         CreatableMultiSelect.init('cu-dovirenosti', allDovirenosti.map(d => ({ id: d.id, name: d.name })), []);
     },
 
-    _internOn: false,
-    _prevJobPosition: '',
-
-    _toggleIntern() {
-        const jobInp = document.getElementById('cu-job-position');
-        const csWrap = document.querySelector('[data-cs="cu-job-position"]');
-        const csInput = csWrap?.querySelector('.cs-input');
-        const hasJob = (jobInp?.value || csInput?.value || '').trim();
-        if (!this._internOn && !hasJob) {
-            Toast.warning('Оберіть посаду', 'Спочатку вкажіть посаду, потім вмикайте стажера');
-            return;
-        }
-        this._internOn = !this._internOn;
-        const knob = document.getElementById('cu-intern-knob');
-        const dot  = document.getElementById('cu-intern-dot');
-        if (knob) {
-            knob.style.background    = this._internOn ? '#8b5cf6' : 'var(--bg-hover)';
-            knob.style.borderColor   = this._internOn ? '#8b5cf6' : 'var(--border)';
-        }
-        if (dot) dot.style.transform = this._internOn ? 'translateX(18px)' : 'translateX(0)';
-
-        const hiddenInp = jobInp;
-
-        if (this._internOn) {
-            const roleEl = document.getElementById('cu-role');
-            if (roleEl) roleEl.value = 'user';
-            const cur = hiddenInp?.value || csInput?.value || '';
-            this._prevJobPosition = cur;
-            const next = cur && !cur.startsWith('Стажер') ? `Стажер ${cur}` : (cur || 'Стажер');
-            if (hiddenInp) hiddenInp.value = next;
-            if (csInput)   csInput.value   = next;
-        } else {
-            const restored = this._prevJobPosition;
-            if (hiddenInp) hiddenInp.value = restored;
-            if (csInput)   csInput.value   = restored;
-            this._prevJobPosition = '';
-        }
+    _onRoleChange(role) {
+        // reserved for future role-specific UI adjustments
     },
+
 
     _autoPassword() {
         const val = Dom.val('cu-birthdate');
@@ -1958,16 +1993,15 @@ const AdminPage = {
                 p_subdivision:  Dom.val('cu-subdivision')      || null,
             });
             if (error) throw error;
+            const isIntern = role === 'intern';
             // Set fields not supported by admin_user_create RPC
             const extraFields = {
                 manager_id:     Dom.val('cu-manager')        || null,
                 hired_at:       Dom.val('cu-hired-at')       || null,
                 position_since: Dom.val('cu-position-since') || null,
-                label:          this._internOn ? 'intern'    : null,
+                label:          isIntern ? 'intern'          : null,
             };
             await supabase.from('profiles').update(extraFields).eq('id', userId);
-            const wasIntern = this._internOn;
-            this._internOn = false;
 
             // Auto-assign tests by job_position
             const newPosition = Dom.val('cu-job-position').trim();
@@ -1997,8 +2031,8 @@ const AdminPage = {
             const adminEl = document.getElementById('admin-content');
             if (adminEl) await this._renderUsersList(adminEl);
 
-            // Auto-create intern record when label='intern'
-            if (wasIntern) {
+            // Auto-create intern record when role='intern'
+            if (isIntern) {
                 try {
                     const managerId = Dom.val('cu-manager') || (AppState.isManager() ? AppState.profile.id : null);
                     await API.interns.create({
@@ -4477,6 +4511,883 @@ const AdminPage = {
         }
     },
 
+    // ── Журнал сесій ─────────────────────────────────────────────
+    _sessPage: 1, _sessLimit: 40, _sessUserId: '', _sessFrom: '', _sessTo: '', _sessProfiles: [],
+
+    async _renderSessions(el) {
+        const _pad = n => String(n).padStart(2, '0');
+        const today = new Date();
+        const todayStr = `${today.getFullYear()}-${_pad(today.getMonth()+1)}-${_pad(today.getDate())}`;
+        const ago30 = new Date(today); ago30.setDate(today.getDate() - 30);
+        const ago30Str = `${ago30.getFullYear()}-${_pad(ago30.getMonth()+1)}-${_pad(ago30.getDate())}`;
+        if (!this._sessFrom) this._sessFrom = ago30Str;
+        if (!this._sessTo)   this._sessTo   = todayStr;
+
+        const { data: profiles } = await API.profiles.getAll({ limit: 500 });
+        this._sessProfiles = profiles?.data || profiles || [];
+        const userOpts = this._sessProfiles.map(p =>
+            `<option value="${p.id}" ${p.id === this._sessUserId ? 'selected' : ''}>${Fmt.esc(p.full_name || p.email)}</option>`
+        ).join('');
+
+        el.innerHTML = `
+        <div class="adm-sess-wrap">
+            <div class="adm-sess-filters">
+                <select id="sess-uid" class="input-field" style="max-width:220px" onchange="AdminPage._sessUserId=this.value">
+                    <option value="">— Всі користувачі —</option>${userOpts}
+                </select>
+                <input type="date" id="sess-from" class="input-field" value="${this._sessFrom}" onchange="AdminPage._sessFrom=this.value">
+                <span style="color:var(--text-muted)">—</span>
+                <input type="date" id="sess-to" class="input-field" value="${this._sessTo}" onchange="AdminPage._sessTo=this.value">
+                <button class="btn btn-primary btn-sm" onclick="AdminPage._sessPage=1;AdminPage._loadSessions()">Застосувати</button>
+            </div>
+            <div id="sess-stats" class="adm-sess-stats"></div>
+            <div id="sess-table"></div>
+            <div id="sess-pager" style="display:flex;justify-content:center;gap:.4rem;margin-top:1rem;flex-wrap:wrap"></div>
+        </div>
+        <style>
+        .adm-sess-wrap{padding:1.25rem}
+        .adm-sess-filters{display:flex;align-items:center;gap:.65rem;flex-wrap:wrap;margin-bottom:1.25rem}
+        .adm-sess-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.75rem;margin-bottom:1.25rem}
+        .adm-sess-kpi{background:var(--bg-raised);border:1px solid var(--border);border-radius:var(--radius-lg);padding:.9rem 1.1rem}
+        .adm-sess-kpi-val{font-size:1.6rem;font-weight:700;color:var(--primary);line-height:1.1}
+        .adm-sess-kpi-lbl{font-size:.75rem;color:var(--text-muted);margin-top:.2rem}
+        .adm-sess-tbl{width:100%;border-collapse:collapse;font-size:.875rem}
+        .adm-sess-tbl th{padding:.55rem .85rem;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);background:var(--bg-raised);text-align:left;white-space:nowrap}
+        .adm-sess-tbl td{padding:.6rem .85rem;border-bottom:1px solid var(--border);vertical-align:middle}
+        .adm-sess-tbl tr:hover td{background:var(--bg-hover)}
+        .sess-live{display:inline-block;padding:.15rem .55rem;border-radius:999px;font-size:.72rem;font-weight:600;background:rgba(16,185,129,.15);color:#10b981}
+        .sess-ua{font-size:.75rem;color:var(--text-muted);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        </style>`;
+        await this._loadSessions();
+    },
+
+    async _loadSessions() {
+        const tableEl = document.getElementById('sess-table');
+        const statsEl = document.getElementById('sess-stats');
+        if (!tableEl) return;
+        tableEl.innerHTML = `<div style="text-align:center;padding:2rem"><div class="spinner"></div></div>`;
+
+        const offset = (this._sessPage - 1) * this._sessLimit;
+        const { data, count } = await API.loginSessions.getAll({
+            userId: this._sessUserId || undefined,
+            dateFrom: this._sessFrom, dateTo: this._sessTo,
+            limit: this._sessLimit, offset,
+        });
+
+        const active = data.filter(s => !s.ended_at).length;
+        const durations = data.filter(s => s.ended_at)
+            .map(s => (new Date(s.ended_at) - new Date(s.started_at)) / 1000);
+        const avgDur = durations.length
+            ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : 0;
+        const uniqueUsers = new Set(data.map(s => s.user_id)).size;
+
+        if (statsEl) statsEl.innerHTML = [
+            { v: count,                  l: 'Сесій за період' },
+            { v: active,                 l: 'Активних зараз' },
+            { v: uniqueUsers,            l: 'Унікальних юзерів' },
+            { v: this._sessFmtDur(avgDur), l: 'Середня тривалість' },
+        ].map(k => `<div class="adm-sess-kpi"><div class="adm-sess-kpi-val">${k.v}</div><div class="adm-sess-kpi-lbl">${k.l}</div></div>`).join('');
+
+        if (!data.length) {
+            tableEl.innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><h3>Сесій не знайдено</h3></div>`;
+            document.getElementById('sess-pager').innerHTML = '';
+            return;
+        }
+
+        const profileMap = Object.fromEntries(this._sessProfiles.map(p => [p.id, p]));
+        const rows = data.map(s => {
+            const p     = profileMap[s.user_id] || {};
+            const name  = Fmt.esc(p.full_name || p.email || '—');
+            const start = Fmt.datetime(s.started_at);
+            const end   = s.ended_at
+                ? Fmt.datetime(s.ended_at)
+                : `<span class="sess-live">активна</span>`;
+            const dur = s.ended_at
+                ? this._sessFmtDur((new Date(s.ended_at) - new Date(s.started_at)) / 1000)
+                : '—';
+            const ua = this._sessParseUA(s.ua || '');
+            return `<tr>
+                <td>${name}</td>
+                <td style="white-space:nowrap;font-size:.82rem">${start}</td>
+                <td style="white-space:nowrap;font-size:.82rem">${end}</td>
+                <td style="white-space:nowrap;font-size:.82rem">${dur}</td>
+                <td class="sess-ua" title="${Fmt.esc(s.ua || '')}">${Fmt.esc(ua)}</td>
+            </tr>`;
+        }).join('');
+
+        tableEl.innerHTML = `<div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-lg)">
+            <table class="adm-sess-tbl"><thead><tr>
+                <th>Користувач</th><th>Початок</th><th>Кінець</th><th>Тривалість</th><th>Браузер</th>
+            </tr></thead><tbody>${rows}</tbody></table></div>`;
+
+        const totalPages = Math.ceil(count / this._sessLimit);
+        const pager = document.getElementById('sess-pager');
+        if (pager) pager.innerHTML = totalPages < 2 ? '' :
+            Array.from({ length: Math.min(totalPages, 12) }, (_, i) => i + 1)
+                .map(p => `<button class="btn btn-sm ${p === this._sessPage ? 'btn-primary' : 'btn-ghost'}" onclick="AdminPage._sessPage=${p};AdminPage._loadSessions()">${p}</button>`)
+                .join('');
+    },
+
+    _sessFmtDur(sec) {
+        if (!sec || sec < 0) return '< 1хв';
+        const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = Math.floor(sec % 60);
+        if (h > 0) return `${h}г ${m}хв`;
+        if (m > 0) return `${m}хв ${s}с`;
+        return `${s}с`;
+    },
+
+    _sessParseUA(ua) {
+        if (!ua) return '—';
+        const os = ua.includes('Windows') ? 'Windows' : ua.includes('Macintosh') ? 'macOS'
+            : ua.includes('Linux') ? 'Linux' : ua.includes('Android') ? 'Android'
+            : ua.includes('iPhone') || ua.includes('iPad') ? 'iOS' : '';
+        let browser = 'Інший';
+        if (ua.includes('Edg/') || ua.includes('Edge/')) browser = 'Edge';
+        else if (ua.includes('OPR/') || ua.includes('Opera/')) browser = 'Opera';
+        else if (ua.includes('Chrome/') && !ua.includes('Chromium')) {
+            const m = ua.match(/Chrome\/([\d]+)/);
+            browser = 'Chrome' + (m ? ' ' + m[1] : '');
+        } else if (ua.includes('Firefox/')) {
+            const m = ua.match(/Firefox\/([\d]+)/);
+            browser = 'Firefox' + (m ? ' ' + m[1] : '');
+        } else if (ua.includes('Safari/') && ua.includes('Version/')) {
+            const m = ua.match(/Version\/([\d]+)/);
+            browser = 'Safari' + (m ? ' ' + m[1] : '');
+        }
+        return os ? `${browser} · ${os}` : browser;
+    },
+
+    // ── Інфографіка навігації ─────────────────────────────────────────
+    _navUserId: '', _navFrom: '', _navTo: '',
+
+    async _renderNavStats(el) {
+        const _pad = n => String(n).padStart(2, '0');
+        const today = new Date();
+        const todayStr = `${today.getFullYear()}-${_pad(today.getMonth()+1)}-${_pad(today.getDate())}`;
+        const ago30 = new Date(today); ago30.setDate(today.getDate() - 30);
+        const ago30Str = `${ago30.getFullYear()}-${_pad(ago30.getMonth()+1)}-${_pad(ago30.getDate())}`;
+        if (!this._navFrom) this._navFrom = ago30Str;
+        if (!this._navTo)   this._navTo   = todayStr;
+
+        const { data: profiles } = await API.profiles.getAll({ limit: 500 });
+        const profileList = profiles?.data || profiles || [];
+        const userOpts = profileList.map(p =>
+            `<option value="${p.id}" ${p.id === this._navUserId ? 'selected' : ''}>${Fmt.esc(p.full_name || p.email)}</option>`
+        ).join('');
+
+        el.innerHTML = `
+        <div class="adm-nav-wrap">
+            <div class="adm-sess-filters">
+                <select id="nav-uid" class="input-field" style="max-width:220px" onchange="AdminPage._navUserId=this.value">
+                    <option value="">— Всі користувачі —</option>${userOpts}
+                </select>
+                <input type="date" id="nav-from" class="input-field" value="${this._navFrom}" onchange="AdminPage._navFrom=this.value">
+                <span style="color:var(--text-muted)">—</span>
+                <input type="date" id="nav-to" class="input-field" value="${this._navTo}" onchange="AdminPage._navTo=this.value">
+                <button class="btn btn-primary btn-sm" onclick="AdminPage._loadNavStats()">Застосувати</button>
+            </div>
+            <div id="nav-content"></div>
+        </div>
+        <style>
+        .adm-nav-wrap{padding:1.25rem}
+        .nav-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-top:1.25rem}
+        @media(max-width:900px){.nav-grid{grid-template-columns:1fr}}
+        .nav-card{background:var(--bg-raised);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1.25rem}
+        .nav-card-title{font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:1rem}
+        .nav-bar-row{display:flex;align-items:center;gap:.65rem;margin-bottom:.45rem}
+        .nav-bar-lbl{font-size:.8rem;color:var(--text-secondary);width:130px;text-align:right;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .nav-bar-track{flex:1;background:var(--bg-surface);border-radius:4px;height:20px;overflow:hidden;position:relative;min-width:0}
+        .nav-bar-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--primary),#818cf8)}
+        .nav-bar-cnt{position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:.72rem;font-weight:600;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.4)}
+        .nav-hmap{overflow-x:auto;font-size:.7rem}
+        .nav-hmap table{border-collapse:collapse}
+        .nav-hmap th{padding:.25rem .35rem;color:var(--text-muted);background:var(--bg-raised);font-weight:600;white-space:nowrap}
+        .nav-hmap td{width:30px;height:30px;border:1px solid var(--border);text-align:center;font-weight:600;cursor:default}
+        .nav-hmap .nav-row-lbl{text-align:right;padding-right:.5rem;white-space:nowrap;max-width:120px;overflow:hidden;text-overflow:ellipsis;color:var(--text-secondary);border:none;width:auto}
+        </style>`;
+        await this._loadNavStats();
+    },
+
+    async _loadNavStats() {
+        const content = document.getElementById('nav-content');
+        if (!content) return;
+        content.innerHTML = `<div style="text-align:center;padding:2rem"><div class="spinner"></div></div>`;
+
+        const data = await API.userNavLog.getTransitions({
+            userId: this._navUserId || undefined,
+            dateFrom: this._navFrom, dateTo: this._navTo,
+        });
+
+        if (!data.length) {
+            content.innerHTML = `<div class="empty-state"><div class="empty-icon">🗺️</div><h3>Даних навігації ще немає</h3><p>Заповниться після переходів користувачів</p></div>`;
+            return;
+        }
+
+        const norm = r => {
+            if (!r) return null;
+            return (r.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, ':id')
+                     .split('?')[0] || r).split('/')[0] || r;
+        };
+
+        // top pages
+        const pageCnt = {};
+        data.forEach(({ to_route }) => {
+            const p = norm(to_route); if (!p) return;
+            pageCnt[p] = (pageCnt[p] || 0) + 1;
+        });
+        const topPages = Object.entries(pageCnt).sort((a,b) => b[1]-a[1]).slice(0, 15);
+        const maxPg = topPages[0]?.[1] || 1;
+
+        const topHtml = topPages.map(([page, cnt]) => `
+            <div class="nav-bar-row">
+                <div class="nav-bar-lbl" title="${Fmt.esc(page)}">${Fmt.esc(page)}</div>
+                <div class="nav-bar-track">
+                    <div class="nav-bar-fill" style="width:${Math.round(cnt/maxPg*100)}%"></div>
+                    <span class="nav-bar-cnt">${cnt}</span>
+                </div>
+            </div>`).join('');
+
+        // transition matrix
+        const routes = [...new Set(topPages.map(([r]) => r))].slice(0, 12);
+        const matrix = {};
+        data.forEach(({ from_route, to_route }) => {
+            const from = norm(from_route), to = norm(to_route);
+            if (!from || !to || !routes.includes(from) || !routes.includes(to)) return;
+            const k = `${from}||${to}`;
+            matrix[k] = (matrix[k] || 0) + 1;
+        });
+        const maxM = Math.max(1, ...Object.values(matrix));
+
+        const hmapHeader = `<tr><th style="border:none;background:transparent"></th>${routes.map(r =>
+            `<th style="writing-mode:vertical-lr;transform:rotate(180deg);height:80px;max-width:28px;font-size:.65rem;overflow:hidden;text-overflow:ellipsis" title="${Fmt.esc(r)}">${Fmt.esc(r)}</th>`).join('')}</tr>`;
+        const hmapRows = routes.map(from => {
+            const cells = routes.map(to => {
+                const v = matrix[`${from}||${to}`] || 0;
+                const alpha = v > 0 ? Math.max(0.08, v / maxM) : 0;
+                const bg = v > 0 ? `rgba(99,102,241,${alpha.toFixed(2)})` : 'transparent';
+                const color = v / maxM > 0.5 ? '#fff' : 'var(--text-primary)';
+                return `<td style="background:${bg};color:${color}" title="${Fmt.esc(from)} → ${Fmt.esc(to)}: ${v}">${v||''}</td>`;
+            }).join('');
+            return `<tr><td class="nav-row-lbl" title="${Fmt.esc(from)}">${Fmt.esc(from)}</td>${cells}</tr>`;
+        }).join('');
+
+        const total = data.length;
+        const uUsers = new Set(data.map(d => d.user_id)).size;
+        const avgPer = uUsers ? Math.round(total / uUsers) : 0;
+
+        content.innerHTML = `
+            <div class="adm-sess-stats" style="margin-top:0">
+                <div class="adm-sess-kpi"><div class="adm-sess-kpi-val">${total.toLocaleString('uk-UA')}</div><div class="adm-sess-kpi-lbl">Переходів всього</div></div>
+                <div class="adm-sess-kpi"><div class="adm-sess-kpi-val">${uUsers}</div><div class="adm-sess-kpi-lbl">Унікальних юзерів</div></div>
+                <div class="adm-sess-kpi"><div class="adm-sess-kpi-val">${avgPer}</div><div class="adm-sess-kpi-lbl">Переходів / юзер</div></div>
+                <div class="adm-sess-kpi"><div class="adm-sess-kpi-val">${Fmt.esc(topPages[0]?.[0] || '—')}</div><div class="adm-sess-kpi-lbl">Топ сторінка</div></div>
+            </div>
+            <div class="nav-grid">
+                <div class="nav-card">
+                    <div class="nav-card-title">Топ сторінок за відвідуваністю</div>
+                    ${topHtml}
+                </div>
+                <div class="nav-card">
+                    <div class="nav-card-title">Матриця переходів (звідки → куди)</div>
+                    <div class="nav-hmap"><table><thead>${hmapHeader}</thead><tbody>${hmapRows}</tbody></table></div>
+                </div>
+            </div>`;
+    },
+
+    // ── Звіт завдань (тести) ──────────────────────────────────────────
+    _taskFrom: '', _taskTo: '',
+
+    async _renderTaskReport(el) {
+        const _pad = n => String(n).padStart(2, '0');
+        const today = new Date();
+        const todayStr = `${today.getFullYear()}-${_pad(today.getMonth()+1)}-${_pad(today.getDate())}`;
+        const ago30 = new Date(today); ago30.setDate(today.getDate() - 30);
+        const ago30Str = `${ago30.getFullYear()}-${_pad(ago30.getMonth()+1)}-${_pad(ago30.getDate())}`;
+        if (!this._taskFrom) this._taskFrom = ago30Str;
+        if (!this._taskTo)   this._taskTo   = todayStr;
+
+        el.innerHTML = `
+        <div class="adm-task-wrap">
+            <div class="adm-sess-filters">
+                <input type="date" id="task-from" class="input-field" value="${this._taskFrom}" onchange="AdminPage._taskFrom=this.value">
+                <span style="color:var(--text-muted)">—</span>
+                <input type="date" id="task-to" class="input-field" value="${this._taskTo}" onchange="AdminPage._taskTo=this.value">
+                <button class="btn btn-primary btn-sm" onclick="AdminPage._loadTaskReport()">Застосувати</button>
+            </div>
+            <div id="task-content"></div>
+        </div>
+        <style>
+        .adm-task-wrap{padding:1.25rem}
+        .task-tbl{width:100%;border-collapse:collapse;font-size:.875rem}
+        .task-tbl th{padding:.55rem .85rem;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);background:var(--bg-raised);text-align:left;white-space:nowrap}
+        .task-tbl td{padding:.6rem .85rem;border-bottom:1px solid var(--border);vertical-align:middle}
+        .task-tbl tr:hover td{background:var(--bg-hover)}
+        .task-pct-bar{display:inline-flex;align-items:center;gap:.4rem}
+        .task-pct-track{width:56px;height:7px;background:var(--bg-surface);border-radius:4px;overflow:hidden}
+        .task-pct-fill{height:100%;border-radius:4px}
+        </style>`;
+        await this._loadTaskReport();
+    },
+
+    async _loadTaskReport() {
+        const content = document.getElementById('task-content');
+        if (!content) return;
+        content.innerHTML = `<div style="text-align:center;padding:2rem"><div class="spinner"></div></div>`;
+
+        const attempts = await API.testAttemptReport.get({ dateFrom: this._taskFrom, dateTo: this._taskTo });
+
+        if (!attempts.length) {
+            content.innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><h3>Немає даних за обраний період</h3></div>`;
+            return;
+        }
+
+        // group by test
+        const byTest = {};
+        attempts.forEach(a => {
+            if (!byTest[a.test_id]) byTest[a.test_id] = {
+                title: a.tests?.title || a.test_id,
+                attempts: [], users: new Set(),
+            };
+            byTest[a.test_id].attempts.push(a);
+            byTest[a.test_id].users.add(a.user_id);
+        });
+
+        const tests = Object.values(byTest).sort((a, b) => b.attempts.length - a.attempts.length);
+
+        const totalAtt = attempts.length;
+        const uniqTests = tests.length;
+        const uniqUsers = new Set(attempts.map(a => a.user_id)).size;
+        const passRate = totalAtt
+            ? Math.round(attempts.filter(a => a.passed).length / totalAtt * 100) : 0;
+
+        const rows = tests.map(t => {
+            const att   = t.attempts.length;
+            const pass  = t.attempts.filter(a => a.passed).length;
+            const pct   = att ? Math.round(pass / att * 100) : 0;
+            const scores = t.attempts.map(a => a.percentage).filter(v => v != null);
+            const avg   = scores.length ? Math.round(scores.reduce((a,b)=>a+b,0)/scores.length) : 0;
+            const last  = t.attempts[0]?.completed_at;
+            const color = pct >= 70 ? '#10b981' : pct >= 40 ? '#f59e0b' : '#ef4444';
+            return `<tr>
+                <td style="max-width:280px">${Fmt.esc(t.title)}</td>
+                <td style="text-align:center;font-weight:600">${att}</td>
+                <td style="text-align:center;color:var(--text-secondary)">${t.users.size}</td>
+                <td>
+                    <div class="task-pct-bar">
+                        <div class="task-pct-track"><div class="task-pct-fill" style="width:${pct}%;background:${color}"></div></div>
+                        <span style="font-size:.8rem;min-width:30px">${pct}%</span>
+                    </div>
+                </td>
+                <td style="text-align:center;font-size:.85rem">${avg}%</td>
+                <td style="font-size:.78rem;color:var(--text-muted);white-space:nowrap">${last ? Fmt.datetime(last) : '—'}</td>
+            </tr>`;
+        }).join('');
+
+        content.innerHTML = `
+            <div class="adm-sess-stats" style="margin-bottom:1.25rem">
+                <div class="adm-sess-kpi"><div class="adm-sess-kpi-val">${totalAtt}</div><div class="adm-sess-kpi-lbl">Спроб всього</div></div>
+                <div class="adm-sess-kpi"><div class="adm-sess-kpi-val">${uniqTests}</div><div class="adm-sess-kpi-lbl">Тестів</div></div>
+                <div class="adm-sess-kpi"><div class="adm-sess-kpi-val">${uniqUsers}</div><div class="adm-sess-kpi-lbl">Унікальних юзерів</div></div>
+                <div class="adm-sess-kpi"><div class="adm-sess-kpi-val">${passRate}%</div><div class="adm-sess-kpi-lbl">Загальна успішність</div></div>
+            </div>
+            <div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-lg)">
+            <table class="task-tbl"><thead><tr>
+                <th>Тест</th><th style="text-align:center">Спроби</th><th style="text-align:center">Юзери</th>
+                <th>Успішність</th><th style="text-align:center">Сер.бал</th><th>Остання спроба</th>
+            </tr></thead><tbody>${rows}</tbody></table></div>`;
+    },
+
+    // ── Зворотний зв'язок ─────────────────────────────────────────
+    _fbStatus: 'all',
+    _fbStatus: 'all',
+    _fbItems: [],
+    _fbProfileMap: {},
+    _fbSelectedId: null,
+
+    async _renderFeedback(el) {
+        if (!AppState.isAdmin()) { el.innerHTML = ''; return; }
+        this._fbStatus = 'all';
+        this._fbSelectedId = null;
+        el.innerHTML = `
+<div class="fbm-shell">
+    <div class="fbm-sidebar">
+        <div class="fbm-sidebar-head">
+            <div class="fbm-sidebar-title"><i class="fa-regular fa-comments"></i> Зворотний зв'язок</div>
+            <div class="fbm-filters">
+                ${[['all','Усі'],['new','🔴 Нові'],['seen','👁 Бачено'],['in_progress','🔧 В роботі'],['resolved','✅ Вирішено']].map(([s,l]) =>
+                    `<button class="fbm-filter${s==='all'?' active':''}" data-status="${s}" onclick="AdminPage._fbmFilter('${s}',this)">${l}</button>`
+                ).join('')}
+            </div>
+        </div>
+        <div class="fbm-list" id="fbm-list">
+            <div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>
+        </div>
+    </div>
+    <div class="fbm-chat-panel" id="fbm-chat-panel">
+        <div class="fbm-empty">
+            <div class="fbm-empty-ico"><i class="fa-regular fa-comments"></i></div>
+            <div style="font-size:.9rem;font-weight:600">Оберіть звернення зі списку</div>
+            <div style="font-size:.8rem">Щоб переглянути переписку</div>
+        </div>
+    </div>
+</div>
+<style>
+.fbm-shell { display:flex;height:calc(100vh - 290px);min-height:360px;max-height:680px;border:1.5px solid var(--border);border-radius:16px;overflow:hidden;margin-top:4px;margin-right:190px; }
+.fbm-sidebar { width:310px;flex-shrink:0;display:flex;flex-direction:column;border-right:1.5px solid var(--border);background:var(--bg-surface); }
+.fbm-sidebar-head { padding:14px 14px 10px;border-bottom:1px solid var(--border);flex-shrink:0; }
+.fbm-sidebar-title { font-size:.9rem;font-weight:700;color:var(--text-primary);margin-bottom:10px;display:flex;align-items:center;gap:7px; }
+.fbm-filters { display:flex;gap:4px;flex-wrap:wrap; }
+.fbm-filter { padding:3px 9px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:.7rem;font-weight:600;cursor:pointer;transition:all .15s; }
+.fbm-filter:hover { border-color:var(--primary);color:var(--primary); }
+.fbm-filter.active { border-color:var(--primary);background:var(--primary);color:#fff; }
+.fbm-list { flex:1;overflow-y:auto; }
+.fbm-list-empty { display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-size:.82rem;padding:20px;text-align:center; }
+.fbm-item { display:flex;align-items:flex-start;gap:10px;padding:11px 14px;cursor:pointer;border-bottom:1px solid var(--border);transition:background .12s;position:relative; }
+.fbm-item:hover { background:var(--bg-hover); }
+.fbm-item.active { background:rgba(99,102,241,.09); }
+.fbm-item.active::before { content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:#6366f1;border-radius:0 2px 2px 0; }
+.fbm-item-ico { width:36px;height:36px;border-radius:50%;background:var(--bg-raised);display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0; }
+.fbm-item-body { flex:1;min-width:0; }
+.fbm-item-top { display:flex;align-items:baseline;gap:5px;margin-bottom:2px; }
+.fbm-item-name { font-size:.8rem;font-weight:700;color:var(--text-primary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.fbm-item-time { font-size:.66rem;color:var(--text-muted);flex-shrink:0; }
+.fbm-item-preview { font-size:.74rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:4px; }
+.fbm-item-foot { display:flex;align-items:center;gap:5px; }
+.fbm-dot { width:7px;height:7px;border-radius:50%;flex-shrink:0; }
+.fbm-dot-new  { background:#ef4444; }
+.fbm-dot-seen { background:#9ca3af; }
+.fbm-dot-prog { background:#f59e0b; }
+.fbm-dot-done { background:#10b981; }
+.fbm-item-status { font-size:.66rem;color:var(--text-muted); }
+.fbm-unread { width:17px;height:17px;border-radius:50%;background:#ef4444;color:#fff;font-size:.6rem;font-weight:700;display:flex;align-items:center;justify-content:center;margin-left:auto;flex-shrink:0; }
+.fbm-item-deleted { opacity:.55; }
+.fbm-item-deleted .fbm-item-name { text-decoration:line-through; }
+.fbm-deleted-notice { padding:10px 18px;background:var(--bg-raised);border-top:1px solid var(--border);font-size:.8rem;color:var(--text-muted);display:flex;align-items:center;gap:8px;flex-shrink:0; }
+/* Right panel */
+.fbm-chat-panel { flex:1;display:flex;flex-direction:column;min-width:0;background:var(--bg-surface); }
+.fbm-empty { display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:10px;color:var(--text-muted); }
+.fbm-empty-ico { font-size:3.5rem;opacity:.2; }
+.fbm-chat-head { display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1.5px solid var(--border);flex-shrink:0;background:var(--bg-surface); }
+.fbm-chat-head-ico { width:40px;height:40px;border-radius:50%;background:var(--bg-raised);display:flex;align-items:center;justify-content:center;font-size:1.3rem;flex-shrink:0; }
+.fbm-chat-head-info { flex:1;min-width:0; }
+.fbm-chat-head-name { font-size:.9rem;font-weight:700;color:var(--text-primary); }
+.fbm-chat-head-sub  { font-size:.72rem;color:var(--text-muted);margin-top:1px; }
+.fbm-head-actions { display:flex;align-items:center;gap:8px;flex-shrink:0; }
+.fbm-status-sel { padding:5px 10px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.78rem;cursor:pointer;font-weight:600;transition:border-color .2s,color .2s; }
+.fbm-status-sel[data-status="new"]         { border-color:#3b82f6;color:#3b82f6; }
+.fbm-status-sel[data-status="seen"]        { border-color:#6b7280;color:#6b7280; }
+.fbm-status-sel[data-status="in_progress"] { border-color:#f59e0b;color:#f59e0b; }
+.fbm-status-sel[data-status="resolved"]    { border-color:#10b981;color:#10b981; }
+.fbm-msgs { flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:14px; }
+.fbm-bwrap { display:flex;align-items:flex-end;gap:9px; }
+.fbm-bwrap-user  { flex-direction:row-reverse; }
+.fbm-avatar { width:32px;height:32px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.82rem;font-weight:700;flex-shrink:0; }
+.fbm-avatar-user  { background:rgba(99,102,241,.15);color:#6366f1; }
+.fbm-avatar-admin { background:rgba(16,185,129,.15);color:#10b981; }
+.fbm-sender-lbl { font-size:.7rem;font-weight:700;color:#10b981;margin-bottom:3px;padding-left:2px; }
+.fbm-bubble { padding:10px 14px;border-radius:16px;font-size:.875rem;line-height:1.55; }
+.fbm-bubble-user  { background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border-bottom-right-radius:4px; }
+.fbm-bubble-admin { display:inline-block;background:var(--bg-hover);color:var(--text-primary);border:1.5px solid var(--border);border-bottom-left-radius:4px; }
+.fbm-bubble-text  { white-space:pre-line;word-break:break-word; }
+.fbm-bubble-time  { font-size:.66rem;margin-top:5px;opacity:.55;text-align:right; }
+.fbm-bubble-admin .fbm-bubble-time { text-align:left; }
+.fbm-bubble-imgs  { display:flex;gap:6px;flex-wrap:wrap;margin-top:8px; }
+.fbm-bubble-img   { width:80px;height:60px;object-fit:cover;border-radius:7px;cursor:pointer;border:1.5px solid rgba(255,255,255,.25);transition:opacity .15s; }
+.fbm-bubble-img:hover { opacity:.8; }
+.fbm-img-ph { width:80px;height:60px;border-radius:7px;border:1.5px solid rgba(255,255,255,.2);background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.6);font-size:.85rem; }
+.fbm-pending { text-align:center;font-size:.8rem;color:var(--text-muted);padding:14px;border:1.5px dashed var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;gap:7px; }
+.fbm-paste-strip { display:flex;flex-wrap:wrap;gap:8px;padding:8px 18px 0;border-top:1.5px solid var(--border);background:var(--bg-surface); }
+.fbm-paste-chip { position:relative;width:64px;height:48px;border-radius:8px;overflow:hidden;border:1.5px solid var(--border); }
+.fbm-paste-thumb { width:100%;height:100%;object-fit:cover;display:block; }
+.fbm-paste-rm { position:absolute;top:1px;right:1px;width:16px;height:16px;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;border:none;cursor:pointer;font-size:.7rem;line-height:16px;text-align:center;padding:0; }
+.fbm-paste-rm:hover { background:#ef4444; }
+.fbm-input-area { display:flex;align-items:flex-end;gap:10px;padding:12px 18px 14px;border-top:none;flex-shrink:0; }
+.fbm-input-ta { flex:1;resize:none;padding:10px 14px;border-radius:12px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-family:inherit;font-size:.875rem;line-height:1.45;transition:border-color .15s;box-sizing:border-box; }
+.fbm-input-ta:focus { outline:none;border-color:#6366f1; }
+.fbm-send-btn { width:42px;height:42px;border-radius:12px;border:none;flex-shrink:0;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.95rem;transition:opacity .15s,transform .15s; }
+.fbm-send-btn:hover { opacity:.88;transform:translateY(-1px); }
+.fbm-send-btn:disabled { opacity:.4;cursor:not-allowed;transform:none; }
+</style>`;
+        await this._fbmLoadList();
+    },
+
+    async _fbmFilter(status, btn) {
+        this._fbStatus = status;
+        document.querySelectorAll('.fbm-filter').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        await this._fbmLoadList();
+    },
+
+    async _fbmLoadList() {
+        const listEl = document.getElementById('fbm-list');
+        if (!listEl) return;
+        listEl.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
+        try {
+            const items = await API.feedback.getAll({
+                status: this._fbStatus === 'all' ? null : this._fbStatus,
+                limit: 100, offset: 0,
+            });
+            this._fbItems = items;
+
+            if (!items.length) { listEl.innerHTML = `<div class="fbm-list-empty">Звернень не знайдено</div>`; return; }
+
+            const profileIds = [...new Set(items.map(i => i.user_id).filter(Boolean))];
+            if (profileIds.length) {
+                const { data: profs } = await supabase.from('profiles').select('id,full_name,job_position,email').in('id', profileIds);
+                this._fbProfileMap = {};
+                (profs || []).forEach(p => this._fbProfileMap[p.id] = p);
+            }
+
+            const typeIcon   = { bug:'🐛', suggestion:'💡', question:'❓', other:'💬' };
+            const typeLabel  = { bug:'Помилка', suggestion:'Пропозиція', question:'Питання', other:'Інше' };
+            const statusDot  = { new:'fbm-dot-new', seen:'fbm-dot-seen', in_progress:'fbm-dot-prog', resolved:'fbm-dot-done' };
+            const statusLbl  = { new:'Нове', seen:'Бачено', in_progress:'В роботі', resolved:'Вирішено' };
+
+            listEl.innerHTML = items.map(item => {
+                const prof    = this._fbProfileMap[item.user_id] || {};
+                const lastMsg = item.reply || item.message;
+                const isNew   = item.status === 'new' && !item.is_deleted;
+                const isActive = item.id === this._fbSelectedId;
+                const isDel   = item.is_deleted;
+                return `
+<div class="fbm-item${isActive?' active':''}${isDel?' fbm-item-deleted':''}" id="fbm-item-${item.id}" onclick="AdminPage._fbmSelectThread('${item.id}')">
+    <div class="fbm-item-ico">${isDel ? '🗑️' : (typeIcon[item.type] || '💬')}</div>
+    <div class="fbm-item-body">
+        <div class="fbm-item-top">
+            <div class="fbm-item-name">${Fmt.esc(prof.full_name || 'Анонім')}</div>
+            <div class="fbm-item-time">${Fmt.dateShort(item.created_at)}</div>
+        </div>
+        <div class="fbm-item-preview">${isDel ? '<em>Видалено користувачем</em>' : (Fmt.esc(lastMsg?.slice(0,55) || '') + ((lastMsg?.length||0)>55?'…':''))}</div>
+        <div class="fbm-item-foot">
+            ${isDel
+                ? '<span class="fbm-item-status" style="color:var(--text-muted)">Видалено</span>'
+                : `<div class="fbm-dot ${statusDot[item.status]||'fbm-dot-seen'}"></div>
+                   <span class="fbm-item-status">${statusLbl[item.status]||item.status} · ${typeLabel[item.type]||item.type}</span>
+                   ${isNew ? '<div class="fbm-unread">!</div>' : ''}`
+            }
+        </div>
+    </div>
+</div>`;
+            }).join('');
+        } catch(e) {
+            listEl.innerHTML = `<div class="fbm-list-empty" style="color:#ef4444">${Fmt.esc(e.message)}</div>`;
+        }
+    },
+
+    async _fbmSelectThread(id) {
+        // Update active state in list
+        document.querySelectorAll('.fbm-item').forEach(el => el.classList.remove('active'));
+        document.getElementById(`fbm-item-${id}`)?.classList.add('active');
+        this._fbSelectedId = id;
+
+        const chatEl = document.getElementById('fbm-chat-panel');
+        if (!chatEl) return;
+        chatEl.innerHTML = `<div style="display:flex;justify-content:center;align-items:center;flex:1;height:100%"><div class="spinner"></div></div>`;
+
+        try {
+            const item = this._fbItems.find(i => i.id === id);
+            const prof = this._fbProfileMap[item?.user_id] || {};
+            const messages = await API.feedback.getMessages(id);
+
+            // Resolve admin sender names
+            const adminIds = [...new Set(messages.filter(m => m.sender_role === 'admin' && m.sender_id).map(m => m.sender_id))];
+            const senderMap = {};
+            if (adminIds.length) {
+                const { data: profs } = await supabase.from('profiles').select('id,full_name').in('id', adminIds);
+                (profs || []).forEach(p => { senderMap[p.id] = p.full_name; });
+            }
+
+            // Mark as seen if new (skip for deleted items)
+            if (item?.status === 'new' && !item?.is_deleted) {
+                await API.feedback.setStatus(id, 'seen').catch(() => {});
+                if (item) item.status = 'seen';
+                const dot = document.querySelector(`#fbm-item-${id} .fbm-dot`);
+                if (dot) { dot.className = 'fbm-dot fbm-dot-seen'; }
+                const unread = document.querySelector(`#fbm-item-${id} .fbm-unread`);
+                if (unread) unread.remove();
+                const stEl = document.querySelector(`#fbm-item-${id} .fbm-item-status`);
+                if (stEl) stEl.textContent = 'Бачено · ' + ({bug:'Помилка',suggestion:'Пропозиція',question:'Питання',other:'Інше'}[item?.type]||'');
+            }
+
+            this._fbmRenderChat(chatEl, item, prof, messages, senderMap);
+        } catch(e) {
+            chatEl.innerHTML = `<div class="fbm-empty"><p style="color:#ef4444">${Fmt.esc(e.message)}</p></div>`;
+        }
+    },
+
+    _fbmRenderChat(chatEl, item, prof, messages, senderMap = {}) {
+        const typeIcon  = { bug:'🐛', suggestion:'💡', question:'❓', other:'💬' };
+        const typeLabel = { bug:'Помилка', suggestion:'Пропозиція', question:'Питання', other:'Інше' };
+        const statusOpts  = ['new','seen','in_progress','resolved'];
+        const statusLabel = { new:'Нові', seen:'Бачено', in_progress:'В роботі', resolved:'Вирішено' };
+        const ctx = item?.context || {};
+        const hasScreens = item?.screenshot_urls?.length;
+        const showFallback = item?.reply && !messages.length;
+        const initials = prof.full_name ? prof.full_name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase() : '?';
+        const adminName = (sid) => Fmt.esc(senderMap[sid] || 'Адміністратор');
+
+        chatEl.innerHTML = `
+<div class="fbm-chat-head">
+    <div class="fbm-chat-head-ico">${typeIcon[item?.type]||'💬'}</div>
+    <div class="fbm-chat-head-info">
+        <div class="fbm-chat-head-name">${Fmt.esc(prof.full_name || 'Анонім')}</div>
+        <div class="fbm-chat-head-sub">
+            ${prof.job_position ? Fmt.esc(prof.job_position)+' · ' : ''}
+            ${item?.title ? Fmt.esc(item.title)+' · ' : Fmt.esc(typeLabel[item?.type]||'')+' · '}
+            ${Fmt.datetime(item?.created_at)}
+        </div>
+    </div>
+    <div class="fbm-head-actions">
+        <select class="fbm-status-sel" data-status="${item?.status||'new'}" onchange="AdminPage._fbmSetStatus('${item?.id}',this.value);this.dataset.status=this.value">
+            ${statusOpts.map(s=>`<option value="${s}"${s===item?.status?' selected':''}>${statusLabel[s]}</option>`).join('')}
+        </select>
+    </div>
+</div>
+<div class="fbm-msgs" id="fbm-msgs">
+    <div class="fbm-bwrap fbm-bwrap-user">
+        <div class="fbm-bubble fbm-bubble-user">
+            <div class="fbm-bubble-text">${Fmt.esc(item?.message||'')}</div>
+            ${hasScreens ? `<div class="fbm-bubble-imgs" id="fbm-imgs-${item.id}">
+                ${item.screenshot_urls.map((_,i)=>
+                    `<div class="fbm-img-ph" data-id="${item.id}" data-idx="${i}"><i class="fa-solid fa-image"></i></div>`
+                ).join('')}
+            </div>` : ''}
+            <div class="fbm-bubble-time">${Fmt.datetime(item?.created_at)}</div>
+        </div>
+        <div class="fbm-avatar fbm-avatar-user">${initials}</div>
+    </div>
+
+    ${messages.map(m => {
+        const lines = m.body.split('\n');
+        const textLines = lines.filter(l => !l.startsWith('__IMG__:')).join('\n');
+        const imgPaths  = lines.filter(l => l.startsWith('__IMG__:')).map(l => l.slice(8));
+        const imgHtml = imgPaths.length
+            ? `<div class="fbm-bubble-imgs" id="fbm-msg-imgs-${m.id}">${imgPaths.map((_,i)=>`<div class="fbm-img-ph fbm-msg-img-ph" data-mid="${m.id}" data-idx="${i}"><i class="fa-solid fa-image"></i></div>`).join('')}</div>`
+            : '';
+        return m.sender_role === 'admin' ? `
+    <div class="fbm-bwrap">
+        <div class="fbm-avatar fbm-avatar-admin"><i class="fa-solid fa-headset"></i></div>
+        <div>
+            <div class="fbm-sender-lbl">${adminName(m.sender_id)}</div>
+            <div class="fbm-bubble fbm-bubble-admin">
+                ${textLines ? `<div class="fbm-bubble-text">${Fmt.esc(textLines)}</div>` : ''}
+                ${imgHtml}
+                <div class="fbm-bubble-time">${Fmt.datetime(m.created_at)}</div>
+            </div>
+        </div>
+    </div>` : `
+    <div class="fbm-bwrap fbm-bwrap-user">
+        <div class="fbm-bubble fbm-bubble-user">
+            ${textLines ? `<div class="fbm-bubble-text">${Fmt.esc(textLines)}</div>` : ''}
+            ${imgHtml}
+            <div class="fbm-bubble-time">${Fmt.datetime(m.created_at)}</div>
+        </div>
+        <div class="fbm-avatar fbm-avatar-user">${initials}</div>
+    </div>`;
+    }).join('')}
+
+    ${showFallback ? `
+    <div class="fbm-bwrap">
+        <div class="fbm-avatar fbm-avatar-admin"><i class="fa-solid fa-headset"></i></div>
+        <div>
+            <div class="fbm-sender-lbl">Адміністратор</div>
+            <div class="fbm-bubble fbm-bubble-admin">
+                <div class="fbm-bubble-text">${Fmt.esc(item.reply)}</div>
+                <div class="fbm-bubble-time">${Fmt.datetime(item.replied_at)}</div>
+            </div>
+        </div>
+    </div>` : ''}
+
+    ${!messages.length && !item?.reply ? `<div class="fbm-pending"><i class="fa-regular fa-clock"></i> Очікує відповіді</div>` : ''}
+</div>
+${item?.is_deleted ? `
+<div class="fbm-deleted-notice">
+    <i class="fa-solid fa-trash-can"></i> Звернення видалено користувачем — відповідь неможлива
+</div>` : `
+<div class="fbm-paste-strip" id="fbm-paste-strip" style="display:none"></div>
+<div class="fbm-input-area">
+    <textarea id="fbm-input-ta" class="fbm-input-ta" placeholder="Відповідь… (Ctrl+Enter — надіслати, Ctrl+V — вставити зображення)" rows="2"
+        onkeydown="if(event.ctrlKey&&event.key==='Enter'){event.preventDefault();AdminPage._fbmSend('${item?.id}')}"></textarea>
+    <button class="fbm-send-btn" id="fbm-send-btn" onclick="AdminPage._fbmSend('${item?.id}')">
+        <i class="fa-solid fa-paper-plane"></i>
+    </button>
+</div>`}`;
+
+        this._fbmFiles = [];
+
+        // Paste handler for images
+        const ta = document.getElementById('fbm-input-ta');
+        if (ta) ta.addEventListener('paste', e => {
+            const imgs = [...(e.clipboardData?.items||[])].filter(i => i.type.startsWith('image/'));
+            if (!imgs.length) return;
+            e.preventDefault();
+            AdminPage._fbmAddFiles(imgs.map(i => i.getAsFile()));
+        });
+
+        // Scroll to bottom
+        setTimeout(() => {
+            const msgs = document.getElementById('fbm-msgs');
+            if (msgs) msgs.scrollTop = msgs.scrollHeight;
+        }, 50);
+
+        // Load screenshot signed URLs
+        if (hasScreens) this._fbmLoadImgs(item);
+        if (messages.some(m => m.body.includes('__IMG__:'))) this._fbmLoadMsgImgs(messages);
+    },
+
+    async _fbmLoadImgs(item) {
+        for (let i = 0; i < item.screenshot_urls.length; i++) {
+            const ph = document.querySelector(`.fbm-img-ph[data-id="${item.id}"][data-idx="${i}"]`);
+            if (!ph) continue;
+            try {
+                const { data } = await supabase.storage.from('feedback-screenshots').createSignedUrl(item.screenshot_urls[i], 3600);
+                if (data?.signedUrl) this._fbmReplaceImgPh(ph, data.signedUrl);
+            } catch(_) {}
+        }
+    },
+
+    async _fbmLoadMsgImgs(messages) {
+        for (const m of messages) {
+            const paths = m.body.split('\n').filter(l => l.startsWith('__IMG__:')).map(l => l.slice(8));
+            for (let i = 0; i < paths.length; i++) {
+                const ph = document.querySelector(`.fbm-msg-img-ph[data-mid="${m.id}"][data-idx="${i}"]`);
+                if (!ph) continue;
+                try {
+                    const { data } = await supabase.storage.from('feedback-screenshots').createSignedUrl(paths[i], 3600);
+                    if (data?.signedUrl) this._fbmReplaceImgPh(ph, data.signedUrl);
+                } catch(_) {}
+            }
+        }
+    },
+
+    _fbmReplaceImgPh(ph, url) {
+        const img = document.createElement('img');
+        img.className = 'fbm-bubble-img';
+        img.src = url;
+        img.dataset.url = url;
+        img.alt = 'зображення';
+        img.onclick = () => Modal.open({ title:'Зображення', size:'xl',
+            body:`<img src="${Fmt.safeUrl(url)}" style="max-width:100%;border-radius:8px;display:block;margin:0 auto">`,
+            footer:`<button class="btn-secondary" onclick="Modal.close()">Закрити</button>` });
+        ph.replaceWith(img);
+    },
+
+    _fbmAddFiles(files) {
+        if (!Array.isArray(this._fbmFiles)) this._fbmFiles = [];
+        for (const f of files) {
+            const idx = this._fbmFiles.length;
+            this._fbmFiles.push(f);
+            const url = URL.createObjectURL(f);
+            const strip = document.getElementById('fbm-paste-strip');
+            if (!strip) continue;
+            strip.style.display = 'flex';
+            const chip = document.createElement('div');
+            chip.className = 'fbm-paste-chip';
+            chip.dataset.idx = idx;
+            chip.innerHTML = `<img src="${url}" class="fbm-paste-thumb" alt="">
+                <button class="fbm-paste-rm" onclick="AdminPage._fbmRemoveFile(${idx})" title="Видалити">×</button>`;
+            strip.appendChild(chip);
+        }
+    },
+
+    _fbmRemoveFile(idx) {
+        if (this._fbmFiles) this._fbmFiles[idx] = null;
+        const chip = document.querySelector(`.fbm-paste-chip[data-idx="${idx}"]`);
+        if (chip) chip.remove();
+        const strip = document.getElementById('fbm-paste-strip');
+        if (strip && !strip.children.length) strip.style.display = 'none';
+    },
+
+    async _fbmSend(feedbackId) {
+        const ta = document.getElementById('fbm-input-ta');
+        const body = ta?.value.trim();
+        const pendingFiles = (this._fbmFiles||[]).filter(Boolean);
+        if (!body && !pendingFiles.length) { if (ta) { ta.style.borderColor='#ef4444'; ta.focus(); } return; }
+        const btn = document.getElementById('fbm-send-btn');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>'; }
+        try {
+            // Upload pasted images
+            const paths = [];
+            for (const f of pendingFiles) {
+                const safe = f.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+                const path = `admin-replies/${feedbackId}/${Date.now()}_${safe}`;
+                const { error } = await supabase.storage.from('feedback-screenshots').upload(path, f, { upsert: false });
+                if (!error) paths.push(path);
+            }
+            const imgLines = paths.map(p => `__IMG__:${p}`).join('\n');
+            const fullBody = [body, imgLines].filter(Boolean).join('\n');
+            this._fbmFiles = [];
+            const strip = document.getElementById('fbm-paste-strip');
+            if (strip) { strip.innerHTML = ''; strip.style.display = 'none'; }
+            await API.feedback.reply(feedbackId, fullBody);
+            // Update list item preview
+            const item = this._fbItems.find(i => i.id === feedbackId);
+            if (item) { item.reply = body; item.status = 'in_progress'; }
+            const previewEl = document.querySelector(`#fbm-item-${feedbackId} .fbm-item-preview`);
+            if (previewEl) previewEl.textContent = body.slice(0,55) + (body.length>55?'…':'');
+            const dotEl = document.querySelector(`#fbm-item-${feedbackId} .fbm-dot`);
+            if (dotEl) dotEl.className = 'fbm-dot fbm-dot-prog';
+            // Reload chat with sender map
+            const messages = await API.feedback.getMessages(feedbackId);
+            const adminIds = [...new Set(messages.filter(m => m.sender_role === 'admin' && m.sender_id).map(m => m.sender_id))];
+            const senderMap = {};
+            if (adminIds.length) {
+                const { data: profs } = await supabase.from('profiles').select('id,full_name').in('id', adminIds);
+                (profs || []).forEach(p => { senderMap[p.id] = p.full_name; });
+            }
+            const chatEl = document.getElementById('fbm-chat-panel');
+            const prof = this._fbProfileMap[item?.user_id] || {};
+            if (chatEl && item) this._fbmRenderChat(chatEl, item, prof, messages, senderMap);
+        } catch(e) {
+            Toast.error('Помилка', e.message);
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i>'; }
+        }
+    },
+
+    async _fbmSetStatus(id, status) {
+        try {
+            await API.feedback.setStatus(id, status);
+            const item = this._fbItems.find(i => i.id === id);
+            if (item) item.status = status;
+            const statusDot   = { new:'fbm-dot-new', seen:'fbm-dot-seen', in_progress:'fbm-dot-prog', resolved:'fbm-dot-done' };
+            const statusLabel = { new:'Нові', seen:'Бачено', in_progress:'В роботі', resolved:'Вирішено' };
+            const typeLabel   = { bug:'Помилка', suggestion:'Пропозиція', question:'Питання', other:'Інше' };
+            const dotEl = document.querySelector(`#fbm-item-${id} .fbm-dot`);
+            if (dotEl) dotEl.className = 'fbm-dot ' + (statusDot[status]||'fbm-dot-seen');
+            const stEl = document.querySelector(`#fbm-item-${id} .fbm-item-status`);
+            if (stEl) stEl.textContent = `${statusLabel[status]||status} · ${typeLabel[item?.type]||''}`;
+            const sel = document.querySelector('.fbm-status-sel');
+            if (sel) sel.dataset.status = status;
+            Toast.success('Статус оновлено');
+            // Refresh top bar badge
+            if (typeof App !== 'undefined') App._pollFeedbackBell().catch(() => {});
+        } catch(e) {
+            console.error('_fbmSetStatus error:', e);
+            Toast.error('Помилка', e.message);
+        }
+    },
+
+    // kept for backward compat (screenshot modal called from older code)
+    _fbViewImg(id, idx) {
+        const img = document.querySelector(`img[data-id="${id}"][data-idx="${idx}"]`);
+        if (!img?.dataset.url) return;
+        Modal.open({
+            title: 'Скриншот', size: 'xl',
+            body: `<img src="${Fmt.safeUrl(img.dataset.url)}" style="max-width:100%;border-radius:8px;display:block;margin:0 auto">`,
+            footer: `<button class="btn-secondary" onclick="Modal.close()">Закрити</button>`,
+        });
+    },
+
+    // ── old overlay methods removed — replaced by fbm-shell inline layout ──
+
+    _fbSetStatus(id, status) { return this._fbmSetStatus(id, status); },
+
+    _fbOpenReply() {}, // no-op, replaced by inline input
+    _fbSendReply() {}, // no-op
+    _fbOpenThread() {}, // no-op
+    _fbtSend() {}, // no-op
+
+    /* PLACEHOLDER BLOCK END */
     // ── Довірені IP ───────────────────────────────────────────────
     async _renderTrustedIps(el) {
         if (!AppState.isAdmin()) { el.innerHTML = ''; return; }

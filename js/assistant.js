@@ -24,6 +24,8 @@ const Assistant = {
 
     init() {
         if (document.getElementById('ai-assistant-panel')) return;
+        const btn = document.getElementById('sidebar-assistant-btn');
+        if (btn) btn.style.display = '';
 
         const panel = document.createElement('div');
         panel.id = 'ai-assistant-panel';

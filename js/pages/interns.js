@@ -18,13 +18,18 @@
     _detailTab: 'info',    // 'info' | 'schedule' | 'characteristic' | 'mentors' | 'report' | 'tabel'
     _disciplines: [],
     _editingDisciplineId: null,
-    _jobSettings: [],       // [{ job_position, training_days }]
+    _positions: [],         // [{ id, name }] — довідник посад
+    _jobSettings: [],       // [{ position_id, job_position, training_days }]
     _scheduleTemplates: [], // [{ id, name, job_position, rows }]
 
     // ── helpers ───────────────────────────────────────────────────────────────
-    _calcPlannedEnd(job_position, start_date) {
-        if (!start_date || !job_position) return '';
-        const setting = this._jobSettings.find(s => s.job_position === job_position);
+    _calcPlannedEnd(positionIdOrName, start_date) {
+        if (!start_date || !positionIdOrName) return '';
+        // accept UUID or plain text name (bulk import passes text)
+        const posName = this._positions.find(p => p.id === positionIdOrName)?.name || positionIdOrName;
+        const setting = this._jobSettings.find(s =>
+            s.position_id === positionIdOrName || s.job_position === posName
+        );
         if (!setting || !setting.training_days) return '';
         const [y, m, d] = start_date.split('-').map(Number);
         const dt = new Date(Date.UTC(y, m - 1, d));
@@ -56,16 +61,18 @@
         try {
             Loader.show();
             const managerId = this._isManager ? AppState.profile.id : null;
-            const [{ data: interns }, profiles, jobSettings, scheduleTemplates] = await Promise.all([
+            const [{ data: interns }, profiles, jobSettings, scheduleTemplates, positions] = await Promise.all([
                 API.interns.getAll({ managerId, pageSize: 500 }),
                 (this._canManage || this._isViewer) ? API.profiles.getAll({ pageSize: 500 }).then(r => r.data || []) : Promise.resolve([]),
                 API.internJobSettings.getAll().catch(() => []),
-                API.internScheduleTemplates.getAll().catch(() => [])
+                API.internScheduleTemplates.getAll().catch(() => []),
+                API.positions.getAll().catch(() => [])
             ]);
             this._interns = interns;
             this._allProfiles = profiles;
             this._jobSettings = jobSettings;
             this._scheduleTemplates = scheduleTemplates;
+            this._positions = positions;
         } catch (e) {
             container.innerHTML = `<div style="text-align:center;padding:3rem;color:var(--danger)">${Fmt.esc(e.message)}</div>`;
             return;
@@ -89,8 +96,7 @@
                 <div class="in-title"><i class="fa-solid fa-user-graduate"></i> ${this._isManager ? 'Мої стажери' : 'Стажери'}</div>
                 <div class="in-header-actions">
                     ${AppState.isAdmin() ? `<button class="in-btn in-btn-access" onclick="InternsPage._recalcAllDates()" title="Перерахувати планові дати для всіх стажерів з порожньою датою"><i class="fa-solid fa-rotate"></i> Дати</button>
-                    <button class="in-btn in-btn-access" onclick="InternsPage._fixJobPositions()" title="Додати префікс Стажер до посад"><i class="fa-solid fa-tag"></i> Посади</button>
-                    <button class="in-btn in-btn-access" onclick="InternsPage._openJobSettingsModal()"><i class="fa-solid fa-sliders"></i> Налаштування</button>
+<button class="in-btn in-btn-access" onclick="InternsPage._openJobSettingsModal()"><i class="fa-solid fa-sliders"></i> Налаштування</button>
                     <button class="in-btn in-btn-access" onclick="InternsPage._archiveAllDropped()" title="Зберегти дані і видалити акаунти всіх відсіяних стажерів"><i class="fa-solid fa-box-archive"></i> Архів відсіяних</button>
                     <button class="in-btn in-btn-access" onclick="InternsPage._openBulkEditModal()" title="Масове редагування відфільтрованих стажерів"><i class="fa-solid fa-pen-to-square"></i> Масове редагування</button>` : ''}
                     ${this._canManage ? `<button class="in-btn in-btn-access" onclick="InternsPage._openAccessModal()"><i class="fa-solid fa-shield-halved"></i> Доступ</button>
@@ -334,7 +340,7 @@
                     <td data-col="name"><div class="in-name-cell">${this._avatar(p)}<span>${this._hl(p?.full_name || '—', this._search)}${!i.profile_id ? ' <span style="font-size:.7rem;color:var(--text-muted)">(архів)</span>' : ''}</span></div></td>
                     <td data-col="gender" ${!show('gender') ? 'style="display:none"' : ''} style="text-align:center;font-weight:600;color:var(--text-muted)">${p?.gender === 'male' ? 'Ч' : p?.gender === 'female' ? 'Ж' : '—'}</td>
                     <td data-col="city"   ${!show('city')   ? 'style="display:none"' : ''}>${Fmt.esc(p?.city || '—')}</td>
-                    <td data-col="job"    ${!show('job')    ? 'style="display:none"' : ''}>${Fmt.esc(p?.job_position || '—')}</td>
+                    <td data-col="job"    ${!show('job')    ? 'style="display:none"' : ''} class="in-td-wrap">${Fmt.esc(p?.job_position || '—')}</td>
                     <td data-col="manager"${!show('manager')? 'style="display:none"' : ''}>${Fmt.esc(i.manager?.full_name || this._allProfiles.find(p => p.id === i.profile?.manager_id)?.full_name || '—')}</td>
                     <td data-col="start"  ${!show('start')  ? 'style="display:none"' : ''} class="in-td-date">${i.start_date ? Fmt.date(i.start_date) : '—'}</td>
                     <td data-col="end"    ${!show('end')    ? 'style="display:none"' : ''} class="in-td-date">${endDate ? Fmt.date(endDate) : '—'}</td>
@@ -1005,7 +1011,7 @@
     },
 
     _buildInlineEditForm(intern) {
-        const profiles  = this._allProfiles;
+        const profiles  = this._allProfiles.filter(p => ['manager','admin','owner'].includes(p.role));
         const statusOpts = [
             { v: 'active',    l: 'Навчається' },
             { v: 'completed', l: 'Завершив' },
@@ -1022,13 +1028,11 @@
                         <select id="inf-job" class="inf-select" onchange="InternsPage._onJobChange()">
                             <option value="">— Обрати посаду —</option>
                             ${(() => {
-                                const cur = intern.profile?.job_position || intern.profile_snapshot?.job_position || '';
-                                const inList = this._jobSettings.some(s => s.job_position === cur);
-                                const extra = (cur && !inList) ? `<option value="${Fmt.esc(cur)}" selected>${Fmt.esc(cur)}</option>` : '';
-                                return extra + this._jobSettings.map(s => `<option value="${Fmt.esc(s.job_position)}" ${cur === s.job_position ? 'selected' : ''}>${Fmt.esc(s.job_position)}</option>`).join('');
+                                const curId = intern.position_id || intern.profile?.position_id || '';
+                                return this._positions.map(p => `<option value="${p.id}" ${curId === p.id ? 'selected' : ''}>${Fmt.esc(p.name)}</option>`).join('');
                             })()}
                         </select>
-                        <span id="inf-job-hint" class="inf-hint">${(() => { const cur = intern.profile?.job_position||intern.profile_snapshot?.job_position||''; const s = this._jobSettings.find(s => s.job_position === cur); return s?.training_days ? s.training_days + ' днів навчання' : ''; })()}</span>
+                        <span id="inf-job-hint" class="inf-hint">${(() => { const curId = intern.position_id || intern.profile?.position_id || ''; const s = this._jobSettings.find(s => s.position_id === curId); return s?.training_days ? s.training_days + ' днів навчання' : ''; })()}</span>
                     </div>
                     <div class="inf-field">
                         <label class="inf-label">Керівник</label>
@@ -2212,9 +2216,377 @@ ${discs.length ? `<table>
     _internFormState: {},
     _editInline: false,
 
-    _openAddModal() {
-        this._internFormState = {};
-        this._renderInternModal(null);
+    async _openAddModal() {
+        Loader.show();
+        let cities = [], subdivisions = [], managers = [];
+        try {
+            const [cData, sData, mData] = await Promise.all([
+                API.directories.getAll('cities'),
+                API.directories.getAll('subdivisions'),
+                supabase.from('profiles').select('id, full_name, job_position').in('role', ['manager', 'admin', 'owner']).order('full_name'),
+            ]);
+            cities       = (cData || []).map(r => r.name);
+            subdivisions = (sData || []).map(r => r.name);
+            managers     = ((mData.data) || []).map(u => ({ value: u.id, label: u.full_name + (u.job_position ? ' · ' + u.job_position : '') }));
+        } catch { /* non-critical */ }
+        finally { Loader.hide(); }
+
+        const posOptions = this._positions.map(p =>
+            `<option value="${p.id}">${Fmt.esc(p.name)}</option>`
+        ).join('');
+
+        const cityOpts = cities.map(c => `<option value="${Fmt.esc(c)}">${Fmt.esc(c)}</option>`).join('');
+        const subdivOpts = subdivisions.map(s => `<option value="${Fmt.esc(s)}">${Fmt.esc(s)}</option>`).join('');
+        const mgrOpts = managers.map(m => `<option value="${m.value}">${Fmt.esc(m.label)}</option>`).join('');
+
+        Modal.open({
+            title: `<i class="fa-solid fa-user-graduate" style="color:#8b5cf6"></i> Реєстрація стажера`,
+            size: 'xl',
+            body: `
+<div class="ia-wrap">
+  <!-- step rail -->
+  <div class="ia-rail">
+    <div class="ia-step ia-step-active" data-step="1">
+      <div class="ia-step-dot"><i class="fa-solid fa-user"></i></div>
+      <span class="ia-step-label">Особисті дані</span>
+    </div>
+    <div class="ia-step-line"></div>
+    <div class="ia-step" data-step="2">
+      <div class="ia-step-dot"><i class="fa-solid fa-key"></i></div>
+      <span class="ia-step-label">Доступ</span>
+    </div>
+  </div>
+
+  <!-- form body -->
+  <div class="ia-body">
+
+    <!-- 1 -->
+    <div class="ia-section" data-section="1">
+      <div class="ia-section-head">
+        <div class="ia-section-num">01</div>
+        <div>
+          <div class="ia-section-title">Особисті дані</div>
+          <div class="ia-section-sub">ПІБ, стать, дата народження</div>
+        </div>
+      </div>
+      <div class="ia-grid-3">
+        <label class="ia-label">Прізвище <span class="ia-req">*</span>
+          <input id="ia-last-name" class="ia-input" autocomplete="off" oninput="InternsPage._iaAutoLogin()">
+        </label>
+        <label class="ia-label">Ім'я <span class="ia-req">*</span>
+          <input id="ia-first-name" class="ia-input" autocomplete="off" oninput="InternsPage._iaAutoLogin()">
+        </label>
+        <label class="ia-label">По батькові
+          <input id="ia-patronymic" class="ia-input" autocomplete="off" oninput="applyGenderFromPatronymic('ia-patronymic','ia-gender')">
+        </label>
+      </div>
+      <div class="ia-grid-3" style="margin-top:.65rem">
+        <label class="ia-label">Стать
+          <div class="ia-gender gender-picker-modern">
+            <input type="hidden" id="ia-gender" value="">
+            <button type="button" class="ia-gender-btn gender-chip" onclick="InternsPage._iaSetGender(this,'male')">
+              <i class="fa-solid fa-mars" style="color:#60a5fa"></i> Чоловік
+            </button>
+            <button type="button" class="ia-gender-btn gender-chip" onclick="InternsPage._iaSetGender(this,'female')">
+              <i class="fa-solid fa-venus" style="color:#f472b6"></i> Жінка
+            </button>
+          </div>
+        </label>
+        <label class="ia-label">Дата народження
+          <input id="ia-birthdate" type="date" class="ia-input" value="2000-01-01" oninput="InternsPage._iaAutoPassword()" onpaste="Fmt.parseDatePaste(event,this)">
+        </label>
+        <label class="ia-label">Телефон
+          <input id="ia-phone" type="tel" class="ia-input" placeholder="+380 XX XXX XX XX">
+        </label>
+      </div>
+    </div>
+
+    <!-- 2 -->
+    <div class="ia-section" data-section="2">
+      <div class="ia-section-head">
+        <div class="ia-section-num">02</div>
+        <div>
+          <div class="ia-section-title">Дані для входу</div>
+          <div class="ia-section-sub">Логін, email та пароль для авторизації</div>
+        </div>
+      </div>
+      <div class="ia-grid-3">
+        <label class="ia-label">Логін <span class="ia-req">*</span>
+          <input id="ia-login" class="ia-input" autocomplete="off" placeholder="ПрізвищеІмʼя">
+        </label>
+        <label class="ia-label">Email <span class="ia-req">*</span>
+          <input id="ia-email" type="email" class="ia-input" placeholder="user@example.com" autocomplete="off">
+        </label>
+        <label class="ia-label">Пароль <span class="ia-req">*</span>
+          <div class="ia-pw-wrap">
+            <input id="ia-password" type="password" class="ia-input" style="padding-right:2.5rem" autocomplete="new-password">
+            <button type="button" class="ia-pw-toggle"
+              onclick="const i=document.getElementById('ia-password');i.type=i.type==='password'?'text':'password';this.innerHTML=i.type==='password'?'<i class=\\'fa-solid fa-eye\\'></i>':'<i class=\\'fa-solid fa-eye-slash\\'></i>'">
+              <i class="fa-solid fa-eye"></i>
+            </button>
+          </div>
+          <span class="ia-hint">Мінімум 6 символів</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- 3 -->
+    <div class="ia-section" data-section="3">
+      <div class="ia-section-head">
+        <div class="ia-section-num">03</div>
+        <div>
+          <div class="ia-section-title">Робоча інформація</div>
+          <div class="ia-section-sub">Місце роботи та керівник</div>
+        </div>
+      </div>
+      <div class="ia-grid-3">
+        <label class="ia-label">Місто
+          <select id="ia-city" class="ia-input">
+            <option value="">— Оберіть —</option>
+            ${cityOpts}
+          </select>
+        </label>
+        <label class="ia-label">Підрозділ
+          <select id="ia-subdivision" class="ia-input">
+            <option value="">— Оберіть —</option>
+            ${subdivOpts}
+          </select>
+        </label>
+        <label class="ia-label">Посада
+          <select id="ia-position" class="ia-input" onchange="InternsPage._iaOnPositionChange()">
+            <option value="">— Оберіть —</option>
+            ${posOptions}
+          </select>
+        </label>
+        <label class="ia-label" style="grid-column:1/-1">Керівник
+          <select id="ia-manager" class="ia-input">
+            <option value="">— Без керівника —</option>
+            ${mgrOpts}
+          </select>
+        </label>
+      </div>
+    </div>
+
+    <!-- 4 -->
+    <div class="ia-section" data-section="4">
+      <div class="ia-section-head">
+        <div class="ia-section-num">04</div>
+        <div>
+          <div class="ia-section-title">Стажування</div>
+          <div class="ia-section-sub">Терміни навчання</div>
+        </div>
+      </div>
+      <div class="ia-grid-3">
+        <label class="ia-label">Дата початку
+          <input id="ia-start" type="date" class="ia-input" oninput="InternsPage._iaAutoEnd()">
+        </label>
+        <label class="ia-label">
+          <span class="ia-label-row">
+            Плановий випуск
+            <span id="ia-days-hint" class="ia-days-chip"></span>
+          </span>
+          <div class="ia-end-wrap">
+            <input id="ia-end" type="date" class="ia-input">
+            <button type="button" class="ia-auto-btn" onclick="InternsPage._iaAutoEnd(true)" title="Розрахувати автоматично">
+              <i class="fa-solid fa-rotate"></i>
+            </button>
+          </div>
+        </label>
+        <label class="ia-label">Нотатки
+          <textarea id="ia-notes" class="ia-input" rows="3" style="resize:vertical"></textarea>
+        </label>
+      </div>
+    </div>
+
+  </div><!-- /ia-body -->
+</div><!-- /ia-wrap -->
+
+<style>
+/* ── layout ────────────────────────────────── */
+.ia-wrap{display:flex;gap:0;height:calc(85vh - 40px);min-height:360px;overflow:hidden}
+.ia-rail{display:flex;flex-direction:column;align-items:center;padding:1.25rem 1.25rem 1.25rem 0;flex-shrink:0;width:130px;border-right:1px solid var(--border);overflow-y:auto}
+.ia-body{flex:1;display:flex;flex-direction:column;gap:1.1rem;padding:.25rem 0 .5rem 1.5rem;overflow-y:auto}
+
+/* ── step rail ─────────────────────────────── */
+.ia-step{display:flex;flex-direction:column;align-items:center;gap:.35rem;text-align:center;position:relative}
+.ia-step-dot{width:36px;height:36px;border-radius:50%;border:2px solid var(--border);background:var(--bg-surface);display:flex;align-items:center;justify-content:center;font-size:.8rem;color:var(--text-muted);transition:all .2s}
+.ia-step-label{font-size:.7rem;font-weight:600;color:var(--text-muted);letter-spacing:.03em;line-height:1.2;transition:color .2s}
+.ia-step-line{width:2px;height:28px;background:var(--border);border-radius:1px;transition:background .2s}
+.ia-step-active .ia-step-dot{border-color:#8b5cf6;background:linear-gradient(135deg,#8b5cf6,#6d28d9);color:#fff;box-shadow:0 0 0 4px color-mix(in srgb,#8b5cf6 18%,transparent)}
+.ia-step-active .ia-step-label{color:#8b5cf6;font-weight:700}
+.ia-step-done .ia-step-dot{border-color:#10b981;background:#10b981;color:#fff}
+.ia-step-done .ia-step-label{color:#10b981}
+.ia-step-done + .ia-step-line{background:#10b981}
+
+/* ── section ───────────────────────────────── */
+.ia-section{background:var(--bg-raised);border:1px solid var(--border);border-radius:12px;padding:1rem 1.15rem;border-left:3px solid #8b5cf6;transition:border-color .15s}
+.ia-section-head{display:flex;align-items:flex-start;gap:.75rem;margin-bottom:.85rem}
+.ia-section-num{font-size:1.6rem;font-weight:800;color:color-mix(in srgb,#8b5cf6 30%,var(--border));line-height:1;flex-shrink:0;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.ia-section-title{font-weight:700;font-size:.92rem;color:var(--text-primary);margin-bottom:.1rem}
+.ia-section-sub{font-size:.75rem;color:var(--text-muted)}
+
+/* ── grid & labels ─────────────────────────── */
+.ia-grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:.65rem}
+@media(max-width:640px){.ia-grid-3{grid-template-columns:1fr}}
+.ia-label{display:block;font-size:.78rem;font-weight:600;color:var(--text-secondary);letter-spacing:.02em;text-transform:uppercase}
+.ia-label .ia-input,.ia-label .ia-gender,.ia-label .ia-pw-wrap,.ia-label .ia-end-wrap{display:block;margin-top:.3rem}
+.ia-label-row{display:flex;align-items:center;gap:.5rem}
+.ia-req{color:#f87171;font-weight:700}
+.ia-hint{font-size:.72rem;color:var(--text-muted);letter-spacing:0;text-transform:none;font-weight:400;margin-top:.2rem;display:block}
+
+/* ── inputs ────────────────────────────────── */
+.ia-input{width:100%;box-sizing:border-box;padding:.48rem .72rem;border:1.5px solid var(--border);border-radius:8px;background:var(--bg-surface);color:var(--text-primary);font-size:.88rem;outline:none;transition:border-color .15s,box-shadow .15s;text-transform:none;letter-spacing:0;font-weight:400}
+.ia-input:focus{border-color:#8b5cf6;box-shadow:0 0 0 3px color-mix(in srgb,#8b5cf6 15%,transparent)}
+textarea.ia-input{resize:vertical}
+select.ia-input{cursor:pointer}
+
+/* ── gender ────────────────────────────────── */
+.ia-gender{display:flex;gap:.5rem}
+.ia-gender-btn{flex:1;padding:.4rem .5rem;border:1.5px solid var(--border);border-radius:8px;background:var(--bg-surface);color:var(--text-secondary);font-size:.82rem;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:.35rem;font-weight:500}
+.ia-gender-btn.active{border-color:#8b5cf6;background:color-mix(in srgb,#8b5cf6 10%,var(--bg-surface));color:#8b5cf6;font-weight:700}
+
+/* ── password ──────────────────────────────── */
+.ia-pw-wrap{position:relative}
+.ia-pw-toggle{position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--text-muted);padding:.2rem;transition:color .15s}
+.ia-pw-toggle:hover{color:var(--text-primary)}
+
+/* ── planned end ───────────────────────────── */
+.ia-end-wrap{position:relative}
+.ia-auto-btn{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#8b5cf6;padding:.2rem .35rem;border-radius:5px;font-size:.8rem;transition:background .15s}
+.ia-auto-btn:hover{background:color-mix(in srgb,#8b5cf6 12%,transparent)}
+.ia-end-wrap .ia-input{padding-right:2.2rem}
+.ia-days-chip{display:inline-block;font-size:.72rem;font-weight:600;color:#8b5cf6;background:color-mix(in srgb,#8b5cf6 10%,var(--bg-surface));border-radius:20px;padding:.05rem .45rem;letter-spacing:0;text-transform:none;vertical-align:middle}
+</style>`,
+            footer: `
+<button class="btn btn-sm" style="background:linear-gradient(135deg,#8b5cf6,#6d28d9);color:#fff;border:none;padding:.5rem 1.25rem;font-weight:600;gap:.45rem;display:inline-flex;align-items:center" onclick="InternsPage._createInternUser()">
+  <i class="fa-solid fa-user-plus"></i> Зареєструвати стажера
+</button>
+<button class="btn btn-ghost btn-sm" onclick="Modal.close()">Скасувати</button>`
+        });
+    },
+
+    _iaSetGender(btn, val) {
+        document.getElementById('ia-gender').value = val;
+        btn.closest('.ia-gender').querySelectorAll('.ia-gender-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+    },
+
+    _iaAutoLogin() {
+        const last  = document.getElementById('ia-last-name')?.value.trim() || '';
+        const first = document.getElementById('ia-first-name')?.value.trim() || '';
+        if (!last && !first) return;
+        const login = document.getElementById('ia-login');
+        if (!login || login.dataset.manual) return;
+        login.value = (last + first).replace(/\s+/g, '');
+    },
+
+    _iaAutoPassword() {
+        const bd = document.getElementById('ia-birthdate')?.value;
+        const pw = document.getElementById('ia-password');
+        if (!bd || !pw || pw.dataset.manual) return;
+        const [y, m, d] = bd.split('-');
+        if (y && m && d) pw.value = d + m + y;
+    },
+
+    _iaOnPositionChange() {
+        const posId   = document.getElementById('ia-position')?.value || '';
+        const posName = this._positions.find(p => p.id === posId)?.name || '';
+        const setting = this._jobSettings.find(s =>
+            s.position_id === posId || (posName && s.job_position === posName)
+        );
+        const hint = document.getElementById('ia-days-hint');
+        if (hint) hint.textContent = setting?.training_days ? `· ${setting.training_days} днів` : '';
+        // always recalculate when position changes
+        const endInput = document.getElementById('ia-end');
+        if (endInput) endInput.value = '';
+        this._iaAutoEnd();
+    },
+
+    _iaAutoEnd(force = false) {
+        const endInput = document.getElementById('ia-end');
+        if (!endInput || (!force && endInput.value)) return;
+        const posId = document.getElementById('ia-position')?.value || '';
+        const start = document.getElementById('ia-start')?.value || '';
+        const planned = this._calcPlannedEnd(posId, start);
+        if (planned) endInput.value = planned;
+        else if (force) Toast.warning('Для цієї посади не встановлено кількість днів навчання');
+    },
+
+    async _createInternUser() {
+        const lastName   = (document.getElementById('ia-last-name')?.value || '').trim();
+        const firstName  = (document.getElementById('ia-first-name')?.value || '').trim();
+        const patronymic = (document.getElementById('ia-patronymic')?.value || '').trim();
+        const email      = (document.getElementById('ia-email')?.value || '').trim();
+        const password   = (document.getElementById('ia-password')?.value || '');
+        const login      = (document.getElementById('ia-login')?.value || '').trim();
+
+        if (!lastName || !firstName)    { Toast.error('Заповніть Прізвище та Ім\'я'); return; }
+        if (!email)                     { Toast.error('Вкажіть Email'); return; }
+        if (!password || password.length < 6) { Toast.error('Пароль мінімум 6 символів'); return; }
+
+        const positionId = document.getElementById('ia-position')?.value || null;
+        const managerId  = document.getElementById('ia-manager')?.value  || null;
+        const startDate  = document.getElementById('ia-start')?.value    || null;
+        const endDate    = document.getElementById('ia-end')?.value      || null;
+        const notes      = (document.getElementById('ia-notes')?.value   || '').trim();
+        const city       = document.getElementById('ia-city')?.value     || null;
+        const subdiv     = document.getElementById('ia-subdivision')?.value || null;
+        const gender     = document.getElementById('ia-gender')?.value   || null;
+        const birthdate  = document.getElementById('ia-birthdate')?.value || null;
+        const phone      = document.getElementById('ia-phone')?.value    || null;
+        const posName    = positionId ? (this._positions.find(p => p.id === positionId)?.name || null) : null;
+
+        Modal.close();
+        Loader.show();
+        try {
+            // 1. Create auth user + profile
+            const { data: userId, error } = await supabase.rpc('admin_user_create', {
+                p_email:        email,
+                p_password:     password,
+                p_role:         'intern',
+                p_last_name:    lastName   || null,
+                p_first_name:   firstName  || null,
+                p_patronymic:   patronymic || null,
+                p_login:        login      || null,
+                p_phone:        phone      || null,
+                p_gender:       gender     || null,
+                p_birth_date:   birthdate  || null,
+                p_city:         city       || null,
+                p_job_position: posName,
+                p_subdivision:  subdiv     || null,
+            });
+            if (error) throw error;
+
+            // 2. Set role + position_id + manager_id + label on profile
+            await supabase.from('profiles').update({
+                role:        'intern',
+                position_id: positionId || null,
+                manager_id:  managerId  || null,
+                label:       'intern',
+            }).eq('id', userId);
+
+            // 3. Create intern record (trigger will not fire here since position was set on profile directly)
+            await API.interns.create({
+                profile_id:       userId,
+                manager_id:       managerId  || null,
+                position_id:      positionId || null,
+                start_date:       startDate  || null,
+                planned_end_date: endDate    || null,
+                notes:            notes      || null,
+                status:           'active',
+            });
+
+            const fullName = [lastName, firstName, patronymic].filter(Boolean).join(' ');
+            Toast.success('Стажера зареєстровано', fullName);
+
+            // Reload list
+            const container = this._container;
+            if (container) await this.init(container);
+        } catch (e) {
+            Toast.error('Помилка', e.message);
+        } finally {
+            Loader.hide();
+        }
     },
 
     _flipModal(bodyHtml, title, footerHtml, cb) {
@@ -2264,7 +2636,7 @@ ${discs.length ? `<table>
                 { v: 'completed', l: 'Завершив' },
                 { v: 'dropped',   l: 'Відмовився' }
             ];
-            const profiles = this._allProfiles;
+            const profiles = this._allProfiles.filter(p => ['manager','admin','owner'].includes(p.role));
 
             const bodyHtml = `
             <div class="inf-form">
@@ -2275,7 +2647,7 @@ ${discs.length ? `<table>
                             <label class="inf-label">Стажер <span class="inf-required">*</span></label>
                             <select id="inf-profile" class="inf-select" onchange="InternsPage._onFormDateChange()">
                                 <option value="">— Обрати профіль —</option>
-                                ${profiles.map(p => `<option value="${p.id}" data-job="${Fmt.esc(p.job_position||'')}" ${intern.profile_id===p.id?'selected':''}>${Fmt.esc(p.full_name)}${p.city?' ('+Fmt.esc(p.city)+')':''}${p.job_position?' — '+Fmt.esc(p.job_position):''}</option>`).join('')}
+                                ${profiles.map(p => `<option value="${p.id}" data-position-id="${p.position_id||''}" ${intern.profile_id===p.id?'selected':''}>${Fmt.esc(p.full_name)}${p.city?' ('+Fmt.esc(p.city)+')':''}${p.job_position?' — '+Fmt.esc(p.job_position):''}</option>`).join('')}
                             </select>
                         </div>
                         <div class="inf-field inf-field-full">
@@ -2369,7 +2741,7 @@ ${discs.length ? `<table>
     _renderInternModal(intern) {
         this._editFromDetail = false;
         const isEdit = !!intern;
-        const profiles = this._allProfiles;
+        const profiles = this._allProfiles.filter(p => ['manager','admin','owner'].includes(p.role));
         const statusOpts = [
             { v: 'active',    l: 'Навчається' },
             { v: 'completed', l: 'Завершив' },
@@ -2460,16 +2832,12 @@ ${discs.length ? `<table>
     },
 
     _onJobChange() {
-        const jobSel  = document.getElementById('inf-job');
-        const jobPos  = jobSel?.value || '';
-        const setting = this._jobSettings.find(s => s.job_position === jobPos);
-        // always force-recalculate end date when job changes
+        const jobSel    = document.getElementById('inf-job');
+        const posId     = jobSel?.value || '';
+        const setting   = this._jobSettings.find(s => s.position_id === posId);
         this._onFormDateChange(true);
-        // show training days hint
         const hint = document.getElementById('inf-job-hint');
-        if (hint) {
-            hint.textContent = setting?.training_days ? `${setting.training_days} днів навчання` : '';
-        }
+        if (hint) hint.textContent = setting?.training_days ? `${setting.training_days} днів навчання` : '';
     },
 
     _onFormDateChange(force = false) {
@@ -2477,16 +2845,17 @@ ${discs.length ? `<table>
         const endInput   = document.getElementById('inf-end');
         if (!startInput || !endInput) return;
         if (!force && endInput.value) return;
-        // inline edit uses inf-job select; add modal uses inf-profile select
+        // inline edit: inf-job value = position_id UUID
+        // add modal:   inf-profile data-position-id attribute
         const jobSel     = document.getElementById('inf-job');
         const profileSel = document.getElementById('inf-profile');
-        let jobPosition = '';
+        let positionId = '';
         if (jobSel && jobSel.tagName === 'SELECT') {
-            jobPosition = jobSel.value;
+            positionId = jobSel.value;
         } else if (profileSel && profileSel.tagName === 'SELECT') {
-            jobPosition = profileSel.options[profileSel.selectedIndex]?.dataset.job || '';
+            positionId = profileSel.options[profileSel.selectedIndex]?.dataset.positionId || '';
         }
-        const planned = this._calcPlannedEnd(jobPosition, startInput.value);
+        const planned = this._calcPlannedEnd(positionId, startInput.value);
         if (planned) endInput.value = planned;
         else if (force) Toast.warning('Для цієї посади не встановлено кількість днів навчання');
     },
@@ -2499,13 +2868,21 @@ ${discs.length ? `<table>
         const status      = Dom.val('inf-status');
         const notes       = Dom.val('inf-notes');
         const actualEnd   = Dom.val('inf-actual-end');
-        const jobPosition = (() => { const el = document.getElementById('inf-job'); return el?.tagName === 'SELECT' ? el.value : null; })();
+        const positionId  = (() => {
+            const jobEl = document.getElementById('inf-job');
+            if (jobEl?.tagName === 'SELECT') return jobEl.value || null;
+            // add modal: take from selected profile option
+            const profEl = document.getElementById('inf-profile');
+            if (profEl?.tagName === 'SELECT') return profEl.options[profEl.selectedIndex]?.dataset.positionId || null;
+            return undefined;
+        })();
 
         if (!profileId) { Toast.warning('Оберіть стажера'); return; }
 
         const payload = {
             profile_id:       profileId,
             manager_id:       managerId || null,
+            position_id:      positionId !== undefined ? positionId : undefined,
             start_date:       start     || null,
             planned_end_date: end       || null,
             status,
@@ -2522,14 +2899,10 @@ ${discs.length ? `<table>
                 const becomingDropped   = status === 'dropped'   && prev?.status !== 'dropped';
                 const becomingCompleted = status === 'completed' && prev?.status !== 'completed';
                 await API.interns.update(internId, payload);
-                // Always sync editable fields to profile (intern card = profile editor)
+                // Sync manager_id and label to profile
+                // Note: job_position + position_id are auto-synced by DB trigger on interns.position_id
                 if (profileId) {
-                    const profileUpdate = {};
-                    // job_position: sync if select exists (null = clear if empty selected)
-                    if (jobPosition !== null) profileUpdate.job_position = jobPosition || null;
-                    // manager_id: always sync
-                    profileUpdate.manager_id = payload.manager_id ?? null;
-                    // label: clear when graduating or firing
+                    const profileUpdate = { manager_id: payload.manager_id ?? null };
                     if (becomingCompleted || becomingDropped) profileUpdate.label = null;
                     await API.profiles.update(profileId, profileUpdate).catch(() => {});
                 }
@@ -2540,7 +2913,10 @@ ${discs.length ? `<table>
                 // Log the save action
                 const _pname = prev?.profile?.full_name || prev?.profile_snapshot?.full_name || '?';
                 const _changes = {};
-                if (jobPosition !== null && jobPosition !== (prev?.profile?.job_position || '')) _changes.посада = jobPosition || '(очищено)';
+                if (positionId !== undefined && positionId !== (prev?.position_id || null)) {
+                    const pname = this._positions.find(p => p.id === positionId)?.name;
+                    _changes.посада = pname || '(очищено)';
+                }
                 if (payload.manager_id !== prev?.manager_id) _changes.керівник = payload.manager_id ? 'змінено' : '(знято)';
                 if (status !== prev?.status) _changes.статус = status;
                 API.internLogs.add(internId, becomingDropped ? 'fired' : becomingCompleted ? 'graduated' : 'edit_info', { intern_name: _pname, changes: _changes });
@@ -4612,20 +4988,15 @@ ${discs.length ? `<table>
     async _renderJobSettingsBody() {
         const area = document.getElementById('ist-tab-days');
         if (!area) return;
-        let rows, profilePositions;
+        let rows;
         try {
-            [rows, profilePositions] = await Promise.all([
-                API.internJobSettings.getAll(),
-                supabase.from('profiles').select('job_position').not('job_position', 'is', null).neq('job_position', '')
-                    .then(({ data }) => [...new Set((data || []).map(p => p.job_position).filter(Boolean))].sort())
-            ]);
+            rows = await API.internJobSettings.getAll();
         } catch(e) {
             area.innerHTML = `<div style="color:var(--danger);padding:1rem">Помилка: ${Fmt.esc(e.message)}</div>`;
             return;
         }
-        // merge: profile positions + any custom ones already in settings
-        const settingsPositions = rows.map(r => r.job_position);
-        const allPositions = [...new Set([...profilePositions, ...settingsPositions])].sort();
+        // only reference table positions — drop legacy text-only entries
+        const allPositions = this._positions.map(p => p.name).sort();
 
         area.innerHTML = `
             <div id="ijs-wrap">
@@ -4662,7 +5033,7 @@ ${discs.length ? `<table>
                             <label style="font-size:.8rem;color:var(--text-muted);margin-bottom:.3rem;display:block">Посада</label>
                             <select id="ijs-pos-input" class="form-control" style="width:100%">
                                 <option value="">— оберіть посаду —</option>
-                                ${allPositions.map(p => `<option value="${Fmt.esc(p)}">${Fmt.esc(p)}</option>`).join('')}
+                                ${this._positions.map(p => `<option value="${p.id}">${Fmt.esc(p.name)}</option>`).join('')}
                             </select>
                         </div>
                         <div style="width:140px">
@@ -4715,9 +5086,11 @@ ${discs.length ? `<table>
         const days = parseInt(row.querySelector('.ijs-days-edit').value, 10);
         if (!pos) { Toast.warning('Введіть назву посади'); return; }
         if (isNaN(days) || days < 0) { Toast.warning('Введіть коректну кількість днів'); return; }
+        const posId = this._positions.find(p => p.name === pos)?.id || null;
         try {
-            await API.internJobSettings.upsert(pos, days);
+            await API.internJobSettings.upsert(pos, days, posId);
             Toast.success('Збережено');
+            this._jobSettings = await API.internJobSettings.getAll().catch(() => this._jobSettings);
             await this._renderJobSettingsBody();
         } catch(e) {
             Toast.error('Помилка', e.message);
@@ -4769,13 +5142,15 @@ ${discs.length ? `<table>
     },
 
     async _saveJobRow() {
-        const pos = (document.getElementById('ijs-pos-input')?.value || '').trim();
-        const days = parseInt(document.getElementById('ijs-days-input')?.value || '0', 10);
-        if (!pos) { Toast.warning('Введіть назву посади'); return; }
+        const posId = (document.getElementById('ijs-pos-input')?.value || '').trim();
+        const days  = parseInt(document.getElementById('ijs-days-input')?.value || '0', 10);
+        if (!posId) { Toast.warning('Оберіть посаду'); return; }
         if (isNaN(days) || days < 0) { Toast.warning('Введіть коректну кількість днів'); return; }
+        const posName = this._positions.find(p => p.id === posId)?.name || '';
         try {
-            await API.internJobSettings.upsert(pos, days);
+            await API.internJobSettings.upsert(posName, days, posId);
             Toast.success('Збережено');
+            this._jobSettings = await API.internJobSettings.getAll().catch(() => this._jobSettings);
             await this._renderJobSettingsBody();
         } catch(e) {
             Toast.error('Помилка', e.message);
@@ -4908,6 +5283,7 @@ ${discs.length ? `<table>
 .in-table thead tr { background:var(--bg-raised); }
 .in-table th { padding:.65rem .85rem; text-align:left; font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--text-muted); position:sticky; top:0; z-index:2; background:var(--bg-raised); min-width:0; overflow:hidden; white-space:nowrap; }
 .in-table td { padding:.65rem .85rem; border-bottom:1px solid var(--border); vertical-align:middle; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.in-table td.in-td-wrap { white-space:normal; overflow:visible; text-overflow:unset; word-break:break-word; }
 .in-col-resizer { position:absolute; right:0; top:20%; bottom:20%; width:3px; cursor:col-resize; user-select:none; z-index:1; background:rgba(201,162,39,.35); border-radius:2px; transition:background .15s; }
 .in-col-resizer:hover, .in-col-resizer.active { background:#C9A227; }
 .in-tr { cursor:pointer; transition:background .12s; }

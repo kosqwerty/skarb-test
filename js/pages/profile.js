@@ -8,36 +8,6 @@ const ProfilePage = {
 
     _pendingAvatar: null,
     _onBack: null,
-    _internOn: false,
-    _prevJobPosition: '',
-
-    _toggleIntern() {
-        this._internOn = !this._internOn;
-        const knob = document.getElementById('pe-intern-knob');
-        const dot  = document.getElementById('pe-intern-dot');
-        if (knob) {
-            knob.style.background  = this._internOn ? '#8b5cf6' : 'var(--bg-hover)';
-            knob.style.borderColor = this._internOn ? '#8b5cf6' : 'var(--border)';
-        }
-        if (dot) dot.style.transform = this._internOn ? 'translateX(18px)' : 'translateX(0)';
-
-        const hiddenInp = document.getElementById('pe-job-position');
-        const csWrap    = document.querySelector('[data-cs="pe-job-position"]');
-        const csInput   = csWrap?.querySelector('.cs-input');
-
-        if (this._internOn) {
-            const cur = hiddenInp?.value || csInput?.value || '';
-            this._prevJobPosition = cur;
-            const next = cur && !cur.startsWith('Стажер') ? `Стажер ${cur}` : (cur || 'Стажер');
-            if (hiddenInp) hiddenInp.value = next;
-            if (csInput)   csInput.value   = next;
-        } else {
-            const restored = this._prevJobPosition;
-            if (hiddenInp) hiddenInp.value = restored;
-            if (csInput)   csInput.value   = restored;
-            this._prevJobPosition = '';
-        }
-    },
 
     _tenureStr(dateStr) {
         if (!dateStr) return '';
@@ -71,12 +41,6 @@ const ProfilePage = {
     async _render(container, user, opts, onBack) {
         this._pendingAvatar = null;
         this._onBack = onBack || null;
-        this._internOn = user.label === 'intern';
-        // store job position without "Стажер " prefix so toggle OFF can restore it
-        const jp = user.job_position || '';
-        this._prevJobPosition = user.label === 'intern'
-            ? (jp.startsWith('Стажер ') ? jp.slice('Стажер '.length) : (jp === 'Стажер' ? '' : jp))
-            : jp;
 
         const isAdminEdit   = opts.isAdminEdit && AppState.isAdmin();
         const canExtended   = isAdminEdit || AppState.isStaff();
@@ -207,7 +171,7 @@ const ProfilePage = {
                         <span>Роль</span>
                         <div class="custom-select-wrapper">
                             <select id="pe-role" ${user.role === 'owner' ? 'disabled title="Змінюйте через передачу прав"' : ''}>
-                                ${(AppState.isOwner() ? ['owner','ceo','admin','smm','teacher','manager','user'] : ['ceo','admin','smm','teacher','manager','user'])
+                                ${(AppState.isOwner() ? ['owner','ceo','admin','smm','teacher','manager','user','intern'] : ['ceo','admin','smm','teacher','manager','user','intern'])
                                     .map(r => `<option value="${r}" ${user.role===r?'selected':''}>${Fmt.role(r)}</option>`).join('')}
                             </select>
                         </div>
@@ -222,16 +186,6 @@ const ProfilePage = {
                     <h4>Робоча інформація</h4>
                 </div>
                 <div class="input-group">
-                    ${isAdminEdit ? `
-                    <div id="pe-intern-toggle-wrap" style="display:flex;align-items:center;gap:.9rem;padding:.75rem 1rem;background:color-mix(in srgb,#8b5cf6 8%,var(--bg-surface));border:1.5px solid color-mix(in srgb,#8b5cf6 25%,var(--border));border-radius:10px;cursor:pointer" onclick="ProfilePage._toggleIntern()">
-                        <div id="pe-intern-knob" style="position:relative;width:40px;height:22px;background:${user.label==='intern'?'#8b5cf6':'var(--bg-hover)'};border:1.5px solid ${user.label==='intern'?'#8b5cf6':'var(--border)'};border-radius:11px;transition:background .2s,border-color .2s;flex-shrink:0">
-                            <div id="pe-intern-dot" style="position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .2s;transform:${user.label==='intern'?'translateX(18px)':'translateX(0)'}"></div>
-                        </div>
-                        <div>
-                            <div style="font-weight:700;font-size:.9rem;color:var(--text-primary);display:flex;align-items:center;gap:.4rem"><i class="fa-solid fa-user-graduate" style="color:#8b5cf6"></i> Стажер</div>
-                            <div style="font-size:.78rem;color:var(--text-muted);margin-top:.1rem">Автоматично встановить посаду "Стажер" та обмежить доступ до розділів</div>
-                        </div>
-                    </div>` : ''}
                     <label class="input-label"><span>Місто</span>${CreatableSelect.html('pe-city', 'cities', cities.map(i=>i.name), user.city||'')}</label>
                     ${canExtended ? `
                     <label class="input-label"><span>Підрозділ</span>${CreatableSelect.html('pe-subdivision', 'subdivisions', subdivisions.map(i=>i.name), user.subdivision||'')}</label>
@@ -314,21 +268,6 @@ const ProfilePage = {
 
         CreatableSelect.init();
 
-        // if user is already an intern, ensure "Стажер " prefix is shown in the position field
-        if (isAdminEdit && this._internOn) {
-            const hiddenInp = document.getElementById('pe-job-position');
-            const csWrap    = document.querySelector('[data-cs="pe-job-position"]');
-            const csInput   = csWrap?.querySelector('.cs-input');
-            const cur = hiddenInp?.value || csInput?.value || '';
-            if (cur && !cur.startsWith('Стажер')) {
-                const next = `Стажер ${cur}`;
-                if (hiddenInp) hiddenInp.value = next;
-                if (csInput)   csInput.value   = next;
-            } else if (!cur) {
-                if (hiddenInp) hiddenInp.value = 'Стажер';
-                if (csInput)   csInput.value   = 'Стажер';
-            }
-        }
 
         if (isAdminEdit) {
             CreatableMultiSelect.init(
@@ -420,7 +359,7 @@ const ProfilePage = {
                 payload.manager_id     = Dom.val('pe-manager') || null;
                 payload.hired_at       = Dom.val('pe-hired-at') || null;
                 payload.position_since = Dom.val('pe-position-since') || null;
-                if (isAdminEdit) payload.label = this._internOn ? 'intern' : null;
+                if (isAdminEdit) payload.label = Dom.val('pe-role') === 'intern' ? 'intern' : null;
             }
             if (canRole)  payload.role  = Dom.val('pe-role');
             if (avatarUrl !== undefined) payload.avatar_url = avatarUrl;

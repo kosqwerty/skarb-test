@@ -374,9 +374,10 @@ const DashboardPage = {
         ]);
         const unreadCount = recentNotifs.length;
 
-        // Unacked docs + pending assignments
+        // Unacked docs + pending assignments (interns have no access to documents)
+        const isIntern = AppState.profile?.label === 'intern';
         const [unackedDocs, testsCount, surveysCount] = await Promise.all([
-            this._getUnackedDocs().catch(() => []),
+            isIntern ? Promise.resolve([]) : this._getUnackedDocs().catch(() => []),
             API.tests.getMyPendingCount().catch(() => 0),
             API.surveys.getMyPendingCount().catch(() => 0),
         ]);
@@ -393,8 +394,8 @@ const DashboardPage = {
         // План дня
         this._showDayPlanPopup(scheduleEntries, calEvents, today);
 
-        // Тур для нових користувачів (запускаємо після рендеру)
-        setTimeout(() => this._startTour(), 1800);
+        // Тур для нових користувачів (тимчасово вимкнено)
+        // setTimeout(() => this._startTour(), 1800);
     },
 
     async _renderFeed(news) {
@@ -678,12 +679,15 @@ const DashboardPage = {
                 title: 'Ви готові!',
                 text: (() => {
                     const r = AppState.profile?.role;
-                    const isStaff = ['owner','admin','smm','teacher'].includes(r);
-                    const isMgr   = r === 'manager';
+                    const isStaff  = ['owner','admin','smm','teacher'].includes(r);
+                    const isMgr    = r === 'manager';
+                    const isIntern = AppState.profile?.label === 'intern';
                     const base = isStaff
                         ? 'Досліджуйте портал через бокове меню: <strong>Моє навчання</strong>, <strong>Новини</strong>, <strong>База знань</strong>, <strong>Документи</strong>, <strong>Сторінки</strong>. В розділі <strong>Управління</strong> — аналітика, планування та адміністрування.'
                         : isMgr
                         ? 'Досліджуйте портал через бокове меню: <strong>Моє навчання</strong>, <strong>Новини</strong>, <strong>База знань</strong>, <strong>Документи</strong>. В розділі <strong>Управління</strong> є <strong>Розділ планування</strong>.'
+                        : isIntern
+                        ? 'Досліджуйте портал через бокове меню: <strong>Моє навчання</strong>, <strong>Новини</strong>, <strong>База знань</strong>.'
                         : 'Досліджуйте портал через бокове меню.';
                     return base + ' Успіхів!';
                 })(),
@@ -1435,6 +1439,7 @@ const DashboardPage = {
         const unreadCount = recentNotifs.length;
 
         if (docsEl) {
+            if (AppState.profile?.label === 'intern') { docsEl.style.display = 'none'; return; }
             const hasIssue = unackedDocs.length > 0;
             if (!hasIssue) { docsEl.style.display = 'none'; }
             else { docsEl.style.display = ''; }
@@ -1914,12 +1919,9 @@ const DashboardPage = {
                 <div class="dbw-pbar"><div class="dbw-pbar-fill" style="width:${pct}%;background:${accent}"></div></div>
                 <span class="dbw-pct">${pct}%</span>
             </div>
-            <button class="dbw-btn" style="--ac:${accent}" onclick="Router.go('courses/${cid}?from=expert-path')">
-                <i class="fa-solid fa-play"></i> Продовжити
-            </button>` : `
+` : `
             <div class="dbw-sep"></div>
-            <span class="dbw-course-hint">🏆 Всі курси завершено</span>
-            <button class="dbw-btn" style="--ac:${accent}" onclick="Router.go('courses')">Знайти нові <i class="fa-solid fa-arrow-right"></i></button>`;
+            <span class="dbw-course-hint">🏆 Всі курси завершено</span>`;
 
         const _cap = n => n > 9 ? '9+' : String(n);
         const _courseLabel = n => n === 1 ? 'курс' : n < 5 ? 'курси' : 'курсів';
@@ -1930,15 +1932,13 @@ const DashboardPage = {
             { icon:'fa-file-pen',              count:testsCount,      label:`${_cap(testsCount)} ${_testLabel(testsCount)}`,             route:'my-tests',    color:'#f59e0b', title:'Тести' },
             { icon:'fa-square-poll-horizontal', count:surveysCount,    label:`${_cap(surveysCount)} опитувань`,                           route:'expert-path', color:'#8b5cf6', title:'Опитування' },
         ];
-        const chips = chipDefs.map(c => {
-            const done = c.count === 0;
-            const col  = done ? '#10b981' : c.color;
-            const rgb  = _hex2rgb(col);
-            return `<button class="dbw-chip" style="--cc:${col};--cc-rgb:${rgb}" onclick="Router.go('${c.route}')" title="${c.title}">
-                <i class="fa-solid ${c.icon}"></i>${c.label}${done ? '<i class="fa-solid fa-check dbw-chip-check"></i>' : ''}
+        const chips = chipDefs.filter(c => c.count > 0).map(c => {
+            const rgb = _hex2rgb(c.color);
+            return `<button class="dbw-chip" style="--cc:${c.color};--cc-rgb:${rgb}" onclick="Router.go('${c.route}')" title="${c.title}">
+                <i class="fa-solid ${c.icon}"></i>${c.label}
             </button>`;
         });
-        const chipsHtml = `<div class="dbw-sep"></div><div class="dbw-chips">${chips.join('')}</div>`;
+        const chipsHtml = chips.length ? `<div class="dbw-sep"></div><div class="dbw-chips">${chips.join('')}</div>` : '';
 
         el.innerHTML = `
         <style>
@@ -1975,12 +1975,6 @@ const DashboardPage = {
             .dbw-pbar{width:clamp(60px,8vw,90px);height:4px;background:var(--bg-raised);border-radius:3px;overflow:hidden;flex-shrink:0}
             .dbw-pbar-fill{height:100%;border-radius:3px;transition:width .6s ease}
             .dbw-pct{font-size:.68rem;font-weight:700;color:var(--text-muted);min-width:26px}
-            .dbw-btn{display:inline-flex;align-items:center;gap:.3rem;background:var(--ac,${accent});
-                border:none;border-radius:var(--radius-sm);color:#fff;padding:.28rem .7rem;
-                font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit;
-                transition:opacity .15s,transform .1s;flex-shrink:0;white-space:nowrap}
-            .dbw-btn:hover{opacity:.88;transform:translateY(-1px)}
-            .dbw-btn:active{transform:translateY(0)}
             .dbw-chips{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap}
             .dbw-chip{display:inline-flex;align-items:center;gap:.35rem;
                 border-radius:999px;padding:.28rem .75rem;
@@ -2002,7 +1996,6 @@ const DashboardPage = {
                 .dbw-pbar{width:70px}
                 .dbw-chips{gap:.3rem}
                 .dbw-chip{font-size:.72rem;padding:.22rem .55rem}
-                .dbw-btn{font-size:.72rem;padding:.32rem .65rem}
             }
         </style>
         <div class="db-welcome-bar">

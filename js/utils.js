@@ -631,7 +631,7 @@ const UI = {
                 { title: 'Особисте',   items: [ contactsItem, bmItem ] }
             ];
         }
-        // Стажер: тільки навчання + особисте без документів/контактів/закладок
+        // Стажер: навчання + закладки, без документів/контактів/сповіщень
         if (AppState.profile?.label === 'intern') {
             const internContentItems = [
                 ...common,
@@ -639,7 +639,7 @@ const UI = {
             ];
             return [
                 { title: 'Навчання',  items: internContentItems },
-                { title: 'Особисте',  items: [ ntfItem ] }
+                { title: 'Особисте',  items: [ bmItem ] }
             ];
         }
         return [
@@ -902,7 +902,7 @@ const Fmt = {
         return `${size.toFixed(1)} ${units[i]}`;
     },
     role(r) {
-        return { owner: 'Admin', ceo: 'CEO', admin: 'Адміністратор', smm: 'SMM-менеджер', teacher: 'Викладач', manager: 'Керівник', user: 'Користувач', student: 'Користувач' }[r] || r || '—';
+        return { owner: 'Admin', ceo: 'CEO', admin: 'Адміністратор', smm: 'SMM-менеджер', teacher: 'Викладач', manager: 'Керівник', user: 'Користувач', intern: 'Стажер', student: 'Користувач' }[r] || r || '—';
     },
     roleBadge(r) {
         if (r === 'owner')   return `<span class="badge badge-warning">👑 Admin</span>`;
@@ -910,6 +910,7 @@ const Fmt = {
         if (r === 'admin')   return `<span class="badge badge-admin">👑 Адміністратор</span>`;
         if (r === 'smm')     return `<span class="badge badge-info">📰 SMM-менеджер</span>`;
         if (r === 'manager') return `<span class="badge badge-manager">👔 Керівник</span>`;
+        if (r === 'intern')  return `<span class="badge badge-success">🌱 Стажер</span>`;
         if (r === 'user' || r === 'student')
             return `<span class="badge" style="background:none;border:none;color:#d946ef;text-shadow:0 0 8px rgba(217,70,239,.4);padding-left:0;padding-right:0">💎 ${Fmt.role(r)}</span>`;
         const cls = { teacher: 'badge-primary' }[r] || 'badge-muted';

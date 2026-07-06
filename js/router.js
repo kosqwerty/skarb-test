@@ -6,6 +6,7 @@ const Router = {
     _routes: {},
     _current: null,
     _prevCleanup: null,
+    _prevRoute: null,
 
     define(routes) {
         this._routes = routes;
@@ -80,7 +81,13 @@ const Router = {
             this._prevCleanup = null;
         }
 
-        this._current = segments.join('/');
+        const nextRoute = segments.join('/');
+        try {
+            if (AppState?.user && typeof API !== 'undefined')
+                API.userNavLog.log(this._prevRoute, nextRoute, AppState._sessionId);
+        } catch(_) {}
+        this._prevRoute = nextRoute;
+        this._current = nextRoute;
         UI.updateActiveNav(segments[0]);
 
         const container = document.getElementById('page-content');

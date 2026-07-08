@@ -651,9 +651,18 @@ const TestsManagerPage = {
         const isEdit = !!test;
         this._pendingCoverFile = null;
         this._coverImageUrl    = test?.cover_image || null;
-        let allPositions = [];
-        try { allPositions = await TestsManagerAPI.getPositions(); } catch(_) {}
         const selectedPos = test?.auto_assign_positions || [];
+        // Посади — зі справочника (positions), а не з job_position профілів
+        let allPositions = [];
+        try {
+            allPositions = (await API.positions.getAll()).map(p => p.name);
+        } catch(e) { console.error('[tests-manager] positions:', e); }
+        if (!allPositions.length) {
+            // Fallback: якщо справочник порожній — старий спосіб (з профілів)
+            try { allPositions = await TestsManagerAPI.getPositions(); } catch(_) {}
+        }
+        // Обрані раніше посади, яких вже немає в справочнику, не губимо
+        selectedPos.forEach(p => { if (!allPositions.includes(p)) allPositions.push(p); });
 
         container.innerHTML = `<style>
 .tset-page{max-width:900px}
@@ -779,10 +788,10 @@ const TestsManagerPage = {
                     return `<label style="display:flex;align-items:center;gap:7px;padding:5px 8px;border-radius:7px;cursor:pointer;background:${on?'rgba(99,102,241,.06)':''};transition:background .12s"
                         onmouseenter="this.style.background=this.querySelector('input').checked?'rgba(99,102,241,.06)':'var(--bg-raised)'"
                         onmouseleave="this.style.background=this.querySelector('input').checked?'rgba(99,102,241,.06)':''">
-                        <input type="checkbox" name="tm-pos" value="${p}" ${on?'checked':''}
+                        <input type="checkbox" name="tm-pos" value="${Fmt.esc(p)}" ${on?'checked':''}
                             style="width:14px;height:14px;cursor:pointer;accent-color:var(--primary);flex-shrink:0"
                             onchange="TestsManagerPage._togglePosLabel(this.closest('label'),this.checked)">
-                        <span style="font-size:.82rem;color:var(--text-primary)">${p}</span>
+                        <span style="font-size:.82rem;color:var(--text-primary)">${Fmt.esc(p)}</span>
                     </label>`;
                 }).join('')}
             </div>` : `<div style="font-size:.78rem;color:var(--text-muted)">Посади не знайдено — заповніть профілі співробітників</div>`}

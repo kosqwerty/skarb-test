@@ -7,10 +7,29 @@ const AdminPage = {
     _group: 'content',
     _groups: [],
 
+    // Короткі описи вкладок — показуються під навігацією
+    _TAB_DESC: {
+        'users':         'Облікові записи співробітників: створення, ролі, блокування та редагування профілів.',
+        'courses':       'Навчальні курси: створення, уроки, матеріали та публікація.',
+        'tests':         'Конструктор тестів, призначення співробітникам і аналіз результатів.',
+        'news':          'Новини порталу: створення, закріплення та публікація.',
+        'access-groups': 'Групи за містом, посадою чи підрозділом — визначають, хто бачить контент.',
+        'trusted-ips':   'Мережі, з яких відкриті всі розділи порталу. Поза ними діють обмеження.',
+        'activity':      'Журнал дій: хто, що і коли робив у системі.',
+        'sessions':      'Історія входів співробітників та їхні пристрої.',
+        'nav-stats':     'Якими сторінками користуються найчастіше і як рухаються порталом.',
+        'task-report':   'Зведення по спробах тестів за обраний період.',
+        'supersearch':   'Єдиний пошук: люди, курси, тести, новини, документи.',
+        'trash':         'Видалені обʼєкти — можна переглянути та відновити.',
+        'feedback':      'Звернення співробітників: помилки, питання та пропозиції. Відповідайте прямо тут.',
+        'ai-assistant':  'Налаштування AI-помічника порталу.',
+        'pleso':         'Генератор цінників Pleso.',
+    },
+
     _buildGroups(canManageUsers) {
         return [
             {
-                id: 'content', label: 'Контент', icon: 'fa-layer-group', tabs: [
+                id: 'content', label: 'Контент', icon: 'fa-layer-group', desc: 'Люди та навчальні матеріали', tabs: [
                     { id: 'users',        label: 'Користувачі',      icon: 'fa-users',               show: canManageUsers },
                     { id: 'courses',      label: 'Курси',             icon: 'fa-book-open',           show: true },
                     { id: 'tests',        label: 'Тести',             icon: 'fa-file-pen',            show: true },
@@ -18,13 +37,13 @@ const AdminPage = {
                 ]
             },
             {
-                id: 'access', label: 'Доступ', icon: 'fa-shield-halved', tabs: [
+                id: 'access', label: 'Доступ', icon: 'fa-shield-halved', desc: 'Права та обмеження', tabs: [
                     { id: 'access-groups', label: 'Групи доступу',   icon: 'fa-lock',                show: canManageUsers },
                     { id: 'trusted-ips',   label: 'Довірені IP',     icon: 'fa-network-wired',       show: AppState.isAdmin() },
                 ]
             },
             {
-                id: 'monitor', label: 'Моніторинг', icon: 'fa-chart-line', tabs: [
+                id: 'monitor', label: 'Моніторинг', icon: 'fa-chart-line', desc: 'Активність у системі', tabs: [
                     { id: 'activity',    label: 'Активність',         icon: 'fa-clock-rotate-left',  show: AppState.isOwner() },
                     { id: 'sessions',    label: 'Сесії',              icon: 'fa-list-ul',             show: AppState.isOwner() },
                     { id: 'nav-stats',   label: 'Навігація',          icon: 'fa-route',               show: AppState.isOwner() },
@@ -32,7 +51,7 @@ const AdminPage = {
                 ]
             },
             {
-                id: 'tools', label: 'Інструменти', icon: 'fa-screwdriver-wrench', tabs: [
+                id: 'tools', label: 'Інструменти', icon: 'fa-screwdriver-wrench', desc: 'Пошук, кошик, звернення', tabs: [
                     { id: 'supersearch',  label: 'Супер пошук',      icon: 'fa-magnifying-glass-chart', show: canManageUsers },
                     { id: 'trash',        label: 'Кошик',            icon: 'fa-trash',               show: AppState.isOwner() },
                     { id: 'feedback',     label: "Зворотний зв'язок", icon: 'fa-comment-dots',       show: AppState.isAdmin() },
@@ -62,43 +81,108 @@ const AdminPage = {
 
         const groupsHtml = this._groups.map(g => `
             <button class="adm-grp-btn${g.id === initGroup ? ' active' : ''}" data-group="${g.id}" onclick="AdminPage.switchGroup('${g.id}')">
-                <i class="fa-solid ${g.icon}"></i> ${g.label}
+                <span class="adm-grp-ico"><i class="fa-solid ${g.icon}"></i></span>
+                <span class="adm-grp-txt">
+                    <span class="adm-grp-lbl">${g.label}</span>
+                    <span class="adm-grp-desc">${g.desc || ''}</span>
+                </span>
             </button>`).join('');
 
         const tabsHtml = this._groups.map(g => g.tabs.map(t => `
-            <button class="tab${t.id === initTab ? ' active' : ''}" data-tab="${t.id}" data-group="${g.id}"
+            <button class="tab adm-tab${t.id === initTab ? ' active' : ''}" data-tab="${t.id}" data-group="${g.id}"
                     style="${g.id !== initGroup ? 'display:none' : ''}"
                     onclick="AdminPage.switchTab('${t.id}', this)">
                 <i class="fa-solid ${t.icon}"></i> ${t.label}
             </button>`).join('')).join('');
 
         container.innerHTML = `
-            <div class="page-header">
-                <div class="page-title">
-                    <h1>⚙️ ${AppState.isSmm() ? 'Керування контентом' : 'Адміністрування'}</h1>
-                    <p>Керування системою</p>
+            <div class="adm-hero">
+                <div class="adm-hero-ico"><i class="fa-solid ${AppState.isSmm() ? 'fa-layer-group' : 'fa-shield-halved'}"></i></div>
+                <div class="adm-hero-txt">
+                    <h1>${AppState.isSmm() ? 'Керування контентом' : 'Адміністрування'}</h1>
+                    <p>${AppState.isSmm()
+                        ? 'Курси, тести та новини порталу — все керування контентом в одному місці'
+                        : 'Користувачі, контент, доступ і моніторинг — центр керування порталом'}</p>
                 </div>
             </div>
             <div class="adm-groups" id="adm-groups">${groupsHtml}</div>
-            <div class="tabs" id="admin-tabs">${tabsHtml}</div>
+            <div class="tabs adm-tabs" id="admin-tabs">${tabsHtml}</div>
+            <div class="adm-desc" id="adm-desc" style="display:none">
+                <i class="fa-solid fa-circle-info"></i><span id="adm-desc-text"></span>
+            </div>
             <div id="admin-content"></div>
             <style>
-.adm-groups {
-    display:flex;gap:6px;padding:0 0 0 0;margin-bottom:4px;
+.adm-hero {
+    display:flex;align-items:center;gap:16px;border-radius:20px;padding:22px 26px;margin-bottom:18px;
+    background:linear-gradient(135deg,#312e81 0%,#4338ca 55%,#6d28d9 100%);position:relative;overflow:hidden;
 }
+.adm-hero::before {
+    content:'';position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(ellipse 55% 90% at 85% 10%,rgba(255,255,255,.14),transparent 60%);
+}
+.adm-hero-ico {
+    width:50px;height:50px;border-radius:15px;flex-shrink:0;position:relative;
+    background:rgba(255,255,255,.13);border:1.5px solid rgba(255,255,255,.22);
+    display:flex;align-items:center;justify-content:center;font-size:1.35rem;color:#fff;
+}
+.adm-hero-txt { position:relative;min-width:0; }
+.adm-hero-txt h1 { margin:0;font-size:1.4rem;font-weight:800;color:#fff;letter-spacing:-.02em; }
+.adm-hero-txt p  { margin:3px 0 0;font-size:.82rem;color:rgba(255,255,255,.65); }
+.adm-groups { display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap; }
 .adm-grp-btn {
-    display:flex;align-items:center;gap:7px;padding:8px 16px;border-radius:10px;
-    border:1.5px solid var(--border);background:transparent;
-    color:var(--text-secondary);font-size:.82rem;font-weight:600;cursor:pointer;
-    transition:all .15s;font-family:inherit;
+    display:flex;align-items:center;gap:10px;padding:9px 16px 9px 10px;border-radius:14px;
+    border:1.5px solid var(--border);background:var(--bg-surface);
+    color:var(--text-secondary);cursor:pointer;text-align:left;
+    transition:all .18s cubic-bezier(.4,0,.2,1);font-family:inherit;
 }
-.adm-grp-btn:hover:not(.active) { border-color:var(--primary);color:var(--primary);background:rgba(99,102,241,.05); }
-.adm-grp-btn.active { background:var(--primary);border-color:var(--primary);color:#fff;box-shadow:0 3px 10px rgba(99,102,241,.3); }
-.adm-grp-btn i { font-size:.8rem; }
+.adm-grp-btn:hover:not(.active) { border-color:var(--primary);background:rgba(99,102,241,.05); }
+.adm-grp-btn:hover:not(.active) .adm-grp-lbl { color:var(--primary); }
+.adm-grp-ico {
+    width:34px;height:34px;border-radius:10px;flex-shrink:0;
+    background:var(--bg-raised);border:1px solid var(--border);
+    display:flex;align-items:center;justify-content:center;font-size:.85rem;color:var(--text-muted);
+    transition:all .18s;
+}
+.adm-grp-btn.active { border-color:var(--primary);background:color-mix(in srgb,var(--primary) 10%,var(--bg-surface));box-shadow:0 4px 14px rgba(99,102,241,.18); }
+.adm-grp-btn.active .adm-grp-ico { background:var(--primary);border-color:var(--primary);color:#fff; }
+.adm-grp-btn.active .adm-grp-lbl { color:var(--primary); }
+.adm-grp-txt { display:flex;flex-direction:column;min-width:0; }
+.adm-grp-lbl { font-size:.84rem;font-weight:700;color:var(--text-primary);transition:color .18s;line-height:1.2; }
+.adm-grp-desc { font-size:.68rem;color:var(--text-muted);margin-top:1px;white-space:nowrap; }
+@media (max-width:768px) { .adm-grp-desc { display:none; } .adm-grp-btn { padding:8px 12px 8px 8px; } }
+.adm-tabs { margin-bottom:0; }
+.adm-tab { border-radius:10px; }
+.adm-desc {
+    display:flex;align-items:center;gap:9px;margin:10px 0 16px;padding:9px 14px;border-radius:10px;
+    background:color-mix(in srgb,var(--primary) 7%,var(--bg-surface));
+    border:1px solid color-mix(in srgb,var(--primary) 20%,var(--border));
+    font-size:.8rem;color:var(--text-secondary);line-height:1.45;animation:adm-desc-in .25s cubic-bezier(.4,0,.2,1);
+}
+.adm-desc i { color:var(--primary);font-size:.85rem;flex-shrink:0; }
+@keyframes adm-desc-in { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:none} }
+@media (prefers-reduced-motion:reduce) { .adm-desc{animation:none} }
             </style>`;
+        this._updateTabDesc(initTab);
 
         this._editCourseId = params.edit || null;
         await this._loadTab();
+    },
+
+    _updateTabDesc(tab) {
+        const wrap = document.getElementById('adm-desc');
+        const txt  = document.getElementById('adm-desc-text');
+        if (!wrap || !txt) return;
+        const desc = this._TAB_DESC[tab];
+        if (desc) {
+            txt.textContent = desc;
+            wrap.style.display = '';
+            // перезапуск анімації появи
+            wrap.style.animation = 'none';
+            void wrap.offsetWidth;
+            wrap.style.animation = '';
+        } else {
+            wrap.style.display = 'none';
+        }
     },
 
     switchGroup(groupId) {
@@ -126,6 +210,7 @@ const AdminPage = {
         this._tab = tab;
         document.querySelectorAll('#admin-tabs .tab').forEach(t => t.classList.remove('active'));
         if (el) el.classList.add('active');
+        this._updateTabDesc(tab);
         // Sync group selector if tab belongs to different group
         const tabGroup = this._groups?.find(g => g.tabs.some(t => t.id === tab))?.id;
         if (tabGroup && tabGroup !== this._group) {

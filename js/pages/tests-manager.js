@@ -274,12 +274,14 @@ const TestsManagerPage = {
         try {
             const { asg, att } = await TestsManagerAPI.getListStats(this._tests.map(t => t.id));
             const st = this._listStats;
+            const assignedUsers = {}; // test_id -> Set(user_id), щоб рахувати "пройшли" лише серед призначених
             asg.forEach(r => {
                 (st[r.test_id] = st[r.test_id] || { assigned: 0, passed: new Set() }).assigned++;
+                (assignedUsers[r.test_id] = assignedUsers[r.test_id] || new Set()).add(r.user_id);
             });
             att.forEach(a => {
-                if (!a.passed) return;
-                (st[a.test_id] = st[a.test_id] || { assigned: 0, passed: new Set() }).passed.add(a.user_id);
+                if (!a.passed || !assignedUsers[a.test_id]?.has(a.user_id)) return;
+                st[a.test_id].passed.add(a.user_id);
             });
             totalAssigned = asg.length;
             if (att.length) avgPct = Math.round(att.reduce((s, a) => s + (a.percentage || 0), 0) / att.length);

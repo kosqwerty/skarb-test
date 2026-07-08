@@ -26,10 +26,25 @@ const AdminPage = {
         'pleso':         'Генератор цінників Pleso.',
     },
 
+    // Розширена довідка (список порад) для найпопулярніших вкладок
+    _TAB_HELP: {
+        'users':         ['Кнопка «Створити користувача» — реєстрація нового співробітника з логіном і паролем.', 'Роль визначає доступ до розділів порталу — змінюйте обережно.', 'Заблокований користувач не втрачає дані, лише не може увійти.'],
+        'courses':       ['Курс складається з уроків і матеріалів — додавайте їх після створення курсу.', 'Непубліковані курси не бачать звичайні користувачі.', 'Групи (потоки) курсу дозволяють вести кілька наборів студентів окремо.'],
+        'tests':         ['«Новий тест» одразу відкриває конструктор питань.', 'Тест призначається вручну або автоматично — за посадою в налаштуваннях.', 'У результатах доступна аналітика по кожному питанню.'],
+        'news':          ['Закріплена новина показується вище за стрічкою.', 'Обкладинка новини впливає на вигляд картки на головній.'],
+        'access-groups': ['Група доступу фільтрує контент за містом, посадою чи підрозділом.', 'Публічна група видима всім — приватна лише вказаним критеріям.'],
+        'trusted-ips':   ['Поза довіреною мережею частина розділів блокується автоматично.', 'Додайте IP-адресу офісу, щоб зняти обмеження для співробітників звідти.'],
+        'sessions':      ['Показує історію входів і виходів — не поточну активність.', 'Блок «Онлайн зараз» вище показує, хто активний прямо зараз.'],
+        'nav-stats':     ['Клік по сторінці в топі показує, звідки приходять і куди йдуть далі.', 'Матриця внизу — повний розподіл переходів між сторінками.'],
+        'feedback':      ['Відповідь адміністратора одразу потрапляє в чат користувача.', 'Видалені користувачем звернення залишаються видимими адміну.'],
+        'trash':         ['Видалені об\'єкти зберігаються обмежений час, потім видаляються остаточно.'],
+        'supersearch':   ['Шукає одночасно серед людей, курсів, тестів, новин і документів.'],
+    },
+
     _buildGroups(canManageUsers) {
         return [
             {
-                id: 'content', label: 'Контент', icon: 'fa-layer-group', desc: 'Люди та навчальні матеріали', tabs: [
+                id: 'content', label: 'Контент', icon: 'fa-layer-group', desc: 'Люди та навчальні матеріали', color: '#3b82f6', tabs: [
                     { id: 'users',        label: 'Користувачі',      icon: 'fa-users',               show: canManageUsers },
                     { id: 'courses',      label: 'Курси',             icon: 'fa-book-open',           show: true },
                     { id: 'tests',        label: 'Тести',             icon: 'fa-file-pen',            show: true },
@@ -37,13 +52,13 @@ const AdminPage = {
                 ]
             },
             {
-                id: 'access', label: 'Доступ', icon: 'fa-shield-halved', desc: 'Права та обмеження', tabs: [
+                id: 'access', label: 'Доступ', icon: 'fa-shield-halved', desc: 'Права та обмеження', color: '#8b5cf6', tabs: [
                     { id: 'access-groups', label: 'Групи доступу',   icon: 'fa-lock',                show: canManageUsers },
                     { id: 'trusted-ips',   label: 'Довірені IP',     icon: 'fa-network-wired',       show: AppState.isAdmin() },
                 ]
             },
             {
-                id: 'monitor', label: 'Моніторинг', icon: 'fa-chart-line', desc: 'Активність у системі', tabs: [
+                id: 'monitor', label: 'Моніторинг', icon: 'fa-chart-line', desc: 'Активність у системі', color: '#10b981', tabs: [
                     { id: 'activity',    label: 'Активність',         icon: 'fa-clock-rotate-left',  show: AppState.isOwner() },
                     { id: 'sessions',    label: 'Сесії',              icon: 'fa-list-ul',             show: AppState.isOwner() },
                     { id: 'nav-stats',   label: 'Навігація',          icon: 'fa-route',               show: AppState.isOwner() },
@@ -51,7 +66,7 @@ const AdminPage = {
                 ]
             },
             {
-                id: 'tools', label: 'Інструменти', icon: 'fa-screwdriver-wrench', desc: 'Пошук, кошик, звернення', tabs: [
+                id: 'tools', label: 'Інструменти', icon: 'fa-screwdriver-wrench', desc: 'Пошук, кошик, звернення', color: '#f59e0b', tabs: [
                     { id: 'supersearch',  label: 'Супер пошук',      icon: 'fa-magnifying-glass-chart', show: canManageUsers },
                     { id: 'trash',        label: 'Кошик',            icon: 'fa-trash',               show: AppState.isOwner() },
                     { id: 'feedback',     label: "Зворотний зв'язок", icon: 'fa-comment-dots',       show: AppState.isAdmin() },
@@ -80,12 +95,16 @@ const AdminPage = {
         this._group = initGroup;
 
         const groupsHtml = this._groups.map(g => `
-            <button class="adm-grp-btn${g.id === initGroup ? ' active' : ''}" data-group="${g.id}" onclick="AdminPage.switchGroup('${g.id}')">
-                <span class="adm-grp-ico"><i class="fa-solid ${g.icon}"></i></span>
-                <span class="adm-grp-txt">
-                    <span class="adm-grp-lbl">${g.label}</span>
-                    <span class="adm-grp-desc">${g.desc || ''}</span>
-                </span>
+            <button class="adm-grp-btn${g.id === initGroup ? ' active' : ''}" style="--grp-c:${g.color || 'var(--primary)'}" data-group="${g.id}" onclick="AdminPage.switchGroup('${g.id}')">
+                <div class="adm-grp-top">
+                    <span class="adm-grp-ico"><i class="fa-solid ${g.icon}"></i></span>
+                    <span class="adm-grp-txt">
+                        <span class="adm-grp-lbl">${g.label}</span>
+                        <span class="adm-grp-desc">${g.desc || ''}</span>
+                    </span>
+                    <i class="fa-solid fa-chevron-right adm-grp-chev"></i>
+                </div>
+                <div class="adm-grp-stat" data-grp="${g.id}"><span class="adm-grp-stat-skel"></span></div>
             </button>`).join('');
 
         const tabsHtml = this._groups.map(g => g.tabs.map(t => `
@@ -99,17 +118,20 @@ const AdminPage = {
             <div class="adm-hero">
                 <div class="adm-hero-ico"><i class="fa-solid ${AppState.isSmm() ? 'fa-layer-group' : 'fa-shield-halved'}"></i></div>
                 <div class="adm-hero-txt">
-                    <h1>${AppState.isSmm() ? 'Керування контентом' : 'Адміністрування'}</h1>
+                    <h1>${AppState.isSmm() ? 'Керування контентом' : 'Адміністрування порталом'}</h1>
                     <p>${AppState.isSmm()
-                        ? 'Курси, тести та новини порталу — все керування контентом в одному місці'
-                        : 'Користувачі, контент, доступ і моніторинг — центр керування порталом'}</p>
+                        ? 'Курси, тести та новини порталу — все керування контентом в одному місці.'
+                        : 'Керуйте користувачами, контентом, доступом і системними налаштуваннями в одному місці.'}</p>
                 </div>
             </div>
             <div class="adm-groups" id="adm-groups">${groupsHtml}</div>
             <div class="tabs adm-tabs" id="admin-tabs">${tabsHtml}</div>
             <div class="adm-desc" id="adm-desc" style="display:none">
-                <i class="fa-solid fa-circle-info"></i><span id="adm-desc-text"></span>
+                <div class="adm-desc-ico"><i class="fa-solid fa-circle-info"></i></div>
+                <span id="adm-desc-text"></span>
+                <button class="adm-desc-help" onclick="AdminPage._openTabHelp()"><i class="fa-regular fa-circle-question"></i> Довідка <i class="fa-solid fa-chevron-right"></i></button>
             </div>
+            <div class="adm-quickpanel" id="adm-quickpanel" style="display:none"></div>
             <div id="admin-content"></div>
             <style>
 .adm-hero {
@@ -128,41 +150,74 @@ const AdminPage = {
 .adm-hero-txt { position:relative;min-width:0; }
 .adm-hero-txt h1 { margin:0;font-size:1.4rem;font-weight:800;color:#fff;letter-spacing:-.02em; }
 .adm-hero-txt p  { margin:3px 0 0;font-size:.82rem;color:rgba(255,255,255,.65); }
-.adm-groups { display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap; }
+.adm-groups { display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:14px; }
 .adm-grp-btn {
-    display:flex;align-items:center;gap:10px;padding:9px 16px 9px 10px;border-radius:14px;
+    display:flex;flex-direction:column;gap:10px;padding:14px 16px;border-radius:16px;
     border:1.5px solid var(--border);background:var(--bg-surface);
     color:var(--text-secondary);cursor:pointer;text-align:left;
     transition:all .18s cubic-bezier(.4,0,.2,1);font-family:inherit;
 }
-.adm-grp-btn:hover:not(.active) { border-color:var(--primary);background:rgba(99,102,241,.05); }
-.adm-grp-btn:hover:not(.active) .adm-grp-lbl { color:var(--primary); }
+.adm-grp-btn:hover:not(.active) { border-color:color-mix(in srgb,var(--grp-c) 45%,var(--border)); box-shadow:0 4px 14px rgba(0,0,0,.08); }
+.adm-grp-top { display:flex;align-items:center;gap:10px; }
 .adm-grp-ico {
-    width:34px;height:34px;border-radius:10px;flex-shrink:0;
-    background:var(--bg-raised);border:1px solid var(--border);
-    display:flex;align-items:center;justify-content:center;font-size:.85rem;color:var(--text-muted);
+    width:38px;height:38px;border-radius:11px;flex-shrink:0;
+    background:color-mix(in srgb,var(--grp-c) 15%,transparent);color:var(--grp-c);
+    display:flex;align-items:center;justify-content:center;font-size:.95rem;
     transition:all .18s;
 }
-.adm-grp-btn.active { border-color:var(--primary);background:color-mix(in srgb,var(--primary) 10%,var(--bg-surface));box-shadow:0 4px 14px rgba(99,102,241,.18); }
-.adm-grp-btn.active .adm-grp-ico { background:var(--primary);border-color:var(--primary);color:#fff; }
-.adm-grp-btn.active .adm-grp-lbl { color:var(--primary); }
-.adm-grp-txt { display:flex;flex-direction:column;min-width:0; }
-.adm-grp-lbl { font-size:.84rem;font-weight:700;color:var(--text-primary);transition:color .18s;line-height:1.2; }
-.adm-grp-desc { font-size:.68rem;color:var(--text-muted);margin-top:1px;white-space:nowrap; }
-@media (max-width:768px) { .adm-grp-desc { display:none; } .adm-grp-btn { padding:8px 12px 8px 8px; } }
+.adm-grp-btn.active { border-color:var(--grp-c);background:color-mix(in srgb,var(--grp-c) 6%,var(--bg-surface));box-shadow:0 4px 14px color-mix(in srgb,var(--grp-c) 22%,transparent); }
+.adm-grp-txt { display:flex;flex-direction:column;min-width:0;flex:1; }
+.adm-grp-lbl { font-size:.9rem;font-weight:700;color:var(--text-primary);transition:color .18s;line-height:1.25; }
+.adm-grp-desc { font-size:.72rem;color:var(--text-muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.adm-grp-chev { color:var(--text-muted);font-size:.75rem;opacity:.6;flex-shrink:0;transition:transform .18s; }
+.adm-grp-btn.active .adm-grp-chev { color:var(--grp-c);opacity:1; }
+.adm-grp-stat { font-size:.74rem;color:var(--text-secondary);padding-top:9px;border-top:1px solid var(--border); }
+.adm-grp-stat b { color:var(--text-primary);font-weight:700; }
+.adm-grp-stat-skel { display:inline-block;width:70%;height:11px;border-radius:4px;background:var(--bg-hover);animation:adm-skel-pulse 1.3s ease-in-out infinite; }
+@keyframes adm-skel-pulse { 0%,100%{opacity:.5} 50%{opacity:1} }
+@media (max-width:768px) { .adm-grp-desc { display:none; } }
 .adm-tabs { margin-bottom:0; }
 .adm-tab { border-radius:10px; }
 .adm-desc {
-    display:flex;align-items:center;gap:9px;margin:10px 0 16px;padding:9px 14px;border-radius:10px;
+    display:flex;align-items:center;gap:11px;margin:10px 0 16px;padding:10px 12px 10px 10px;border-radius:12px;
     background:color-mix(in srgb,var(--primary) 7%,var(--bg-surface));
     border:1px solid color-mix(in srgb,var(--primary) 20%,var(--border));
     font-size:.8rem;color:var(--text-secondary);line-height:1.45;animation:adm-desc-in .25s cubic-bezier(.4,0,.2,1);
 }
-.adm-desc i { color:var(--primary);font-size:.85rem;flex-shrink:0; }
+.adm-desc-ico { width:28px;height:28px;border-radius:9px;flex-shrink:0;background:color-mix(in srgb,var(--primary) 16%,transparent);color:var(--primary);display:flex;align-items:center;justify-content:center;font-size:.8rem; }
+.adm-desc span#adm-desc-text { flex:1; }
+.adm-desc-help {
+    display:inline-flex;align-items:center;gap:6px;flex-shrink:0;padding:6px 12px;border-radius:9px;
+    border:1.5px solid color-mix(in srgb,var(--primary) 30%,var(--border));background:var(--bg-surface);
+    color:var(--primary);font-size:.76rem;font-weight:700;cursor:pointer;transition:all .15s;font-family:inherit;white-space:nowrap;
+}
+.adm-desc-help:hover { background:var(--primary);color:#fff;border-color:var(--primary); }
+.adm-desc-help i:last-child { font-size:.62rem; }
 @keyframes adm-desc-in { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:none} }
 @media (prefers-reduced-motion:reduce) { .adm-desc{animation:none} }
+.adm-quickpanel { margin-bottom:18px; }
+.adm-qp-grid { display:grid;grid-template-columns:1fr 1fr;gap:16px; }
+@media (max-width:900px) { .adm-qp-grid { grid-template-columns:1fr; } }
+.adm-qp-col { border:1px solid var(--border);border-radius:16px;background:var(--bg-surface);padding:16px 18px; }
+.adm-qp-title { font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:12px; }
+.adm-qp-actions { display:grid;grid-template-columns:1fr 1fr;gap:8px; }
+.adm-qp-act {
+    display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:11px;
+    border:1.5px solid var(--border);background:var(--bg-raised);color:var(--text-primary);
+    font-size:.8rem;font-weight:600;cursor:pointer;transition:all .16s;text-align:left;font-family:inherit;
+}
+.adm-qp-act:hover { border-color:var(--primary);background:color-mix(in srgb,var(--primary) 6%,var(--bg-raised));transform:translateY(-1px); }
+.adm-qp-act i { font-size:.9rem;flex-shrink:0; }
+.adm-qp-kpis { display:grid;grid-template-columns:1fr 1fr;gap:10px; }
+.adm-qp-kpi { padding:11px 13px;border-radius:12px;background:var(--bg-raised);border:1px solid var(--border); }
+.adm-qp-kpi-head { display:flex;align-items:center;justify-content:space-between;font-size:.72rem;color:var(--text-muted);margin-bottom:5px; }
+.adm-qp-kpi-val { font-size:1.35rem;font-weight:800;color:var(--text-primary);letter-spacing:-.02em; }
+.adm-ov-trend { display:block;font-size:.68rem;font-weight:600;margin-top:3px; }
+.adm-ov-trend.up { color:#10b981; }
+.adm-ov-trend.flat { color:var(--text-muted); }
             </style>`;
         this._updateTabDesc(initTab);
+        this._loadGroupStats();
 
         this._editCourseId = params.edit || null;
         await this._loadTab();
@@ -183,6 +238,149 @@ const AdminPage = {
         } else {
             wrap.style.display = 'none';
         }
+    },
+
+    _openTabHelp() {
+        const tips = this._TAB_HELP[this._tab];
+        const tabLabel = this._groups?.flatMap(g => g.tabs).find(t => t.id === this._tab)?.label || 'Розділ';
+        Modal.open({
+            title: `<i class="fa-regular fa-circle-question" style="color:var(--primary)"></i> Довідка — ${Fmt.esc(tabLabel)}`,
+            body: tips?.length ? `
+<ul style="margin:0;padding-left:1.1rem;display:flex;flex-direction:column;gap:.6rem;font-size:.87rem;line-height:1.55;color:var(--text-secondary)">
+    ${tips.map(t => `<li>${Fmt.esc(t)}</li>`).join('')}
+</ul>` : `<p style="font-size:.87rem;color:var(--text-secondary);line-height:1.55">${Fmt.esc(this._TAB_DESC[this._tab] || 'Довідка для цього розділу поки не додана.')}</p>`,
+            footer: `<button class="btn btn-primary" onclick="Modal.close()">Зрозуміло</button>`
+        });
+    },
+
+    // Реальні лічильники на картках груп (категорії/матеріали, групи/обмеження, дії сьогодні, звернення)
+    async _loadGroupStats() {
+        const setStat = (grp, html) => {
+            const el = document.querySelector(`.adm-grp-stat[data-grp="${grp}"]`);
+            if (el) el.innerHTML = html;
+        };
+        const fail = grp => setStat(grp, '<span style="opacity:.6">Немає даних</span>');
+
+        (async () => {
+            try {
+                const [{ count: coursesN }, { count: testsN }, { count: newsN }, { count: resN }, { data: cats }] = await Promise.all([
+                    supabase.from('courses').select('id', { count: 'exact', head: true }),
+                    supabase.from('tests').select('id', { count: 'exact', head: true }),
+                    supabase.from('news').select('id', { count: 'exact', head: true }),
+                    supabase.from('resources').select('id', { count: 'exact', head: true }).eq('is_deleted', false),
+                    supabase.from('courses').select('category').not('category', 'is', null).neq('category', ''),
+                ]);
+                const catN  = new Set((cats || []).map(c => c.category)).size;
+                const total = (coursesN || 0) + (testsN || 0) + (newsN || 0) + (resN || 0);
+                setStat('content', `<b>${catN}</b> категорій · <b>${Fmt.num(total)}</b> матеріалів`);
+            } catch(e) { fail('content'); }
+        })();
+
+        (async () => {
+            try {
+                const [{ count: groupsN }, { count: rulesN }] = await Promise.all([
+                    supabase.from('access_groups').select('id', { count: 'exact', head: true }),
+                    supabase.from('label_restrictions').select('id', { count: 'exact', head: true }),
+                ]);
+                setStat('access', `<b>${groupsN || 0}</b> груп доступу · <b>${rulesN || 0}</b> обмежень`);
+            } catch(e) { fail('access'); }
+        })();
+
+        (async () => {
+            try {
+                const _pad = n => String(n).padStart(2, '0');
+                const now  = new Date();
+                const todayStart = `${now.getFullYear()}-${_pad(now.getMonth()+1)}-${_pad(now.getDate())}T00:00:00`;
+                const { count } = await supabase.from('activity_log').select('id', { count: 'exact', head: true }).gte('created_at', todayStart);
+                setStat('monitor', `<b>${Fmt.num(count || 0)}</b> дій сьогодні`);
+            } catch(e) { fail('monitor'); }
+        })();
+
+        (async () => {
+            try {
+                const { count } = await supabase.from('feedback_reports').select('id', { count: 'exact', head: true })
+                    .in('status', ['new', 'in_progress']).eq('is_deleted', false);
+                setStat('tools', `<b>${count || 0}</b> звернень у роботі`);
+            } catch(e) { fail('tools'); }
+        })();
+    },
+
+    // ── Швидкі дії + Огляд системи (лише для вкладок Контент-групи) ─────
+    _ovStats: null, _ovStatsAt: 0,
+
+    async _loadOverviewStats() {
+        const weekAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
+        const counts = async (table) => {
+            const [{ count: total }, { count: week }] = await Promise.all([
+                supabase.from(table).select('id', { count: 'exact', head: true }),
+                supabase.from(table).select('id', { count: 'exact', head: true }).gte('created_at', weekAgo),
+            ]);
+            return { total: total || 0, week: week || 0 };
+        };
+        const [users, courses, tests, news] = await Promise.all([
+            counts('profiles'), counts('courses'), counts('tests'), counts('news'),
+        ]);
+        return { users, courses, tests, news };
+    },
+
+    async _renderQuickPanel() {
+        const qp = document.getElementById('adm-quickpanel');
+        if (!qp) return;
+        if (!this._ovStats || Date.now() - this._ovStatsAt > 60000) {
+            qp.innerHTML = `<div style="display:flex;justify-content:center;padding:2rem"><div class="spinner"></div></div>`;
+            try {
+                this._ovStats = await this._loadOverviewStats();
+                this._ovStatsAt = Date.now();
+            } catch(e) {
+                qp.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>${Fmt.esc(e.message)}</h3></div>`;
+                return;
+            }
+        }
+        if (!document.getElementById('adm-quickpanel')) return; // покинули вкладку поки чекали
+        const s = this._ovStats;
+        const trend = n => n > 0
+            ? `<span class="adm-ov-trend up"><i class="fa-solid fa-arrow-up"></i> ${n} за тиждень</span>`
+            : `<span class="adm-ov-trend flat">без змін за тиждень</span>`;
+        qp.innerHTML = `
+        <div class="adm-qp-grid">
+            <div class="adm-qp-col">
+                <div class="adm-qp-title"><i class="fa-solid fa-bolt" style="color:#f59e0b"></i> Швидкі дії</div>
+                <div class="adm-qp-actions">
+                    <button class="adm-qp-act" onclick="AdminPage._quickAction('users','openCreateUser')"><i class="fa-solid fa-user-plus" style="color:#3b82f6"></i> Додати користувача</button>
+                    <button class="adm-qp-act" onclick="AdminPage._quickAction('access-groups','openAccessGroupForm')"><i class="fa-solid fa-shield-halved" style="color:#8b5cf6"></i> Створити групу доступу</button>
+                    <button class="adm-qp-act" onclick="AdminPage._quickAction('courses','openCourseForm')"><i class="fa-solid fa-book-open" style="color:#10b981"></i> Створити курс</button>
+                    <button class="adm-qp-act" onclick="AdminPage._quickAction('tests','openTestModal')"><i class="fa-solid fa-file-pen" style="color:#f59e0b"></i> Створити тест</button>
+                    <button class="adm-qp-act" onclick="AdminPage._quickAction('news','openNewsModal')"><i class="fa-solid fa-newspaper" style="color:#ec4899"></i> Опублікувати новину</button>
+                </div>
+            </div>
+            <div class="adm-qp-col">
+                <div class="adm-qp-title"><i class="fa-solid fa-gauge-high" style="color:#3b82f6"></i> Огляд системи</div>
+                <div class="adm-qp-kpis">
+                    <div class="adm-qp-kpi"><div class="adm-qp-kpi-head"><span>Користувачів</span><i class="fa-solid fa-users" style="color:#3b82f6"></i></div><div class="adm-qp-kpi-val">${Fmt.num(s.users.total)}</div>${trend(s.users.week)}</div>
+                    <div class="adm-qp-kpi"><div class="adm-qp-kpi-head"><span>Курсів</span><i class="fa-solid fa-book" style="color:#8b5cf6"></i></div><div class="adm-qp-kpi-val">${Fmt.num(s.courses.total)}</div>${trend(s.courses.week)}</div>
+                    <div class="adm-qp-kpi"><div class="adm-qp-kpi-head"><span>Тестів</span><i class="fa-solid fa-file-pen" style="color:#f59e0b"></i></div><div class="adm-qp-kpi-val">${Fmt.num(s.tests.total)}</div>${trend(s.tests.week)}</div>
+                    <div class="adm-qp-kpi"><div class="adm-qp-kpi-head"><span>Новин</span><i class="fa-solid fa-newspaper" style="color:#ec4899"></i></div><div class="adm-qp-kpi-val">${Fmt.num(s.news.total)}</div>${trend(s.news.week)}</div>
+                </div>
+            </div>
+        </div>`;
+    },
+
+    // Перемикає на потрібну вкладку (якщо ще не на ній) і виконує реальну дію створення
+    async _quickAction(tab, actionName) {
+        if (this._tab !== tab) {
+            const tabEl = document.querySelector(`#admin-tabs .tab[data-tab="${tab}"]`);
+            if (!tabEl) { Toast.error('Немає доступу', 'Розділ недоступний для вашої ролі'); return; }
+            await this.switchTab(tab, tabEl);
+        }
+        try {
+            switch (actionName) {
+                case 'openCreateUser':       await this.openCreateUser();                 break;
+                case 'openAccessGroupForm': await AccessGroupsPage.openForm();            break;
+                case 'openCourseForm':      this._openCourseForm();                       break;
+                case 'openTestModal':       TestsManagerPage.openCreateModal();           break;
+                case 'openNewsModal':       NewsPage.openCreate();                        break;
+            }
+        } catch(e) { Toast.error('Помилка', e.message); }
     },
 
     switchGroup(groupId) {
@@ -232,10 +430,22 @@ const AdminPage = {
         await this._loadTab();
     },
 
+    _QUICK_PANEL_TABS: ['users', 'courses', 'tests', 'news'],
+
     async _loadTab() {
         const el = document.getElementById('admin-content');
         if (!el) return;
         el.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
+
+        const qp = document.getElementById('adm-quickpanel');
+        if (qp) {
+            if (this._QUICK_PANEL_TABS.includes(this._tab)) {
+                qp.style.display = '';
+                this._renderQuickPanel();
+            } else {
+                qp.style.display = 'none';
+            }
+        }
 
         try {
             switch (this._tab) {
@@ -4608,7 +4818,7 @@ const AdminPage = {
         if (!this._sessFrom) this._sessFrom = ago30Str;
         if (!this._sessTo)   this._sessTo   = todayStr;
 
-        const { data: profiles } = await API.profiles.getAll({ limit: 500 });
+        const { data: profiles } = await API.profiles.getAll({ pageSize: 1000 });
         this._sessProfiles = profiles?.data || profiles || [];
         const userOpts = this._sessProfiles.map(p =>
             `<option value="${p.id}" ${p.id === this._sessUserId ? 'selected' : ''}>${Fmt.esc(p.full_name || p.email)}</option>`
@@ -4616,6 +4826,9 @@ const AdminPage = {
 
         el.innerHTML = `
         <div class="adm-sess-wrap">
+            <div class="adm-online-card" id="sess-online">
+                <div style="text-align:center;padding:1.5rem"><div class="spinner"></div></div>
+            </div>
             <div class="adm-sess-filters">
                 <select id="sess-uid" class="input-field" style="max-width:220px" onchange="AdminPage._sessUserId=this.value">
                     <option value="">— Всі користувачі —</option>${userOpts}
@@ -4642,8 +4855,101 @@ const AdminPage = {
         .adm-sess-tbl tr:hover td{background:var(--bg-hover)}
         .sess-live{display:inline-block;padding:.15rem .55rem;border-radius:999px;font-size:.72rem;font-weight:600;background:rgba(16,185,129,.15);color:#10b981}
         .sess-ua{font-size:.75rem;color:var(--text-muted);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .adm-online-card{border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--bg-surface);padding:1rem 1.1rem;margin-bottom:1.25rem}
+        .adm-online-head{display:flex;align-items:center;gap:9px;margin-bottom:.9rem}
+        .adm-online-head-ico{width:30px;height:30px;border-radius:9px;background:rgba(16,185,129,.13);color:#10b981;display:flex;align-items:center;justify-content:center;font-size:.85rem;flex-shrink:0}
+        .adm-online-title{font-size:.85rem;font-weight:700;color:var(--text-primary)}
+        .adm-online-sub{font-size:.72rem;color:var(--text-muted);margin-top:1px}
+        .adm-online-list{display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto}
+        .adm-online-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;background:var(--bg-raised);border:1px solid var(--border)}
+        .adm-online-row.multi{border-color:rgba(245,158,11,.4);background:rgba(245,158,11,.06)}
+        .adm-online-name{font-weight:600;font-size:.85rem;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .adm-online-devs{font-size:.72rem;color:var(--text-muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .adm-online-count{font-size:.72rem;font-weight:700;padding:2px 10px;border-radius:999px;background:rgba(16,185,129,.13);color:#10b981;flex-shrink:0;white-space:nowrap}
+        .adm-online-row.multi .adm-online-count{background:rgba(245,158,11,.18);color:#f59e0b}
+        .adm-online-empty{text-align:center;padding:1.25rem;color:var(--text-muted);font-size:.82rem}
         </style>`;
-        await this._loadSessions();
+        await Promise.all([this._loadSessions(), this._loadOnlineNow()]);
+    },
+
+    // ── Одночасні активні сесії (heartbeat, окрема вкладка/пристрій = 1 сесія) ──
+    _ONLINE_THRESHOLD_MS: 2 * 60 * 1000, // heartbeat кожні 30с — 2хв без пінгу = офлайн
+    _onlineTimer: null,
+
+    async _loadOnlineNow() {
+        const el = document.getElementById('sess-online');
+        if (!el) return;
+        clearTimeout(this._onlineTimer);
+        try {
+            const since = new Date(Date.now() - this._ONLINE_THRESHOLD_MS).toISOString();
+            const { data, error } = await supabase.from('user_sessions')
+                .select('user_id,user_agent,last_seen_at')
+                .gte('last_seen_at', since)
+                .order('last_seen_at', { ascending: false });
+            if (error) throw error;
+            if (!document.getElementById('sess-online')) return; // покинули вкладку поки чекали
+
+            const profileMap = Object.fromEntries(this._sessProfiles.map(p => [p.id, p]));
+            const byUser = {};
+            (data || []).forEach(s => (byUser[s.user_id] = byUser[s.user_id] || []).push(s));
+
+            const rows = Object.entries(byUser).map(([uid, sessions]) => {
+                const p = profileMap[uid] || {};
+                const devices = [...new Set(sessions.map(s => this._sessParseUA(s.user_agent || '')))];
+                return { uid, name: p.full_name || p.email || uid, count: sessions.length, devices };
+            }).sort((a, b) => b.count - a.count);
+
+            const multiCount = rows.filter(r => r.count > 1).length;
+
+            const rowsHtml = rows.length ? rows.map(r => `
+                <div class="adm-online-row${r.count > 1 ? ' multi' : ''}">
+                    <div style="flex:1;min-width:0">
+                        <div class="adm-online-name">${Fmt.esc(r.name)}</div>
+                        <div class="adm-online-devs" title="${Fmt.esc(r.devices.join(', '))}">${Fmt.esc(r.devices.join(' · '))}</div>
+                    </div>
+                    <span class="adm-online-count">${r.count} ${r.count === 1 ? 'сесія' : r.count < 5 ? 'сесії' : 'сесій'}</span>
+                    ${r.count > 1 ? `<button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="AdminPage._terminateAllSessions('${r.uid}',${JSON.stringify(r.name).replace(/"/g,'&quot;')})" title="Завершити всі сесії цього користувача"><i class="fa-solid fa-power-off"></i></button>` : ''}
+                </div>`).join('') : `<div class="adm-online-empty">Зараз ніхто не онлайн</div>`;
+
+            el.innerHTML = `
+                <div class="adm-online-head">
+                    <div class="adm-online-head-ico"><i class="fa-solid fa-tower-broadcast"></i></div>
+                    <div>
+                        <div class="adm-online-title">Онлайн зараз — ${rows.length} ${rows.length === 1 ? 'користувач' : 'користувачів'}</div>
+                        <div class="adm-online-sub">${multiCount ? `${multiCount} ${multiCount === 1 ? 'заходить' : 'заходять'} одночасно з кількох пристроїв/вкладок` : 'Кожен користувач — одна активна сесія'}</div>
+                    </div>
+                </div>
+                <div class="adm-online-list">${rowsHtml}</div>`;
+        } catch(e) {
+            el.innerHTML = `<div class="adm-online-empty">Не вдалося завантажити: ${Fmt.esc(e.message)}</div>`;
+        }
+        if (document.getElementById('sess-online')) {
+            this._onlineTimer = setTimeout(() => this._loadOnlineNow(), 30000);
+        }
+    },
+
+    async _terminateAllSessions(userId, name) {
+        const ok = await Modal.confirm({
+            title: 'Завершити всі сесії',
+            message: `Завершити всі одночасні сесії користувача <b>${Fmt.esc(name)}</b>? Він буде виведений з усіх пристроїв і вкладок.`,
+            confirmText: 'Завершити',
+            danger: true
+        });
+        if (!ok) return;
+        try {
+            // Видалення user_sessions саме по собі НЕ виводить користувача —
+            // це лише таблиця presence/heartbeat, її рядки повернуться при
+            // наступному пінгу (кожні 30с). Реальний примусовий вихід — через
+            // profiles.force_logout: кожна відкрита вкладка ловить це через
+            // Heartbeat-пінг і Realtime та сама викликає supabase.auth.signOut().
+            await API.profiles.forceLogout(userId);
+            await Promise.all([
+                supabase.from('profiles').update({ last_seen_at: null }).eq('id', userId),
+                API.userSessions.removeAll(userId).catch(() => {})
+            ]);
+            Toast.success('Завершено', `Всі сесії користувача ${name} буде завершено протягом кількох секунд`);
+            await this._loadOnlineNow();
+        } catch(e) { Toast.error('Помилка', e.message); }
     },
 
     async _loadSessions() {
@@ -4783,7 +5089,7 @@ const AdminPage = {
         if (!this._navFrom) { const d = new Date(today); d.setDate(d.getDate() - 30); this._navFrom = _str(d); }
         if (!this._navTo) this._navTo = _str(today);
 
-        const { data: profiles } = await API.profiles.getAll({ limit: 500 });
+        const { data: profiles } = await API.profiles.getAll({ pageSize: 1000 });
         const profileList = profiles?.data || profiles || [];
         const userOpts = profileList.map(p =>
             `<option value="${p.id}" ${p.id === this._navUserId ? 'selected' : ''}>${Fmt.esc(p.full_name || p.email)}</option>`

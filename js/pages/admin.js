@@ -4743,16 +4743,45 @@ const AdminPage = {
     },
 
     // ── Інфографіка навігації ─────────────────────────────────────────
-    _navUserId: '', _navFrom: '', _navTo: '',
+    _navUserId: '', _navFrom: '', _navTo: '', _navData: [],
+
+    // Людські назви маршрутів для звітів навігації
+    _NAV_ROUTES: {
+        'dashboard':      ['Головна', 'fa-house'],
+        'knowledge-base': ['База знань', 'fa-book'],
+        'documents':      ['Документи', 'fa-folder-open'],
+        'branch-docs':    ['Куточок споживача', 'fa-store'],
+        'resource':       ['Документ', 'fa-file-lines'],
+        'courses':        ['Курси', 'fa-book-open'],
+        'lessons':        ['Уроки', 'fa-graduation-cap'],
+        'tests':          ['Проходження тесту', 'fa-file-pen'],
+        'my-tests':       ['Мої тести', 'fa-list-check'],
+        'news':           ['Новини', 'fa-newspaper'],
+        'admin':          ['Адміністрування', 'fa-shield-halved'],
+        'analytics':      ['Аналітика', 'fa-chart-pie'],
+        'scheduler':      ['Планування', 'fa-calendar-days'],
+        'schedule-graph': ['Графік роботи', 'fa-table-cells'],
+        'schedule-view':  ['Перегляд графіку', 'fa-eye'],
+        'my-calendar':    ['Мій календар', 'fa-calendar-check'],
+        'notifications':  ['Сповіщення', 'fa-bell'],
+        'contacts':       ['Контакти', 'fa-address-book'],
+        'bookmarks':      ['Закладки', 'fa-bookmark'],
+        'collections':    ['Меню порталу', 'fa-grip'],
+        'expert-path':    ['Skill Up', 'fa-rocket'],
+        'interns':        ['Стажери', 'fa-user-graduate'],
+        'label-access':   ['Обмеження доступу', 'fa-lock'],
+        'profile':        ['Профіль', 'fa-user'],
+        'results':        ['Результати', 'fa-trophy'],
+    },
+    _navLbl(route) { return this._NAV_ROUTES[route]?.[0] || route; },
+    _navIco(route) { return this._NAV_ROUTES[route]?.[1] || 'fa-file'; },
 
     async _renderNavStats(el) {
         const _pad = n => String(n).padStart(2, '0');
+        const _str = d => `${d.getFullYear()}-${_pad(d.getMonth()+1)}-${_pad(d.getDate())}`;
         const today = new Date();
-        const todayStr = `${today.getFullYear()}-${_pad(today.getMonth()+1)}-${_pad(today.getDate())}`;
-        const ago30 = new Date(today); ago30.setDate(today.getDate() - 30);
-        const ago30Str = `${ago30.getFullYear()}-${_pad(ago30.getMonth()+1)}-${_pad(ago30.getDate())}`;
-        if (!this._navFrom) this._navFrom = ago30Str;
-        if (!this._navTo)   this._navTo   = todayStr;
+        if (!this._navFrom) { const d = new Date(today); d.setDate(d.getDate() - 30); this._navFrom = _str(d); }
+        if (!this._navTo) this._navTo = _str(today);
 
         const { data: profiles } = await API.profiles.getAll({ limit: 500 });
         const profileList = profiles?.data || profiles || [];
@@ -4762,35 +4791,76 @@ const AdminPage = {
 
         el.innerHTML = `
         <div class="adm-nav-wrap">
-            <div class="adm-sess-filters">
-                <select id="nav-uid" class="input-field" style="max-width:220px" onchange="AdminPage._navUserId=this.value">
+            <div class="adm-sess-filters" style="flex-wrap:wrap">
+                <select id="nav-uid" class="input-field" style="max-width:220px" onchange="AdminPage._navUserId=this.value;AdminPage._loadNavStats()">
                     <option value="">— Всі користувачі —</option>${userOpts}
                 </select>
                 <input type="date" id="nav-from" class="input-field" value="${this._navFrom}" onchange="AdminPage._navFrom=this.value">
                 <span style="color:var(--text-muted)">—</span>
                 <input type="date" id="nav-to" class="input-field" value="${this._navTo}" onchange="AdminPage._navTo=this.value">
+                <div class="nav-period-chips">
+                    <button class="nav-pchip" onclick="AdminPage._navSetPeriod(0)">Сьогодні</button>
+                    <button class="nav-pchip" onclick="AdminPage._navSetPeriod(7)">7 днів</button>
+                    <button class="nav-pchip" onclick="AdminPage._navSetPeriod(30)">30 днів</button>
+                    <button class="nav-pchip" onclick="AdminPage._navSetPeriod(90)">90 днів</button>
+                </div>
                 <button class="btn btn-primary btn-sm" onclick="AdminPage._loadNavStats()">Застосувати</button>
             </div>
             <div id="nav-content"></div>
         </div>
         <style>
         .adm-nav-wrap{padding:1.25rem}
-        .nav-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-top:1.25rem}
+        .nav-period-chips{display:flex;gap:5px}
+        .nav-pchip{padding:7px 13px;border-radius:9999px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);font-size:.76rem;font-weight:600;cursor:pointer;transition:all .15s;font-family:inherit}
+        .nav-pchip:hover{border-color:var(--primary);color:var(--primary)}
+        .nav-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+        .nav-kpi{padding:14px 16px;border-radius:14px;border:1px solid var(--border);background:var(--bg-surface);position:relative;overflow:hidden}
+        .nav-kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--kc,var(--primary))}
+        .nav-kpi-ico{font-size:.85rem;color:var(--kc,var(--primary));margin-bottom:7px}
+        .nav-kpi-val{font-size:1.45rem;font-weight:800;color:var(--text-primary);letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .nav-kpi-lbl{font-size:.66rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-top:2px}
+        .nav-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
         @media(max-width:900px){.nav-grid{grid-template-columns:1fr}}
-        .nav-card{background:var(--bg-raised);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1.25rem}
-        .nav-card-title{font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:1rem}
-        .nav-bar-row{display:flex;align-items:center;gap:.65rem;margin-bottom:.45rem}
-        .nav-bar-lbl{font-size:.8rem;color:var(--text-secondary);width:130px;text-align:right;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-        .nav-bar-track{flex:1;background:var(--bg-surface);border-radius:4px;height:20px;overflow:hidden;position:relative;min-width:0}
-        .nav-bar-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--primary),#818cf8)}
-        .nav-bar-cnt{position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:.72rem;font-weight:600;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.4)}
+        .nav-card{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1.1rem 1.25rem}
+        .nav-card-title{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:1rem;display:flex;align-items:center;gap:7px}
+        .nav-card-title i{color:var(--primary);font-size:.78rem}
+        .nav-bar-row{display:flex;align-items:center;gap:.65rem;margin-bottom:.4rem;padding:3px 6px;border-radius:8px;cursor:pointer;transition:background .12s}
+        .nav-bar-row:hover{background:var(--bg-raised)}
+        .nav-bar-row.sel{background:color-mix(in srgb,var(--primary) 10%,var(--bg-surface))}
+        .nav-bar-lbl{font-size:.8rem;color:var(--text-secondary);width:160px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:7px}
+        .nav-bar-lbl i{width:14px;text-align:center;color:var(--text-muted);font-size:.72rem}
+        .nav-bar-track{flex:1;background:var(--bg-raised);border-radius:4px;height:20px;overflow:hidden;position:relative;min-width:0}
+        .nav-bar-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--primary),#818cf8);transition:width .5s cubic-bezier(.4,0,.2,1)}
+        .nav-bar-cnt{position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:.7rem;font-weight:700;color:var(--text-primary)}
+        .nav-cols{display:flex;align-items:flex-end;gap:3px;height:110px}
+        .nav-col{flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%;min-width:0}
+        .nav-col-bar{background:linear-gradient(180deg,#818cf8,var(--primary));border-radius:3px 3px 0 0;min-height:2px;transition:height .5s cubic-bezier(.4,0,.2,1)}
+        .nav-col:hover .nav-col-bar{opacity:.8}
+        .nav-col-lbl{font-size:.58rem;color:var(--text-muted);text-align:center;margin-top:4px;white-space:nowrap;overflow:hidden}
+        .nav-detail{margin-top:14px;display:none}
+        .nav-detail.on{display:block;animation:adm-desc-in .25s cubic-bezier(.4,0,.2,1)}
+        .nav-detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+        @media(max-width:900px){.nav-detail-grid{grid-template-columns:1fr}}
         .nav-hmap{overflow-x:auto;font-size:.7rem}
         .nav-hmap table{border-collapse:collapse}
-        .nav-hmap th{padding:.25rem .35rem;color:var(--text-muted);background:var(--bg-raised);font-weight:600;white-space:nowrap}
+        .nav-hmap th{padding:.25rem .35rem;color:var(--text-muted);background:var(--bg-surface);font-weight:600;white-space:nowrap}
         .nav-hmap td{width:30px;height:30px;border:1px solid var(--border);text-align:center;font-weight:600;cursor:default}
-        .nav-hmap .nav-row-lbl{text-align:right;padding-right:.5rem;white-space:nowrap;max-width:120px;overflow:hidden;text-overflow:ellipsis;color:var(--text-secondary);border:none;width:auto}
+        .nav-hmap .nav-row-lbl{text-align:right;padding-right:.5rem;white-space:nowrap;max-width:150px;overflow:hidden;text-overflow:ellipsis;color:var(--text-secondary);border:none;width:auto}
         </style>`;
         await this._loadNavStats();
+    },
+
+    _navSetPeriod(days) {
+        const _pad = n => String(n).padStart(2, '0');
+        const _str = d => `${d.getFullYear()}-${_pad(d.getMonth()+1)}-${_pad(d.getDate())}`;
+        const today = new Date();
+        const from  = new Date(today); from.setDate(from.getDate() - days);
+        this._navFrom = _str(from);
+        this._navTo   = _str(today);
+        const f = document.getElementById('nav-from'), t = document.getElementById('nav-to');
+        if (f) f.value = this._navFrom;
+        if (t) t.value = this._navTo;
+        this._loadNavStats();
     },
 
     async _loadNavStats() {
@@ -4798,10 +4868,16 @@ const AdminPage = {
         if (!content) return;
         content.innerHTML = `<div style="text-align:center;padding:2rem"><div class="spinner"></div></div>`;
 
-        const data = await API.userNavLog.getTransitions({
-            userId: this._navUserId || undefined,
-            dateFrom: this._navFrom, dateTo: this._navTo,
-        });
+        let data = [];
+        try {
+            data = await API.userNavLog.getTransitions({
+                userId: this._navUserId || undefined,
+                dateFrom: this._navFrom, dateTo: this._navTo,
+            });
+        } catch(e) {
+            content.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>${Fmt.esc(e.message)}</h3></div>`;
+            return;
+        }
 
         if (!data.length) {
             content.innerHTML = `<div class="empty-state"><div class="empty-icon">🗺️</div><h3>Даних навігації ще немає</h3><p>Заповниться після переходів користувачів</p></div>`;
@@ -4813,70 +4889,163 @@ const AdminPage = {
             return (r.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, ':id')
                      .split('?')[0] || r).split('/')[0] || r;
         };
+        this._navData = data.map(d => ({ ...d, _from: norm(d.from_route), _to: norm(d.to_route) }));
 
         // top pages
         const pageCnt = {};
-        data.forEach(({ to_route }) => {
-            const p = norm(to_route); if (!p) return;
-            pageCnt[p] = (pageCnt[p] || 0) + 1;
-        });
+        this._navData.forEach(({ _to }) => { if (_to) pageCnt[_to] = (pageCnt[_to] || 0) + 1; });
         const topPages = Object.entries(pageCnt).sort((a,b) => b[1]-a[1]).slice(0, 15);
         const maxPg = topPages[0]?.[1] || 1;
+        const total = this._navData.length;
 
         const topHtml = topPages.map(([page, cnt]) => `
-            <div class="nav-bar-row">
-                <div class="nav-bar-lbl" title="${Fmt.esc(page)}">${Fmt.esc(page)}</div>
+            <div class="nav-bar-row" data-route="${Fmt.esc(page)}" onclick="AdminPage._navShowPageDetail(this.dataset.route, this)" title="Показати звідки приходять і куди йдуть">
+                <div class="nav-bar-lbl"><i class="fa-solid ${this._navIco(page)}"></i>${Fmt.esc(this._navLbl(page))}</div>
                 <div class="nav-bar-track">
                     <div class="nav-bar-fill" style="width:${Math.round(cnt/maxPg*100)}%"></div>
-                    <span class="nav-bar-cnt">${cnt}</span>
+                    <span class="nav-bar-cnt">${cnt} · ${Math.round(cnt/total*100)}%</span>
                 </div>
+            </div>`).join('');
+
+        // тренд за днями
+        const dayCnt = {};
+        const dFrom = new Date(this._navFrom + 'T00:00:00'), dTo = new Date(this._navTo + 'T00:00:00');
+        for (let d = new Date(dFrom); d <= dTo; d.setDate(d.getDate() + 1)) {
+            dayCnt[`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`] = 0;
+        }
+        this._navData.forEach(({ ts }) => {
+            const d = new Date(ts);
+            const k = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+            if (k in dayCnt) dayCnt[k]++;
+        });
+        const days = Object.entries(dayCnt);
+        const maxDay = Math.max(1, ...days.map(([,v]) => v));
+        const showEvery = Math.max(1, Math.ceil(days.length / 15));
+        const trendHtml = days.map(([day, v], i) => `
+            <div class="nav-col" title="${day.split('-').reverse().join('.')}: ${v}">
+                <div class="nav-col-bar" style="height:${Math.round(v/maxDay*100)}%"></div>
+                <div class="nav-col-lbl">${i % showEvery === 0 ? day.slice(8,10)+'.'+day.slice(5,7) : ''}</div>
+            </div>`).join('');
+
+        // активність за годинами (локальний час)
+        const hourCnt = Array(24).fill(0);
+        this._navData.forEach(({ ts }) => { hourCnt[new Date(ts).getHours()]++; });
+        const maxHour = Math.max(1, ...hourCnt);
+        const hoursHtml = hourCnt.map((v, h) => `
+            <div class="nav-col" title="${String(h).padStart(2,'0')}:00 — ${v} переходів">
+                <div class="nav-col-bar" style="height:${Math.round(v/maxHour*100)}%"></div>
+                <div class="nav-col-lbl">${h % 3 === 0 ? h : ''}</div>
             </div>`).join('');
 
         // transition matrix
         const routes = [...new Set(topPages.map(([r]) => r))].slice(0, 12);
         const matrix = {};
-        data.forEach(({ from_route, to_route }) => {
-            const from = norm(from_route), to = norm(to_route);
-            if (!from || !to || !routes.includes(from) || !routes.includes(to)) return;
-            const k = `${from}||${to}`;
+        this._navData.forEach(({ _from, _to }) => {
+            if (!_from || !_to || !routes.includes(_from) || !routes.includes(_to)) return;
+            const k = `${_from}||${_to}`;
             matrix[k] = (matrix[k] || 0) + 1;
         });
         const maxM = Math.max(1, ...Object.values(matrix));
 
         const hmapHeader = `<tr><th style="border:none;background:transparent"></th>${routes.map(r =>
-            `<th style="writing-mode:vertical-lr;transform:rotate(180deg);height:80px;max-width:28px;font-size:.65rem;overflow:hidden;text-overflow:ellipsis" title="${Fmt.esc(r)}">${Fmt.esc(r)}</th>`).join('')}</tr>`;
+            `<th style="writing-mode:vertical-lr;transform:rotate(180deg);height:96px;max-width:28px;font-size:.63rem;overflow:hidden;text-overflow:ellipsis" title="${Fmt.esc(this._navLbl(r))}">${Fmt.esc(this._navLbl(r))}</th>`).join('')}</tr>`;
         const hmapRows = routes.map(from => {
             const cells = routes.map(to => {
                 const v = matrix[`${from}||${to}`] || 0;
                 const alpha = v > 0 ? Math.max(0.08, v / maxM) : 0;
                 const bg = v > 0 ? `rgba(99,102,241,${alpha.toFixed(2)})` : 'transparent';
                 const color = v / maxM > 0.5 ? '#fff' : 'var(--text-primary)';
-                return `<td style="background:${bg};color:${color}" title="${Fmt.esc(from)} → ${Fmt.esc(to)}: ${v}">${v||''}</td>`;
+                return `<td style="background:${bg};color:${color}" title="${Fmt.esc(this._navLbl(from))} → ${Fmt.esc(this._navLbl(to))}: ${v}">${v||''}</td>`;
             }).join('');
-            return `<tr><td class="nav-row-lbl" title="${Fmt.esc(from)}">${Fmt.esc(from)}</td>${cells}</tr>`;
+            return `<tr><td class="nav-row-lbl" title="${Fmt.esc(this._navLbl(from))}">${Fmt.esc(this._navLbl(from))}</td>${cells}</tr>`;
         }).join('');
 
-        const total = data.length;
-        const uUsers = new Set(data.map(d => d.user_id)).size;
+        const uUsers = new Set(this._navData.map(d => d.user_id)).size;
         const avgPer = uUsers ? Math.round(total / uUsers) : 0;
+        const peakHour = hourCnt.indexOf(Math.max(...hourCnt));
 
         content.innerHTML = `
-            <div class="adm-sess-stats" style="margin-top:0">
-                <div class="adm-sess-kpi"><div class="adm-sess-kpi-val">${total.toLocaleString('uk-UA')}</div><div class="adm-sess-kpi-lbl">Переходів всього</div></div>
-                <div class="adm-sess-kpi"><div class="adm-sess-kpi-val">${uUsers}</div><div class="adm-sess-kpi-lbl">Унікальних юзерів</div></div>
-                <div class="adm-sess-kpi"><div class="adm-sess-kpi-val">${avgPer}</div><div class="adm-sess-kpi-lbl">Переходів / юзер</div></div>
-                <div class="adm-sess-kpi"><div class="adm-sess-kpi-val">${Fmt.esc(topPages[0]?.[0] || '—')}</div><div class="adm-sess-kpi-lbl">Топ сторінка</div></div>
+            <div class="nav-kpis">
+                <div class="nav-kpi" style="--kc:var(--primary)"><div class="nav-kpi-ico"><i class="fa-solid fa-route"></i></div><div class="nav-kpi-val">${total.toLocaleString('uk-UA')}</div><div class="nav-kpi-lbl">Переходів</div></div>
+                <div class="nav-kpi" style="--kc:#10b981"><div class="nav-kpi-ico"><i class="fa-solid fa-users"></i></div><div class="nav-kpi-val">${uUsers}</div><div class="nav-kpi-lbl">Користувачів</div></div>
+                <div class="nav-kpi" style="--kc:#f59e0b"><div class="nav-kpi-ico"><i class="fa-solid fa-gauge-high"></i></div><div class="nav-kpi-val">${avgPer}</div><div class="nav-kpi-lbl">Переходів / юзер</div></div>
+                <div class="nav-kpi" style="--kc:#8b5cf6"><div class="nav-kpi-ico"><i class="fa-solid fa-fire"></i></div><div class="nav-kpi-val" title="${Fmt.esc(this._navLbl(topPages[0]?.[0] || ''))}">${Fmt.esc(this._navLbl(topPages[0]?.[0] || '—'))}</div><div class="nav-kpi-lbl">Топ сторінка</div></div>
+                <div class="nav-kpi" style="--kc:#ef4444"><div class="nav-kpi-ico"><i class="fa-regular fa-clock"></i></div><div class="nav-kpi-val">${String(peakHour).padStart(2,'0')}:00</div><div class="nav-kpi-lbl">Пік активності</div></div>
+            </div>
+            <div class="nav-card">
+                <div class="nav-card-title"><i class="fa-solid fa-chart-line"></i> Динаміка переходів за період</div>
+                <div class="nav-cols">${trendHtml}</div>
             </div>
             <div class="nav-grid">
                 <div class="nav-card">
-                    <div class="nav-card-title">Топ сторінок за відвідуваністю</div>
+                    <div class="nav-card-title"><i class="fa-solid fa-ranking-star"></i> Топ сторінок — клік для деталей</div>
                     ${topHtml}
                 </div>
                 <div class="nav-card">
-                    <div class="nav-card-title">Матриця переходів (звідки → куди)</div>
-                    <div class="nav-hmap"><table><thead>${hmapHeader}</thead><tbody>${hmapRows}</tbody></table></div>
+                    <div class="nav-card-title"><i class="fa-regular fa-clock"></i> Активність за годинами доби</div>
+                    <div class="nav-cols" style="height:150px">${hoursHtml}</div>
+                    <div style="font-size:.7rem;color:var(--text-muted);margin-top:6px;text-align:center">година доби (локальний час)</div>
+                </div>
+            </div>
+            <div class="nav-detail" id="nav-detail"></div>
+            <div class="nav-card" style="margin-top:14px">
+                <div class="nav-card-title"><i class="fa-solid fa-diagram-project"></i> Матриця переходів (звідки → куди)</div>
+                <div class="nav-hmap"><table><thead>${hmapHeader}</thead><tbody>${hmapRows}</tbody></table></div>
+            </div>`;
+    },
+
+    // Drill-down по сторінці: звідки приходять і куди йдуть
+    _navShowPageDetail(route, rowEl) {
+        const box = document.getElementById('nav-detail');
+        if (!box) return;
+        document.querySelectorAll('.nav-bar-row').forEach(r => r.classList.remove('sel'));
+        // повторний клік по вибраному — сховати
+        if (this._navDetailRoute === route && box.classList.contains('on')) {
+            box.classList.remove('on');
+            this._navDetailRoute = null;
+            return;
+        }
+        this._navDetailRoute = route;
+        rowEl?.classList.add('sel');
+
+        const inCnt = {}, outCnt = {};
+        this._navData.forEach(({ _from, _to }) => {
+            if (_to === route && _from && _from !== route) inCnt[_from]  = (inCnt[_from]  || 0) + 1;
+            if (_from === route && _to && _to !== route)   outCnt[_to]   = (outCnt[_to]   || 0) + 1;
+        });
+        const mkList = (cnt, emptyTxt) => {
+            const top = Object.entries(cnt).sort((a,b) => b[1]-a[1]).slice(0, 7);
+            if (!top.length) return `<div style="font-size:.8rem;color:var(--text-muted);padding:.5rem 0">${emptyTxt}</div>`;
+            const mx = top[0][1];
+            return top.map(([r, v]) => `
+                <div class="nav-bar-row" style="cursor:default">
+                    <div class="nav-bar-lbl"><i class="fa-solid ${this._navIco(r)}"></i>${Fmt.esc(this._navLbl(r))}</div>
+                    <div class="nav-bar-track">
+                        <div class="nav-bar-fill" style="width:${Math.round(v/mx*100)}%"></div>
+                        <span class="nav-bar-cnt">${v}</span>
+                    </div>
+                </div>`).join('');
+        };
+
+        box.innerHTML = `
+            <div class="nav-card" style="border-color:color-mix(in srgb,var(--primary) 35%,var(--border))">
+                <div class="nav-card-title" style="margin-bottom:14px">
+                    <i class="fa-solid ${this._navIco(route)}"></i> ${Fmt.esc(this._navLbl(route))} — потоки переходів
+                    <button data-route="${Fmt.esc(route)}" onclick="AdminPage._navShowPageDetail(this.dataset.route)" style="margin-left:auto;background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:.85rem;padding:2px 6px" title="Закрити"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="nav-detail-grid">
+                    <div>
+                        <div style="font-size:.72rem;font-weight:700;color:#10b981;margin-bottom:8px"><i class="fa-solid fa-arrow-right-to-bracket"></i> ЗВІДКИ ПРИХОДЯТЬ</div>
+                        ${mkList(inCnt, 'Прямі заходи — без попередньої сторінки')}
+                    </div>
+                    <div>
+                        <div style="font-size:.72rem;font-weight:700;color:#f59e0b;margin-bottom:8px"><i class="fa-solid fa-arrow-right-from-bracket"></i> КУДИ ЙДУТЬ ДАЛІ</div>
+                        ${mkList(outCnt, 'Виходять з порталу або закривають вкладку')}
+                    </div>
                 </div>
             </div>`;
+        box.classList.add('on');
+        box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     },
 
     // ── Звіт завдань (тести) ──────────────────────────────────────────

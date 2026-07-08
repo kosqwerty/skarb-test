@@ -393,7 +393,7 @@ const NotificationsPage = {
 
     _showToastNotification(n) {
         const icon = { general:'🔔', gold:'🏆', tech:'🔧', system:'⚙️' }[n.type] || '🔔';
-        Toast.info(`${icon} ${n.title}`, n.message.slice(0, 80) + (n.message.length > 80 ? '…' : ''));
+        Toast.info(`${icon} ${Fmt.esc(n.title)}`, Fmt.esc(n.message.slice(0, 80)) + (n.message.length > 80 ? '…' : ''));
         this.playSound();
         if (!this._reminderTimer) this.startReminder();
     },

@@ -752,8 +752,8 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
             }
             return `<div style="display:flex;align-items:center;padding:.5rem .25rem;border-bottom:1px solid var(--border);gap:.75rem">
                 <div style="flex:1;min-width:0">
-                    <div style="font-size:.875rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.full_name || '—'}</div>
-                    ${r.job_position ? `<div style="font-size:.75rem;color:var(--text-muted)">${r.job_position}</div>` : ''}
+                    <div style="font-size:.875rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Fmt.esc(r.full_name || '—')}</div>
+                    ${r.job_position ? `<div style="font-size:.75rem;color:var(--text-muted)">${Fmt.esc(r.job_position)}</div>` : ''}
                 </div>
                 ${statusHtml}
             </div>`;

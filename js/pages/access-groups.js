@@ -388,13 +388,13 @@ const AccessGroupsPage = {
                                     ? members.map(u => `
                                         <tr>
                                             <td>
-                                                <div style="font-weight:600;font-size:.875rem">${u.full_name || '—'}</div>
-                                                <div style="font-size:.72rem;color:var(--text-muted)">${u.email || ''}</div>
+                                                <div style="font-weight:600;font-size:.875rem">${Fmt.esc(u.full_name || '—')}</div>
+                                                <div style="font-size:.72rem;color:var(--text-muted)">${Fmt.esc(u.email || '')}</div>
                                             </td>
-                                            <td style="font-size:.8rem">${u.job_position || '—'}</td>
-                                            <td style="font-size:.8rem">${u.subdivision || '—'}</td>
-                                            <td style="font-size:.8rem">${u.city || '—'}</td>
-                                            <td>${u.label ? `<span class="badge badge-warning" style="font-size:.7rem">${u.label}</span>` : '—'}</td>
+                                            <td style="font-size:.8rem">${Fmt.esc(u.job_position || '—')}</td>
+                                            <td style="font-size:.8rem">${Fmt.esc(u.subdivision || '—')}</td>
+                                            <td style="font-size:.8rem">${Fmt.esc(u.city || '—')}</td>
+                                            <td>${u.label ? `<span class="badge badge-warning" style="font-size:.7rem">${Fmt.esc(u.label)}</span>` : '—'}</td>
                                         </tr>`).join('')
                                     : `<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text-muted)">Жодного користувача не знайдено</td></tr>`}
                             </tbody>

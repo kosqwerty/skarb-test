@@ -2867,8 +2867,8 @@ const AdminPage = {
                     <tbody id="courses-tbody">
                         ${courses.map(c => `
                             <tr>
-                                <td><strong>${c.title}</strong></td>
-                                <td style="color:var(--text-muted)">${c.teacher?.full_name || '—'}</td>
+                                <td><strong>${Fmt.esc(c.title)}</strong></td>
+                                <td style="color:var(--text-muted)">${Fmt.esc(c.teacher?.full_name || '—')}</td>
                                 <td><span class="badge badge-muted">${Fmt.level(c.level)}</span></td>
                                 <td><span class="badge ${c.is_published ? 'badge-success' : 'badge-muted'}">${c.is_published ? 'Опубліковано' : 'Чернетка'}</span></td>
                                 <td style="color:var(--text-muted);font-size:.8rem">${Fmt.dateShort(c.created_at)}</td>
@@ -3761,9 +3761,9 @@ const AdminPage = {
                     <tbody id="news-tbody">
                         ${news.map(n => `
                             <tr>
-                                <td><strong>${n.title}</strong></td>
-                                <td style="color:var(--text-muted)">${n.author?.full_name || '—'}</td>
-                                <td>${n.category || '—'}</td>
+                                <td><strong>${Fmt.esc(n.title)}</strong></td>
+                                <td style="color:var(--text-muted)">${Fmt.esc(n.author?.full_name || '—')}</td>
+                                <td>${Fmt.esc(n.category || '—')}</td>
                                 <td><span class="badge ${n.is_published ? 'badge-success' : 'badge-muted'}">${n.is_published ? 'Опубліковано' : 'Чернетка'}</span></td>
                                 <td style="color:var(--text-muted);font-size:.8rem">${Fmt.dateShort(n.published_at || n.created_at)}</td>
                                 <td>
@@ -4117,7 +4117,7 @@ const AdminPage = {
         const deletedByBanner = `
             <div style="display:flex;align-items:center;gap:.75rem;padding:.55rem .9rem;background:var(--bg-raised);border-radius:var(--radius);font-size:.82rem;margin-bottom:1rem;border-left:3px solid var(--danger)">
                 <span style="color:var(--text-muted)">Видалив:</span>
-                <strong>${item.deleted_by_name}</strong>
+                <strong>${Fmt.esc(item.deleted_by_name)}</strong>
                 <span style="color:var(--text-muted)">${Fmt.datetime(item.deleted_at)}</span>
             </div>`;
 
@@ -4125,7 +4125,7 @@ const AdminPage = {
         let title = typeNames[item.type] || item.type;
 
         if (item.type === 'page') {
-            title = `🖥 ${d.title || 'Сторінка'}`;
+            title = `🖥 ${Fmt.esc(d.title) || 'Сторінка'}`;
             body += d.html_content
                 ? `<iframe srcdoc="${d.html_content.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,'').replace(/"/g,'&quot;')}"
                        style="width:100%;height:520px;border:1px solid var(--border);border-radius:var(--radius);background:#fff"
@@ -4133,13 +4133,13 @@ const AdminPage = {
                 : `<div style="text-align:center;padding:3rem;color:var(--text-muted)">Вміст відсутній</div>`;
 
         } else if (item.type === 'news') {
-            title = `📰 ${d.title || 'Новина'}`;
-            const cover = d.cover_url ? `<img src="${d.cover_url}" style="width:100%;max-height:220px;object-fit:cover;border-radius:var(--radius);margin-bottom:1rem">` : '';
+            title = `📰 ${Fmt.esc(d.title) || 'Новина'}`;
+            const cover = d.cover_url ? `<img src="${Fmt.esc(d.cover_url)}" style="width:100%;max-height:220px;object-fit:cover;border-radius:var(--radius);margin-bottom:1rem">` : '';
             body += `
                 <div style="font-family:var(--font-sans,sans-serif)">
                     ${cover}
-                    <h2 style="font-size:1.3rem;font-weight:700;margin:0 0 .5rem">${d.title || ''}</h2>
-                    ${d.excerpt ? `<p style="color:var(--text-muted);font-size:.875rem;margin:0 0 1rem;font-style:italic">${d.excerpt}</p>` : ''}
+                    <h2 style="font-size:1.3rem;font-weight:700;margin:0 0 .5rem">${Fmt.esc(d.title || '')}</h2>
+                    ${d.excerpt ? `<p style="color:var(--text-muted);font-size:.875rem;margin:0 0 1rem;font-style:italic">${Fmt.esc(d.excerpt)}</p>` : ''}
                     <div style="font-size:.875rem;line-height:1.7;max-height:360px;overflow-y:auto">${d.content || '<em style="color:var(--text-muted)">Вміст відсутній</em>'}</div>
                 </div>`;
 
@@ -4154,44 +4154,44 @@ const AdminPage = {
                 link:     '<i class="fa-regular fa-link"></i>',
                 file:     '<i class="fa-regular fa-file"></i>',
             };
-            title = `${icons[d.type] || '📎'} ${d.title || 'Ресурс'}`;
+            title = `${icons[d.type] || '📎'} ${Fmt.esc(d.title) || 'Ресурс'}`;
             const link = d.url || d.file_url;
             body += `
                 <div style="display:flex;flex-direction:column;gap:.75rem">
                     <div style="display:flex;align-items:center;gap:1rem;padding:1rem;background:var(--bg-raised);border-radius:var(--radius-lg);border:1px solid var(--border)">
                         <span style="font-size:2.5rem">${iconsHtml[d.type] || iconsHtml.file}</span>
                         <div>
-                            <div style="font-weight:600;font-size:1rem">${d.title}</div>
+                            <div style="font-weight:600;font-size:1rem">${Fmt.esc(d.title)}</div>
                             <div style="font-size:.8rem;color:var(--text-muted)">${d.type?.toUpperCase() || ''}${d.file_size ? ' · ' + (d.file_size/1024).toFixed(0) + ' КБ' : ''}${d.duration_seconds ? ' · ' + Math.round(d.duration_seconds/60) + ' хв' : ''}</div>
                         </div>
                     </div>
-                    ${d.description ? `<p style="font-size:.875rem;color:var(--text-secondary);margin:0">${d.description}</p>` : ''}
-                    ${link ? `<a href="${link}" target="_blank" class="btn btn-ghost btn-sm" style="align-self:flex-start">🔗 Відкрити файл / посилання</a>` : ''}
-                    <div style="font-size:.78rem;color:var(--text-muted)">Категорія: ${d.category || '—'} · Створено: ${Fmt.datetime(d.created_at)}</div>
+                    ${d.description ? `<p style="font-size:.875rem;color:var(--text-secondary);margin:0">${Fmt.esc(d.description)}</p>` : ''}
+                    ${link ? `<a href="${Fmt.safeUrl(link)}" target="_blank" rel="noopener noreferrer" class="btn btn-ghost btn-sm" style="align-self:flex-start">🔗 Відкрити файл / посилання</a>` : ''}
+                    <div style="font-size:.78rem;color:var(--text-muted)">Категорія: ${Fmt.esc(d.category || '—')} · Створено: ${Fmt.datetime(d.created_at)}</div>
                 </div>`;
 
         } else if (item.type === 'user') {
             const genderMap = { male:'Чоловіча', female:'Жіноча', other:'Інша' };
             const avatar = d.avatar_url
-                ? `<img src="${d.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
+                ? `<img src="${Fmt.esc(d.avatar_url)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
                 : `<span style="font-size:1.5rem;font-weight:700;color:#fff">${Fmt.initials(d.full_name)}</span>`;
             const row = (icon, label, val) => val ? `
                 <div style="display:flex;align-items:flex-start;gap:.6rem;padding:.4rem 0;border-bottom:1px solid var(--border)">
                     <span style="width:1.1rem;text-align:center;flex-shrink:0">${icon}</span>
                     <span style="color:var(--text-muted);font-size:.78rem;white-space:nowrap;min-width:90px">${label}</span>
-                    <span style="font-size:.875rem;word-break:break-word">${val}</span>
+                    <span style="font-size:.875rem;word-break:break-word">${Fmt.esc(val)}</span>
                 </div>` : '';
-            title = `👤 ${d.full_name || d.email}`;
+            title = `👤 ${Fmt.esc(d.full_name || d.email)}`;
             body += `
                 <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.25rem">
                     <div style="width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--secondary));display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden">
                         ${avatar}
                     </div>
                     <div>
-                        <div style="font-size:1.1rem;font-weight:700;margin-bottom:.3rem">${d.full_name || '—'}</div>
+                        <div style="font-size:1.1rem;font-weight:700;margin-bottom:.3rem">${Fmt.esc(d.full_name || '—')}</div>
                         <div style="display:flex;gap:.4rem;flex-wrap:wrap">
                             ${Fmt.roleBadge(d.role)}
-                            ${d.label ? `<span class="badge badge-warning" style="font-size:.65rem">${d.label}</span>` : ''}
+                            ${d.label ? `<span class="badge badge-warning" style="font-size:.65rem">${Fmt.esc(d.label)}</span>` : ''}
                         </div>
                     </div>
                 </div>
@@ -4205,7 +4205,7 @@ const AdminPage = {
                     ${row('🏢','Підрозділ', d.subdivision)}
                     ${row('📍','Місто', d.city)}
                     ${row('📅','Реєстрація', Fmt.datetime(d.created_at))}
-                    ${d.bio ? `<div style="padding:.6rem 0"><div style="color:var(--text-muted);font-size:.78rem;margin-bottom:.3rem">Про себе</div><div style="font-size:.875rem;line-height:1.5">${d.bio}</div></div>` : ''}
+                    ${d.bio ? `<div style="padding:.6rem 0"><div style="color:var(--text-muted);font-size:.78rem;margin-bottom:.3rem">Про себе</div><div style="font-size:.875rem;line-height:1.5">${Fmt.esc(d.bio)}</div></div>` : ''}
                 </div>`;
         }
 
@@ -4276,7 +4276,7 @@ const AdminPage = {
                     if (!matchedInterns?.length) console.warn('interns relink: no match found for', prof.email);
                 }
             }
-            Toast.success('Відновлено', `${result?.full_name || ''} — повернуто до графіку`);
+            Toast.success('Відновлено', `${Fmt.esc(result?.full_name || '')} — повернуто до графіку`);
         } else {
             Toast.success('Відновлено');
         }

@@ -1840,7 +1840,7 @@ const DashboardPage = {
             Modal.close();
             const btn = document.querySelector(`[data-bday-btn="${personId}"]`);
             if (btn) { btn.textContent = '✅ Надіслано'; btn.disabled = true; btn.style.opacity = '.5'; }
-            Toast.success('Надіслано! 🎉', `Привітання для ${p?.full_name || ''} відправлено`);
+            Toast.success('Надіслано! 🎉', `Привітання для ${Fmt.esc(p?.full_name || '')} відправлено`);
         } catch(e) {
             btn.disabled = false;
             btn.textContent = '🎊 Надіслати';

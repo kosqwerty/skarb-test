@@ -493,8 +493,8 @@ const SchedulerPage = {
             }
 
             const authorHtml = isOwner ? `<td><div style="display:flex;align-items:center;gap:6px">
-                ${t.creator?.avatar_url ? `<img src="${t.creator.avatar_url}" style="width:24px;height:24px;border-radius:50%;object-fit:cover">` : `<div style="width:24px;height:24px;border-radius:50%;background:var(--primary-glow);display:flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:700;color:var(--primary)">${Fmt.initials(t.creator?.full_name)}</div>`}
-                <span style="font-size:.82rem;color:var(--text-secondary)">${t.creator?.full_name || '—'}</span>
+                ${t.creator?.avatar_url ? `<img src="${Fmt.esc(t.creator.avatar_url)}" style="width:24px;height:24px;border-radius:50%;object-fit:cover">` : `<div style="width:24px;height:24px;border-radius:50%;background:var(--primary-glow);display:flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:700;color:var(--primary)">${Fmt.initials(t.creator?.full_name)}</div>`}
+                <span style="font-size:.82rem;color:var(--text-secondary)">${Fmt.esc(t.creator?.full_name || '—')}</span>
             </div></td>` : '';
 
             return `<tr class="${isOverdue ? 'sch-overdue-row' : ''}" data-id="${t.id}">
@@ -618,10 +618,10 @@ const SchedulerPage = {
                     </div>
                     <div class="sch-rcp-dropdown" id="sf-rcp-dropdown">
                         ${this._users.map(u => `
-                            <div class="sch-rcp-item" data-id="${u.id}" data-name="${(u.full_name||'').toLowerCase()}" onclick="SchedulerPage._addRecipient('${u.id}','${(u.full_name||'').replace(/'/g,'\\\'').replace(/"/g,'&quot;')}','${u.role||''}')">
-                                ${u.avatar_url ? `<img src="${u.avatar_url}" style="width:28px;height:28px;border-radius:50%;object-fit:cover">` : `<div class="sch-rcp-avatar">${Fmt.initials(u.full_name)}</div>`}
+                            <div class="sch-rcp-item" data-id="${u.id}" data-name="${Fmt.esc((u.full_name||'').toLowerCase())}" data-fullname="${Fmt.esc(u.full_name||'')}" onclick="SchedulerPage._addRecipient('${u.id}',this.dataset.fullname,'${u.role||''}')">
+                                ${u.avatar_url ? `<img src="${Fmt.esc(u.avatar_url)}" style="width:28px;height:28px;border-radius:50%;object-fit:cover">` : `<div class="sch-rcp-avatar">${Fmt.initials(u.full_name)}</div>`}
                                 <div>
-                                    <div style="font-size:.875rem;font-weight:500">${u.full_name || u.email}</div>
+                                    <div style="font-size:.875rem;font-weight:500">${Fmt.esc(u.full_name || u.email)}</div>
                                     <div style="font-size:.75rem;color:var(--text-muted)">${Fmt.role(u.role)}</div>
                                 </div>
                             </div>`).join('')}
@@ -646,7 +646,7 @@ const SchedulerPage = {
                         </div>
                         <span class="sch-ntf-card-badge" id="sf-preview-type">${{ general:'Загальне', gold:'ЗОЛ', tech:'ТЕХ' }[type]}</span>
                     </div>
-                    <div class="sch-ntf-card-title" id="sf-preview-title">${title || 'Назва повідомлення…'}</div>
+                    <div class="sch-ntf-card-title" id="sf-preview-title">${Fmt.esc(title) || 'Назва повідомлення…'}</div>
                     <div class="sch-ntf-card-body" id="sf-preview-text">${message || 'Текст повідомлення з\'явиться тут…'}</div>
                     <div class="sch-ntf-card-footer">
                         <div class="sch-ntf-card-dot"></div>
@@ -806,7 +806,7 @@ const SchedulerPage = {
         const tag = document.createElement('div');
         tag.className = 'sch-rcp-tag';
         tag.dataset.uid = id;
-        tag.innerHTML = `${name} <button onclick="SchedulerPage._removeRecipient('${id}')">×</button>`;
+        tag.innerHTML = `${Fmt.esc(name)} <button onclick="SchedulerPage._removeRecipient('${id}')">×</button>`;
         tags.appendChild(tag);
     },
 
@@ -1078,7 +1078,7 @@ const SchedulerPage = {
             const readCnt = total - unread.length;
 
             const avatarHtml = (p) => p?.avatar_url
-                ? `<img src="${p.avatar_url}" style="width:30px;height:30px;border-radius:50%;object-fit:cover;flex-shrink:0">`
+                ? `<img src="${Fmt.esc(p.avatar_url)}" style="width:30px;height:30px;border-radius:50%;object-fit:cover;flex-shrink:0">`
                 : `<div style="width:30px;height:30px;border-radius:50%;background:rgba(239,68,68,.12);display:flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:700;color:#ef4444;flex-shrink:0">${Fmt.initials(p?.full_name)}</div>`;
 
             Modal.open({
@@ -1101,7 +1101,7 @@ const SchedulerPage = {
                     ${unread.map(r => `
                     <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg-raised);border-radius:12px;border:1px solid rgba(239,68,68,.15)">
                         ${avatarHtml(r.recipient)}
-                        <span style="font-size:.875rem;font-weight:500;color:var(--text-primary)">${r.recipient?.full_name || '—'}</span>
+                        <span style="font-size:.875rem;font-weight:500;color:var(--text-primary)">${Fmt.esc(r.recipient?.full_name || '—')}</span>
                         <span style="margin-left:auto;font-size:.72rem;padding:2px 8px;border-radius:40px;background:rgba(239,68,68,.1);color:#ef4444;font-weight:600">не прочитано</span>
                     </div>`).join('')}
                 </div>` : `<div style="text-align:center;padding:1.5rem;color:var(--text-muted)">✅ Всі отримувачі прочитали повідомлення</div>`}
@@ -1112,7 +1112,7 @@ const SchedulerPage = {
                         ${rows.filter(r => r.is_read).map(r => `
                         <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg-raised);border-radius:12px;opacity:.7">
                             ${avatarHtml(r.recipient)}
-                            <span style="font-size:.875rem;font-weight:500;color:var(--text-primary)">${r.recipient?.full_name || '—'}</span>
+                            <span style="font-size:.875rem;font-weight:500;color:var(--text-primary)">${Fmt.esc(r.recipient?.full_name || '—')}</span>
                             <span style="margin-left:auto;font-size:.72rem;padding:2px 8px;border-radius:40px;background:rgba(16,185,129,.1);color:#10b981;font-weight:600">прочитано</span>
                         </div>`).join('')}
                     </div>

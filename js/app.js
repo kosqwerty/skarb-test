@@ -409,12 +409,12 @@ const App = {
             <div style="position: relative; flex-shrink: 0;">
                 <div style="width: 96px; height: 96px; border-radius: var(--radius-lg); overflow: hidden; background: linear-gradient(135deg, var(--primary), var(--secondary)); display: flex; align-items: center; justify-content: center; font-size: 2.2rem; font-weight: 600; color: var(--text-inverse); box-shadow: var(--shadow-glow); border: 2px solid var(--border-light);">
                     ${profile?.avatar_url
-                        ? `<img src="${profile.avatar_url}" style="width:100%;height:100%;object-fit:cover">`
+                        ? `<img src="${Fmt.esc(profile.avatar_url)}" style="width:100%;height:100%;object-fit:cover">`
                         : Fmt.initials(profile?.full_name)}
                 </div>
             </div>
             <div style="flex: 1;">
-                <h2 style="margin: 0 0 6px 0; font-weight: 700; font-size: 1.75rem; color: var(--text-primary); line-height: 1.2;">${profile?.full_name || 'Користувач'}</h2>
+                <h2 style="margin: 0 0 6px 0; font-weight: 700; font-size: 1.75rem; color: var(--text-primary); line-height: 1.2;">${Fmt.esc(profile?.full_name) || 'Користувач'}</h2>
                 <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px;">
                     ${Fmt.roleBadge(profile?.role)}
                     ${profile?.label === 'intern' ? `<span style="background:rgba(16,185,129,.12);color:#10b981;padding:4px 12px;border-radius:var(--radius-full);font-size:.8rem;font-weight:600;border:1px solid rgba(16,185,129,.25)">🌱 Стажер</span>` : profile?.label === 'mentor' ? `<span style="background:rgba(245,158,11,.12);color:var(--warning);padding:4px 12px;border-radius:var(--radius-full);font-size:.8rem;font-weight:600;border:1px solid rgba(245,158,11,.25)">⭐ Наставник</span>` : ''}
@@ -453,11 +453,11 @@ const App = {
             ${subordinates.map(s => `
                 <div style="display: flex; align-items: center; gap: 16px; padding: 12px 28px; transition: background var(--transition); border-bottom: 1px solid var(--border);">
                     <div style="width: 44px; height: 44px; border-radius: var(--radius-md); background: linear-gradient(135deg, var(--bg-raised), var(--bg-hover)); display: flex; align-items: center; justify-content: center; font-size: 1rem; font-weight: 600; color: var(--primary); flex-shrink: 0; overflow: hidden; border: 1px solid var(--border-light);">
-                        ${s.avatar_url ? `<img src="${s.avatar_url}" style="width:100%;height:100%;object-fit:cover">` : Fmt.initials(s.full_name)}
+                        ${s.avatar_url ? `<img src="${Fmt.esc(s.avatar_url)}" style="width:100%;height:100%;object-fit:cover">` : Fmt.initials(s.full_name)}
                     </div>
                     <div style="flex: 1; min-width: 0;">
-                        <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 2px;">${s.full_name}</div>
-                        <div style="font-size: 0.8rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${[s.job_position, s.subdivision].filter(Boolean).join(' · ') || s.email}</div>
+                        <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 2px;">${Fmt.esc(s.full_name)}</div>
+                        <div style="font-size: 0.8rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${Fmt.esc([s.job_position, s.subdivision].filter(Boolean).join(' · ') || s.email)}</div>
                     </div>
                     <div style="opacity: 0.4; color: var(--text-muted);">→</div>
                 </div>

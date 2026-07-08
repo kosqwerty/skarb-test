@@ -2027,13 +2027,13 @@ ${this._opts.map((o,i) => `
             <select id="tm-filter-pos" onchange="TestsManagerPage._applyAssignFilters()"
                 style="padding:8px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.85rem;outline:none">
                 <option value="">Всі посади</option>
-                ${positions.map(p => `<option value="${p.toLowerCase()}">${p}</option>`).join('')}
+                ${positions.map(p => `<option value="${Fmt.esc(p.toLowerCase())}">${Fmt.esc(p)}</option>`).join('')}
             </select>` : ''}
             ${showMgrFilter ? `
             <select id="tm-filter-mgr" onchange="TestsManagerPage._applyAssignFilters()"
                 style="padding:8px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.85rem;outline:none">
                 <option value="">Всі керівники</option>
-                ${managers.map(m => `<option value="${m.id}">${m.full_name}</option>`).join('')}
+                ${managers.map(m => `<option value="${m.id}">${Fmt.esc(m.full_name)}</option>`).join('')}
             </select>` : ''}
         </div>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
@@ -2071,8 +2071,8 @@ ${this._opts.map((o,i) => `
                 style="width:16px;height:16px;cursor:pointer;flex-shrink:0"
                 onchange="TestsManagerPage._updateAssignCount()">
             <div style="flex:1;min-width:0">
-                <div style="font-weight:600;font-size:.88rem">${e.full_name||e.email}</div>
-                ${e.job_position?`<div style="font-size:.75rem;color:var(--text-muted)">${e.job_position}</div>`:''}
+                <div style="font-weight:600;font-size:.88rem">${Fmt.esc(e.full_name||e.email)}</div>
+                ${e.job_position?`<div style="font-size:.75rem;color:var(--text-muted)">${Fmt.esc(e.job_position)}</div>`:''}
             </div>
             ${statusHtml}
             ${a && dlTxt ? `<span style="font-size:.7rem;color:var(--text-muted);white-space:nowrap">${dlTxt}</span>` : ''}

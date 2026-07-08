@@ -2564,7 +2564,7 @@ ${this._styles()}`;
             }).catch(e => console.error('[sg notify]', e));
         }
 
-        Toast.success(`${prof?.full_name || 'Співробітника'} додано до "${loc?.name || 'локації'}"`);
+        Toast.success(`${Fmt.esc(prof?.full_name) || 'Співробітника'} додано до "${Fmt.esc(loc?.name) || 'локації'}"`);
 
         await this._loadAllData();
         this._render(this._container);
@@ -3763,7 +3763,7 @@ ${this._styles()}`;
                 ${this._viewerProfiles.map(p => `
                 <div class="sg-viewer-drop-item" data-id="${p.id}" data-name="${(p.full_name||'').replace(/"/g,'&quot;')}"
                     onmousedown="ScheduleGraphPage._pickViewerUser('${p.id}',${JSON.stringify(p.full_name||p.id).replace(/"/g,'&quot;')})">
-                    ${p.full_name || p.id}
+                    ${Fmt.esc(p.full_name || p.id)}
                 </div>`).join('')}
             </div>
         </div>

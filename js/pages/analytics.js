@@ -283,9 +283,9 @@ const AnalyticsPage = {
                 </thead>
                 <tbody>
                     ${attempts.slice(0, 100).map(a => `<tr>
-                        <td><strong>${a.user?.full_name || '—'}</strong></td>
-                        <td>${a.test?.title || '—'}</td>
-                        <td style="color:var(--text-muted)">${a.test?.course?.title || '—'}</td>
+                        <td><strong>${Fmt.esc(a.user?.full_name || '—')}</strong></td>
+                        <td>${Fmt.esc(a.test?.title || '—')}</td>
+                        <td style="color:var(--text-muted)">${Fmt.esc(a.test?.course?.title || '—')}</td>
                         <td><strong>${Math.round(a.percentage||0)}%</strong></td>
                         <td><span class="badge ${a.passed ? 'badge-success' : 'badge-danger'}">${a.passed ? 'Сдан' : 'Не сдан'}</span></td>
                         <td style="color:var(--text-muted)">${a.time_spent_seconds ? Math.floor(a.time_spent_seconds/60) + ' мин' : '—'}</td>

@@ -5,10 +5,16 @@
 const Auth = {
     async init() {
         const { data: { session }, error } = await supabase.auth.getSession();
-        // Прострочений або недійсний refresh token — очищаємо і показуємо логін
         if (error || !session) {
-            if (error?.message?.includes('Refresh Token')) {
-                await supabase.auth.signOut().catch(() => {});
+            // Битий/використаний refresh token (400/401) — чистимо локальну сесію,
+            // щоб він не висів у localStorage і не сипав помилки при кожному старті.
+            // Мережеві збої (офлайн) не чистимо — сесія може бути ще жива.
+            const isStaleToken = error && (
+                error.status === 400 || error.status === 401 ||
+                /refresh[_ ]token/i.test(error.message || '')
+            );
+            if (isStaleToken) {
+                await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
             }
             return false;
         }

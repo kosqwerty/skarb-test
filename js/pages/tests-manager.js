@@ -193,6 +193,27 @@ const TestsManagerAPI = {
             if (!map.has(a.user_id)) map.set(a.user_id, a);
         }
         return map;
+    },
+
+    // Aggregates for the list screen: assignments + completed attempts per test
+    async getListStats(testIds) {
+        if (!testIds.length) return { asg: [], att: [] };
+        const [a, b] = await Promise.all([
+            supabase.from('test_assignments').select('test_id, user_id').in('test_id', testIds),
+            supabase.from('test_attempts').select('test_id, user_id, percentage, passed')
+                .not('completed_at', 'is', null).in('test_id', testIds)
+        ]);
+        return { asg: a.data || [], att: b.data || [] };
+    },
+
+    // Per-question correctness for the results screen
+    async getQuestionStats(attemptIds) {
+        if (!attemptIds.length) return [];
+        const { data, error } = await supabase.from('attempt_answers')
+            .select('question_id, is_correct')
+            .in('attempt_id', attemptIds.slice(0, 1000));
+        if (error) throw error;
+        return data || [];
     }
 };
 
@@ -240,10 +261,29 @@ const TestsManagerPage = {
         this._curTest   = null;
         this._questions = [];
         this._activeIdx = -1;
+        this._listFilter = this._listFilter || 'all';
+        this._listQuery  = '';
         container.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
         try {
             this._tests = await TestsManagerAPI.getAllStandalone();
         } catch(e) { this._tests = []; }
+
+        // Aggregates: assigned / passed per test + hero stats
+        this._listStats = {};
+        let totalAssigned = 0, avgPct = null;
+        try {
+            const { asg, att } = await TestsManagerAPI.getListStats(this._tests.map(t => t.id));
+            const st = this._listStats;
+            asg.forEach(r => {
+                (st[r.test_id] = st[r.test_id] || { assigned: 0, passed: new Set() }).assigned++;
+            });
+            att.forEach(a => {
+                if (!a.passed) return;
+                (st[a.test_id] = st[a.test_id] || { assigned: 0, passed: new Set() }).passed.add(a.user_id);
+            });
+            totalAssigned = asg.length;
+            if (att.length) avgPct = Math.round(att.reduce((s, a) => s + (a.percentage || 0), 0) / att.length);
+        } catch(e) { console.error('[tests-manager] list stats:', e); }
 
         container.innerHTML = `
 <style>
@@ -314,6 +354,52 @@ const TestsManagerPage = {
 .tm-empty-ico{font-size:4rem;margin-bottom:1rem;opacity:.3}
 .tm-empty-head{font-size:1.2rem;font-weight:700;color:var(--text-primary);margin-bottom:.5rem}
 .tm-empty-txt{font-size:.875rem;color:var(--text-muted);max-width:360px;line-height:1.6;margin-bottom:1.5rem}
+
+.tm-hero-stats{display:flex;gap:24px;position:relative}
+.tm-hero-stat{text-align:right}
+.tm-hero-stat b{display:block;font-size:1.35rem;font-weight:800;color:#fff}
+.tm-hero-stat span{font-size:.66rem;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.06em}
+@media(max-width:768px){.tm-hero-stats{display:none}}
+.tm-fchips{display:flex;gap:6px}
+.tm-fchip{padding:8px 14px;border-radius:9999px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);font-size:.8rem;font-weight:600;cursor:pointer;transition:all .18s}
+.tm-fchip:hover{border-color:var(--border-light);color:var(--text-primary)}
+.tm-fchip.on{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 12%,var(--bg-surface));color:var(--primary)}
+.tm-fchip b{font-weight:800;opacity:.65;margin-left:3px;font-size:.72rem}
+.tm-sort-sel{padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);font-size:.8rem;font-weight:600;cursor:pointer;outline:none;font-family:inherit}
+.tm-card{animation:tm-card-in .4s cubic-bezier(.4,0,.2,1) both;animation-delay:calc(var(--i,0)*50ms)}
+@keyframes tm-card-in{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.tm-card{animation:none}}
+.tm-card-head{display:flex;align-items:flex-start;gap:10px;padding:16px 16px 0}
+.tm-card-cover-strip{height:6px;background:linear-gradient(90deg,#C9A227,#f59e0b)}
+.tm-card-cover-strip.draft{background:var(--border)}
+.tm-pub-tgl{display:flex;align-items:center;gap:7px;flex-shrink:0;cursor:pointer}
+.tm-pub-lbl{font-size:.66rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);transition:color .2s}
+.tm-pub-tgl.on .tm-pub-lbl{color:#10b981}
+.tm-pub-knob{width:34px;height:19px;border-radius:9999px;background:var(--bg-hover);border:1.5px solid var(--border);position:relative;transition:all .22s}
+.tm-pub-knob::after{content:'';position:absolute;top:1.5px;left:2px;width:12px;height:12px;border-radius:50%;background:var(--text-muted);transition:all .22s cubic-bezier(.4,0,.2,1)}
+.tm-pub-tgl.on .tm-pub-knob{background:rgba(16,185,129,.22);border-color:#10b981}
+.tm-pub-tgl.on .tm-pub-knob::after{left:17px;background:#10b981}
+.tm-prog{margin:12px 16px 0;padding:11px 13px;border-radius:12px;background:var(--bg-raised);border:1px solid var(--border)}
+.tm-prog-row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px;font-size:.75rem;color:var(--text-muted)}
+.tm-prog-row b{font-weight:800;color:var(--text-primary);font-size:.82rem}
+.tm-pbar{height:5px;border-radius:9999px;background:var(--bg-hover);overflow:hidden}
+.tm-pbar-fill{height:100%;border-radius:9999px;background:linear-gradient(90deg,#10b981,#34d399);transition:width .6s cubic-bezier(.4,0,.2,1)}
+.tm-prog-empty{font-size:.75rem;color:var(--text-muted);display:flex;align-items:center;gap:7px}
+.tm-card-foot{display:flex;gap:8px;padding:14px 16px 16px;margin-top:auto;position:relative}
+.tm-btn-assign2{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:9px;border-radius:10px;font-size:.8rem;font-weight:700;cursor:pointer;transition:all .18s;border:1.5px solid #C9A227;background:transparent;color:#C9A227}
+.tm-btn-assign2:hover{background:#C9A227;color:#fff}
+.tm-btn-results2{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:9px;border-radius:10px;font-size:.8rem;font-weight:700;cursor:pointer;transition:all .18s;border:1.5px solid var(--border);background:var(--bg-raised);color:var(--text-secondary)}
+.tm-btn-results2:hover{border-color:#10b981;color:#10b981}
+.tm-btn-more{width:36px;border-radius:10px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;font-size:.9rem;transition:all .18s}
+.tm-btn-more:hover{border-color:var(--border-light);color:var(--text-primary);background:var(--bg-hover)}
+.tm-menu{position:absolute;right:12px;bottom:54px;z-index:50;min-width:200px;padding:5px;background:var(--bg-surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 14px 40px rgba(0,0,0,.35);display:none;animation:tm-menu-in .16s cubic-bezier(.4,0,.2,1)}
+@keyframes tm-menu-in{from{opacity:0;transform:translateY(6px) scale(.97)}to{opacity:1;transform:none}}
+.tm-menu.open{display:block}
+.tm-menu button{display:flex;align-items:center;gap:10px;width:100%;padding:8px 11px;border:none;border-radius:8px;background:transparent;color:var(--text-secondary);font-size:.82rem;font-weight:500;cursor:pointer;text-align:left;transition:all .12s;font-family:inherit}
+.tm-menu button:hover{background:var(--bg-hover);color:var(--text-primary)}
+.tm-menu button.tm-menu-danger:hover{background:rgba(239,68,68,.1);color:var(--danger)}
+.tm-menu button i{width:15px;text-align:center;font-size:.78rem}
+.tm-menu hr{border:none;border-top:1px solid var(--border);margin:5px 4px}
 </style>
 
 <div class="tm-page">
@@ -326,19 +412,34 @@ const TestsManagerPage = {
                     <p class="tm-hero-sub">Створюйте тести та призначайте співробітникам</p>
                 </div>
             </div>
+            <div class="tm-hero-stats">
+                <div class="tm-hero-stat"><b>${this._tests.length}</b><span>тестів</span></div>
+                <div class="tm-hero-stat"><b>${Fmt.num(totalAssigned)}</b><span>призначень</span></div>
+                ${avgPct !== null ? `<div class="tm-hero-stat"><b>${avgPct}%</b><span>сер. бал</span></div>` : ''}
+            </div>
+            ${AppState.canMutate() ? `<button class="tm-btn-new" onclick="TestsManagerPage.openCreateModal()"><i class="fa-solid fa-plus"></i> Новий тест</button>` : ''}
         </div>
     </div>
 
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;flex-wrap:wrap">
         <div class="tm-search-wrap">
             <i class="fa-solid fa-magnifying-glass"></i>
             <input class="tm-search-inp" type="text" placeholder="Пошук тесту..." oninput="TestsManagerPage._filterTests(this.value)">
         </div>
-        ${AppState.canMutate() ? `<button class="tm-btn-new" onclick="TestsManagerPage.openCreateModal()"><i class="fa-solid fa-plus"></i> Новий тест</button>` : ''}
+        <div class="tm-fchips" id="tm-fchips">
+            <button class="tm-fchip${this._listFilter==='all'?' on':''}" data-f="all" onclick="TestsManagerPage._setListFilter('all',this)">Всі <b>${this._tests.length}</b></button>
+            <button class="tm-fchip${this._listFilter==='pub'?' on':''}" data-f="pub" onclick="TestsManagerPage._setListFilter('pub',this)">Опубліковані <b>${this._tests.filter(t=>t.is_published).length}</b></button>
+            <button class="tm-fchip${this._listFilter==='draft'?' on':''}" data-f="draft" onclick="TestsManagerPage._setListFilter('draft',this)">Чернетки <b>${this._tests.filter(t=>!t.is_published).length}</b></button>
+        </div>
+        <select class="tm-sort-sel" onchange="TestsManagerPage._setListSort(this.value)">
+            <option value="new">Спочатку нові</option>
+            <option value="title">За назвою</option>
+            <option value="progress">За % проходження</option>
+        </select>
     </div>
 
     <div class="tm-grid" id="tm-grid">
-        ${this._tests.length ? this._tests.map(t => this._cardHtml(t)).join('') : `
+        ${this._tests.length ? this._tests.map((t, i) => this._cardHtml(t, i)).join('') : `
             <div class="tm-empty">
                 <div class="tm-empty-ico"><i class="fa-solid fa-clipboard-list"></i></div>
                 <div class="tm-empty-head">Тестів ще немає</div>
@@ -347,33 +448,67 @@ const TestsManagerPage = {
             </div>`}
     </div>
 </div>`;
+        this._applyListFilters();
+        // Close card menus on outside click (bind once)
+        if (!this._menuDocBound) {
+            this._menuDocBound = true;
+            document.addEventListener('click', () => {
+                document.querySelectorAll('.tm-menu.open').forEach(m => m.classList.remove('open'));
+            });
+        }
     },
 
-    _cardHtml(t) {
-        const qCount = t.questions?.length ?? '—';
+    _cardHtml(t, i = 0) {
+        const qCount   = t.questions?.length ?? '—';
+        const st       = this._listStats?.[t.id];
+        const assigned = st?.assigned || 0;
+        const passedN  = st?.passed?.size || 0;
+        const pct      = assigned ? Math.round(passedN / assigned * 100) : 0;
+        const canMut   = AppState.canMutate();
         return `
-<div class="tm-card">
+<div class="tm-card" style="--i:${i}" data-pub="${!!t.is_published}" data-title="${Fmt.esc((t.title||'').toLowerCase())}" data-progress="${pct}"
+     ${canMut ? `onclick="TestsManagerPage.openEditor('${t.id}')"` : `onclick="TestsManagerPage.openResultsModal('${t.id}')"`}>
     ${t.cover_image
-        ? `<img class="tm-card-cover" src="${t.cover_image}" alt="">`
-        : `<div class="tm-card-cover-placeholder"></div>`}
-    <div class="tm-card-body">
-        <div class="tm-card-title">${t.title}</div>
-        ${t.description ? `<div style="font-size:.82rem;color:var(--text-muted);margin-bottom:10px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${t.description}</div>` : ''}
-        <div class="tm-card-meta">
+        ? `<img class="tm-card-cover" src="${Fmt.esc(t.cover_image)}" alt="">`
+        : `<div class="tm-card-cover-strip${t.is_published ? '' : ' draft'}"></div>`}
+    <div class="tm-card-head">
+        <div class="tm-card-title" style="flex:1;margin-bottom:0">${Fmt.esc(t.title)}</div>
+        ${canMut ? `
+        <div class="tm-pub-tgl${t.is_published ? ' on' : ''}" onclick="event.stopPropagation();TestsManagerPage._togglePublish('${t.id}',this)" title="Опублікувати / зняти з публікації">
+            <span class="tm-pub-lbl">${t.is_published ? 'Опубліковано' : 'Чернетка'}</span>
+            <div class="tm-pub-knob"></div>
+        </div>` : `
+        <span class="tm-chip ${t.is_published ? 'tm-chip-pub' : 'tm-chip-draft'}">${t.is_published ? '<i class="fa-solid fa-check"></i> Опубліковано' : 'Чернетка'}</span>`}
+    </div>
+    <div class="tm-card-body" style="padding-top:6px">
+        ${t.description ? `<div style="font-size:.82rem;color:var(--text-muted);margin-bottom:10px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${Fmt.esc(t.description)}</div>` : ''}
+        <div class="tm-card-meta" style="margin-bottom:0">
             <span class="tm-chip tm-chip-q"><i class="fa-solid fa-question"></i> ${qCount} питань</span>
             ${t.time_limit_minutes ? `<span class="tm-chip tm-chip-time"><i class="fa-regular fa-clock"></i> ${t.time_limit_minutes} хв</span>` : ''}
             <span class="tm-chip tm-chip-score"><i class="fa-solid fa-trophy"></i> ${t.passing_score||70}%</span>
-            <span class="tm-chip ${t.is_published ? 'tm-chip-pub' : 'tm-chip-draft'}">${t.is_published ? '<i class="fa-solid fa-check"></i> Опубліковано' : 'Чернетка'}</span>
         </div>
-        <div style="font-size:.75rem;color:var(--text-muted)">${Fmt.date(t.created_at)}</div>
     </div>
-    <div class="tm-card-footer" onclick="event.stopPropagation()">
-        ${AppState.canMutate() ? `<button class="tm-btn-edit" onclick="TestsManagerPage.openEditor('${t.id}')"><i class="fa-solid fa-pen-to-square"></i> Редагувати</button>` : ''}
-        ${AppState.canMutate() ? `<button class="tm-btn-settings" onclick="TestsManagerPage.openSettings('${t.id}')" title="Налаштувати"><i class="fa-solid fa-gears"></i></button>` : ''}
-        ${AppState.canMutate() ? `<button class="tm-btn-assign" onclick="TestsManagerPage.openAssignModal('${t.id}')"><i class="fa-solid fa-users"></i></button>` : ''}
-        <button class="tm-btn-results" onclick="TestsManagerPage.openResultsModal('${t.id}')"><i class="fa-solid fa-chart-line"></i></button>
-        ${AppState.canMutate() ? `<button class="tm-btn-dupe" onclick="TestsManagerPage.duplicateTest('${t.id}')" title="Дублювати тест"><i class="fa-regular fa-copy"></i></button>` : ''}
-        ${AppState.canMutate() ? `<button class="tm-btn-del" onclick="TestsManagerPage.deleteTest('${t.id}',${JSON.stringify(t.title||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-trash"></i></button>` : ''}
+    <div class="tm-prog">
+        ${assigned ? `
+        <div class="tm-prog-row">
+            <div><b>${passedN}</b> з <b>${assigned}</b> пройшли</div>
+            <span style="font-weight:800;color:${pct >= 70 ? '#10b981' : '#f59e0b'}">${pct}%</span>
+        </div>
+        <div class="tm-pbar"><div class="tm-pbar-fill" style="width:${pct}%"></div></div>`
+        : `<div class="tm-prog-empty"><i class="fa-regular fa-hourglass"></i> Ще нікому не призначено</div>`}
+    </div>
+    <div class="tm-card-foot" onclick="event.stopPropagation()">
+        ${canMut ? `<button class="tm-btn-assign2" onclick="TestsManagerPage.openAssignModal('${t.id}')"><i class="fa-solid fa-user-plus"></i> Призначити</button>` : ''}
+        <button class="tm-btn-results2" onclick="TestsManagerPage.openResultsModal('${t.id}')"><i class="fa-solid fa-chart-column"></i> Результати</button>
+        ${canMut ? `
+        <button class="tm-btn-more" onclick="TestsManagerPage._toggleCardMenu(this, event)"><i class="fa-solid fa-ellipsis"></i></button>
+        <div class="tm-menu">
+            <button onclick="TestsManagerPage.openEditor('${t.id}')"><i class="fa-solid fa-pen"></i> Редагувати питання</button>
+            <button onclick="TestsManagerPage.openSettings('${t.id}')"><i class="fa-solid fa-gear"></i> Налаштування</button>
+            <button onclick="TestsManagerPage.duplicateTest('${t.id}')"><i class="fa-regular fa-copy"></i> Дублювати</button>
+            <hr>
+            <button class="tm-menu-danger" onclick="TestsManagerPage.deleteTest('${t.id}',${JSON.stringify(t.title||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-trash"></i> Видалити</button>
+        </div>` : ''}
     </div>
 </div>`;
     },
@@ -381,8 +516,118 @@ const TestsManagerPage = {
     // ── Create / Edit meta modal ──────────────────────────────────
 
     openCreateModal() {
-        const c = TestsManagerPage._container;
-        this._renderSettings(c, null);
+        Modal.open({
+            title: '<i class="fa-solid fa-bolt" style="color:#C9A227"></i> Новий тест',
+            body: `
+<div style="display:flex;flex-direction:column;gap:14px">
+    <div>
+        <label style="display:block;font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:7px">Назва тесту</label>
+        <div style="display:flex;border:1.5px solid var(--border);border-radius:10px;background:var(--bg-raised);overflow:hidden">
+            <div style="width:42px;display:flex;align-items:center;justify-content:center;background:var(--bg-hover);color:var(--text-muted);font-size:.85rem"><i class="fa-solid fa-heading"></i></div>
+            <input id="tmqc-title" placeholder="Напр.: Оцінка ювелірних виробів" autocomplete="off"
+                style="flex:1;border:none;background:transparent;color:var(--text-primary);font-size:.92rem;padding:12px 14px;outline:none;font-family:inherit">
+        </div>
+    </div>
+    <div style="display:flex;gap:8px;font-size:.78rem;color:var(--text-muted);line-height:1.55">
+        <i class="fa-solid fa-circle-info" style="color:var(--primary);margin-top:2px"></i>
+        <span>Тест створиться як чернетка з типовими налаштуваннями (прохідний бал 70%, 1 спроба). Обкладинку, ліміт часу та автоматизацію можна додати пізніше — кнопка «⚙ Налаштування» в редакторі.</span>
+    </div>
+</div>`,
+            footer: `
+<button class="btn btn-primary" onclick="TestsManagerPage._quickCreate()"><i class="fa-solid fa-arrow-right"></i> Створити і додати питання</button>
+<button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>`
+        });
+        setTimeout(() => {
+            const inp = document.getElementById('tmqc-title');
+            if (!inp) return;
+            inp.focus();
+            inp.addEventListener('keydown', e => { if (e.key === 'Enter') TestsManagerPage._quickCreate(); });
+        }, 80);
+    },
+
+    async _quickCreate() {
+        const title = document.getElementById('tmqc-title')?.value.trim();
+        if (!title) { Toast.error('Помилка', 'Введіть назву тесту'); document.getElementById('tmqc-title')?.focus(); return; }
+        Loader.show();
+        try {
+            const test = await API.tests.create({
+                title, description: null,
+                passing_score: 70, max_attempts: 1,
+                is_published: false, course_id: null,
+                created_by: AppState.user.id
+            });
+            Modal.close();
+            ActivityTracker.track('test_create', { entity_type: 'test', entity_id: test.id, entity_title: title });
+            Toast.success('Тест створено', 'Додайте питання і опублікуйте');
+            await this.openEditor(test.id);
+        } catch(e) { Toast.error('Помилка', e.message); }
+        finally { Loader.hide(); }
+    },
+
+    async _togglePublish(testId, el) {
+        const t = this._tests.find(x => x.id === testId);
+        if (!t) return;
+        const next = !t.is_published;
+        el.style.pointerEvents = 'none';
+        try {
+            await API.tests.update(testId, { is_published: next });
+            t.is_published = next;
+            el.classList.toggle('on', next);
+            const lbl = el.querySelector('.tm-pub-lbl');
+            if (lbl) lbl.textContent = next ? 'Опубліковано' : 'Чернетка';
+            const card = el.closest('.tm-card');
+            card?.setAttribute('data-pub', String(next));
+            card?.querySelector('.tm-card-cover-strip')?.classList.toggle('draft', !next);
+            // refresh filter chip counters
+            const chips = document.getElementById('tm-fchips');
+            if (chips) {
+                const pubN = this._tests.filter(x => x.is_published).length;
+                chips.querySelector('[data-f="pub"] b').textContent   = pubN;
+                chips.querySelector('[data-f="draft"] b').textContent = this._tests.length - pubN;
+            }
+            this._applyListFilters();
+            Toast.success(next ? 'Опубліковано' : 'Знято з публікації');
+        } catch(e) { Toast.error('Помилка', e.message); }
+        finally { el.style.pointerEvents = ''; }
+    },
+
+    _toggleCardMenu(btn, ev) {
+        ev.stopPropagation();
+        const menu = btn.parentElement.querySelector('.tm-menu');
+        const wasOpen = menu.classList.contains('open');
+        document.querySelectorAll('.tm-menu.open').forEach(m => m.classList.remove('open'));
+        if (!wasOpen) menu.classList.add('open');
+    },
+
+    _setListFilter(f, btn) {
+        this._listFilter = f;
+        document.querySelectorAll('.tm-fchip').forEach(c => c.classList.remove('on'));
+        btn.classList.add('on');
+        this._applyListFilters();
+    },
+
+    _setListSort(mode) {
+        const grid = document.getElementById('tm-grid');
+        if (!grid || !this._tests.length) return;
+        const sorted = [...this._tests];
+        if (mode === 'title')         sorted.sort((a, b) => (a.title||'').localeCompare(b.title||'', 'uk'));
+        else if (mode === 'progress') sorted.sort((a, b) => {
+            const p = t => { const s = this._listStats?.[t.id]; return s?.assigned ? (s.passed?.size||0) / s.assigned : -1; };
+            return p(b) - p(a);
+        });
+        else sorted.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        grid.innerHTML = sorted.map((t, i) => this._cardHtml(t, i)).join('');
+        this._applyListFilters();
+    },
+
+    _applyListFilters() {
+        const f = this._listFilter || 'all';
+        const q = (this._listQuery || '').trim().toLowerCase();
+        document.querySelectorAll('#tm-grid .tm-card').forEach(card => {
+            const okF = f === 'all' || (f === 'pub') === (card.dataset.pub === 'true');
+            const okQ = !q || (card.dataset.title || '').includes(q);
+            card.style.display = okF && okQ ? '' : 'none';
+        });
     },
 
     openSettings(testId) {
@@ -884,7 +1129,7 @@ const TestsManagerPage = {
 <div class="te-wrap">
     <div class="te-topbar">
         <button class="te-back" onclick="TestsManagerPage._checkDirty().then(()=>{TestsManagerPage._dirty=false;TestsManagerPage._renderList(TestsManagerPage._container)})"><i class="fa-solid fa-arrow-left"></i> Тести</button>
-        <span class="te-test-title">${this._curTest.title}</span>
+        <span class="te-test-title">${Fmt.esc(this._curTest.title)}</span>
         <button class="btn btn-ghost btn-sm" onclick="TestsManagerPage._checkDirty().then(()=>{TestsManagerPage._dirty=false;TestsManagerPage._renderSettings(TestsManagerPage._container,TestsManagerPage._curTest)})"><i class="fa-solid fa-gear"></i> Налаштування</button>
         <button class="btn btn-ghost btn-sm" onclick="TestsManagerPage.openPreview('${this._curTest.id}')"><i class="fa-solid fa-eye"></i> Перегляд</button>
         <button class="btn btn-sm" style="background:#C9A227;color:#fff;border:none;border-radius:10px;padding:7px 16px;font-weight:600;cursor:pointer" onclick="TestsManagerPage.openAssignModal('${this._curTest.id}')"><i class="fa-solid fa-users"></i> Призначити</button>
@@ -1809,11 +2054,8 @@ ${this._opts.map((o,i) => `
     // ── Test list features ────────────────────────────────────────
 
     _filterTests(query) {
-        const q = query.trim().toLowerCase();
-        document.querySelectorAll('.tm-card').forEach(card => {
-            const title = card.querySelector('.tm-card-title')?.textContent.toLowerCase() || '';
-            card.style.display = (!q || title.includes(q)) ? '' : 'none';
-        });
+        this._listQuery = query;
+        this._applyListFilters();
     },
 
     async duplicateTest(testId) {
@@ -1994,8 +2236,14 @@ ${this._opts.map((o,i) => `
 
         const assignedMap = new Map(assigned.map(a => [a.user_id, a]));
         const deadlines   = assigned.map(a => a.deadline_at).filter(Boolean);
+        // datetime-local очікує локальний час — toISOString() зсунув би на -2/-3 год
+        const _dtLocal = iso => {
+            const d = new Date(iso), p = n => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+        };
         const commonDl    = deadlines.length && deadlines.every(d => d === deadlines[0])
-            ? new Date(deadlines[0]).toISOString().slice(0, 16) : '';
+            ? _dtLocal(deadlines[0]) : '';
+        this._assignTitle = testTitle;
 
         const positions     = [...new Set(employees.map(e => e.job_position).filter(Boolean))].sort();
         const mgrIds        = [...new Set(employees.map(e => e.manager_id).filter(Boolean))];
@@ -2011,12 +2259,43 @@ ${this._opts.map((o,i) => `
 .tasgn-controls{flex-shrink:0}
 .tasgn-list-wrap{flex:1;overflow-y:auto;border:1px solid var(--border);border-radius:12px;min-height:0}
 .tm-assign-item:last-child{border-bottom:none}
+.tasgn-chips{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px;flex-shrink:0}
+.tasgn-pos-chip{display:inline-flex;align-items:center;gap:7px;padding:7px 13px;border-radius:9999px;border:1.5px dashed var(--border-light);background:transparent;color:var(--text-secondary);font-size:.78rem;font-weight:600;cursor:pointer;transition:all .18s;font-family:inherit}
+.tasgn-pos-chip:hover{border-color:var(--primary);color:var(--primary);border-style:solid}
+.tasgn-pos-chip.on{border-style:solid;border-color:var(--primary);background:color-mix(in srgb,var(--primary) 13%,var(--bg-surface));color:var(--primary)}
+.tasgn-pos-chip b{font-size:.68rem;opacity:.65}
+.tasgn-pos-chip i{font-size:.66rem}
+.tasgn-sum{display:flex;align-items:center;gap:16px;padding:11px 15px;margin-bottom:12px;border-radius:10px;background:color-mix(in srgb,var(--primary) 8%,var(--bg-surface));border:1px solid color-mix(in srgb,var(--primary) 25%,var(--border));flex-wrap:wrap;flex-shrink:0;font-size:.82rem;color:var(--text-secondary)}
+.tasgn-sum b{color:var(--text-primary);font-weight:800;font-size:.95rem}
+.tasgn-sum-dl{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:.78rem;color:var(--text-muted)}
+.tasgn-foot{display:flex;gap:10px;margin-top:12px;flex-shrink:0}
+.tasgn-remind{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:10px;border:1.5px solid #f59e0b;background:transparent;color:#f59e0b;font-size:.85rem;font-weight:700;cursor:pointer;transition:all .18s;font-family:inherit}
+.tasgn-remind:hover{background:rgba(245,158,11,.12)}
+.tasgn-remind:disabled{opacity:.5;cursor:not-allowed}
 </style>
 <div class="tasgn-page">
     <div class="tasgn-topbar">
         <button class="tasgn-back" onclick="TestsManagerPage._goBack(TestsManagerPage._container)"><i class="fa-solid fa-arrow-left"></i> Назад</button>
-        <span style="font-size:1.1rem;font-weight:700;color:var(--text-primary);flex:1"><i class="fa-solid fa-users"></i> ${testTitle}</span>
-        <button class="btn btn-primary" onclick="TestsManagerPage._doAssign('${testId}')"><i class="fa-regular fa-floppy-disk"></i> Зберегти</button>
+        <span style="font-size:1.1rem;font-weight:700;color:var(--text-primary);flex:1"><i class="fa-solid fa-users" style="color:#C9A227"></i> ${Fmt.esc(testTitle)}</span>
+    </div>
+    ${positions.length ? `
+    <div class="tasgn-chips">
+        <span style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);align-self:center;margin-right:2px">Швидкий вибір:</span>
+        ${positions.map(p => {
+            const n = employees.filter(e => e.job_position === p).length;
+            return `<button type="button" class="tasgn-pos-chip" data-pos="${Fmt.esc(p.toLowerCase())}" onclick="TestsManagerPage._togglePosChip(this)"><i class="fa-solid fa-user-tag"></i> ${Fmt.esc(p)} <b>${n}</b></button>`;
+        }).join('')}
+    </div>` : ''}
+    <div class="tasgn-sum">
+        <span>Вибрано: <b id="tasgn-sum-sel">0</b></span>
+        <span>вже пройшли: <b id="tasgn-sum-pass" style="color:#10b981">0</b></span>
+        <span>нових призначень: <b id="tasgn-sum-new" style="color:var(--primary)">0</b></span>
+        <div class="tasgn-sum-dl">
+            <i class="fa-regular fa-clock"></i> Дедлайн
+            <input type="datetime-local" id="tm-deadline" value="${commonDl}"
+                style="padding:5px 10px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.8rem;outline:none;font-family:inherit"
+                onchange="this.dataset.changed='true'">
+        </div>
     </div>
     <div class="tasgn-controls">
         <div style="display:grid;grid-template-columns:repeat(${filterCols},1fr);gap:8px;margin-bottom:10px">
@@ -2036,18 +2315,10 @@ ${this._opts.map((o,i) => `
                 ${managers.map(m => `<option value="${m.id}">${Fmt.esc(m.full_name)}</option>`).join('')}
             </select>` : ''}
         </div>
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-            <div style="display:flex;align-items:center;gap:6px">
-                <button type="button" class="btn btn-ghost btn-sm" onclick="TestsManagerPage._selectAllFiltered(true)"><i class="fa-solid fa-square-check"></i> Вибрати всіх</button>
-                <button type="button" class="btn btn-ghost btn-sm" onclick="TestsManagerPage._selectAllFiltered(false)"><i class="fa-regular fa-square"></i> Скинути</button>
-                <span id="tm-assign-count" style="font-size:.78rem;color:var(--text-muted);padding-left:4px"></span>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px">
-                <label style="font-size:.82rem;color:var(--text-muted);white-space:nowrap">Дедлайн:</label>
-                <input type="datetime-local" id="tm-deadline" value="${commonDl}"
-                    style="padding:5px 10px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.82rem;outline:none"
-                    onchange="this.dataset.changed='true'">
-            </div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">
+            <button type="button" class="btn btn-ghost btn-sm" onclick="TestsManagerPage._selectAllFiltered(true)"><i class="fa-solid fa-square-check"></i> Вибрати всіх</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="TestsManagerPage._selectAllFiltered(false)"><i class="fa-regular fa-square"></i> Скинути</button>
+            <span id="tm-assign-count" style="font-size:.78rem;color:var(--text-muted);padding-left:4px"></span>
         </div>
     </div>
     <div class="tasgn-list-wrap">
@@ -2060,11 +2331,13 @@ ${this._opts.map((o,i) => `
                     ? `<span style="font-size:.7rem;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(16,185,129,.12);color:#10b981;white-space:nowrap"><i class="fa-solid fa-check"></i> Пройшов</span>`
                     : `<span style="font-size:.7rem;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(239,68,68,.1);color:#ef4444;white-space:nowrap"><i class="fa-solid fa-xmark"></i> Не пройшов</span>`
                 : a ? `<span style="font-size:.7rem;font-weight:700;padding:2px 8px;border-radius:20px;background:var(--bg-raised);color:var(--text-muted);white-space:nowrap;border:1px solid var(--border)"><i class="fa-solid fa-pause"></i> Не починав</span>` : '';
+            const stKey = attempt ? (attempt.passed ? 'pass' : 'fail') : (a ? 'none' : '');
             return `
         <label class="tm-assign-item"
-            data-name="${(e.full_name||e.email||'').toLowerCase().replace(/"/g,'&quot;')}"
-            data-pos="${(e.job_position||'').toLowerCase().replace(/"/g,'&quot;')}"
+            data-name="${Fmt.esc((e.full_name||e.email||'').toLowerCase())}"
+            data-pos="${Fmt.esc((e.job_position||'').toLowerCase())}"
             data-mgr="${e.manager_id||''}"
+            data-st="${stKey}"
             style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s"
             onmouseenter="this.style.background='var(--bg-raised)'" onmouseleave="this.style.background=''">
             <input type="checkbox" value="${e.id}" ${a?'checked':''} data-was-assigned="${!!a}"
@@ -2079,8 +2352,53 @@ ${this._opts.map((o,i) => `
         </label>`;
         }).join('')}
     </div>
+    <div class="tasgn-foot">
+        <button class="btn btn-primary" style="flex:1;justify-content:center" onclick="TestsManagerPage._doAssign('${testId}')"><i class="fa-regular fa-floppy-disk"></i> Зберегти призначення</button>
+        <button type="button" class="tasgn-remind" onclick="TestsManagerPage._remindInactive('${testId}',this)"><i class="fa-regular fa-bell"></i> Нагадати неактивним</button>
+    </div>
 </div>`;
         this._updateAssignCount();
+    },
+
+    // Клік по чипу посади — відмітити/зняти всіх співробітників цієї посади
+    _togglePosChip(chip) {
+        const on  = chip.classList.toggle('on');
+        const pos = chip.dataset.pos;
+        document.querySelectorAll('.tm-assign-item').forEach(el => {
+            if (el.dataset.pos !== pos) return;
+            const cb = el.querySelector('input[type=checkbox]');
+            if (cb) cb.checked = on;
+        });
+        this._updateAssignCount();
+    },
+
+    // Нагадування призначеним, які ще не почали тест
+    async _remindInactive(testId, btn) {
+        const targets = [...document.querySelectorAll('.tm-assign-item')]
+            .filter(el => el.dataset.st === 'none' && el.querySelector('input[type=checkbox]')?.dataset.wasAssigned === 'true')
+            .map(el => el.querySelector('input[type=checkbox]').value);
+        if (!targets.length) { Toast.info('Нікому нагадувати', 'Всі призначені вже почали тест'); return; }
+        const ok = await Modal.confirm({
+            title: 'Нагадування',
+            message: `Надіслати нагадування ${targets.length} співробітникам, які ще не почали тест?`,
+            confirmText: 'Надіслати'
+        });
+        if (!ok) return;
+        btn.disabled = true;
+        try {
+            const title = this._assignTitle || 'Тест';
+            const { error } = await supabase.from('notifications').insert(targets.map(uid => ({
+                user_id: uid, type: 'test_assigned',
+                title:   `Нагадування: пройдіть тест «${title}»`,
+                message: title,
+                link:    `tests/${testId}`
+            })));
+            if (error) throw error;
+            Toast.success('Надіслано', `Нагадування отримають ${targets.length} співробітників`);
+        } catch(e) {
+            Toast.error('Помилка', e.message);
+            btn.disabled = false;
+        }
     },
 
     _applyAssignFilters() {
@@ -2111,6 +2429,20 @@ ${this._opts.map((o,i) => `
         const sel     = visible.filter(c => c.checked).length;
         const el = document.getElementById('tm-assign-count');
         if (el) el.textContent = `Вибрано: ${sel} з ${visible.length}`;
+        // Зведена панель
+        const checked = all.filter(c => c.checked);
+        const passN   = checked.filter(c => c.closest('.tm-assign-item').dataset.st === 'pass').length;
+        const newN    = checked.filter(c => c.dataset.wasAssigned === 'false').length;
+        const set = (id, v) => { const n = document.getElementById(id); if (n) n.textContent = v; };
+        set('tasgn-sum-sel', checked.length);
+        set('tasgn-sum-pass', passN);
+        set('tasgn-sum-new', newN);
+        // Синхронізуємо стан чипів посад: активний якщо всі його співробітники відмічені
+        document.querySelectorAll('.tasgn-pos-chip').forEach(chip => {
+            const items = [...document.querySelectorAll(`.tm-assign-item[data-pos="${CSS.escape(chip.dataset.pos)}"]`)];
+            const allOn = items.length && items.every(el => el.querySelector('input[type=checkbox]').checked);
+            chip.classList.toggle('on', allOn);
+        });
     },
 
     async _doAssign(testId) {
@@ -2148,19 +2480,17 @@ ${this._opts.map((o,i) => `
             for (const uid of toUnassign) {
                 await TestsManagerAPI.unassign(testId, uid);
             }
-            // Send notifications to newly assigned users
+            // Send notifications to newly assigned users (single batch insert)
             if (toAssignNew.length) {
                 const testTitle = (this._tests.find(x => x.id === testId) || this._curTest)?.title || 'Тест';
-                const results = await Promise.all(toAssignNew.map(uid =>
-                    supabase.from('notifications').insert({
-                        user_id: uid, type: 'test_assigned',
-                        title:   `Вам призначено тест: ${testTitle}`,
-                        message: testTitle,
-                        link:    `tests/${testId}`
-                    })
-                ));
-                if (results.some(r => r.error)) {
-                    Toast.warning('Сповіщення', 'Призначено, але не вдалося надіслати сповіщення деяким користувачам');
+                const { error: nErr } = await supabase.from('notifications').insert(toAssignNew.map(uid => ({
+                    user_id: uid, type: 'test_assigned',
+                    title:   `Вам призначено тест: ${testTitle}`,
+                    message: testTitle,
+                    link:    `tests/${testId}`
+                })));
+                if (nErr) {
+                    Toast.warning('Сповіщення', 'Призначено, але не вдалося надіслати сповіщення');
                 }
             }
             Toast.success('Збережено');
@@ -2178,17 +2508,20 @@ ${this._opts.map((o,i) => `
 
     async _renderResults(container, testId) {
         container.innerHTML = '<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>';
-        let results = [], test, grants = {};
+        let results = [], test, grants = {}, assignments = [];
         try {
-            [results, test, grants] = await Promise.all([
+            [results, test, grants, assignments] = await Promise.all([
                 TestsManagerAPI.getAllResults(testId),
                 API.tests.getById(testId),
-                API.attempts.getGrantsForTest(testId).catch(() => ({}))
+                API.attempts.getGrantsForTest(testId).catch(() => ({})),
+                TestsManagerAPI.getAssignments(testId).catch(() => [])
             ]);
         } catch(e) { Toast.error('Помилка', e.message); this._goBack(container); return; }
 
         this._lastResults = results;
         this._resultsTestId = testId;
+        this._resTest = test;
+        this._qStatsLoaded = false;
 
         // Group attempts by user
         const userMap = new Map();
@@ -2197,10 +2530,14 @@ ${this._opts.map((o,i) => `
             userMap.get(r.user_id).attempts.push(r);
         }
         const users = [...userMap.values()];
+        this._resUsers = userMap;
 
         const totalPassed = users.filter(u => u.attempts.some(a => a.passed)).length;
         const avgPct = results.length ? Math.round(results.reduce((s,r) => s+(r.percentage||0), 0) / results.length) : 0;
         const maxAttempts = test.max_attempts;
+        const assignedN   = assignments.length;
+        const attemptedIds = new Set(results.map(r => r.user_id));
+        const notStarted  = assignments.filter(a => !attemptedIds.has(a.user_id)).length;
 
         const rowsHtml = users.map(({ user, uid, attempts }) => {
             const best = attempts.reduce((b,a) => (!b || (a.percentage||0) > (b.percentage||0)) ? a : b, null);
@@ -2209,7 +2546,9 @@ ${this._opts.map((o,i) => `
             const exhausted = allowed !== null && attempts.length >= allowed;
             const hasPassed = attempts.some(a => a.passed);
             return `
-            <tr style="border-top:1px solid var(--border)">
+            <tr style="border-top:1px solid var(--border);cursor:pointer;transition:background .12s"
+                onmouseenter="this.style.background='var(--bg-raised)'" onmouseleave="this.style.background=''"
+                onclick="TestsManagerPage._openUserAttempts('${uid}')" title="Історія спроб">
                 <td style="padding:10px 14px">
                     <div style="font-weight:600">${Fmt.esc(user?.full_name||user?.email||'—')}</div>
                     ${user?.job_position?`<div style="font-size:.72rem;color:var(--text-muted)">${Fmt.esc(user.job_position)}</div>`:''}
@@ -2224,7 +2563,7 @@ ${this._opts.map((o,i) => `
                         ${hasPassed ? '<i class="fa-solid fa-check"></i> Пройшов' : '<i class="fa-solid fa-xmark"></i> Не пройшов'}
                     </span>
                 </td>
-                <td style="padding:10px 14px;text-align:center">
+                <td style="padding:10px 14px;text-align:center" onclick="event.stopPropagation()">
                     ${maxAttempts && exhausted ? `<button class="btn btn-ghost btn-sm" onclick="TestsManagerPage._grantAttempt('${testId}','${uid}',this)" title="Дати додаткову спробу">
                         <i class="fa-solid fa-plus"></i> Спробу
                     </button>` : ''}
@@ -2237,26 +2576,53 @@ ${this._opts.map((o,i) => `
 .tres-topbar{display:flex;align-items:center;gap:12px;padding-bottom:16px;border-bottom:1px solid var(--border);margin-bottom:20px;flex-shrink:0}
 .tres-back{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);font-size:.83rem;font-weight:500;cursor:pointer;transition:all .15s}
 .tres-back:hover{border-color:var(--primary);color:var(--primary)}
-.tres-stats{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;flex-shrink:0}
-.tres-stat{flex:1;min-width:110px;padding:14px 16px;border-radius:14px;border:1px solid var(--border);background:var(--bg-raised);text-align:center}
-.tres-table-wrap{flex:1;border:1px solid var(--border);border-radius:12px;overflow:auto;min-height:0}
+.tres-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:18px;flex-shrink:0}
+.tres-stat{padding:14px 16px;border-radius:14px;border:1px solid var(--border);background:var(--bg-surface);position:relative;overflow:hidden}
+.tres-stat::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--tile-c,var(--primary))}
+.tres-stat-ico{font-size:.9rem;color:var(--tile-c,var(--primary));margin-bottom:7px}
+.tres-stat-val{font-size:1.5rem;font-weight:800;color:var(--text-primary);letter-spacing:-.02em}
+.tres-stat-lbl{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-top:2px}
+.tres-tabs{display:flex;gap:4px;padding:4px;border-radius:10px;background:var(--bg-raised);border:1px solid var(--border);width:fit-content;margin-bottom:14px;flex-shrink:0}
+.tres-tab{padding:8px 20px;border-radius:7px;border:none;background:transparent;color:var(--text-secondary);font-size:.83rem;font-weight:700;cursor:pointer;transition:all .18s;font-family:inherit}
+.tres-tab.on{background:var(--bg-surface);color:var(--text-primary);box-shadow:0 2px 8px rgba(0,0,0,.18)}
+.tres-table-wrap{flex:1;border:1px solid var(--border);border-radius:12px;overflow:auto;min-height:0;background:var(--bg-surface)}
+.tres-qrow{display:flex;align-items:center;gap:14px;padding:13px 18px;border-bottom:1px solid var(--border)}
+.tres-qrow:last-child{border-bottom:none}
+.tres-qnum{width:26px;height:26px;border-radius:50%;background:var(--bg-raised);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:800;color:var(--text-muted);flex-shrink:0}
+.tres-qrow.hard .tres-qnum{border-color:var(--danger);color:var(--danger);background:rgba(239,68,68,.08)}
+.tres-qbody{flex:1;min-width:0}
+.tres-qtext{font-size:.84rem;font-weight:500;color:var(--text-primary);margin-bottom:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tres-qbar{height:7px;border-radius:9999px;background:var(--bg-hover);overflow:hidden}
+.tres-qfill{height:100%;border-radius:9999px;transition:width .7s cubic-bezier(.4,0,.2,1)}
+.tres-qpct{width:110px;text-align:right;flex-shrink:0;font-size:.8rem;font-weight:800}
+.tres-qpct span{display:block;font-size:.62rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-top:1px}
 </style>
 <div class="tres-page">
     <div class="tres-topbar">
         <button class="tres-back" onclick="TestsManagerPage._goBack(TestsManagerPage._container)"><i class="fa-solid fa-arrow-left"></i> Назад</button>
-        <span style="font-size:1.1rem;font-weight:700;color:var(--text-primary);flex:1"><i class="fa-solid fa-chart-bar"></i> ${test.title}</span>
+        <span style="font-size:1.1rem;font-weight:700;color:var(--text-primary);flex:1"><i class="fa-solid fa-chart-column" style="color:#16a34a"></i> ${Fmt.esc(test.title)}</span>
         ${results.length ? `<button style="display:inline-flex;align-items:center;gap:6px;padding:7px 16px;border-radius:10px;border:none;cursor:pointer;font-size:.82rem;font-weight:700;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;box-shadow:0 4px 14px rgba(22,163,74,.35);transition:all .2s" onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform=''" onclick="TestsManagerPage._exportCSV(TestsManagerPage._lastResults,${JSON.stringify(test.title||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-file-csv"></i> Звіт</button>` : ''}
     </div>
     <div class="tres-stats">
-        ${[['<i class="fa-solid fa-users"></i>',users.length,'Співробітників'],['<i class="fa-solid fa-circle-check"></i>',totalPassed,'Пройшли'],['<i class="fa-solid fa-circle-xmark"></i>',users.length-totalPassed,'Не пройшли'],['<i class="fa-solid fa-chart-bar"></i>',avgPct+'%','Середній бал']].map(([ic,v,l]) => `
-        <div class="tres-stat">
-            <div style="font-size:1.5rem">${ic}</div>
-            <div style="font-size:1.3rem;font-weight:800;color:var(--text-primary)">${v}</div>
-            <div style="font-size:.72rem;color:var(--text-muted)">${l}</div>
+        ${[
+            ['var(--primary)','<i class="fa-solid fa-users"></i>',        assignedN || users.length, 'Призначено'],
+            ['#10b981',       '<i class="fa-solid fa-circle-check"></i>', totalPassed,               'Пройшли'],
+            ['#ef4444',       '<i class="fa-solid fa-circle-xmark"></i>', users.length - totalPassed,'Не пройшли'],
+            ['#f59e0b',       '<i class="fa-solid fa-hourglass-half"></i>', notStarted,              'Не починали'],
+            ['#C9A227',       '<i class="fa-solid fa-chart-line"></i>',   avgPct + '%',              'Середній бал'],
+        ].map(([c, ic, v, l]) => `
+        <div class="tres-stat" style="--tile-c:${c}">
+            <div class="tres-stat-ico">${ic}</div>
+            <div class="tres-stat-val">${v}</div>
+            <div class="tres-stat-lbl">${l}</div>
         </div>`).join('')}
     </div>
-    ${users.length ? `
-    <div class="tres-table-wrap">
+    <div class="tres-tabs">
+        <button class="tres-tab on" onclick="TestsManagerPage._resTab('people',this)">По людях</button>
+        <button class="tres-tab" onclick="TestsManagerPage._resTab('questions',this)">По питаннях</button>
+    </div>
+    <div id="tres-people" class="tres-table-wrap">
+        ${users.length ? `
         <table style="width:100%;border-collapse:collapse;font-size:.85rem">
             <thead style="position:sticky;top:0;z-index:1">
                 <tr style="background:var(--bg-raised)">
@@ -2268,9 +2634,140 @@ ${this._opts.map((o,i) => `
                 </tr>
             </thead>
             <tbody>${rowsHtml}</tbody>
-        </table>
-    </div>` : '<div style="text-align:center;padding:3rem;color:var(--text-muted)">Результатів поки немає</div>'}
+        </table>` : '<div style="text-align:center;padding:3rem;color:var(--text-muted)">Результатів поки немає</div>'}
+    </div>
+    <div id="tres-questions" class="tres-table-wrap" style="display:none">
+        <div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>
+    </div>
 </div>`;
+    },
+
+    _resTab(which, btn) {
+        document.querySelectorAll('.tres-tab').forEach(t => t.classList.remove('on'));
+        btn.classList.add('on');
+        const people = document.getElementById('tres-people');
+        const quests = document.getElementById('tres-questions');
+        if (people) people.style.display = which === 'people' ? '' : 'none';
+        if (quests) quests.style.display = which === 'questions' ? '' : 'none';
+        if (which === 'questions' && !this._qStatsLoaded) this._loadQuestionStats();
+    },
+
+    // Вкладка «По питаннях» — % помилок на кожне питання
+    async _loadQuestionStats() {
+        const el = document.getElementById('tres-questions');
+        if (!el) return;
+        this._qStatsLoaded = true;
+        try {
+            const attemptIds = (this._lastResults || []).map(r => r.id);
+            const rows = await TestsManagerAPI.getQuestionStats(attemptIds);
+            const agg = {};   // question_id -> {total, wrong}
+            rows.forEach(r => {
+                const a = agg[r.question_id] = agg[r.question_id] || { total: 0, wrong: 0 };
+                a.total++;
+                if (!r.is_correct) a.wrong++;
+            });
+            const qText = html => (html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+            const questions = [...(this._resTest?.questions || [])]
+                .sort((a, b) => a.order_index - b.order_index)
+                .map((q, idx) => {
+                    const a = agg[q.id];
+                    return {
+                        num:  idx + 1,
+                        text: qText(q.question_text) || `Питання ${idx + 1}`,
+                        err:  a?.total ? Math.round(a.wrong / a.total * 100) : null,
+                        total: a?.total || 0
+                    };
+                })
+                .sort((a, b) => (b.err ?? -1) - (a.err ?? -1));
+            if (!questions.length || !rows.length) {
+                el.innerHTML = '<div style="text-align:center;padding:3rem;color:var(--text-muted)">Ще немає даних по відповідях</div>';
+                return;
+            }
+            el.innerHTML = questions.map(q => {
+                const c = q.err === null ? 'var(--text-muted)' : q.err >= 50 ? '#ef4444' : q.err >= 30 ? '#f59e0b' : '#10b981';
+                return `
+<div class="tres-qrow${q.err !== null && q.err >= 50 ? ' hard' : ''}">
+    <div class="tres-qnum">${q.num}</div>
+    <div class="tres-qbody">
+        <div class="tres-qtext" title="${Fmt.esc(q.text)}">${Fmt.esc(q.text)}</div>
+        <div class="tres-qbar"><div class="tres-qfill" style="width:${q.err ?? 0}%;background:${c}"></div></div>
+    </div>
+    <div class="tres-qpct" style="color:${c}">${q.err === null ? '—' : q.err + '%'}<span>${q.err === null ? 'без відповідей' : 'помилок · ' + q.total + ' відп.'}</span></div>
+</div>`;
+            }).join('');
+        } catch(e) {
+            el.innerHTML = `<div style="text-align:center;padding:3rem;color:var(--danger)">${Fmt.esc(e.message)}</div>`;
+        }
+    },
+
+    // Історія спроб співробітника + протокол помилок
+    _openUserAttempts(uid) {
+        const entry = this._resUsers?.get(uid);
+        if (!entry) return;
+        const { user, attempts } = entry;
+        const sorted = [...attempts].sort((a, b) => (a.attempt_number || 0) - (b.attempt_number || 0));
+        Modal.open({
+            title: `<i class="fa-solid fa-clock-rotate-left"></i> ${Fmt.esc(user?.full_name || user?.email || 'Співробітник')}`,
+            size: 'lg',
+            body: `
+<div style="display:flex;flex-direction:column;gap:8px">
+    ${sorted.map(a => `
+    <div style="display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:12px;border:1.5px solid var(--border);background:var(--bg-raised)">
+        <div style="width:26px;height:26px;border-radius:50%;background:${a.passed ? 'rgba(16,185,129,.12)' : 'rgba(239,68,68,.1)'};color:${a.passed ? '#10b981' : '#ef4444'};display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:800;flex-shrink:0">${a.attempt_number || '·'}</div>
+        <div style="flex:1;min-width:0">
+            <div style="font-size:.85rem;font-weight:700;color:${a.passed ? '#10b981' : '#ef4444'}">${Math.round(a.percentage || 0)}% ${a.passed ? '· складено' : '· не складено'}</div>
+            <div style="font-size:.72rem;color:var(--text-muted)">${Fmt.datetime(a.completed_at)}${a.time_spent_seconds ? ' · ' + Math.round(a.time_spent_seconds / 60) + ' хв' : ''}</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="TestsManagerPage._openAttemptProtocol('${a.id}','${uid}')"><i class="fa-solid fa-list-check"></i> Протокол</button>
+    </div>`).join('')}
+</div>`,
+            footer: `<button class="btn btn-secondary" onclick="Modal.close()">Закрити</button>`
+        });
+    },
+
+    async _openAttemptProtocol(attemptId, uid) {
+        const body = document.getElementById('modal-body');
+        if (body) body.innerHTML = '<div style="display:flex;justify-content:center;padding:2rem"><div class="spinner"></div></div>';
+        try {
+            const wrongs = await API.internTabель.getWrongAnswers(attemptId);
+            if (!body) return;
+            if (!wrongs.length) {
+                body.innerHTML = '<div style="text-align:center;padding:2rem;color:#10b981;font-weight:600"><i class="fa-solid fa-circle-check"></i> Всі відповіді правильні</div>';
+            } else {
+                body.innerHTML = `
+<div style="display:flex;flex-direction:column;gap:12px">
+    ${wrongs.map(w => {
+        const q = w.question;
+        const selected = new Set(w.selected_answer_ids || []);
+        const answers = [...(q?.answers || [])].sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
+        return `
+    <div style="padding:13px 15px;border-radius:12px;border:1.5px solid rgba(239,68,68,.25);background:rgba(239,68,68,.04)">
+        <div style="font-size:.86rem;font-weight:600;margin-bottom:9px">${q?.question_text || ''}</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+            ${answers.map(ans => {
+                const sel = selected.has(ans.id);
+                const cor = ans.is_correct;
+                const ic  = cor ? '<i class="fa-solid fa-check" style="color:#10b981"></i>'
+                          : sel ? '<i class="fa-solid fa-xmark" style="color:#ef4444"></i>'
+                          : '<i class="fa-regular fa-circle" style="color:var(--text-muted);font-size:.6rem"></i>';
+                return `<div style="display:flex;align-items:flex-start;gap:8px;font-size:.8rem;padding:4px 8px;border-radius:7px;${sel && !cor ? 'background:rgba(239,68,68,.1)' : cor ? 'background:rgba(16,185,129,.08)' : ''}">
+                    <span style="width:14px;text-align:center;flex-shrink:0;margin-top:1px">${ic}</span>
+                    <span style="color:var(--text-${cor || sel ? 'primary' : 'muted'})">${ans.answer_text || ''}</span>
+                    ${sel ? '<span style="margin-left:auto;font-size:.62rem;font-weight:700;color:var(--text-muted);white-space:nowrap">обрано</span>' : ''}
+                </div>`;
+            }).join('')}
+        </div>
+    </div>`;
+    }).join('')}
+</div>`;
+            }
+            const footer = document.getElementById('modal-footer');
+            if (footer) footer.innerHTML = `
+<button class="btn btn-secondary" onclick="TestsManagerPage._openUserAttempts('${uid}')"><i class="fa-solid fa-arrow-left"></i> До спроб</button>
+<button class="btn btn-secondary" onclick="Modal.close()">Закрити</button>`;
+        } catch(e) {
+            Toast.error('Помилка', e.message);
+        }
     },
 
     async _grantAttempt(testId, userId, btn) {

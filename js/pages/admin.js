@@ -6,46 +6,14 @@ const AdminPage = {
     _tab: 'users',
     _group: 'content',
     _groups: [],
-
-    // Короткі описи вкладок — показуються під навігацією
-    _TAB_DESC: {
-        'users':         'Облікові записи співробітників: створення, ролі, блокування та редагування профілів.',
-        'courses':       'Навчальні курси: створення, уроки, матеріали та публікація.',
-        'tests':         'Конструктор тестів, призначення співробітникам і аналіз результатів.',
-        'news':          'Новини порталу: створення, закріплення та публікація.',
-        'access-groups': 'Групи за містом, посадою чи підрозділом — визначають, хто бачить контент.',
-        'trusted-ips':   'Мережі, з яких відкриті всі розділи порталу. Поза ними діють обмеження.',
-        'activity':      'Журнал дій: хто, що і коли робив у системі.',
-        'sessions':      'Історія входів співробітників та їхні пристрої.',
-        'nav-stats':     'Якими сторінками користуються найчастіше і як рухаються порталом.',
-        'task-report':   'Зведення по спробах тестів за обраний період.',
-        'supersearch':   'Єдиний пошук: люди, курси, тести, новини, документи.',
-        'trash':         'Видалені обʼєкти — можна переглянути та відновити.',
-        'feedback':      'Звернення співробітників: помилки, питання та пропозиції. Відповідайте прямо тут.',
-        'ai-assistant':  'Налаштування AI-помічника порталу.',
-        'pleso':         'Генератор цінників Pleso.',
-    },
-
-    // Розширена довідка (список порад) для найпопулярніших вкладок
-    _TAB_HELP: {
-        'users':         ['Кнопка «Створити користувача» — реєстрація нового співробітника з логіном і паролем.', 'Роль визначає доступ до розділів порталу — змінюйте обережно.', 'Заблокований користувач не втрачає дані, лише не може увійти.'],
-        'courses':       ['Курс складається з уроків і матеріалів — додавайте їх після створення курсу.', 'Непубліковані курси не бачать звичайні користувачі.', 'Групи (потоки) курсу дозволяють вести кілька наборів студентів окремо.'],
-        'tests':         ['«Новий тест» одразу відкриває конструктор питань.', 'Тест призначається вручну або автоматично — за посадою в налаштуваннях.', 'У результатах доступна аналітика по кожному питанню.'],
-        'news':          ['Закріплена новина показується вище за стрічкою.', 'Обкладинка новини впливає на вигляд картки на головній.'],
-        'access-groups': ['Група доступу фільтрує контент за містом, посадою чи підрозділом.', 'Публічна група видима всім — приватна лише вказаним критеріям.'],
-        'trusted-ips':   ['Поза довіреною мережею частина розділів блокується автоматично.', 'Додайте IP-адресу офісу, щоб зняти обмеження для співробітників звідти.'],
-        'sessions':      ['Показує історію входів і виходів — не поточну активність.', 'Блок «Онлайн зараз» вище показує, хто активний прямо зараз.'],
-        'nav-stats':     ['Клік по сторінці в топі показує, звідки приходять і куди йдуть далі.', 'Матриця внизу — повний розподіл переходів між сторінками.'],
-        'feedback':      ['Відповідь адміністратора одразу потрапляє в чат користувача.', 'Видалені користувачем звернення залишаються видимими адміну.'],
-        'trash':         ['Видалені об\'єкти зберігаються обмежений час, потім видаляються остаточно.'],
-        'supersearch':   ['Шукає одночасно серед людей, курсів, тестів, новин і документів.'],
-    },
+    _onOverview: false,
 
     _buildGroups(canManageUsers) {
         return [
             {
                 id: 'content', label: 'Контент', icon: 'fa-layer-group', desc: 'Люди та навчальні матеріали', color: '#3b82f6', tabs: [
                     { id: 'users',        label: 'Користувачі',      icon: 'fa-users',               show: canManageUsers },
+                    { id: 'directories',  label: 'Довідник',         icon: 'fa-address-book',        show: canManageUsers },
                     { id: 'courses',      label: 'Курси',             icon: 'fa-book-open',           show: true },
                     { id: 'tests',        label: 'Тести',             icon: 'fa-file-pen',            show: true },
                     { id: 'news',         label: 'Новини',            icon: 'fa-newspaper',           show: true },
@@ -95,219 +63,124 @@ const AdminPage = {
         this._group = initGroup;
 
         const groupsHtml = this._groups.map(g => `
-            <button class="adm-grp-btn${g.id === initGroup ? ' active' : ''}" style="--grp-c:${g.color || 'var(--primary)'}" data-group="${g.id}" onclick="AdminPage.switchGroup('${g.id}')">
-                <div class="adm-grp-top">
-                    <span class="adm-grp-ico"><i class="fa-solid ${g.icon}"></i></span>
-                    <span class="adm-grp-txt">
-                        <span class="adm-grp-lbl">${g.label}</span>
-                        <span class="adm-grp-desc">${g.desc || ''}</span>
-                    </span>
-                    <i class="fa-solid fa-chevron-right adm-grp-chev"></i>
-                </div>
-                <div class="adm-grp-stat" data-grp="${g.id}"><span class="adm-grp-stat-skel"></span></div>
-            </button>`).join('');
+            <button type="button" class="adm-grp-btn${g.id === initGroup ? ' active' : ''}" style="--grp-c:${g.color || 'var(--primary)'}" data-group="${g.id}" onclick="AdminPage.switchGroup('${g.id}')">
+                <span class="adm-grp-ico"><i class="fa-solid ${g.icon}"></i></span>
+                <span class="adm-grp-txt">
+                    <span class="adm-grp-lbl">${g.label}</span>
+                    <span class="adm-grp-desc">${g.desc || ''}</span>
+                </span>
+                <i class="fa-solid fa-chevron-right adm-grp-chev"></i>
+            </button>`).join('') + `
+            <button type="button" class="adm-grp-btn adm-ov-tile" style="--grp-c:#06b6d4" onclick="AdminPage._openSystemOverview(this)">
+                <span class="adm-grp-ico"><i class="fa-solid fa-gauge-high"></i></span>
+                <span class="adm-grp-txt">
+                    <span class="adm-grp-lbl">Огляд системи</span>
+                    <span class="adm-grp-desc">Користувачі, курси, тести, новини</span>
+                </span>
+                <i class="fa-solid fa-chevron-right adm-grp-chev"></i>
+            </button>`;
 
         const tabsHtml = this._groups.map(g => g.tabs.map(t => `
-            <button class="tab adm-tab${t.id === initTab ? ' active' : ''}" data-tab="${t.id}" data-group="${g.id}"
-                    style="${g.id !== initGroup ? 'display:none' : ''}"
+            <button type="button" class="tab adm-tab-vert${t.id === initTab ? ' active' : ''}"
+                    data-tab="${t.id}" data-group="${g.id}"
+                    style="--tab-c:${g.color || 'var(--primary)'};${g.id !== initGroup ? 'display:none' : ''}"
                     onclick="AdminPage.switchTab('${t.id}', this)">
-                <i class="fa-solid ${t.icon}"></i> ${t.label}
+                <span class="adm-tab-ico"><i class="fa-solid ${t.icon}"></i></span>
+                <span class="adm-tab-lbl">${t.label}</span>
+                <i class="fa-solid fa-chevron-right adm-tab-chev"></i>
             </button>`).join('')).join('');
 
+        const activeGroupObj = this._groups.find(g => g.id === initGroup);
+
         container.innerHTML = `
-            <div class="adm-hero">
-                <div class="adm-hero-ico"><i class="fa-solid ${AppState.isSmm() ? 'fa-layer-group' : 'fa-shield-halved'}"></i></div>
-                <div class="adm-hero-txt">
-                    <h1>${AppState.isSmm() ? 'Керування контентом' : 'Адміністрування порталом'}</h1>
-                    <p>${AppState.isSmm()
-                        ? 'Курси, тести та новини порталу — все керування контентом в одному місці.'
-                        : 'Керуйте користувачами, контентом, доступом і системними налаштуваннями в одному місці.'}</p>
+            <div class="adm-groups" id="adm-groups">${groupsHtml}</div>
+            <div class="adm-body-grid">
+                <nav class="tabs adm-tabs-vert" id="admin-tabs" style="--tab-c:${activeGroupObj?.color || 'var(--primary)'}">
+                    <div class="adm-tabs-hd" id="adm-tabs-hd">
+                        <i class="fa-solid ${activeGroupObj?.icon || 'fa-layer-group'}"></i>
+                        <span id="adm-tabs-hd-lbl">${activeGroupObj?.label || ''}</span>
+                    </div>
+                    ${tabsHtml}
+                </nav>
+                <div class="adm-body-main">
+                    <div id="admin-content"></div>
                 </div>
             </div>
-            <div class="adm-groups" id="adm-groups">${groupsHtml}</div>
-            <div class="tabs adm-tabs" id="admin-tabs">${tabsHtml}</div>
-            <div class="adm-desc" id="adm-desc" style="display:none">
-                <div class="adm-desc-ico"><i class="fa-solid fa-circle-info"></i></div>
-                <span id="adm-desc-text"></span>
-                <button class="adm-desc-help" onclick="AdminPage._openTabHelp()"><i class="fa-regular fa-circle-question"></i> Довідка <i class="fa-solid fa-chevron-right"></i></button>
-            </div>
-            <div class="adm-quickpanel" id="adm-quickpanel" style="display:none"></div>
-            <div id="admin-content"></div>
             <style>
-.adm-hero {
-    display:flex;align-items:center;gap:16px;border-radius:20px;padding:22px 26px;margin-bottom:18px;
-    background:linear-gradient(135deg,#312e81 0%,#4338ca 55%,#6d28d9 100%);position:relative;overflow:hidden;
-}
-.adm-hero::before {
-    content:'';position:absolute;inset:0;pointer-events:none;
-    background:radial-gradient(ellipse 55% 90% at 85% 10%,rgba(255,255,255,.14),transparent 60%);
-}
-.adm-hero-ico {
-    width:50px;height:50px;border-radius:15px;flex-shrink:0;position:relative;
-    background:rgba(255,255,255,.13);border:1.5px solid rgba(255,255,255,.22);
-    display:flex;align-items:center;justify-content:center;font-size:1.35rem;color:#fff;
-}
-.adm-hero-txt { position:relative;min-width:0; }
-.adm-hero-txt h1 { margin:0;font-size:1.4rem;font-weight:800;color:#fff;letter-spacing:-.02em; }
-.adm-hero-txt p  { margin:3px 0 0;font-size:.82rem;color:rgba(255,255,255,.65); }
-.adm-groups { display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:14px; }
+.adm-groups { display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-bottom:12px; }
 .adm-grp-btn {
-    display:flex;flex-direction:column;gap:10px;padding:14px 16px;border-radius:16px;
+    display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:13px;
     border:1.5px solid var(--border);background:var(--bg-surface);
     color:var(--text-secondary);cursor:pointer;text-align:left;
     transition:all .18s cubic-bezier(.4,0,.2,1);font-family:inherit;
 }
-.adm-grp-btn:hover:not(.active) { border-color:color-mix(in srgb,var(--grp-c) 45%,var(--border)); box-shadow:0 4px 14px rgba(0,0,0,.08); }
-.adm-grp-top { display:flex;align-items:center;gap:10px; }
+.adm-grp-btn:hover:not(.active) { border-color:color-mix(in srgb,var(--grp-c) 45%,var(--border)); box-shadow:0 3px 10px rgba(0,0,0,.07); }
 .adm-grp-ico {
-    width:38px;height:38px;border-radius:11px;flex-shrink:0;
+    width:28px;height:28px;border-radius:9px;flex-shrink:0;
     background:color-mix(in srgb,var(--grp-c) 15%,transparent);color:var(--grp-c);
-    display:flex;align-items:center;justify-content:center;font-size:.95rem;
+    display:flex;align-items:center;justify-content:center;font-size:.78rem;
     transition:all .18s;
 }
-.adm-grp-btn.active { border-color:var(--grp-c);background:color-mix(in srgb,var(--grp-c) 6%,var(--bg-surface));box-shadow:0 4px 14px color-mix(in srgb,var(--grp-c) 22%,transparent); }
+.adm-grp-btn.active { border-color:var(--grp-c);background:color-mix(in srgb,var(--grp-c) 6%,var(--bg-surface));box-shadow:0 3px 10px color-mix(in srgb,var(--grp-c) 20%,transparent); }
 .adm-grp-txt { display:flex;flex-direction:column;min-width:0;flex:1; }
-.adm-grp-lbl { font-size:.9rem;font-weight:700;color:var(--text-primary);transition:color .18s;line-height:1.25; }
-.adm-grp-desc { font-size:.72rem;color:var(--text-muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
-.adm-grp-chev { color:var(--text-muted);font-size:.75rem;opacity:.6;flex-shrink:0;transition:transform .18s; }
+.adm-grp-lbl { font-size:.82rem;font-weight:700;color:var(--text-primary);transition:color .18s;line-height:1.2; }
+.adm-grp-desc { font-size:.66rem;color:var(--text-muted);margin-top:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.adm-grp-chev { color:var(--text-muted);font-size:.68rem;opacity:.6;flex-shrink:0;transition:transform .18s; }
 .adm-grp-btn.active .adm-grp-chev { color:var(--grp-c);opacity:1; }
-.adm-grp-stat { font-size:.74rem;color:var(--text-secondary);padding-top:9px;border-top:1px solid var(--border); }
-.adm-grp-stat b { color:var(--text-primary);font-weight:700; }
-.adm-grp-stat-skel { display:inline-block;width:70%;height:11px;border-radius:4px;background:var(--bg-hover);animation:adm-skel-pulse 1.3s ease-in-out infinite; }
-@keyframes adm-skel-pulse { 0%,100%{opacity:.5} 50%{opacity:1} }
 @media (max-width:768px) { .adm-grp-desc { display:none; } }
-.adm-tabs { margin-bottom:0; }
-.adm-tab { border-radius:10px; }
-.adm-desc {
-    display:flex;align-items:center;gap:11px;margin:10px 0 16px;padding:10px 12px 10px 10px;border-radius:12px;
-    background:color-mix(in srgb,var(--primary) 7%,var(--bg-surface));
-    border:1px solid color-mix(in srgb,var(--primary) 20%,var(--border));
-    font-size:.8rem;color:var(--text-secondary);line-height:1.45;animation:adm-desc-in .25s cubic-bezier(.4,0,.2,1);
+
+.adm-body-grid { display:grid;grid-template-columns:230px 1fr;gap:18px;align-items:start; }
+.adm-body-grid.adm-no-sidebar { grid-template-columns:1fr; }
+@media (max-width:860px) { .adm-body-grid { grid-template-columns:1fr; } }
+
+.adm-tabs-vert {
+    display:flex;flex-direction:column;gap:3px;padding:10px;border-radius:16px;
+    background:var(--bg-surface);border:1px solid var(--border);
+    position:sticky;top:12px;margin-bottom:0;border-bottom:none;overflow-x:visible;
 }
-.adm-desc-ico { width:28px;height:28px;border-radius:9px;flex-shrink:0;background:color-mix(in srgb,var(--primary) 16%,transparent);color:var(--primary);display:flex;align-items:center;justify-content:center;font-size:.8rem; }
-.adm-desc span#adm-desc-text { flex:1; }
-.adm-desc-help {
-    display:inline-flex;align-items:center;gap:6px;flex-shrink:0;padding:6px 12px;border-radius:9px;
-    border:1.5px solid color-mix(in srgb,var(--primary) 30%,var(--border));background:var(--bg-surface);
-    color:var(--primary);font-size:.76rem;font-weight:700;cursor:pointer;transition:all .15s;font-family:inherit;white-space:nowrap;
+.adm-tabs-hd {
+    display:flex;align-items:center;gap:8px;padding:6px 10px 10px;margin-bottom:4px;
+    border-bottom:1px solid var(--border);color:var(--tab-c,var(--primary));
+    font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.07em;
 }
-.adm-desc-help:hover { background:var(--primary);color:#fff;border-color:var(--primary); }
-.adm-desc-help i:last-child { font-size:.62rem; }
+.adm-tabs-hd i { font-size:.78rem; }
+.adm-tab-vert {
+    display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:11px;
+    background:none;border:none;border-bottom:none;
+    color:var(--text-secondary);font-size:.85rem;font-weight:600;cursor:pointer;
+    text-align:left;transition:all .16s cubic-bezier(.4,0,.2,1);font-family:inherit;width:100%;
+}
+.adm-tab-ico {
+    width:26px;height:26px;border-radius:8px;flex-shrink:0;
+    background:var(--bg-raised);color:var(--text-muted);
+    display:flex;align-items:center;justify-content:center;font-size:.75rem;
+    transition:all .16s;
+}
+.adm-tab-lbl { flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.adm-tab-chev { font-size:.6rem;color:var(--text-muted);opacity:0;transform:translateX(-3px);transition:all .16s; }
+.adm-tab-vert:hover:not(.active) { background:var(--bg-hover);color:var(--text-primary); }
+.adm-tab-vert:hover:not(.active) .adm-tab-ico { background:var(--bg-surface); }
+.adm-tab-vert.active {
+    background:color-mix(in srgb,var(--tab-c) 12%,var(--bg-surface));
+    color:var(--tab-c);box-shadow:inset 3px 0 0 var(--tab-c);
+}
+.adm-tab-vert.active .adm-tab-ico { background:var(--tab-c);color:#fff; }
+.adm-tab-vert.active .adm-tab-chev { opacity:1;transform:none; }
+@media (max-width:860px) {
+    .adm-tabs-vert { position:static;flex-direction:row;overflow-x:auto;gap:6px; }
+    .adm-tabs-hd { display:none; }
+    .adm-tab-vert { width:auto;white-space:nowrap;flex-shrink:0; }
+    .adm-tab-chev { display:none; }
+}
 @keyframes adm-desc-in { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:none} }
-@media (prefers-reduced-motion:reduce) { .adm-desc{animation:none} }
-.adm-quickpanel { margin-bottom:18px; }
-.adm-qp-grid { display:grid;grid-template-columns:1fr 1fr;gap:16px; }
-@media (max-width:900px) { .adm-qp-grid { grid-template-columns:1fr; } }
-.adm-qp-col { border:1px solid var(--border);border-radius:16px;background:var(--bg-surface);padding:16px 18px; }
-.adm-qp-title { font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:12px; }
-.adm-qp-actions { display:grid;grid-template-columns:1fr 1fr;gap:8px; }
-.adm-qp-act {
-    display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:11px;
-    border:1.5px solid var(--border);background:var(--bg-raised);color:var(--text-primary);
-    font-size:.8rem;font-weight:600;cursor:pointer;transition:all .16s;text-align:left;font-family:inherit;
-}
-.adm-qp-act:hover { border-color:var(--primary);background:color-mix(in srgb,var(--primary) 6%,var(--bg-raised));transform:translateY(-1px); }
-.adm-qp-act i { font-size:.9rem;flex-shrink:0; }
-.adm-qp-kpis { display:grid;grid-template-columns:1fr 1fr;gap:10px; }
-.adm-qp-kpi { padding:11px 13px;border-radius:12px;background:var(--bg-raised);border:1px solid var(--border); }
-.adm-qp-kpi-head { display:flex;align-items:center;justify-content:space-between;font-size:.72rem;color:var(--text-muted);margin-bottom:5px; }
-.adm-qp-kpi-val { font-size:1.35rem;font-weight:800;color:var(--text-primary);letter-spacing:-.02em; }
-.adm-ov-trend { display:block;font-size:.68rem;font-weight:600;margin-top:3px; }
-.adm-ov-trend.up { color:#10b981; }
-.adm-ov-trend.flat { color:var(--text-muted); }
+@media (prefers-reduced-motion:reduce) { .nav-detail{animation:none} }
             </style>`;
-        this._updateTabDesc(initTab);
-        this._loadGroupStats();
 
         this._editCourseId = params.edit || null;
         await this._loadTab();
     },
 
-    _updateTabDesc(tab) {
-        const wrap = document.getElementById('adm-desc');
-        const txt  = document.getElementById('adm-desc-text');
-        if (!wrap || !txt) return;
-        const desc = this._TAB_DESC[tab];
-        if (desc) {
-            txt.textContent = desc;
-            wrap.style.display = '';
-            // перезапуск анімації появи
-            wrap.style.animation = 'none';
-            void wrap.offsetWidth;
-            wrap.style.animation = '';
-        } else {
-            wrap.style.display = 'none';
-        }
-    },
-
-    _openTabHelp() {
-        const tips = this._TAB_HELP[this._tab];
-        const tabLabel = this._groups?.flatMap(g => g.tabs).find(t => t.id === this._tab)?.label || 'Розділ';
-        Modal.open({
-            title: `<i class="fa-regular fa-circle-question" style="color:var(--primary)"></i> Довідка — ${Fmt.esc(tabLabel)}`,
-            body: tips?.length ? `
-<ul style="margin:0;padding-left:1.1rem;display:flex;flex-direction:column;gap:.6rem;font-size:.87rem;line-height:1.55;color:var(--text-secondary)">
-    ${tips.map(t => `<li>${Fmt.esc(t)}</li>`).join('')}
-</ul>` : `<p style="font-size:.87rem;color:var(--text-secondary);line-height:1.55">${Fmt.esc(this._TAB_DESC[this._tab] || 'Довідка для цього розділу поки не додана.')}</p>`,
-            footer: `<button class="btn btn-primary" onclick="Modal.close()">Зрозуміло</button>`
-        });
-    },
-
-    // Реальні лічильники на картках груп (категорії/матеріали, групи/обмеження, дії сьогодні, звернення)
-    async _loadGroupStats() {
-        const setStat = (grp, html) => {
-            const el = document.querySelector(`.adm-grp-stat[data-grp="${grp}"]`);
-            if (el) el.innerHTML = html;
-        };
-        const fail = grp => setStat(grp, '<span style="opacity:.6">Немає даних</span>');
-
-        (async () => {
-            try {
-                const [{ count: coursesN }, { count: testsN }, { count: newsN }, { count: resN }, { data: cats }] = await Promise.all([
-                    supabase.from('courses').select('id', { count: 'exact', head: true }),
-                    supabase.from('tests').select('id', { count: 'exact', head: true }),
-                    supabase.from('news').select('id', { count: 'exact', head: true }),
-                    supabase.from('resources').select('id', { count: 'exact', head: true }).eq('is_deleted', false),
-                    supabase.from('courses').select('category').not('category', 'is', null).neq('category', ''),
-                ]);
-                const catN  = new Set((cats || []).map(c => c.category)).size;
-                const total = (coursesN || 0) + (testsN || 0) + (newsN || 0) + (resN || 0);
-                setStat('content', `<b>${catN}</b> категорій · <b>${Fmt.num(total)}</b> матеріалів`);
-            } catch(e) { fail('content'); }
-        })();
-
-        (async () => {
-            try {
-                const [{ count: groupsN }, { count: rulesN }] = await Promise.all([
-                    supabase.from('access_groups').select('id', { count: 'exact', head: true }),
-                    supabase.from('label_restrictions').select('id', { count: 'exact', head: true }),
-                ]);
-                setStat('access', `<b>${groupsN || 0}</b> груп доступу · <b>${rulesN || 0}</b> обмежень`);
-            } catch(e) { fail('access'); }
-        })();
-
-        (async () => {
-            try {
-                const _pad = n => String(n).padStart(2, '0');
-                const now  = new Date();
-                const todayStart = `${now.getFullYear()}-${_pad(now.getMonth()+1)}-${_pad(now.getDate())}T00:00:00`;
-                const { count } = await supabase.from('activity_log').select('id', { count: 'exact', head: true }).gte('created_at', todayStart);
-                setStat('monitor', `<b>${Fmt.num(count || 0)}</b> дій сьогодні`);
-            } catch(e) { fail('monitor'); }
-        })();
-
-        (async () => {
-            try {
-                const { count } = await supabase.from('feedback_reports').select('id', { count: 'exact', head: true })
-                    .in('status', ['new', 'in_progress']).eq('is_deleted', false);
-                setStat('tools', `<b>${count || 0}</b> звернень у роботі`);
-            } catch(e) { fail('tools'); }
-        })();
-    },
-
-    // ── Швидкі дії + Огляд системи (лише для вкладок Контент-групи) ─────
-    _ovStats: null, _ovStatsAt: 0,
-
+    // ── Огляд системи — окрема сторінка (5-та картка в ряду adm-groups) ─────
     async _loadOverviewStats() {
         const weekAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
         const counts = async (table) => {
@@ -323,77 +196,76 @@ const AdminPage = {
         return { users, courses, tests, news };
     },
 
-    async _renderQuickPanel() {
-        const qp = document.getElementById('adm-quickpanel');
-        if (!qp) return;
-        if (!this._ovStats || Date.now() - this._ovStatsAt > 60000) {
-            qp.innerHTML = `<div style="display:flex;justify-content:center;padding:2rem"><div class="spinner"></div></div>`;
-            try {
-                this._ovStats = await this._loadOverviewStats();
-                this._ovStatsAt = Date.now();
-            } catch(e) {
-                qp.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>${Fmt.esc(e.message)}</h3></div>`;
-                return;
-            }
-        }
-        if (!document.getElementById('adm-quickpanel')) return; // покинули вкладку поки чекали
-        const s = this._ovStats;
-        const trend = n => n > 0
-            ? `<span class="adm-ov-trend up"><i class="fa-solid fa-arrow-up"></i> ${n} за тиждень</span>`
-            : `<span class="adm-ov-trend flat">без змін за тиждень</span>`;
-        qp.innerHTML = `
-        <div class="adm-qp-grid">
-            <div class="adm-qp-col">
-                <div class="adm-qp-title"><i class="fa-solid fa-bolt" style="color:#f59e0b"></i> Швидкі дії</div>
-                <div class="adm-qp-actions">
-                    <button class="adm-qp-act" onclick="AdminPage._quickAction('users','openCreateUser')"><i class="fa-solid fa-user-plus" style="color:#3b82f6"></i> Додати користувача</button>
-                    <button class="adm-qp-act" onclick="AdminPage._quickAction('access-groups','openAccessGroupForm')"><i class="fa-solid fa-shield-halved" style="color:#8b5cf6"></i> Створити групу доступу</button>
-                    <button class="adm-qp-act" onclick="AdminPage._quickAction('courses','openCourseForm')"><i class="fa-solid fa-book-open" style="color:#10b981"></i> Створити курс</button>
-                    <button class="adm-qp-act" onclick="AdminPage._quickAction('tests','openTestModal')"><i class="fa-solid fa-file-pen" style="color:#f59e0b"></i> Створити тест</button>
-                    <button class="adm-qp-act" onclick="AdminPage._quickAction('news','openNewsModal')"><i class="fa-solid fa-newspaper" style="color:#ec4899"></i> Опублікувати новину</button>
-                </div>
-            </div>
-            <div class="adm-qp-col">
-                <div class="adm-qp-title"><i class="fa-solid fa-gauge-high" style="color:#3b82f6"></i> Огляд системи</div>
-                <div class="adm-qp-kpis">
-                    <div class="adm-qp-kpi"><div class="adm-qp-kpi-head"><span>Користувачів</span><i class="fa-solid fa-users" style="color:#3b82f6"></i></div><div class="adm-qp-kpi-val">${Fmt.num(s.users.total)}</div>${trend(s.users.week)}</div>
-                    <div class="adm-qp-kpi"><div class="adm-qp-kpi-head"><span>Курсів</span><i class="fa-solid fa-book" style="color:#8b5cf6"></i></div><div class="adm-qp-kpi-val">${Fmt.num(s.courses.total)}</div>${trend(s.courses.week)}</div>
-                    <div class="adm-qp-kpi"><div class="adm-qp-kpi-head"><span>Тестів</span><i class="fa-solid fa-file-pen" style="color:#f59e0b"></i></div><div class="adm-qp-kpi-val">${Fmt.num(s.tests.total)}</div>${trend(s.tests.week)}</div>
-                    <div class="adm-qp-kpi"><div class="adm-qp-kpi-head"><span>Новин</span><i class="fa-solid fa-newspaper" style="color:#ec4899"></i></div><div class="adm-qp-kpi-val">${Fmt.num(s.news.total)}</div>${trend(s.news.week)}</div>
-                </div>
-            </div>
-        </div>`;
-    },
-
-    // Перемикає на потрібну вкладку (якщо ще не на ній) і виконує реальну дію створення
-    async _quickAction(tab, actionName) {
-        if (this._tab !== tab) {
-            const tabEl = document.querySelector(`#admin-tabs .tab[data-tab="${tab}"]`);
-            if (!tabEl) { Toast.error('Немає доступу', 'Розділ недоступний для вашої ролі'); return; }
-            await this.switchTab(tab, tabEl);
-        }
+    async _openSystemOverview(btn) {
+        this._onOverview = true;
+        document.querySelectorAll('.adm-grp-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('admin-tabs')?.style.setProperty('display', 'none');
+        document.querySelector('.adm-body-grid')?.classList.add('adm-no-sidebar');
+        const el = document.getElementById('admin-content');
+        if (!el) return;
+        el.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
         try {
-            switch (actionName) {
-                case 'openCreateUser':       await this.openCreateUser();                 break;
-                case 'openAccessGroupForm': await AccessGroupsPage.openForm();            break;
-                case 'openCourseForm':      this._openCourseForm();                       break;
-                case 'openTestModal':       TestsManagerPage.openCreateModal();           break;
-                case 'openNewsModal':       NewsPage.openCreate();                        break;
-            }
-        } catch(e) { Toast.error('Помилка', e.message); }
+            const s = await this._loadOverviewStats();
+            const trend = n => n > 0
+                ? `<b style="color:#10b981">+${n}</b> за тиждень`
+                : `без змін за тиждень`;
+            const tile = (icon, color, label, val, week) => `
+                <div class="adm-grp-btn" style="--grp-c:${color};cursor:default">
+                    <span class="adm-grp-ico"><i class="fa-solid ${icon}"></i></span>
+                    <span class="adm-grp-txt">
+                        <span class="adm-grp-lbl">${Fmt.num(val)}</span>
+                        <span class="adm-grp-desc" style="white-space:normal">${label} · ${trend(week)}</span>
+                    </span>
+                </div>`;
+            el.innerHTML = `
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+                    <h3 style="margin:0"><i class="fa-solid fa-gauge-high" style="color:#06b6d4"></i> Огляд системи</h3>
+                </div>
+                <div class="adm-groups">
+                    ${tile('fa-users',     '#3b82f6', 'Користувачів', s.users.total,   s.users.week)}
+                    ${tile('fa-book',      '#8b5cf6', 'Курсів',       s.courses.total, s.courses.week)}
+                    ${tile('fa-file-pen',  '#f59e0b', 'Тестів',       s.tests.total,   s.tests.week)}
+                    ${tile('fa-newspaper', '#ec4899', 'Новин',        s.news.total,    s.news.week)}
+                </div>`;
+        } catch(e) {
+            el.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>${Fmt.esc(e.message)}</h3></div>`;
+        }
     },
 
     switchGroup(groupId) {
-        if (this._group === groupId) return;
+        const cameFromOverview = this._onOverview;
+        this._onOverview = false;
+        if (cameFromOverview) {
+            document.getElementById('admin-tabs')?.style.removeProperty('display');
+            document.querySelector('.adm-body-grid')?.classList.remove('adm-no-sidebar');
+        }
+        if (this._group === groupId && !cameFromOverview) return;
         this._group = groupId;
         document.querySelectorAll('.adm-grp-btn').forEach(b => b.classList.toggle('active', b.dataset.group === groupId));
         document.querySelectorAll('#admin-tabs .tab').forEach(t => { t.style.display = t.dataset.group === groupId ? '' : 'none'; });
+        this._updateTabsSidebarHeader(groupId);
         // Auto-select first tab of new group if current is in another group
         const currentInGroup = document.querySelector(`#admin-tabs .tab[data-tab="${this._tab}"][data-group="${groupId}"]`);
         if (!currentInGroup) {
             const firstTab = document.querySelector(`#admin-tabs .tab[data-group="${groupId}"]`);
             if (firstTab) firstTab.click();
+        } else if (cameFromOverview) {
+            // Вкладка технічно та сама, але #admin-content зараз показує Огляд системи — перерендерити
+            currentInGroup.classList.add('active');
+            this._loadTab();
         }
+    },
+
+    _updateTabsSidebarHeader(groupId) {
+        const g = this._groups?.find(x => x.id === groupId);
+        if (!g) return;
+        const nav = document.getElementById('admin-tabs');
+        if (nav) nav.style.setProperty('--tab-c', g.color || 'var(--primary)');
+        const hd = document.getElementById('adm-tabs-hd');
+        if (hd) { const ico = hd.querySelector('i'); if (ico) ico.className = `fa-solid ${g.icon}`; }
+        const lbl = document.getElementById('adm-tabs-hd-lbl');
+        if (lbl) lbl.textContent = g.label;
     },
 
     async switchTab(tab, el) {
@@ -406,18 +278,25 @@ const AdminPage = {
             return;
         }
         this._tab = tab;
+        this._onOverview = false;
+        document.getElementById('admin-tabs')?.style.removeProperty('display');
+        document.querySelector('.adm-body-grid')?.classList.remove('adm-no-sidebar');
         document.querySelectorAll('#admin-tabs .tab').forEach(t => t.classList.remove('active'));
         if (el) el.classList.add('active');
-        this._updateTabDesc(tab);
-        // Sync group selector if tab belongs to different group
+        // Sync group selector if tab belongs to different group; завжди знімаємо
+        // активність з картки "Огляд системи" навіть якщо група не змінилась
         const tabGroup = this._groups?.find(g => g.tabs.some(t => t.id === tab))?.id;
-        if (tabGroup && tabGroup !== this._group) {
+        if (tabGroup) {
+            const groupChanged = tabGroup !== this._group;
             this._group = tabGroup;
             document.querySelectorAll('.adm-grp-btn').forEach(b => b.classList.toggle('active', b.dataset.group === tabGroup));
-            document.querySelectorAll('#admin-tabs .tab').forEach(t => { t.style.display = t.dataset.group === tabGroup ? '' : 'none'; });
+            if (groupChanged) {
+                document.querySelectorAll('#admin-tabs .tab').forEach(t => { t.style.display = t.dataset.group === tabGroup ? '' : 'none'; });
+                this._updateTabsSidebarHeader(tabGroup);
+            }
         }
         const tabLabels = {
-            'users': 'Користувачі', 'courses': 'Курси', 'tests': 'Тести', 'news': 'Новини',
+            'users': 'Користувачі', 'directories': 'Довідник', 'courses': 'Курси', 'tests': 'Тести', 'news': 'Новини',
             'access-groups': 'Групи доступу', 'trash': 'Кошик', 'supersearch': 'Супер пошук',
             'activity': 'Активність', 'sessions': 'Сесії', 'nav-stats': 'Навігація',
             'task-report': 'Завдання', 'feedback': "Зворотний зв'язок",
@@ -430,26 +309,15 @@ const AdminPage = {
         await this._loadTab();
     },
 
-    _QUICK_PANEL_TABS: ['users', 'courses', 'tests', 'news'],
-
     async _loadTab() {
         const el = document.getElementById('admin-content');
         if (!el) return;
         el.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
 
-        const qp = document.getElementById('adm-quickpanel');
-        if (qp) {
-            if (this._QUICK_PANEL_TABS.includes(this._tab)) {
-                qp.style.display = '';
-                this._renderQuickPanel();
-            } else {
-                qp.style.display = 'none';
-            }
-        }
-
         try {
             switch (this._tab) {
-                case 'users':       await this._renderUsers(el);       break;
+                case 'users':       await this._renderUsersList(el);   break;
+                case 'directories': await this._renderDirectories(el); break;
                 case 'courses':     await this._renderCourses(el);     break;
                 case 'tests':       await this._renderTests(el);       break;
                 case 'news':        await this._renderNews(el);        break;
@@ -532,62 +400,6 @@ const AdminPage = {
         } catch(_) {}
     },
 
-    _renderUsers(el) {
-        el.innerHTML = `
-            <style>
-                .us-nav-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:1rem; padding:.25rem 0 }
-                .us-nav-btn {
-                    display:flex; align-items:center; gap:1rem;
-                    padding:1.1rem 1.25rem;
-                    background:var(--bg-surface);
-                    border:1.5px solid var(--border);
-                    border-radius:var(--radius-lg);
-                    cursor:pointer; text-decoration:none;
-                    transition:border-color .18s, box-shadow .18s, transform .15s;
-                    position:relative; overflow:hidden;
-                }
-                .us-nav-btn::before {
-                    content:''; position:absolute; inset:0;
-                    background:linear-gradient(135deg,rgba(var(--primary-rgb),.06),transparent 60%);
-                    opacity:0; transition:opacity .18s;
-                }
-                .us-nav-btn:hover { border-color:var(--primary); box-shadow:0 4px 18px rgba(var(--primary-rgb),.13); transform:translateY(-1px); }
-                .us-nav-btn:hover::before { opacity:1; }
-                .us-nav-icon {
-                    width:46px; height:46px; border-radius:12px; flex-shrink:0;
-                    display:flex; align-items:center; justify-content:center;
-                    font-size:1.35rem;
-                }
-                .us-nav-body { min-width:0 }
-                .us-nav-title { font-weight:700; font-size:.92rem; color:var(--text-primary); margin-bottom:.18rem }
-                .us-nav-desc  { font-size:.76rem; color:var(--text-muted); line-height:1.35 }
-                .us-nav-arrow { margin-left:auto; color:var(--text-muted); font-size:.75rem; flex-shrink:0; transition:transform .18s }
-                .us-nav-btn:hover .us-nav-arrow { transform:translateX(3px); color:var(--primary) }
-            </style>
-            <div class="us-nav-grid">
-                <a class="us-nav-btn" href="#" onclick="event.preventDefault();AdminPage._renderUsersList(document.getElementById('admin-content'))">
-                    <div class="us-nav-icon" style="background:linear-gradient(135deg,rgba(99,102,241,.15),rgba(139,92,246,.1))">
-                        <i class="fa-solid fa-users" style="color:#818cf8"></i>
-                    </div>
-                    <div class="us-nav-body">
-                        <div class="us-nav-title">Всі користувачі</div>
-                        <div class="us-nav-desc">Перегляд, додавання,<br>редагування та імпорт</div>
-                    </div>
-                    <i class="fa-solid fa-chevron-right us-nav-arrow"></i>
-                </a>
-                <a class="us-nav-btn" href="#" onclick="event.preventDefault();AdminPage._renderDirectories(document.getElementById('admin-content'))">
-                    <div class="us-nav-icon" style="background:linear-gradient(135deg,rgba(245,158,11,.15),rgba(251,191,36,.1))">
-                        <i class="fa-solid fa-book-open" style="color:#f59e0b"></i>
-                    </div>
-                    <div class="us-nav-body">
-                        <div class="us-nav-title">Довідник</div>
-                        <div class="us-nav-desc">Міста, посади,<br>підрозділи, довіреності</div>
-                    </div>
-                    <i class="fa-solid fa-chevron-right us-nav-arrow"></i>
-                </a>
-            </div>`;
-    },
-
     async _renderUsersList(el) {
         let list;
         try {
@@ -635,7 +447,6 @@ const AdminPage = {
             </style>
 
             <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.85rem">
-                <button class="btn btn-ghost btn-sm" onclick="AdminPage._renderUsers(document.getElementById('admin-content'))" style="display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i> Назад</button>
                 <h3 style="margin:0">👥 Всі користувачі</h3>
             </div>
 
@@ -4099,7 +3910,6 @@ const AdminPage = {
 
         el.innerHTML = `
             <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem">
-                <button class="btn btn-ghost btn-sm" onclick="AdminPage._renderUsers(document.getElementById('admin-content'))" style="display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i> Назад</button>
                 <h3 style="margin:0">📋 Довідник</h3>
             </div>
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.5rem">

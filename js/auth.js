@@ -6,22 +6,28 @@ const Auth = {
     async init() {
         const { data: { session }, error } = await supabase.auth.getSession();
         if (error || !session) {
-            // Битий/використаний refresh token (400/401) — чистимо локальну сесію,
-            // щоб він не висів у localStorage і не сипав помилки при кожному старті.
-            // Мережеві збої (офлайн) не чистимо — сесія може бути ще жива.
-            const isStaleToken = error && (
-                error.status === 400 || error.status === 401 ||
-                /refresh[_ ]token/i.test(error.message || '')
-            );
-            if (isStaleToken) {
-                await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
-            }
+            // getSession() повертає !session і без error, коли SDK сам вже прибрав
+            // мертву сесію під час свого внутрішнього _recoverAndRefresh() —
+            // тому чистимо localStorage напряму й безумовно, а не за патерном error.status.
+            // Синхронний removeItem переживає навіть live-reload посеред виконання,
+            // на відміну від async signOut(), який могло б перервати.
+            this._purgeStaleSession();
             return false;
         }
         AppState.session = session;
         AppState.user    = session.user;
         await this._loadProfile();
         return true;
+    },
+
+    _purgeStaleSession() {
+        try {
+            const ref = SUPABASE_URL.match(/^https:\/\/([^.]+)\./)?.[1];
+            if (ref) localStorage.removeItem(`sb-${ref}-auth-token`);
+        } catch(_) {}
+        // Best-effort — розлогінює на сервері й скидає внутрішній стан SDK,
+        // не блокує показ екрану логіна
+        supabase.auth.signOut({ scope: 'local' }).catch(() => {});
     },
 
     async _loadProfile() {

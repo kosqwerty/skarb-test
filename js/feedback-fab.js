@@ -9,15 +9,12 @@ const FeedbackFab = {
     _fabTimer: null,
 
     init() {
-        if (document.getElementById('global-feedback-fab')) return;
         this._injectCSS();
-        const btn = document.createElement('button');
-        btn.id = 'global-feedback-fab';
-        btn.className = 'sgfb-global-fab';
-        btn.title = 'Зворотний зв\'язок';
-        btn.innerHTML = `<i class="fa-regular fa-comment-dots"></i><span>Зворотний зв'язок</span><span class="sgfb-fab-badge" id="sgfb-fab-badge" style="display:none"></span>`;
-        btn.onclick = () => FeedbackFab.open();
-        document.body.appendChild(btn);
+        // Картка живе статично в index.html (у бічній панелі) — лише навішуємо обробники
+        const card = document.getElementById('global-feedback-fab');
+        if (!card || card.dataset.bound) { if (card) this._startPolling(); return; }
+        card.dataset.bound = '1';
+        card.onclick = () => FeedbackFab.open();
         this._startPolling();
     },
 
@@ -442,34 +439,78 @@ const FeedbackFab = {
         const s = document.createElement('style');
         s.id = 'sgfb-global-styles';
         s.textContent = `
-@keyframes sgfb-slide-in { from{transform:translateX(100%)} to{transform:translateX(0)} }
+@keyframes sgfb-slide-in { from{transform:translateX(-100%)} to{transform:translateX(0)} }
 @keyframes sgfb-fab-vibrate { 0%,100%{transform:translateX(0)} 10%,50%,90%{transform:translateX(-4px)} 30%,70%{transform:translateX(4px)} }
-.sgfb-global-fab {
-    position:fixed;bottom:28px;right:28px;z-index:840;
-    display:flex;align-items:center;gap:8px;padding:12px 20px;border-radius:50px;
-    background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;cursor:pointer;
-    font-size:.875rem;font-weight:600;box-shadow:0 4px 20px rgba(99,102,241,.4);
-    transition:transform .18s,box-shadow .18s,background .3s;
+
+/* ── Картка "Підтримка" в бічній панелі ─────────────────────────── */
+.sb-feedback-card {
+    margin:10px 12px 14px;padding:12px 13px;border-radius:14px;flex-shrink:0;position:relative;
+    background:linear-gradient(160deg,rgba(99,102,241,.14),rgba(139,92,246,.08));
+    border:1px solid rgba(99,102,241,.28);cursor:pointer;transition:border-color .18s,transform .18s;
 }
-.sgfb-global-fab:hover { transform:translateY(-2px);box-shadow:0 8px 28px rgba(99,102,241,.5); }
-.sgfb-global-fab i { font-size:1rem; }
-.sgfb-global-fab.sgfb-fab-replied { background:linear-gradient(135deg,#059669,#10b981);box-shadow:0 4px 20px rgba(16,185,129,.45); }
-.sgfb-global-fab.sgfb-fab-replied:hover { box-shadow:0 8px 28px rgba(16,185,129,.6); }
-.sgfb-global-fab.sgfb-fab-shake { animation:sgfb-fab-vibrate .6s ease; }
+.sb-feedback-card:hover { border-color:rgba(99,102,241,.5);transform:translateY(-1px); }
+.sb-fc-top { display:flex;align-items:center;gap:9px;margin-bottom:10px; }
+.sb-fc-ico {
+    width:32px;height:32px;border-radius:10px;flex-shrink:0;position:relative;
+    background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-size:.85rem;
+    box-shadow:0 3px 10px rgba(99,102,241,.4);
+}
+.sb-fc-txt { min-width:0; }
+.sb-fc-title { font-size:.82rem;font-weight:700;color:#fff;line-height:1.2; }
+.sb-fc-sub   { font-size:.7rem;color:rgba(255,255,255,.55);margin-top:1px;line-height:1.25; }
+.sb-fc-btn {
+    display:block;width:100%;padding:8px;border-radius:9px;border:none;cursor:pointer;
+    background:#fff;color:#1e1b3a;font-size:.78rem;font-weight:700;font-family:inherit;
+    transition:opacity .15s;
+}
+.sb-fc-btn:hover { opacity:.9; }
+.sidebar.collapsed .sb-feedback-card { display:none; }
+/* Стан "є відповідь" — зелена акцентна іконка + бейдж */
+.sb-feedback-card.sgfb-fab-replied .sb-fc-ico {
+    background:linear-gradient(135deg,#059669,#10b981);box-shadow:0 3px 10px rgba(16,185,129,.45);
+}
+.sb-feedback-card.sgfb-fab-replied { border-color:rgba(16,185,129,.4); }
+.sb-feedback-card.sgfb-fab-shake .sb-fc-ico { animation:sgfb-fab-vibrate .6s ease; }
 .sgfb-fab-badge {
-    position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;padding:0 5px;
+    position:absolute;top:8px;right:10px;min-width:18px;height:18px;padding:0 5px;
     border-radius:9px;background:#ef4444;color:#fff;font-size:.65rem;font-weight:700;
     line-height:18px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.3);
 }
+/* ── Світла тема — сайдбар білий, тож текст/кнопку інвертуємо ──── */
+.light-theme .sb-feedback-card {
+    background:linear-gradient(160deg,rgba(99,102,241,.09),rgba(139,92,246,.05));
+    border-color:rgba(99,102,241,.22);
+}
+.light-theme .sb-feedback-card:hover { border-color:rgba(99,102,241,.4); }
+.light-theme .sb-fc-title { color:#1e293b; }
+.light-theme .sb-fc-sub   { color:#64748b; }
+.light-theme .sb-fc-btn {
+    background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;
+    box-shadow:0 2px 8px rgba(99,102,241,.3);
+}
+.light-theme .sb-feedback-card.sgfb-fab-replied { border-color:rgba(16,185,129,.35); }
+.light-theme .sb-feedback-card.sgfb-fab-replied .sb-fc-btn {
+    background:linear-gradient(135deg,#059669,#10b981);box-shadow:0 2px 8px rgba(16,185,129,.3);
+}
 .sgfb-overlay {
-    position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:850;
-    display:flex;justify-content:flex-end;backdrop-filter:blur(2px);animation:fadeIn .2s;
+    position:fixed;top:64px;left:0;right:0;bottom:0;background:rgba(0,0,0,.35);z-index:190;
+    display:flex;justify-content:flex-start;backdrop-filter:blur(2px);animation:fadeIn .2s;
 }
 .sgfb-modal {
-    width:580px;max-width:100vw;height:100vh;
-    background:var(--bg-surface);border-left:1px solid var(--border);
+    width:480px;max-width:calc(100vw - var(--sidebar-w));height:100%;
+    margin-left:var(--sidebar-w);
+    background:var(--bg-surface);border-right:1px solid var(--border);
     padding:0;overflow:hidden;display:flex;flex-direction:column;
     animation:sgfb-slide-in .25s cubic-bezier(.32,0,.67,0);
+    box-shadow:8px 0 32px rgba(0,0,0,.18);
+    transition:margin-left .3s var(--transition-slow, ease);
+}
+body.sidebar-collapsed .sgfb-modal { margin-left:var(--sidebar-w-col); max-width:calc(100vw - var(--sidebar-w-col)); }
+@media (max-width:1024px) {
+    .sgfb-overlay { justify-content:flex-end; }
+    .sgfb-modal { margin-left:0;max-width:100vw;width:min(480px,100vw);border-right:none;border-left:1px solid var(--border); }
+    body.sidebar-collapsed .sgfb-modal { margin-left:0;max-width:100vw; }
 }
 .sgfb-hero {
     display:flex;align-items:center;gap:12px;padding:18px 18px 16px;

@@ -2173,10 +2173,10 @@ const API = {
 
         async end(sessionId) {
             if (!sessionId) return;
-            await supabase.from('user_login_sessions')
+            const { error } = await supabase.from('user_login_sessions')
                 .update({ ended_at: new Date().toISOString() })
-                .eq('id', sessionId)
-                .catch(e => console.error('[loginSessions] end:', e));
+                .eq('id', sessionId);
+            if (error) console.error('[loginSessions] end:', error);
         },
 
         async getAll({ userId, dateFrom, dateTo, limit = 50, offset = 0 } = {}) {

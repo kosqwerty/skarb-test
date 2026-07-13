@@ -62,22 +62,26 @@ const AdminPage = {
         this._tab   = initTab;
         this._group = initGroup;
 
-        const groupsHtml = this._groups.map(g => `
-            <button type="button" class="adm-grp-btn${g.id === initGroup ? ' active' : ''}" style="--grp-c:${g.color || 'var(--primary)'}" data-group="${g.id}" onclick="AdminPage.switchGroup('${g.id}')">
+        const groupsHtml = this._groups.map(g => {
+            const isActive     = g.id === initGroup;
+            const activeTabLbl = isActive ? g.tabs.find(t => t.id === initTab)?.label : null;
+            return `
+            <button type="button" class="adm-grp-btn${isActive ? ' active' : ''}" style="--grp-c:${g.color || 'var(--primary)'}" data-group="${g.id}" onclick="AdminPage.switchGroup('${g.id}')">
                 <span class="adm-grp-ico"><i class="fa-solid ${g.icon}"></i></span>
                 <span class="adm-grp-txt">
                     <span class="adm-grp-lbl">${g.label}</span>
-                    <span class="adm-grp-desc">${g.desc || ''}</span>
+                    <span class="adm-grp-desc" id="adm-grp-desc-${g.id}" data-default="${Fmt.esc(g.desc||'')}">${Fmt.esc(activeTabLbl || g.desc || '')}</span>
                 </span>
-                <i class="fa-solid fa-chevron-right adm-grp-chev"></i>
-            </button>`).join('') + `
+                <i class="fa-solid fa-chevron-down adm-grp-chev"></i>
+            </button>`;
+        }).join('') + `
             <button type="button" class="adm-grp-btn adm-ov-tile" style="--grp-c:#06b6d4" onclick="AdminPage._openSystemOverview(this)">
                 <span class="adm-grp-ico"><i class="fa-solid fa-gauge-high"></i></span>
                 <span class="adm-grp-txt">
                     <span class="adm-grp-lbl">Огляд системи</span>
                     <span class="adm-grp-desc">Користувачі, курси, тести, новини</span>
                 </span>
-                <i class="fa-solid fa-chevron-right adm-grp-chev"></i>
+                <i class="fa-solid fa-chevron-down adm-grp-chev"></i>
             </button>`;
 
         const tabsHtml = this._groups.map(g => g.tabs.map(t => `
@@ -87,27 +91,22 @@ const AdminPage = {
                     onclick="AdminPage.switchTab('${t.id}', this)">
                 <span class="adm-tab-ico"><i class="fa-solid ${t.icon}"></i></span>
                 <span class="adm-tab-lbl">${t.label}</span>
-                <i class="fa-solid fa-chevron-right adm-tab-chev"></i>
             </button>`).join('')).join('');
 
         const activeGroupObj = this._groups.find(g => g.id === initGroup);
 
         container.innerHTML = `
-            <div class="adm-groups" id="adm-groups">${groupsHtml}</div>
-            <div class="adm-body-grid">
+            <div class="adm-tabsdd" id="adm-tabsdd">
+                <div class="adm-groups" id="adm-groups">${groupsHtml}</div>
                 <nav class="tabs adm-tabs-vert" id="admin-tabs" style="--tab-c:${activeGroupObj?.color || 'var(--primary)'}">
-                    <div class="adm-tabs-hd" id="adm-tabs-hd">
-                        <i class="fa-solid ${activeGroupObj?.icon || 'fa-layer-group'}"></i>
-                        <span id="adm-tabs-hd-lbl">${activeGroupObj?.label || ''}</span>
-                    </div>
                     ${tabsHtml}
                 </nav>
-                <div class="adm-body-main">
-                    <div id="admin-content"></div>
-                </div>
             </div>
+            <div class="adm-divider"></div>
+            <div id="admin-content"></div>
             <style>
 .adm-groups { display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-bottom:12px; }
+.adm-divider { height:1px;background:var(--border);margin:0 0 20px; }
 .adm-grp-btn {
     display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:13px;
     border:1.5px solid var(--border);background:var(--bg-surface);
@@ -125,25 +124,23 @@ const AdminPage = {
 .adm-grp-txt { display:flex;flex-direction:column;min-width:0;flex:1; }
 .adm-grp-lbl { font-size:.82rem;font-weight:700;color:var(--text-primary);transition:color .18s;line-height:1.2; }
 .adm-grp-desc { font-size:.66rem;color:var(--text-muted);margin-top:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
-.adm-grp-chev { color:var(--text-muted);font-size:.68rem;opacity:.6;flex-shrink:0;transition:transform .18s; }
+.adm-grp-chev { color:var(--text-muted);font-size:.68rem;opacity:.6;flex-shrink:0;transition:transform .18s,color .18s,opacity .18s; }
 .adm-grp-btn.active .adm-grp-chev { color:var(--grp-c);opacity:1; }
+.adm-tabsdd.open .adm-grp-btn.active .adm-grp-chev { transform:rotate(180deg); }
 @media (max-width:768px) { .adm-grp-desc { display:none; } }
 
-.adm-body-grid { display:grid;grid-template-columns:230px 1fr;gap:18px;align-items:start; }
-.adm-body-grid.adm-no-sidebar { grid-template-columns:1fr; }
-@media (max-width:860px) { .adm-body-grid { grid-template-columns:1fr; } }
-
+/* Floating panel — overlays the page (position:absolute) so nothing below it shifts
+   when it opens/closes; sized/positioned by JS to match the active group card. */
+.adm-tabsdd { position:relative; }
 .adm-tabs-vert {
-    display:flex;flex-direction:column;gap:3px;padding:10px;border-radius:16px;
-    background:var(--bg-surface);border:1px solid var(--border);
-    position:sticky;top:12px;margin-bottom:0;border-bottom:none;overflow-x:visible;
+    position:absolute;top:calc(100% + 8px);left:0;z-index:60;
+    display:none;flex-direction:column;gap:3px;box-sizing:border-box;padding:10px;
+    background:var(--bg-surface);border:2px solid var(--tab-c,var(--primary));
+    border-radius:14px;
+    box-shadow:0 20px 50px rgba(0,0,0,.4),0 0 0 4px color-mix(in srgb,var(--tab-c,var(--primary)) 14%,transparent);
 }
-.adm-tabs-hd {
-    display:flex;align-items:center;gap:8px;padding:6px 10px 10px;margin-bottom:4px;
-    border-bottom:1px solid var(--border);color:var(--tab-c,var(--primary));
-    font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.07em;
-}
-.adm-tabs-hd i { font-size:.78rem; }
+.adm-tabsdd.open .adm-tabs-vert { display:flex;animation:adm-dd-in .16s cubic-bezier(.4,0,.2,1); }
+@keyframes adm-dd-in { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:none} }
 .adm-tab-vert {
     display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:11px;
     background:none;border:none;border-bottom:none;
@@ -157,7 +154,6 @@ const AdminPage = {
     transition:all .16s;
 }
 .adm-tab-lbl { flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
-.adm-tab-chev { font-size:.6rem;color:var(--text-muted);opacity:0;transform:translateX(-3px);transition:all .16s; }
 .adm-tab-vert:hover:not(.active) { background:var(--bg-hover);color:var(--text-primary); }
 .adm-tab-vert:hover:not(.active) .adm-tab-ico { background:var(--bg-surface); }
 .adm-tab-vert.active {
@@ -165,13 +161,6 @@ const AdminPage = {
     color:var(--tab-c);box-shadow:inset 3px 0 0 var(--tab-c);
 }
 .adm-tab-vert.active .adm-tab-ico { background:var(--tab-c);color:#fff; }
-.adm-tab-vert.active .adm-tab-chev { opacity:1;transform:none; }
-@media (max-width:860px) {
-    .adm-tabs-vert { position:static;flex-direction:row;overflow-x:auto;gap:6px; }
-    .adm-tabs-hd { display:none; }
-    .adm-tab-vert { width:auto;white-space:nowrap;flex-shrink:0; }
-    .adm-tab-chev { display:none; }
-}
 @keyframes adm-desc-in { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:none} }
 @media (prefers-reduced-motion:reduce) { .nav-detail{animation:none} }
             </style>`;
@@ -200,8 +189,8 @@ const AdminPage = {
         this._onOverview = true;
         document.querySelectorAll('.adm-grp-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        document.getElementById('admin-tabs')?.style.setProperty('display', 'none');
-        document.querySelector('.adm-body-grid')?.classList.add('adm-no-sidebar');
+        this._closeTabsDropdown();
+        this._updateGroupCardDesc(null, null);
         const el = document.getElementById('admin-content');
         if (!el) return;
         el.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
@@ -233,39 +222,72 @@ const AdminPage = {
         }
     },
 
+    // ── Tabs dropdown (adm-tabsdd) — adm-groups stays a permanent row of
+    // cards; clicking one opens adm-tabs-vert as an overlay instead of it
+    // permanently occupying a sidebar column. ──────────────────────────
+    _toggleTabsDropdown() {
+        const dd = document.getElementById('adm-tabsdd');
+        if (!dd) return;
+        if (dd.classList.contains('open')) this._closeTabsDropdown();
+        else this._openTabsDropdown();
+    },
+
+    _openTabsDropdown() {
+        const dd  = document.getElementById('adm-tabsdd');
+        const nav = document.getElementById('admin-tabs');
+        if (!dd) return;
+        dd.classList.add('open');
+        // Size/align the panel to match the active group card exactly
+        const activeBtn = dd.querySelector('.adm-grp-btn.active');
+        if (nav && activeBtn) {
+            const ddRect  = dd.getBoundingClientRect();
+            const btnRect = activeBtn.getBoundingClientRect();
+            nav.style.width = btnRect.width + 'px';
+            nav.style.left  = (btnRect.left - ddRect.left) + 'px';
+        }
+        if (!this._tabsDdDocBound) {
+            this._tabsDdDocBound = true;
+            document.addEventListener('click', e => {
+                const dd2 = document.getElementById('adm-tabsdd');
+                if (dd2 && !dd2.contains(e.target)) this._closeTabsDropdown();
+            });
+        }
+    },
+
+    _closeTabsDropdown() {
+        document.getElementById('adm-tabsdd')?.classList.remove('open');
+    },
+
+    // Clicking a group card only opens adm-tabs-vert (filtered to that group) so the
+    // user can pick a tab — it must never auto-navigate to a tab by itself.
     switchGroup(groupId) {
         const cameFromOverview = this._onOverview;
-        this._onOverview = false;
-        if (cameFromOverview) {
-            document.getElementById('admin-tabs')?.style.removeProperty('display');
-            document.querySelector('.adm-body-grid')?.classList.remove('adm-no-sidebar');
+        // Same group clicked again while its dropdown is already showing → just collapse it
+        if (this._group === groupId && !cameFromOverview) {
+            this._toggleTabsDropdown();
+            return;
         }
-        if (this._group === groupId && !cameFromOverview) return;
         this._group = groupId;
         document.querySelectorAll('.adm-grp-btn').forEach(b => b.classList.toggle('active', b.dataset.group === groupId));
         document.querySelectorAll('#admin-tabs .tab').forEach(t => { t.style.display = t.dataset.group === groupId ? '' : 'none'; });
         this._updateTabsSidebarHeader(groupId);
-        // Auto-select first tab of new group if current is in another group
-        const currentInGroup = document.querySelector(`#admin-tabs .tab[data-tab="${this._tab}"][data-group="${groupId}"]`);
-        if (!currentInGroup) {
-            const firstTab = document.querySelector(`#admin-tabs .tab[data-group="${groupId}"]`);
-            if (firstTab) firstTab.click();
-        } else if (cameFromOverview) {
-            // Вкладка технічно та сама, але #admin-content зараз показує Огляд системи — перерендерити
-            currentInGroup.classList.add('active');
-            this._loadTab();
-        }
+        this._openTabsDropdown();
     },
 
     _updateTabsSidebarHeader(groupId) {
         const g = this._groups?.find(x => x.id === groupId);
         if (!g) return;
-        const nav = document.getElementById('admin-tabs');
-        if (nav) nav.style.setProperty('--tab-c', g.color || 'var(--primary)');
-        const hd = document.getElementById('adm-tabs-hd');
-        if (hd) { const ico = hd.querySelector('i'); if (ico) ico.className = `fa-solid ${g.icon}`; }
-        const lbl = document.getElementById('adm-tabs-hd-lbl');
-        if (lbl) lbl.textContent = g.label;
+        document.getElementById('admin-tabs')?.style.setProperty('--tab-c', g.color || 'var(--primary)');
+    },
+
+    // Shows the current tab's name under the active group's card label instead of the
+    // generic description; other cards fall back to their default description.
+    _updateGroupCardDesc(activeGroupId, activeTabLabel) {
+        this._groups?.forEach(g => {
+            const el = document.getElementById(`adm-grp-desc-${g.id}`);
+            if (!el) return;
+            el.textContent = (g.id === activeGroupId && activeTabLabel) || el.dataset.default || '';
+        });
     },
 
     async switchTab(tab, el) {
@@ -279,13 +301,13 @@ const AdminPage = {
         }
         this._tab = tab;
         this._onOverview = false;
-        document.getElementById('admin-tabs')?.style.removeProperty('display');
-        document.querySelector('.adm-body-grid')?.classList.remove('adm-no-sidebar');
+        this._closeTabsDropdown();
         document.querySelectorAll('#admin-tabs .tab').forEach(t => t.classList.remove('active'));
         if (el) el.classList.add('active');
         // Sync group selector if tab belongs to different group; завжди знімаємо
         // активність з картки "Огляд системи" навіть якщо група не змінилась
-        const tabGroup = this._groups?.find(g => g.tabs.some(t => t.id === tab))?.id;
+        const tabGroupObj = this._groups?.find(g => g.tabs.some(t => t.id === tab));
+        const tabGroup    = tabGroupObj?.id;
         if (tabGroup) {
             const groupChanged = tabGroup !== this._group;
             this._group = tabGroup;
@@ -294,6 +316,7 @@ const AdminPage = {
                 document.querySelectorAll('#admin-tabs .tab').forEach(t => { t.style.display = t.dataset.group === tabGroup ? '' : 'none'; });
                 this._updateTabsSidebarHeader(tabGroup);
             }
+            this._updateGroupCardDesc(tabGroup, tabGroupObj.tabs.find(t => t.id === tab)?.label);
         }
         const tabLabels = {
             'users': 'Користувачі', 'directories': 'Довідник', 'courses': 'Курси', 'tests': 'Тести', 'news': 'Новини',

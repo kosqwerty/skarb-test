@@ -1517,7 +1517,7 @@ const MultiSelect = (() => {
                 document.body.appendChild(dd);
                 _portals[id] = dd;
             }
-            const ddWidth = Math.max(r.width, 280);
+            const ddWidth = r.width;
             let left = r.left;
             // Якщо виходить за правий край вікна — зсуваємо вліво
             const overflowRight = left + ddWidth - window.innerWidth;

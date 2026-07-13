@@ -468,7 +468,7 @@ h4 { font-size: 1.125rem; font-weight: 500; }
 }
 .ms-control:hover { border-color: var(--primary); }
 .ms-control.open  { border-color: var(--primary); }
-.ms-chips { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: .2rem; flex: 1; min-width: 0; }
+.ms-chips { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: .2rem; flex: 0 1 auto; min-width: 0; }
 .ms-chip {
     display: inline-flex; align-items: center; gap: .25rem;
     padding: .1rem .45rem; border-radius: 999px;
@@ -518,7 +518,7 @@ h4 { font-size: 1.125rem; font-weight: 500; }
     background: var(--bg-raised);
 }
 .ms-search-inner {
-    width: 100%; border: none; outline: none;
+    width: 100%; box-sizing: border-box; outline: none;
     background: var(--bg-surface);
     border: 1px solid var(--border); border-radius: var(--radius-sm);
     font-size: .8rem; color: var(--text-primary);

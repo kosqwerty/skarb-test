@@ -2159,41 +2159,6 @@ const API = {
         }
     },
 
-    // ── Login Sessions (history) ───────────────────────────────────────
-    loginSessions: {
-        async start() {
-            const uid = AppState.user?.id;
-            if (!uid) return null;
-            const sessionId = crypto.randomUUID();
-            const { error } = await supabase.from('user_login_sessions')
-                .insert({ id: sessionId, user_id: uid, ua: navigator.userAgent });
-            if (error) { console.error('[loginSessions] start:', error); return null; }
-            return sessionId;
-        },
-
-        async end(sessionId) {
-            if (!sessionId) return;
-            const { error } = await supabase.from('user_login_sessions')
-                .update({ ended_at: new Date().toISOString() })
-                .eq('id', sessionId);
-            if (error) console.error('[loginSessions] end:', error);
-        },
-
-        async getAll({ userId, dateFrom, dateTo, limit = 50, offset = 0 } = {}) {
-            let q = supabase
-                .from('user_login_sessions')
-                .select('id,user_id,started_at,ended_at,ua', { count: 'exact' })
-                .order('started_at', { ascending: false })
-                .range(offset, offset + limit - 1);
-            if (userId)   q = q.eq('user_id', userId);
-            if (dateFrom) q = q.gte('started_at', dateFrom + 'T00:00:00');
-            if (dateTo)   q = q.lte('started_at', dateTo   + 'T23:59:59');
-            const { data, error, count } = await q;
-            if (error) throw error;
-            return { data: data || [], count: count || 0 };
-        },
-    },
-
     // ── User Navigation Log ────────────────────────────────────────────
     userNavLog: {
         log(fromRoute, toRoute, sessionId) {

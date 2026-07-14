@@ -497,8 +497,8 @@ const TestsManagerPage = {
     </div>
 </div>`,
             footer: `
-<button class="btn btn-primary" onclick="TestsManagerPage._quickCreate()"><i class="fa-solid fa-arrow-right"></i> Створити і додати питання</button>
-<button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>`
+<button class="btn-primary-modern" onclick="TestsManagerPage._quickCreate()"><i class="fa-solid fa-arrow-right"></i> Створити і додати питання</button>
+<button class="btn-secondary-modern" onclick="Modal.close()">Скасувати</button>`
         });
         setTimeout(() => {
             const inp = document.getElementById('tmqc-title');
@@ -693,7 +693,7 @@ const TestsManagerPage = {
             <div class="tset-hero-title">${isEdit ? Fmt.esc(test.title) : 'Новий тест'}</div>
             <div class="tset-hero-sub">${isEdit ? 'Налаштування тесту' : 'Базові параметри перед створенням'}</div>
         </div>
-        <button class="btn btn-primary" onclick="TestsManagerPage._saveMeta(${isEdit ? `'${test.id}'` : 'null'})">${isEdit ? '<i class="fa-regular fa-floppy-disk"></i> Зберегти' : '<i class="fa-solid fa-plus"></i> Створити'}</button>
+        <button class="btn-primary-modern" onclick="TestsManagerPage._saveMeta(${isEdit ? `'${test.id}'` : 'null'})">${isEdit ? '<i class="fa-regular fa-floppy-disk"></i> Зберегти' : '<i class="fa-solid fa-plus"></i> Створити'}</button>
     </div>
     <div class="tm-cover-frame">
         <div id="tm-cover-wrap" class="tm-cover-upload">
@@ -879,7 +879,8 @@ const TestsManagerPage = {
             }
             ActivityTracker.track(testId ? 'test_edit' : 'test_create', { entity_type: 'test', entity_id: test.id, entity_title: test.title });
             Toast.success(testId ? 'Збережено' : 'Тест створено');
-            await this.openEditor(test.id);
+            if (testId) await this._renderList(this._container);
+            else        await this.openEditor(test.id);
         } catch(e) { Toast.error('Помилка', e.message); }
         finally { Loader.hide(); }
     },
@@ -1984,8 +1985,8 @@ body.light-theme .tm-src-ta{background:#f6f8fa;color:#24292f;border-color:#d0d7d
 </div>
 <textarea id="tm-src-html" class="tm-src-ta" spellcheck="false">${Fmt.esc(quill.root.innerHTML)}</textarea>`,
             footer: `
-<button class="btn btn-primary" onclick="TestsManagerPage._applySourceEditor()"><i class="fa-solid fa-check"></i> Застосувати</button>
-<button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>`
+<button class="btn-primary-modern" onclick="TestsManagerPage._applySourceEditor()"><i class="fa-solid fa-check"></i> Застосувати</button>
+<button class="btn-secondary-modern" onclick="Modal.close()">Скасувати</button>`
         });
     },
 
@@ -3621,7 +3622,7 @@ body.light-theme .tm-src-ta{background:#f6f8fa;color:#24292f;border-color:#d0d7d
         <button class="btn btn-ghost btn-sm" onclick="TestsManagerPage._openAttemptProtocol('${a.id}','${uid}')"><i class="fa-solid fa-list-check"></i> Протокол</button>
     </div>`).join('')}
 </div>`,
-            footer: `<button class="btn btn-secondary" onclick="Modal.close()">Закрити</button>`
+            footer: `<button class="btn-secondary-modern" onclick="Modal.close()">Закрити</button>`
         });
     },
 
@@ -3663,8 +3664,8 @@ body.light-theme .tm-src-ta{background:#f6f8fa;color:#24292f;border-color:#d0d7d
             }
             const footer = document.getElementById('modal-footer');
             if (footer) footer.innerHTML = `
-<button class="btn btn-secondary" onclick="TestsManagerPage._openUserAttempts('${uid}')"><i class="fa-solid fa-arrow-left"></i> До спроб</button>
-<button class="btn btn-secondary" onclick="Modal.close()">Закрити</button>`;
+<button class="btn-secondary-modern" onclick="TestsManagerPage._openUserAttempts('${uid}')"><i class="fa-solid fa-arrow-left"></i> До спроб</button>
+<button class="btn-secondary-modern" onclick="Modal.close()">Закрити</button>`;
         } catch(e) {
             Toast.error('Помилка', e.message);
         }
@@ -3761,10 +3762,18 @@ const MyTestsPage = {
 .mt-ep-count{padding:1px 8px;border-radius:20px;font-size:.68rem;font-weight:800;line-height:1.6;background:var(--border);color:var(--text-muted)}
 .mt-tab.active .mt-ep-count{background:rgba(255,255,255,.25);color:#fff}
 
-.mt-list{display:flex;flex-direction:column;gap:10px;animation:mt-in .3s ease}
+.mt-list{
+    display:flex;flex-direction:column;animation:mt-in .3s ease;
+    background:var(--bg-surface);border:1px solid var(--border);
+    border-radius:16px;overflow:hidden
+}
 @keyframes mt-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
-.mt-card{background:var(--bg-surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;display:flex;transition:box-shadow .2s,border-color .2s}
-.mt-card:hover{box-shadow:0 4px 20px rgba(0,0,0,.1);border-color:var(--border-light)}
+.mt-card{
+    background:transparent;border:none;border-bottom:1px solid var(--border);
+    border-radius:0;display:flex;transition:background .15s
+}
+.mt-list .mt-card:last-child{border-bottom:none}
+.mt-card:hover{background:var(--bg-hover)}
 .mt-card-bar{width:4px;flex-shrink:0}
 .mt-card-bar.pending{background:linear-gradient(180deg,#f59e0b,#f97316)}
 .mt-card-bar.overdue{background:linear-gradient(180deg,#ef4444,#dc2626)}
@@ -3779,7 +3788,7 @@ const MyTestsPage = {
 .mt-badge-done{background:rgba(16,185,129,.12);color:#10b981}
 .mt-badge-fail{background:rgba(239,68,68,.1);color:#ef4444}
 .mt-badge-info{background:var(--bg-raised);color:var(--text-muted);border:1px solid var(--border)}
-.mt-btn-start{padding:8px 20px;border-radius:12px;border:none;background:var(--primary);color:#fff;font-size:.85rem;font-weight:700;cursor:pointer;transition:background .15s;white-space:nowrap;flex-shrink:0}
+.mt-btn-start{padding:.55rem .8rem;border-radius:8px;border:1px solid transparent;background:var(--primary);color:#fff;font-size:.8rem;font-weight:700;cursor:pointer;transition:background .15s;white-space:nowrap;flex-shrink:0}
 .mt-btn-start:hover{background:var(--primary-dark,#1d4ed8)}
 .mt-btn-view{padding:8px 16px;border-radius:12px;border:1.5px solid var(--border);background:transparent;color:var(--text-secondary);font-size:.83rem;font-weight:500;cursor:pointer;transition:all .15s;white-space:nowrap;flex-shrink:0}
 .mt-btn-view:hover{border-color:var(--primary);color:var(--primary)}

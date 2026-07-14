@@ -76,93 +76,108 @@ const ExpertPathPage = {
 /* ── Hero ────────────────────────────────────────────────────── */
 .ep-hero{
     position:relative;overflow:hidden;
-    border-radius:24px;padding:40px 44px;margin-bottom:28px;
-    background:linear-gradient(135deg,#1e1b4b 0%,#312e81 40%,#4338ca 72%,#7c3aed 100%);
-    color:#fff
+    border-radius:20px;padding:34px 36px 46px;margin-bottom:0;
+    background:
+        radial-gradient(circle at 88% 25%,rgba(212,175,55,.16),transparent 55%),
+        linear-gradient(120deg,#0a0e1f 0%,#131a35 45%,#1b2350 100%);
+    color:#fff;display:flex;align-items:center;justify-content:space-between;gap:20px
 }
-.ep-hero-orb{
-    position:absolute;border-radius:50%;
-    background:rgba(255,255,255,.07);pointer-events:none
+.ep-hero::after{
+    content:'';position:absolute;left:0;right:0;bottom:0;height:3px;
+    background:linear-gradient(90deg,transparent,#d4af37 20%,#f5e0a3 50%,#d4af37 80%,transparent)
 }
-.ep-hero-orb-1{width:300px;height:300px;top:-90px;right:-70px}
-.ep-hero-orb-2{width:180px;height:180px;bottom:-80px;right:150px}
-.ep-hero-orb-3{width:90px;height:90px;top:30px;right:250px;background:rgba(255,255,255,.04)}
-.ep-hero-body{position:relative;z-index:1}
+.ep-hero-spark{
+    position:absolute;width:5px;height:5px;background:#f5d78e;opacity:.5;
+    transform:rotate(45deg);pointer-events:none;
+    animation:ep-twinkle 3s ease-in-out infinite
+}
+@keyframes ep-twinkle{0%,100%{opacity:.15;transform:rotate(45deg) scale(.8)}50%{opacity:.7;transform:rotate(45deg) scale(1.15)}}
+.ep-hero-body{position:relative;z-index:1;min-width:0}
 .ep-hero-tag{
-    display:inline-flex;align-items:center;gap:6px;
-    background:rgba(255,255,255,.15);backdrop-filter:blur(10px);
-    border:1px solid rgba(255,255,255,.22);border-radius:20px;
-    padding:4px 14px;font-size:.72rem;font-weight:700;
-    letter-spacing:.07em;text-transform:uppercase;margin-bottom:14px;
-    color:rgba(255,255,255,.9)
+    display:flex;align-items:center;gap:10px;
+    font-family:Georgia,'Times New Roman',serif;
+    font-size:1.55rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+    margin-bottom:8px;color:#fff
 }
+.ep-hero-tag i{font-size:1.15rem;color:#f0c766;filter:drop-shadow(0 0 6px rgba(240,199,102,.5))}
 .ep-hero-sub{
-    font-size:.93rem;color:rgba(255,255,255,.68);
-    margin:0;max-width:580px;line-height:1.55
+    font-size:.88rem;color:rgba(255,255,255,.6);
+    margin:0;max-width:520px;line-height:1.55
 }
+/* Light theme — lighter hero, dark navy text on a soft cream/gold wash */
+body.light-theme .ep-hero{
+    background:
+        radial-gradient(circle at 88% 25%,rgba(212,175,55,.22),transparent 55%),
+        linear-gradient(120deg,#fdf8ec 0%,#f8eed3 50%,#f3e4bd 100%)
+}
+body.light-theme .ep-hero-tag{color:#1b2350}
+body.light-theme .ep-hero-tag i{color:#b4870f;filter:drop-shadow(0 0 4px rgba(180,135,15,.3))}
+body.light-theme .ep-hero-sub{color:rgba(27,35,80,.62)}
+body.light-theme .ep-hero-spark{background:#b4870f}
 .ep-hero-deco{
-    position:absolute;right:44px;top:50%;transform:translateY(-50%);
-    font-size:6rem;opacity:.1;z-index:0;pointer-events:none;
+    position:relative;z-index:1;flex-shrink:0;
+    width:104px;height:104px;
+    display:flex;align-items:center;justify-content:center
+}
+.ep-hero-deco::before{
+    content:'';position:absolute;inset:0;border-radius:50%;
+    border:1.5px solid rgba(212,175,55,.55)
+}
+.ep-hero-deco::after{
+    content:'';position:absolute;inset:14px;border-radius:50%;
+    border:1px dashed rgba(212,175,55,.35);
+    animation:ep-spin 18s linear infinite
+}
+@keyframes ep-spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+.ep-hero-deco i{
+    position:relative;z-index:1;font-size:2.5rem;color:#f0c766;
+    filter:drop-shadow(0 4px 12px rgba(0,0,0,.45));
     animation:ep-float 4s ease-in-out infinite
 }
-@keyframes ep-float{0%,100%{transform:translateY(-50%) rotate(-4deg)}50%{transform:translateY(calc(-50% - 10px)) rotate(4deg)}}
+@keyframes ep-float{0%,100%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-6px) rotate(3deg)}}
+body.light-theme .ep-hero-deco::before{border-color:rgba(180,135,15,.55)}
+body.light-theme .ep-hero-deco::after{border-color:rgba(180,135,15,.4)}
+body.light-theme .ep-hero-deco i{color:#b4870f;filter:drop-shadow(0 4px 10px rgba(0,0,0,.15))}
 
-/* ── Tab cards ───────────────────────────────────────────────── */
-.ep-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:28px}
-
+/* ── Tab bar (overlapping stat row) ──────────────────────────── */
+.ep-tabs{
+    display:flex;margin:-26px 14px 24px;position:relative;z-index:2;
+    background:var(--bg-surface);border:1px solid var(--border);
+    border-radius:18px;box-shadow:0 14px 34px rgba(0,0,0,.14);overflow:hidden
+}
 .ep-tab{
-    position:relative;overflow:hidden;
-    padding:22px 20px 20px;border-radius:20px;
-    border:2px solid var(--border);
-    background:var(--bg-surface);
-    cursor:pointer;text-align:left;
-    transition:all .25s cubic-bezier(.4,0,.2,1);
-    display:flex;flex-direction:column;gap:0
+    flex:1;position:relative;
+    display:flex;align-items:center;gap:14px;
+    padding:18px 18px;border:none;
+    background:transparent;cursor:pointer;text-align:left;
+    transition:background .2s ease
 }
-.ep-tab::before{
-    content:'';position:absolute;inset:0;
-    border-radius:18px;opacity:0;transition:opacity .25s
+.ep-tab:not(:last-child)::after{
+    content:'';position:absolute;right:0;top:16px;bottom:16px;width:1px;background:var(--border)
 }
-.ep-tab[data-tab="courses"]::before  {background:linear-gradient(135deg,#6366f1,#8b5cf6)}
-.ep-tab[data-tab="tests"]::before    {background:linear-gradient(135deg,#3b82f6,#06b6d4)}
-.ep-tab[data-tab="surveys"]::before  {background:linear-gradient(135deg,#10b981,#14b8a6)}
-.ep-tab[data-tab="completed"]::before{background:linear-gradient(135deg,#f59e0b,#ef4444)}
-
-.ep-tab:hover:not(.active){transform:translateY(-3px);box-shadow:0 8px 30px rgba(0,0,0,.1)}
-.ep-tab[data-tab="courses"]:hover:not(.active)  {border-color:#6366f1}
-.ep-tab[data-tab="tests"]:hover:not(.active)    {border-color:#3b82f6}
-.ep-tab[data-tab="surveys"]:hover:not(.active)  {border-color:#10b981}
-.ep-tab[data-tab="completed"]:hover:not(.active){border-color:#f59e0b}
-
-.ep-tab.active{border-color:transparent;color:#fff;transform:translateY(-3px)}
-.ep-tab.active::before{opacity:1}
-.ep-tab[data-tab="courses"].active  {box-shadow:0 10px 36px rgba(99,102,241,.45)}
-.ep-tab[data-tab="tests"].active    {box-shadow:0 10px 36px rgba(59,130,246,.45)}
-.ep-tab[data-tab="surveys"].active  {box-shadow:0 10px 36px rgba(16,185,129,.45)}
-.ep-tab[data-tab="completed"].active{box-shadow:0 10px 36px rgba(245,158,11,.45)}
+.ep-tab:hover:not(.active){background:var(--bg-hover)}
+.ep-tab.active{background:var(--bg-hover)}
+.ep-tab.active::before{
+    content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--ep-accent)
+}
 
 .ep-tab-icon-wrap{
-    font-size:1.4rem;margin-bottom:14px;
-    position:relative;z-index:1;transition:color .25s
+    width:44px;height:44px;border-radius:12px;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;
+    font-size:1.05rem;transition:background .25s,color .25s;
+    background:color-mix(in srgb,var(--ep-accent) 14%,transparent);color:var(--ep-accent)
 }
-.ep-tab[data-tab="courses"] .ep-tab-icon-wrap  {color:#6366f1}
-.ep-tab[data-tab="tests"] .ep-tab-icon-wrap    {color:#3b82f6}
-.ep-tab[data-tab="surveys"] .ep-tab-icon-wrap  {color:#10b981}
-.ep-tab[data-tab="completed"] .ep-tab-icon-wrap{color:#f59e0b}
-.ep-tab.active .ep-tab-icon-wrap{color:#fff!important}
+.ep-tab.active .ep-tab-icon-wrap{background:var(--ep-accent);color:#fff}
 
-.ep-tab-count{
-    font-size:2.5rem;font-weight:900;line-height:1;
-    color:var(--text-primary);letter-spacing:-.04em;
-    transition:color .25s;position:relative;z-index:1;margin-bottom:4px
-}
+.ep-tab-text{display:flex;flex-direction:column;gap:1px;min-width:0}
 .ep-tab-label{
-    font-size:.7rem;font-weight:700;text-transform:uppercase;
-    letter-spacing:.07em;color:var(--text-muted);
-    transition:color .25s;position:relative;z-index:1
+    font-size:.76rem;font-weight:700;color:var(--text-primary);white-space:nowrap
 }
-.ep-tab.active .ep-tab-count,
-.ep-tab.active .ep-tab-label{color:#fff}
+.ep-tab-count{
+    font-size:1.55rem;font-weight:800;line-height:1.15;
+    color:var(--text-primary);letter-spacing:-.02em
+}
+.ep-tab-caption{font-size:.68rem;color:var(--text-muted);white-space:nowrap}
 
 /* ── Sub-tabs ─────────────────────────────────────────────────── */
 .ep-sub-tabs{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap}
@@ -238,14 +253,11 @@ const ExpertPathPage = {
     margin-top:auto;padding-top:8px;border-top:1px solid var(--border);
     font-size:.72rem;color:var(--text-muted);display:flex;align-items:center;gap:.4rem;
 }
-/* Old refs kept for compat */
-.ep-course-title{font-weight:700;font-size:.9rem;color:var(--text-primary);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.ep-course-teacher{font-size:.73rem;color:var(--text-muted)}
-.ep-prog-bar{height:4px;border-radius:4px;background:var(--border);overflow:hidden}
+/* Progress row (enrolled, in-progress courses) */
+.ep-prog-row{display:flex;align-items:center;gap:8px;margin-top:6px}
+.ep-prog-bar{flex:1;height:5px;border-radius:4px;background:var(--border);overflow:hidden}
 .ep-prog-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,#6366f1,#8b5cf6);transition:width .6s ease}
-.ep-prog-fill.done{background:linear-gradient(90deg,#10b981,#14b8a6)}
-.ep-prog-label{font-size:.7rem;color:var(--text-muted)}
-.ep-prog-label.done{color:#10b981;font-weight:600}
+.ep-prog-label{font-size:.68rem;font-weight:700;color:var(--text-muted);flex-shrink:0}
 
 /* ── Results stats ───────────────────────────────────────────── */
 .ep-res-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
@@ -269,44 +281,58 @@ const ExpertPathPage = {
 .ep-empty-sub{font-size:.85rem;color:var(--text-muted)}
 
 @media(max-width:680px){
-    .ep-tabs{grid-template-columns:repeat(2,1fr)!important}
-    .ep-tab-count{font-size:1.1rem!important}
-    .ep-hero{padding:28px 24px}
-    .ep-hero-deco{display:none}
+    .ep-tabs{flex-wrap:wrap;margin:-20px 10px 24px}
+    .ep-tab{min-width:50%;flex:none}
+    .ep-tab:nth-child(2)::after,.ep-tab:nth-child(4)::after{display:none}
+    .ep-tab-count{font-size:1.25rem}
+    .ep-hero{padding:26px 22px 40px}
+    .ep-hero-deco{width:72px;height:72px}
+    .ep-hero-deco i{font-size:1.8rem}
+    .ep-hero-tag{font-size:1.2rem}
     .ep-res-stats{grid-template-columns:repeat(2,1fr)}
 }
 </style>
 <div class="ep-wrap">
     <div class="ep-hero">
-        <div class="ep-hero-orb ep-hero-orb-1"></div>
-        <div class="ep-hero-orb ep-hero-orb-2"></div>
-        <div class="ep-hero-orb ep-hero-orb-3"></div>
+        ${Array.from({length:7}).map((_,i) => `<div class="ep-hero-spark" style="left:${8+Math.random()*70}%;top:${10+Math.random()*70}%;animation-delay:${(i*0.4).toFixed(2)}s"></div>`).join('')}
         <div class="ep-hero-body">
-            <div class="ep-hero-tag"><i class="fa-solid fa-star"></i>&nbsp; Моє навчання</div>
+            <div class="ep-hero-tag"><i class="fa-solid fa-star"></i> Моє навчання</div>
             <p class="ep-hero-sub">Продовжуй навчатися — кожен крок робить тебе кращим спеціалістом</p>
         </div>
         <div class="ep-hero-deco"><i class="fa-solid fa-graduation-cap"></i></div>
     </div>
     <div class="ep-tabs">
-        <button class="ep-tab active" data-tab="courses" onclick="ExpertPathPage.switchTab('courses',this)">
+        <button class="ep-tab active" data-tab="courses" style="--ep-accent:#6366f1" onclick="ExpertPathPage.switchTab('courses',this)">
             <div class="ep-tab-icon-wrap"><i class="fa-solid fa-graduation-cap"></i></div>
-            <div class="ep-tab-count">—</div>
-            <span class="ep-tab-label">Мої курси</span>
+            <div class="ep-tab-text">
+                <span class="ep-tab-label">Мої курси</span>
+                <span class="ep-tab-count">—</span>
+                <span class="ep-tab-caption">Активні курси</span>
+            </div>
         </button>
-        <button class="ep-tab" data-tab="tests" onclick="ExpertPathPage.switchTab('tests',this)">
+        <button class="ep-tab" data-tab="tests" style="--ep-accent:#3b82f6" onclick="ExpertPathPage.switchTab('tests',this)">
             <div class="ep-tab-icon-wrap"><i class="fa-solid fa-clipboard-list"></i></div>
-            <div class="ep-tab-count">—</div>
-            <span class="ep-tab-label">Мої тести</span>
+            <div class="ep-tab-text">
+                <span class="ep-tab-label">Мої тести</span>
+                <span class="ep-tab-count">—</span>
+                <span class="ep-tab-caption">Доступно тестів</span>
+            </div>
         </button>
-        <button class="ep-tab" data-tab="surveys" onclick="ExpertPathPage.switchTab('surveys',this)">
+        <button class="ep-tab" data-tab="surveys" style="--ep-accent:#10b981" onclick="ExpertPathPage.switchTab('surveys',this)">
             <div class="ep-tab-icon-wrap"><i class="fa-solid fa-square-poll-horizontal"></i></div>
-            <div class="ep-tab-count">0</div>
-            <span class="ep-tab-label">Мої опитування</span>
+            <div class="ep-tab-text">
+                <span class="ep-tab-label">Мої опитування</span>
+                <span class="ep-tab-count">0</span>
+                <span class="ep-tab-caption">Доступно опитувань</span>
+            </div>
         </button>
-        <button class="ep-tab" data-tab="completed" onclick="ExpertPathPage.switchTab('completed',this)">
+        <button class="ep-tab" data-tab="completed" style="--ep-accent:#f59e0b" onclick="ExpertPathPage.switchTab('completed',this)">
             <div class="ep-tab-icon-wrap"><i class="fa-solid fa-trophy"></i></div>
-            <div class="ep-tab-count">—</div>
-            <span class="ep-tab-label">Завершені</span>
+            <div class="ep-tab-text">
+                <span class="ep-tab-label">Завершені</span>
+                <span class="ep-tab-count">—</span>
+                <span class="ep-tab-caption">Курси завершено</span>
+            </div>
         </button>
     </div>
     <div id="ep-content"></div>
@@ -416,6 +442,12 @@ const ExpertPathPage = {
                         ${run?.title ? `<span style="color:var(--primary);font-weight:600">· ${Fmt.esc(run.title)}</span>` : ''}
                     </div>` : '';
 
+                const progressRow = (enr && !done) ? `
+                    <div class="ep-prog-row">
+                        <div class="ep-prog-bar"><div class="ep-prog-fill" style="width:${pct}%"></div></div>
+                        <span class="ep-prog-label">${pct}%</span>
+                    </div>` : '';
+
                 return `
                 <div class="ep-course-card" onclick="Router.go('courses/${c.id}?from=expert-path')">
                     <div class="ep-course-thumb">
@@ -428,6 +460,7 @@ const ExpertPathPage = {
                     </div>
                     <div class="ep-course-body">
                         ${metaTags ? `<div class="ep-course-meta">${metaTags}</div>` : ''}
+                        ${progressRow}
                         ${datesRow}
                     </div>
                 </div>`;
@@ -442,14 +475,7 @@ const ExpertPathPage = {
             { id: 'done',     label: `Завершені (${completed.length})`,   courses: completed.map(e => e.course).filter(Boolean) },
         ];
 
-        const canCreate = AppState.isStaff() && AppState.canMutate();
-        area.innerHTML = `
-            ${canCreate ? `<div style="display:flex;justify-content:flex-end;margin-bottom:.75rem">
-                <button class="btn btn-primary btn-sm" onclick="Router.go('admin?tab=courses')">
-                    <i class="fa-solid fa-plus"></i> Створити курс
-                </button>
-            </div>` : ''}
-            <div id="ep-course-list">${cardsFn(allCourses || [])}</div>`;
+        area.innerHTML = `<div id="ep-course-list">${cardsFn(allCourses || [])}</div>`;
     },
 
     _switchCourseTab(id, btn) {
@@ -552,7 +578,7 @@ const ExpertPathPage = {
                         ${dates ? `<div style="font-size:.7rem;color:var(--text-muted)">${dates}</div>` : ''}
                     </div>
                     ${parts.length ? `<div><div style="font-size:.65rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:.3rem"><i class="fa-solid fa-users"></i> Учасники (${parts.length})</div><div class="ep-done-avatars">${avatarsHtml}</div></div>` : ''}
-                    <button class="btn btn-ghost btn-sm" style="margin-top:auto;border:1px solid var(--border)" onclick="Router.go('courses/${c.id}?from=expert-path')">
+                    <button class="btn-primary-modern btn-sm" style="margin-top:auto;justify-content:center" onclick="Router.go('courses/${c.id}?from=expert-path')">
                         <i class="fa-solid fa-rotate"></i> Записатися повторно
                     </button>
                 </div>
@@ -585,7 +611,7 @@ const ExpertPathPage = {
                         </span>
                         <span style="font-size:1rem;font-weight:800;color:${passed ? '#10b981' : '#ef4444'}">${pct}%</span>
                     </div>
-                    <button class="btn btn-ghost btn-sm" style="border:1px solid var(--border)" onclick="Router.go('tests/${a.test_id}')">
+                    <button class="btn-primary-modern btn-sm" style="width:100%;justify-content:center" onclick="Router.go('tests/${a.test_id}')">
                         <i class="fa-solid fa-rotate"></i> Пройти ще раз
                     </button>
                 </div>

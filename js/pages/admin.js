@@ -4639,56 +4639,22 @@ const AdminPage = {
         }
     },
 
-    // ── Журнал сесій ─────────────────────────────────────────────
-    _sessPage: 1, _sessLimit: 40, _sessUserId: '', _sessFrom: '', _sessTo: '', _sessProfiles: [],
+    // ── Активні сесії (хто онлайн) ─────────────────────────────────
+    _sessProfiles: [],
 
     async _renderSessions(el) {
-        const _pad = n => String(n).padStart(2, '0');
-        const today = new Date();
-        const todayStr = `${today.getFullYear()}-${_pad(today.getMonth()+1)}-${_pad(today.getDate())}`;
-        const ago30 = new Date(today); ago30.setDate(today.getDate() - 30);
-        const ago30Str = `${ago30.getFullYear()}-${_pad(ago30.getMonth()+1)}-${_pad(ago30.getDate())}`;
-        if (!this._sessFrom) this._sessFrom = ago30Str;
-        if (!this._sessTo)   this._sessTo   = todayStr;
-
         const { data: profiles } = await API.profiles.getAll({ pageSize: 1000 });
         this._sessProfiles = profiles?.data || profiles || [];
-        const userOpts = this._sessProfiles.map(p =>
-            `<option value="${p.id}" ${p.id === this._sessUserId ? 'selected' : ''}>${Fmt.esc(p.full_name || p.email)}</option>`
-        ).join('');
 
         el.innerHTML = `
         <div class="adm-sess-wrap">
             <div class="adm-online-card" id="sess-online">
                 <div style="text-align:center;padding:1.5rem"><div class="spinner"></div></div>
             </div>
-            <div class="adm-sess-filters">
-                <select id="sess-uid" class="input-field" style="max-width:220px" onchange="AdminPage._sessUserId=this.value">
-                    <option value="">— Всі користувачі —</option>${userOpts}
-                </select>
-                <input type="date" id="sess-from" class="input-field" value="${this._sessFrom}" onchange="AdminPage._sessFrom=this.value">
-                <span style="color:var(--text-muted)">—</span>
-                <input type="date" id="sess-to" class="input-field" value="${this._sessTo}" onchange="AdminPage._sessTo=this.value">
-                <button class="btn btn-primary btn-sm" onclick="AdminPage._sessPage=1;AdminPage._loadSessions()">Застосувати</button>
-            </div>
-            <div id="sess-stats" class="adm-sess-stats"></div>
-            <div id="sess-table"></div>
-            <div id="sess-pager" style="display:flex;justify-content:center;gap:.4rem;margin-top:1rem;flex-wrap:wrap"></div>
         </div>
         <style>
         .adm-sess-wrap{padding:1.25rem}
-        .adm-sess-filters{display:flex;align-items:center;gap:.65rem;flex-wrap:wrap;margin-bottom:1.25rem}
-        .adm-sess-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.75rem;margin-bottom:1.25rem}
-        .adm-sess-kpi{background:var(--bg-raised);border:1px solid var(--border);border-radius:var(--radius-lg);padding:.9rem 1.1rem}
-        .adm-sess-kpi-val{font-size:1.6rem;font-weight:700;color:var(--primary);line-height:1.1}
-        .adm-sess-kpi-lbl{font-size:.75rem;color:var(--text-muted);margin-top:.2rem}
-        .adm-sess-tbl{width:100%;border-collapse:collapse;font-size:.875rem}
-        .adm-sess-tbl th{padding:.55rem .85rem;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);background:var(--bg-raised);text-align:left;white-space:nowrap}
-        .adm-sess-tbl td{padding:.6rem .85rem;border-bottom:1px solid var(--border);vertical-align:middle}
-        .adm-sess-tbl tr:hover td{background:var(--bg-hover)}
-        .sess-live{display:inline-block;padding:.15rem .55rem;border-radius:999px;font-size:.72rem;font-weight:600;background:rgba(16,185,129,.15);color:#10b981}
-        .sess-ua{font-size:.75rem;color:var(--text-muted);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-        .adm-online-card{border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--bg-surface);padding:1rem 1.1rem;margin-bottom:1.25rem}
+        .adm-online-card{border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--bg-surface);padding:1rem 1.1rem}
         .adm-online-head{display:flex;align-items:center;gap:9px;margin-bottom:.9rem}
         .adm-online-head-ico{width:30px;height:30px;border-radius:9px;background:rgba(16,185,129,.13);color:#10b981;display:flex;align-items:center;justify-content:center;font-size:.85rem;flex-shrink:0}
         .adm-online-title{font-size:.85rem;font-weight:700;color:var(--text-primary)}
@@ -4702,7 +4668,7 @@ const AdminPage = {
         .adm-online-row.multi .adm-online-count{background:rgba(245,158,11,.18);color:#f59e0b}
         .adm-online-empty{text-align:center;padding:1.25rem;color:var(--text-muted);font-size:.82rem}
         </style>`;
-        await Promise.all([this._loadSessions(), this._loadOnlineNow()]);
+        await this._loadOnlineNow();
     },
 
     // ── Одночасні активні сесії (heartbeat, окрема вкладка/пристрій = 1 сесія) ──
@@ -4783,81 +4749,6 @@ const AdminPage = {
             Toast.success('Завершено', `Всі сесії користувача ${name} буде завершено протягом кількох секунд`);
             await this._loadOnlineNow();
         } catch(e) { Toast.error('Помилка', e.message); }
-    },
-
-    async _loadSessions() {
-        const tableEl = document.getElementById('sess-table');
-        const statsEl = document.getElementById('sess-stats');
-        if (!tableEl) return;
-        tableEl.innerHTML = `<div style="text-align:center;padding:2rem"><div class="spinner"></div></div>`;
-
-        const offset = (this._sessPage - 1) * this._sessLimit;
-        const { data, count } = await API.loginSessions.getAll({
-            userId: this._sessUserId || undefined,
-            dateFrom: this._sessFrom, dateTo: this._sessTo,
-            limit: this._sessLimit, offset,
-        });
-
-        const active = data.filter(s => !s.ended_at).length;
-        const durations = data.filter(s => s.ended_at)
-            .map(s => (new Date(s.ended_at) - new Date(s.started_at)) / 1000);
-        const avgDur = durations.length
-            ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : 0;
-        const uniqueUsers = new Set(data.map(s => s.user_id)).size;
-
-        if (statsEl) statsEl.innerHTML = [
-            { v: count,                  l: 'Сесій за період' },
-            { v: active,                 l: 'Активних зараз' },
-            { v: uniqueUsers,            l: 'Унікальних юзерів' },
-            { v: this._sessFmtDur(avgDur), l: 'Середня тривалість' },
-        ].map(k => `<div class="adm-sess-kpi"><div class="adm-sess-kpi-val">${k.v}</div><div class="adm-sess-kpi-lbl">${k.l}</div></div>`).join('');
-
-        if (!data.length) {
-            tableEl.innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><h3>Сесій не знайдено</h3></div>`;
-            document.getElementById('sess-pager').innerHTML = '';
-            return;
-        }
-
-        const profileMap = Object.fromEntries(this._sessProfiles.map(p => [p.id, p]));
-        const rows = data.map(s => {
-            const p     = profileMap[s.user_id] || {};
-            const name  = Fmt.esc(p.full_name || p.email || '—');
-            const start = Fmt.datetime(s.started_at);
-            const end   = s.ended_at
-                ? Fmt.datetime(s.ended_at)
-                : `<span class="sess-live">активна</span>`;
-            const dur = s.ended_at
-                ? this._sessFmtDur((new Date(s.ended_at) - new Date(s.started_at)) / 1000)
-                : '—';
-            const ua = this._sessParseUA(s.ua || '');
-            return `<tr>
-                <td>${name}</td>
-                <td style="white-space:nowrap;font-size:.82rem">${start}</td>
-                <td style="white-space:nowrap;font-size:.82rem">${end}</td>
-                <td style="white-space:nowrap;font-size:.82rem">${dur}</td>
-                <td class="sess-ua" title="${Fmt.esc(s.ua || '')}">${Fmt.esc(ua)}</td>
-            </tr>`;
-        }).join('');
-
-        tableEl.innerHTML = `<div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-lg)">
-            <table class="adm-sess-tbl"><thead><tr>
-                <th>Користувач</th><th>Початок</th><th>Кінець</th><th>Тривалість</th><th>Браузер</th>
-            </tr></thead><tbody>${rows}</tbody></table></div>`;
-
-        const totalPages = Math.ceil(count / this._sessLimit);
-        const pager = document.getElementById('sess-pager');
-        if (pager) pager.innerHTML = totalPages < 2 ? '' :
-            Array.from({ length: Math.min(totalPages, 12) }, (_, i) => i + 1)
-                .map(p => `<button class="btn btn-sm ${p === this._sessPage ? 'btn-primary' : 'btn-ghost'}" onclick="AdminPage._sessPage=${p};AdminPage._loadSessions()">${p}</button>`)
-                .join('');
-    },
-
-    _sessFmtDur(sec) {
-        if (!sec || sec < 0) return '< 1хв';
-        const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = Math.floor(sec % 60);
-        if (h > 0) return `${h}г ${m}хв`;
-        if (m > 0) return `${m}хв ${s}с`;
-        return `${s}с`;
     },
 
     _sessParseUA(ua) {
@@ -4949,6 +4840,7 @@ const AdminPage = {
         </div>
         <style>
         .adm-nav-wrap{padding:1.25rem}
+        .adm-sess-filters{display:flex;align-items:center;gap:.65rem;flex-wrap:wrap;margin-bottom:1.25rem}
         .nav-period-chips{display:flex;gap:5px}
         .nav-pchip{padding:7px 13px;border-radius:9999px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);font-size:.76rem;font-weight:600;cursor:pointer;transition:all .15s;font-family:inherit}
         .nav-pchip:hover{border-color:var(--primary);color:var(--primary)}
@@ -5211,6 +5103,11 @@ const AdminPage = {
         </div>
         <style>
         .adm-task-wrap{padding:1.25rem}
+        .adm-sess-filters{display:flex;align-items:center;gap:.65rem;flex-wrap:wrap;margin-bottom:1.25rem}
+        .adm-sess-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.75rem}
+        .adm-sess-kpi{background:var(--bg-raised);border:1px solid var(--border);border-radius:var(--radius-lg);padding:.9rem 1.1rem}
+        .adm-sess-kpi-val{font-size:1.6rem;font-weight:700;color:var(--primary);line-height:1.1}
+        .adm-sess-kpi-lbl{font-size:.75rem;color:var(--text-muted);margin-top:.2rem}
         .task-tbl{width:100%;border-collapse:collapse;font-size:.875rem}
         .task-tbl th{padding:.55rem .85rem;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);background:var(--bg-raised);text-align:left;white-space:nowrap}
         .task-tbl td{padding:.6rem .85rem;border-bottom:1px solid var(--border);vertical-align:middle}

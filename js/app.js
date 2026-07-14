@@ -874,7 +874,19 @@ const AnniversaryModal = {
     </button>
 </div>`;
         document.body.appendChild(overlay);
-        overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+        overlay.addEventListener('click', e => {
+            if (e.target !== overlay) return;
+            overlay.remove();
+            // Закриття кліком по фону теж рахується як "побачив" —
+            // інакше badgeKey ніколи не встановлюється і торт у топбарі
+            // не з'являється до кінця дня (навіть після перезавантаження).
+            const p = AppState.profile;
+            if (p) {
+                const t = new Date();
+                localStorage.setItem(`anniversary_badge_${p.id}_${t.getFullYear()}-${t.getMonth()}-${t.getDate()}`, '1');
+            }
+            this._placeBadge();
+        });
     },
 
     _flyOut() {

@@ -959,11 +959,12 @@ const SchedulerPage = {
     // ── Birthday reminders ───────────────────────────────────────
 
     async _checkBirthdayReminders() {
-        if (!AppState.user?.id) return;
+        const uid = AppState.user?.id;
+        if (!uid) return;
         const { data, error } = await supabase
             .from('birthday_reminders')
             .select('*, target:profiles!target_id(id, full_name, birth_date)')
-            .eq('created_by', AppState.user.id)
+            .eq('created_by', uid)
             .eq('is_active', true);
         if (error || !data?.length) return;
 
@@ -993,11 +994,11 @@ const SchedulerPage = {
                             rem.days_before === 1 ? 'Завтра' :
                             `Через ${rem.days_before} днів`;
 
-            await NotificationsPage.send([AppState.user.id], {
+            await NotificationsPage.send([uid], {
                 title:     `🎂 ${rem.target.full_name}`,
                 message:   `${dayText} день народження!\n${bdLabel}`,
                 type:      'general',
-                createdBy: AppState.user.id,
+                createdBy: uid,
             });
 
             await supabase.from('birthday_reminders')

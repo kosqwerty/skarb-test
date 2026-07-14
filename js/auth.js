@@ -39,6 +39,7 @@ const Auth = {
         }
         // Якщо акаунт заблоковано адміністратором — одразу виходимо
         if (AppState.profile?.is_active === false) {
+            console.warn('[Auth] Примусовий вихід: is_active=false на _loadProfile (заблоковано адміністратором)');
             try { await supabase.auth.signOut(); } catch(_) {}
             AppState.user = null; AppState.profile = null; AppState.session = null;
             this._showAuth();
@@ -192,12 +193,14 @@ const Auth = {
 
                 const row = fresh || payload.new;
                 if (row?.is_active === false) {
+                    console.warn('[Auth] Примусовий вихід: is_active=false через Realtime block-watch');
                     this._signingOut = true;
                     this._blockedByAdmin = true;
                     try { await supabase.auth.signOut(); } catch(_) {}
                     return;
                 }
                 if (row?.force_logout === true) {
+                    console.warn('[Auth] Примусовий вихід: force_logout=true через Realtime block-watch');
                     this._signingOut = true;
                     this._kickedByAdmin = true;
                     try { await supabase.auth.signOut(); } catch(_) {}
@@ -209,6 +212,11 @@ const Auth = {
     listen() {
         supabase.auth.onAuthStateChange((event, session) => {
             if (event === 'SIGNED_OUT') {
+                console.warn('[Auth] SIGNED_OUT', {
+                    blockedByAdmin: this._blockedByAdmin,
+                    kickedByAdmin:  this._kickedByAdmin,
+                    signingOut:     this._signingOut,
+                });
                 try { API.loginSessions.end(AppState._sessionId); } catch(_) {}
                 AppState._sessionId = null;
                 this._signingOut = false;
@@ -217,6 +225,7 @@ const Auth = {
                 InactivityWatcher.stop();
                 Heartbeat.removeSession().catch(() => {});
                 Heartbeat.stop();
+                SchedulerPage.stopTimer();
                 if (this._blockChannel) {
                     supabase.removeChannel(this._blockChannel);
                     this._blockChannel = null;
@@ -247,6 +256,11 @@ const Auth = {
     },
 
     async _showApp() {
+        // Явний логін — це вже активність користувача. Скидаємо lms_last_active,
+        // інакше прострочений таймстемп з минулої сесії (вкладка була закрита >30хв)
+        // одразу після входу викликає InactivityWatcher._doLogout() і миттєво розлогінює.
+        InactivityWatcher._reset();
+
         // Скидаємо force_logout якщо лишився з попередньої сесії —
         // до старту Heartbeat, щоб він не прочитав true і не вибив знову
         const uid = AppState.user?.id;
@@ -326,6 +340,7 @@ const Heartbeat = {
             if (!data) return;
             // Fallback для блокування (Realtime міг не спрацювати)
             if (data.is_active === false) {
+                console.warn('[Auth] Примусовий вихід: is_active=false через Heartbeat fallback');
                 Auth._signingOut = true;
                 Auth._blockedByAdmin = true;
                 await supabase.auth.signOut();
@@ -333,6 +348,7 @@ const Heartbeat = {
             }
             // Fallback для примусового виходу (Realtime міг не спрацювати)
             if (data.force_logout === true) {
+                console.warn('[Auth] Примусовий вихід: force_logout=true через Heartbeat fallback');
                 Auth._signingOut = true;
                 Auth._kickedByAdmin = true;
                 await supabase.auth.signOut();
@@ -395,6 +411,7 @@ const InactivityWatcher = {
     },
 
     _doLogout() {
+        console.warn('[Auth] Примусовий вихід: неактивність понад', Math.round((Date.now() - this._lastActive) / 60000), 'хв (ліміт 30 хв)');
         this.stop();
         localStorage.removeItem('lms_last_active');
         const hash = location.hash;

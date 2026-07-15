@@ -108,7 +108,7 @@ Full namespace list: `API.profiles`, `API.courses`, `API.enrollments`, `API.less
 
 ### Database migrations
 
-`sql/schema.sql` — consolidated schema snapshot of the current DB state. All migrations v2–v109 have been merged into this single file. When adding a new column/table, create `sql/migration_v131.sql` (increment from 131) and run it in the Supabase SQL Editor. **Latest is v130**.
+`sql/schema.sql` — consolidated schema snapshot of the current DB state. All migrations v2–v152 have been merged into this single file. When adding a new column/table, create `sql/migration_v153.sql` (increment from 153) and run it in the Supabase SQL Editor. **Latest is v152**.
 
 When writing a migration, always include `IF NOT EXISTS` / `IF EXISTS` guards and end with RLS + policies.
 
@@ -183,7 +183,7 @@ All PKs are UUID. All tables have `created_at TIMESTAMPTZ DEFAULT NOW()`. Tables
 | `intern_disciplines` | `intern_id`, `discipline_name`, `date`, `hours`, `place`, `cabinet`, `address`, `row_type`, `mentor_id`, `is_completed`, `notes`, `order_index` | Schedule rows for intern training |
 | `intern_logs` | `actor_id`, `intern_id`, `action`, `details` (jsonb) | Activity log; RLS: `actor_id = auth.uid()`. Use `AppState._realProfile?.id \|\| AppState.profile?.id` for actor (sync, works during impersonation) |
 
-> `schema.sql` is the baseline. Migrations `v2–v50` add columns — check the latest migration for the most current column list on any table.
+> `schema.sql` is the up-to-date baseline (as of v152) — regenerated directly from the live database, so it already reflects every column across all past migrations. New migrations start at `v153`.
 
 ## All routes
 

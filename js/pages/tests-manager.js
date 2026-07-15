@@ -120,11 +120,23 @@ const TestsManagerAPI = {
     async getMyAssignments() {
         const { data, error } = await supabase.from('test_assignments')
             .select(`*, test:tests(id,title,description,time_limit_minutes,max_attempts,randomize_questions,
-                questions(id))`)
+                questions(id)), group:test_groups(id,title,description,cover_image,is_sequential)`)
             .eq('user_id', AppState.user.id)
             .order('created_at', { ascending: false });
         if (error) throw error;
-        return data || [];
+        const assignments = data || [];
+
+        const groupIds = [...new Set(assignments.map(a => a.group_id).filter(Boolean))];
+        if (groupIds.length) {
+            const { data: items } = await supabase.from('test_group_items')
+                .select('group_id, test_id, order_index')
+                .in('group_id', groupIds);
+            const orderMap = new Map((items || []).map(it => [`${it.group_id}_${it.test_id}`, it.order_index]));
+            assignments.forEach(a => {
+                if (a.group_id) a._order = orderMap.get(`${a.group_id}_${a.test_id}`) ?? 0;
+            });
+        }
+        return assignments;
     },
 
     async getAssignments(testId) {
@@ -214,6 +226,95 @@ const TestsManagerAPI = {
             .in('attempt_id', attemptIds.slice(0, 1000));
         if (error) throw error;
         return data || [];
+    },
+
+    // ── Test groups (sequential test paths) ────────────────────────
+    async getGroups() {
+        const { data, error } = await supabase.from('test_groups')
+            .select('*, items:test_group_items(id, test_id, order_index)')
+            .order('created_at', { ascending: false });
+        if (error) throw error;
+        return data || [];
+    },
+
+    async getGroup(id) {
+        const { data, error } = await supabase.from('test_groups')
+            .select('*, items:test_group_items(id, test_id, order_index, test:tests(id,title,is_published,cover_image))')
+            .eq('id', id).single();
+        if (error) throw error;
+        return data;
+    },
+
+    async createGroup(fields) {
+        const { data, error } = await supabase.from('test_groups')
+            .insert({ ...fields, created_by: AppState.user.id })
+            .select().single();
+        if (error) throw error;
+        return data;
+    },
+
+    async updateGroup(id, fields) {
+        const { data, error } = await supabase.from('test_groups')
+            .update({ ...fields, updated_at: new Date().toISOString() })
+            .eq('id', id).select().single();
+        if (error) throw error;
+        return data;
+    },
+
+    async deleteGroup(id) {
+        const { error } = await supabase.from('test_groups').delete().eq('id', id);
+        if (error) throw error;
+    },
+
+    async setGroupItems(groupId, testIds) {
+        const { error: delErr } = await supabase.from('test_group_items').delete().eq('group_id', groupId);
+        if (delErr) throw delErr;
+        if (!testIds.length) return;
+        const rows = testIds.map((testId, i) => ({ group_id: groupId, test_id: testId, order_index: i }));
+        const { error } = await supabase.from('test_group_items').insert(rows);
+        if (error) throw error;
+    },
+
+    async uploadGroupCover(groupId, file) {
+        const ext  = file.name.split('.').pop().toLowerCase();
+        const path = `covers/groups/${groupId}/cover.${ext}`;
+        const opts = { upsert: true };
+        if (file.type) opts.contentType = file.type;
+        const { error } = await supabase.storage.from(APP_CONFIG.buckets.testImages).upload(path, file, opts);
+        if (error) throw error;
+        return `${APP_CONFIG.storagePublicUrl}/${APP_CONFIG.buckets.testImages}/${path}`;
+    },
+
+    async getGroupAssignedUsers(groupId) {
+        const { data, error } = await supabase.from('test_assignments')
+            .select('user_id, deadline_at')
+            .eq('group_id', groupId);
+        if (error) throw error;
+        const map = new Map();
+        for (const a of (data || [])) if (!map.has(a.user_id)) map.set(a.user_id, a);
+        return map;
+    },
+
+    async assignGroup(groupId, userIds, deadlineAt) {
+        const { data: items, error: itemsErr } = await supabase.from('test_group_items')
+            .select('test_id').eq('group_id', groupId);
+        if (itemsErr) throw itemsErr;
+        const testIds = (items || []).map(i => i.test_id);
+        if (!testIds.length) return;
+        const rows = [];
+        for (const testId of testIds) for (const uid of userIds) rows.push({
+            test_id: testId, user_id: uid, group_id: groupId,
+            assigned_by: AppState.user.id, deadline_at: deadlineAt || null
+        });
+        const { error } = await supabase.from('test_assignments')
+            .upsert(rows, { onConflict: 'test_id,user_id', ignoreDuplicates: false });
+        if (error) throw error;
+    },
+
+    async unassignGroup(groupId, userId) {
+        const { error } = await supabase.from('test_assignments')
+            .delete().eq('group_id', groupId).eq('user_id', userId);
+        if (error) throw error;
     }
 };
 
@@ -362,6 +463,29 @@ const TestsManagerPage = {
 .tm-act-btn{width:32px;height:32px;border-radius:9px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;font-size:.8rem;transition:all .15s}
 .tm-act-btn:hover{border-color:var(--primary);color:var(--primary);background:color-mix(in srgb,var(--primary) 8%,transparent)}
 .tm-act-danger:hover{border-color:var(--danger)!important;color:var(--danger)!important;background:rgba(239,68,68,.08)!important}
+
+.tm-sec-tabs{display:flex;gap:8px;margin-bottom:18px}
+.tm-sec-tab{padding:8px 18px;border-radius:9999px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-muted);font-size:.82rem;font-weight:600;cursor:pointer;transition:all .18s;display:inline-flex;align-items:center;gap:7px}
+.tm-sec-tab:hover:not(.on){border-color:var(--primary);color:var(--primary)}
+.tm-sec-tab.on{background:var(--primary);color:#fff;border-color:var(--primary)}
+
+.tmg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+.tmg-card{background:var(--bg-surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;transition:box-shadow .15s,transform .15s;animation:tm-in .3s ease}
+.tmg-card:hover{box-shadow:0 8px 24px rgba(0,0,0,.1);transform:translateY(-2px)}
+.tmg-cover{height:110px;background:linear-gradient(135deg,#0f172a 0%,#1e40af 55%,#C9A227 100%);background-size:cover;background-position:center;position:relative;display:flex;align-items:flex-end;padding:10px}
+.tmg-cover-ph{display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.85);font-size:1.8rem}
+.tmg-seq-badge{position:absolute;top:8px;right:8px;font-size:.64rem;font-weight:700;padding:3px 9px;border-radius:20px;background:rgba(0,0,0,.4);color:#fff;backdrop-filter:blur(4px)}
+.tmg-body{padding:14px 16px}
+.tmg-title{font-weight:700;font-size:.95rem;color:var(--text-primary);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tmg-desc{font-size:.78rem;color:var(--text-muted);margin-bottom:10px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;min-height:2.1em}
+.tmg-meta{font-size:.72rem;color:var(--text-muted);margin-bottom:10px}
+.tmg-actions{display:flex;gap:6px}
+.tmg-btn{flex:1;padding:7px 10px;border-radius:9px;border:1.5px solid var(--border);background:transparent;color:var(--text-secondary);font-size:.76rem;font-weight:600;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;justify-content:center;gap:5px}
+.tmg-btn:hover{border-color:var(--primary);color:var(--primary)}
+.tmg-btn-danger:hover{border-color:var(--danger)!important;color:var(--danger)!important}
+.tmg-new-card{border:2px dashed var(--border);border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:220px;cursor:pointer;color:var(--text-muted);background:transparent;transition:all .15s}
+.tmg-new-card:hover{border-color:var(--primary);color:var(--primary)}
+.tmg-new-card i{font-size:1.6rem}
 </style>
 
 <div class="tm-page">
@@ -381,6 +505,11 @@ const TestsManagerPage = {
             </div>
             ${AppState.canMutate() ? `<button class="tm-btn-new" onclick="TestsManagerPage.openCreateModal()"><i class="fa-solid fa-plus"></i> Новий тест</button>` : ''}
         </div>
+    </div>
+
+    <div class="tm-sec-tabs">
+        <button class="tm-sec-tab on" onclick="TestsManagerPage._renderList(TestsManagerPage._container)"><i class="fa-solid fa-file-pen"></i> Тести</button>
+        <button class="tm-sec-tab" onclick="TestsManagerPage._renderGroupsList(TestsManagerPage._container)"><i class="fa-solid fa-layer-group"></i> Групи тестів</button>
     </div>
 
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;flex-wrap:wrap">
@@ -426,6 +555,421 @@ const TestsManagerPage = {
     </div>`}
 </div>`;
         this._applyListFilters();
+    },
+
+    // ── Groups list ──────────────────────────────────────────────
+
+    async _renderGroupsList(container) {
+        this._container = container;
+        this._prevView  = 'groups';
+        container.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
+        try {
+            this._groups = await TestsManagerAPI.getGroups();
+        } catch(e) { Toast.error('Помилка', e.message); this._groups = []; }
+
+        container.innerHTML = `
+<style>
+.tm-hero{border-radius:22px;padding:32px 36px;margin-bottom:24px;background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 60%,#1e40af 100%);position:relative;overflow:hidden}
+.tm-hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 60% 80% at 80% 20%,rgba(201,162,39,.18),transparent);pointer-events:none}
+.tm-hero-inner{position:relative;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.tm-hero-left{display:flex;align-items:center;gap:18px}
+.tm-hero-icon{width:60px;height:60px;border-radius:18px;background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:1.9rem;flex-shrink:0;color:#fff}
+.tm-hero-title{margin:0;font-size:1.7rem;font-weight:800;color:#fff;letter-spacing:-.03em}
+.tm-hero-sub{margin:4px 0 0;color:rgba(255,255,255,.65);font-size:.88rem}
+.tm-hero-stats{display:flex;gap:24px;position:relative}
+.tm-hero-stat{text-align:right}
+.tm-hero-stat b{display:block;font-size:1.35rem;font-weight:800;color:#fff}
+.tm-hero-stat span{font-size:.66rem;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.06em}
+@media(max-width:768px){.tm-hero-stats{display:none}}
+
+.tm-sec-tabs{display:flex;gap:8px;margin-bottom:18px}
+.tm-sec-tab{padding:8px 18px;border-radius:9999px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-muted);font-size:.82rem;font-weight:600;cursor:pointer;transition:all .18s;display:inline-flex;align-items:center;gap:7px}
+.tm-sec-tab:hover:not(.on){border-color:var(--primary);color:var(--primary)}
+.tm-sec-tab.on{background:var(--primary);color:#fff;border-color:var(--primary)}
+
+.tmg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+.tmg-card{background:var(--bg-surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;transition:box-shadow .15s,transform .15s;animation:tm-in .3s ease}
+.tmg-card:hover{box-shadow:0 8px 24px rgba(0,0,0,.1);transform:translateY(-2px)}
+.tmg-cover{height:110px;background:linear-gradient(135deg,#0f172a 0%,#1e40af 55%,#C9A227 100%);background-size:cover;background-position:center;position:relative;display:flex;align-items:flex-end;padding:10px}
+.tmg-cover-ph{display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.85);font-size:1.8rem}
+.tmg-seq-badge{position:absolute;top:8px;right:8px;font-size:.64rem;font-weight:700;padding:3px 9px;border-radius:20px;background:rgba(0,0,0,.4);color:#fff;backdrop-filter:blur(4px)}
+.tmg-body{padding:14px 16px}
+.tmg-title{font-weight:700;font-size:.95rem;color:var(--text-primary);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tmg-desc{font-size:.78rem;color:var(--text-muted);margin-bottom:10px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;min-height:2.1em}
+.tmg-meta{font-size:.72rem;color:var(--text-muted);margin-bottom:10px}
+.tmg-actions{display:flex;gap:6px}
+.tmg-btn{flex:1;padding:7px 10px;border-radius:9px;border:1.5px solid var(--border);background:transparent;color:var(--text-secondary);font-size:.76rem;font-weight:600;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;justify-content:center;gap:5px}
+.tmg-btn:hover{border-color:var(--primary);color:var(--primary)}
+.tmg-btn-danger:hover{border-color:var(--danger)!important;color:var(--danger)!important}
+.tmg-new-card{border:2px dashed var(--border);border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:220px;cursor:pointer;color:var(--text-muted);background:transparent;transition:all .15s}
+.tmg-new-card:hover{border-color:var(--primary);color:var(--primary)}
+.tmg-new-card i{font-size:1.6rem}
+@keyframes tm-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+</style>
+<div class="tm-page">
+    <div class="tm-hero">
+        <div class="tm-hero-inner">
+            <div class="tm-hero-left">
+                <div class="tm-hero-icon"><i class="fa-solid fa-layer-group"></i></div>
+                <div>
+                    <h1 class="tm-hero-title">Групи тестів</h1>
+                    <p class="tm-hero-sub">Об'єднуйте тести у послідовність для проходження</p>
+                </div>
+            </div>
+            <div class="tm-hero-stats">
+                <div class="tm-hero-stat"><b>${this._groups.length}</b><span>груп</span></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="tm-sec-tabs">
+        <button class="tm-sec-tab" onclick="TestsManagerPage._renderList(TestsManagerPage._container)"><i class="fa-solid fa-file-pen"></i> Тести</button>
+        <button class="tm-sec-tab on" onclick="TestsManagerPage._renderGroupsList(TestsManagerPage._container)"><i class="fa-solid fa-layer-group"></i> Групи тестів</button>
+    </div>
+
+    <div class="tmg-grid">
+        ${this._groups.map(g => this._groupCardHtml(g)).join('')}
+        ${AppState.canMutate() ? `
+        <button type="button" class="tmg-new-card" onclick="TestsManagerPage.openGroupEditor()">
+            <i class="fa-solid fa-plus"></i>
+            <span>Нова група</span>
+        </button>` : ''}
+    </div>
+</div>`;
+    },
+
+    _groupCardHtml(g) {
+        const count = g.items?.length || 0;
+        return `
+<div class="tmg-card">
+    <div class="tmg-cover" style="${g.cover_image ? `background-image:url('${Fmt.esc(g.cover_image)}')` : ''}">
+        ${!g.cover_image ? `<div class="tmg-cover-ph"><i class="fa-solid fa-layer-group"></i></div>` : ''}
+        <span class="tmg-seq-badge"><i class="fa-solid ${g.is_sequential ? 'fa-arrow-down-1-9' : 'fa-shuffle'}"></i> ${g.is_sequential ? 'Послідовно' : 'У будь-якому порядку'}</span>
+    </div>
+    <div class="tmg-body">
+        <div class="tmg-title">${Fmt.esc(g.title)}</div>
+        <div class="tmg-desc">${Fmt.esc(g.description || '')}</div>
+        <div class="tmg-meta"><i class="fa-solid fa-clipboard-list"></i> ${count} ${count === 1 ? 'тест' : 'тестів'}</div>
+        <div class="tmg-actions">
+            ${AppState.canMutate() ? `
+            <button type="button" class="tmg-btn" onclick="TestsManagerPage.openGroupEditor('${g.id}')"><i class="fa-solid fa-pen"></i> Редагувати</button>
+            <button type="button" class="tmg-btn" onclick="TestsManagerPage.openGroupAssign('${g.id}')"><i class="fa-solid fa-user-group"></i> Призначити</button>
+            <button type="button" class="tmg-btn tmg-btn-danger" onclick="TestsManagerPage._deleteGroup('${g.id}')"><i class="fa-solid fa-trash"></i></button>` : ''}
+        </div>
+    </div>
+</div>`;
+    },
+
+    async _deleteGroup(id) {
+        const ok = await Modal.confirm({ title: 'Видалити групу', message: 'Групу буде видалено. Тести залишаться, але їх призначення в межах групи розв\'яжуться. Продовжити?', danger: true });
+        if (!ok) return;
+        Loader.show();
+        try {
+            await TestsManagerAPI.deleteGroup(id);
+            Toast.success('Групу видалено');
+            await this._renderGroupsList(this._container);
+        } catch(e) { Toast.error('Помилка', e.message); }
+        finally { Loader.hide(); }
+    },
+
+    // ── Group editor ─────────────────────────────────────────────
+
+    async openGroupEditor(groupId) {
+        this._pendingGroupCoverFile = null;
+        let group = null;
+        if (groupId) {
+            Loader.show();
+            try { group = await TestsManagerAPI.getGroup(groupId); }
+            catch(e) { Loader.hide(); Toast.error('Помилка', e.message); return; }
+            Loader.hide();
+        }
+        this._groupCoverUrl = group?.cover_image || null;
+        const items = (group?.items || []).slice().sort((a,b) => a.order_index - b.order_index);
+        this._editorGroupItems = items.map(it => ({ id: it.test_id, title: it.test?.title || '(тест видалено)' }));
+
+        const availableTests = (this._tests?.length ? this._tests : await TestsManagerAPI.getAllStandalone().catch(e => { console.error('[test group editor] load tests:', e); return []; }));
+        this._editorAllTests = availableTests;
+
+        Modal.open({
+            title: groupId ? 'Редагувати групу тестів' : 'Нова група тестів',
+            size: 'lg',
+            body: `
+<style>
+.tmge-cover-wrap{margin-bottom:16px}
+.tmge-cover-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;height:120px;border:2px dashed var(--border);border-radius:12px;cursor:pointer;color:var(--text-muted);text-align:center}
+.tmge-cover-empty:hover{border-color:var(--primary);color:var(--primary)}
+.tmge-cover-preview{position:relative;height:120px;border-radius:12px;overflow:hidden}
+.tmge-cover-preview img{width:100%;height:100%;object-fit:cover}
+.tmge-cover-actions{position:absolute;top:8px;right:8px;display:flex;gap:6px}
+.tmge-cover-btn{width:30px;height:30px;border-radius:8px;border:none;background:rgba(0,0,0,.55);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.tmge-field{margin-bottom:14px}
+.tmge-label{display:block;font-size:.78rem;font-weight:700;color:var(--text-secondary);margin-bottom:6px}
+.tmge-inp,.tmge-textarea{width:100%;padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.85rem;outline:none;font-family:inherit}
+.tmge-inp:focus,.tmge-textarea:focus{border-color:var(--primary)}
+.tmge-textarea{resize:vertical;min-height:60px}
+.tmge-toggle-row{display:flex;align-items:center;gap:10px;font-size:.84rem;color:var(--text-primary)}
+.tmge-items{border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.tmge-item{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border);font-size:.83rem}
+.tmge-item:last-child{border-bottom:none}
+.tmge-item-idx{width:20px;text-align:center;font-weight:700;color:var(--text-muted);flex-shrink:0}
+.tmge-item-title{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tmge-item-btn{width:26px;height:26px;border-radius:7px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;flex-shrink:0}
+.tmge-item-btn:hover{border-color:var(--primary);color:var(--primary)}
+.tmge-item-btn:disabled{opacity:.3;cursor:not-allowed}
+.tmge-empty-items{padding:14px;text-align:center;color:var(--text-muted);font-size:.8rem}
+.tmge-checklist{border:1px solid var(--border);border-radius:12px;max-height:220px;overflow-y:auto}
+.tmge-check-row{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);font-size:.83rem;cursor:pointer}
+.tmge-check-row:last-child{border-bottom:none}
+.tmge-check-row:hover{background:var(--bg-hover)}
+.tmge-check-row input{width:16px;height:16px;accent-color:var(--primary);flex-shrink:0}
+.tmge-check-row span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-primary)}
+</style>
+<div class="tmge-cover-wrap" id="tmge-cover-wrap">${this._groupCoverPreviewHtml()}</div>
+<div class="tmge-field">
+    <label class="tmge-label">Назва групи</label>
+    <input class="tmge-inp" id="tmge-title" type="text" value="${Fmt.esc(group?.title || '')}" placeholder="Напр. Вступний курс продавця">
+</div>
+<div class="tmge-field">
+    <label class="tmge-label">Опис</label>
+    <textarea class="tmge-textarea" id="tmge-desc" placeholder="Короткий опис групи тестів">${Fmt.esc(group?.description || '')}</textarea>
+</div>
+<div class="tmge-field">
+    <label class="tmge-toggle-row"><input type="checkbox" id="tmge-seq" ${(group ? group.is_sequential : true) ? 'checked' : ''}> Проходити тести строго по порядку (наступний тест відкривається лише після успішного складання попереднього)</label>
+</div>
+<div class="tmge-field">
+    <label class="tmge-label">Тести для додавання</label>
+    <div class="tmge-checklist" id="tmge-checklist">${this._groupChecklistHtml()}</div>
+</div>
+<div class="tmge-field">
+    <label class="tmge-label">Тести у групі (порядок проходження)</label>
+    <div class="tmge-items" id="tmge-items">${this._groupItemsHtml()}</div>
+</div>`,
+            footer: `
+<button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
+<button class="btn btn-primary" onclick="TestsManagerPage._saveGroup('${groupId || ''}')"><i class="fa-solid fa-check"></i> Зберегти</button>`
+        });
+    },
+
+    _groupCoverPreviewHtml() {
+        if (this._groupCoverUrl) return `
+<div class="tmge-cover-preview">
+    <img src="${Fmt.esc(this._groupCoverUrl)}" alt="">
+    <div class="tmge-cover-actions">
+        <label class="tmge-cover-btn"><i class="fa-solid fa-image"></i><input type="file" accept="image/*" style="display:none" onchange="TestsManagerPage._onGroupCoverPick(this)"></label>
+        <button type="button" class="tmge-cover-btn" onclick="TestsManagerPage._removeGroupCover()"><i class="fa-solid fa-trash"></i></button>
+    </div>
+</div>`;
+        return `
+<label class="tmge-cover-empty">
+    <i class="fa-solid fa-cloud-arrow-up"></i>
+    <span>Завантажити обкладинку групи</span>
+    <input type="file" accept="image/*" style="display:none" onchange="TestsManagerPage._onGroupCoverPick(this)">
+</label>`;
+    },
+
+    _onGroupCoverPick(input) {
+        const file = input.files[0];
+        if (!file) return;
+        this._pendingGroupCoverFile = file;
+        const reader = new FileReader();
+        reader.onload = e => {
+            this._groupCoverUrl = e.target.result;
+            document.getElementById('tmge-cover-wrap').innerHTML = this._groupCoverPreviewHtml();
+        };
+        reader.readAsDataURL(file);
+    },
+
+    _removeGroupCover() {
+        this._pendingGroupCoverFile = null;
+        this._groupCoverUrl = '';
+        document.getElementById('tmge-cover-wrap').innerHTML = this._groupCoverPreviewHtml();
+    },
+
+    _groupItemsHtml() {
+        const items = this._editorGroupItems || [];
+        if (!items.length) return `<div class="tmge-empty-items">Ще немає тестів у групі</div>`;
+        return items.map((it, i) => `
+<div class="tmge-item">
+    <span class="tmge-item-idx">${i + 1}</span>
+    <span class="tmge-item-title">${Fmt.esc(it.title)}</span>
+    <button type="button" class="tmge-item-btn" ${i === 0 ? 'disabled' : ''} onclick="TestsManagerPage._groupMoveItem(${i},-1)"><i class="fa-solid fa-arrow-up"></i></button>
+    <button type="button" class="tmge-item-btn" ${i === items.length - 1 ? 'disabled' : ''} onclick="TestsManagerPage._groupMoveItem(${i},1)"><i class="fa-solid fa-arrow-down"></i></button>
+    <button type="button" class="tmge-item-btn" onclick="TestsManagerPage._groupRemoveItem(${i})"><i class="fa-solid fa-xmark"></i></button>
+</div>`).join('');
+    },
+
+    _groupChecklistHtml() {
+        const usedIds = new Set((this._editorGroupItems || []).map(it => it.id));
+        const tests = this._editorAllTests || [];
+        if (!tests.length) return `<div class="tmge-empty-items">Немає доступних тестів</div>`;
+        return tests.map(t => `
+<label class="tmge-check-row">
+    <input type="checkbox" value="${t.id}" ${usedIds.has(t.id) ? 'checked' : ''} onchange="TestsManagerPage._groupToggleTest('${t.id}', this.checked)">
+    <span>${Fmt.esc(t.title)}</span>
+</label>`).join('');
+    },
+
+    _refreshGroupEditorLists() {
+        document.getElementById('tmge-items').innerHTML      = this._groupItemsHtml();
+        document.getElementById('tmge-checklist').innerHTML  = this._groupChecklistHtml();
+    },
+
+    _groupToggleTest(testId, checked) {
+        if (checked) {
+            if ((this._editorGroupItems || []).some(it => it.id === testId)) return;
+            const test = this._editorAllTests.find(t => t.id === testId);
+            if (!test) return;
+            this._editorGroupItems.push({ id: test.id, title: test.title });
+        } else {
+            this._editorGroupItems = (this._editorGroupItems || []).filter(it => it.id !== testId);
+        }
+        this._refreshGroupEditorLists();
+    },
+
+    _groupRemoveItem(i) {
+        this._editorGroupItems.splice(i, 1);
+        this._refreshGroupEditorLists();
+    },
+
+    _groupMoveItem(i, dir) {
+        const items = this._editorGroupItems;
+        const j = i + dir;
+        if (j < 0 || j >= items.length) return;
+        [items[i], items[j]] = [items[j], items[i]];
+        document.getElementById('tmge-items').innerHTML = this._groupItemsHtml();
+    },
+
+    async _saveGroup(groupId) {
+        const title = Dom.val('tmge-title').trim();
+        if (!title) { Toast.warning('Вкажіть назву групи'); return; }
+        const payload = {
+            title,
+            description: Dom.val('tmge-desc').trim() || null,
+            is_sequential: !!document.getElementById('tmge-seq')?.checked
+        };
+        Loader.show();
+        try {
+            let group;
+            if (groupId) group = await TestsManagerAPI.updateGroup(groupId, payload);
+            else          group = await TestsManagerAPI.createGroup(payload);
+
+            if (this._pendingGroupCoverFile) {
+                const url = await TestsManagerAPI.uploadGroupCover(group.id, this._pendingGroupCoverFile);
+                await TestsManagerAPI.updateGroup(group.id, { cover_image: url });
+            } else if (this._groupCoverUrl === '') {
+                await TestsManagerAPI.updateGroup(group.id, { cover_image: null });
+            }
+
+            await TestsManagerAPI.setGroupItems(group.id, (this._editorGroupItems || []).map(it => it.id));
+
+            Toast.success(groupId ? 'Групу збережено' : 'Групу створено');
+            Modal.close();
+            await this._renderGroupsList(this._container);
+        } catch(e) { Toast.error('Помилка', e.message); }
+        finally { Loader.hide(); }
+    },
+
+    // ── Group assign modal ────────────────────────────────────────
+
+    async openGroupAssign(groupId) {
+        const container = this._container;
+        container.innerHTML = '<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>';
+        let group, allEmployees, assignedMap;
+        try {
+            [group, allEmployees, assignedMap] = await Promise.all([
+                TestsManagerAPI.getGroup(groupId),
+                TestsManagerAPI.getAllEmployees(),
+                TestsManagerAPI.getGroupAssignedUsers(groupId)
+            ]);
+        } catch(e) { Toast.error('Помилка', e.message); await this._renderGroupsList(container); return; }
+
+        let employees = allEmployees;
+        if (!AppState.isAdmin()) employees = allEmployees.filter(e => e.manager_id === AppState.user.id);
+
+        this._groupAssignId    = groupId;
+        this._groupAssignTitle = group.title;
+        this._groupAssignSel   = new Set(assignedMap.keys());
+
+        container.innerHTML = `
+<style>
+.tga-page{max-width:720px}
+.tga-back{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);font-size:.83rem;font-weight:600;cursor:pointer;margin-bottom:16px}
+.tga-back:hover{border-color:#C9A227;color:#C9A227}
+.tga-title{font-size:1.1rem;font-weight:800;color:var(--text-primary);margin-bottom:4px}
+.tga-sub{font-size:.82rem;color:var(--text-muted);margin-bottom:18px}
+.tga-dl{margin-bottom:14px}
+.tga-dl label{font-size:.78rem;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:6px}
+.tga-dl input{padding:8px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.84rem}
+.tga-list{border:1px solid var(--border);border-radius:14px;max-height:420px;overflow-y:auto}
+.tga-item{display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--border);cursor:pointer}
+.tga-item:last-child{border-bottom:none}
+.tga-item:hover{background:var(--bg-hover)}
+.tga-item input{width:17px;height:17px;accent-color:var(--primary)}
+.tga-name{font-weight:600;font-size:.87rem;color:var(--text-primary)}
+.tga-pos{margin-left:auto;font-size:.78rem;color:var(--text-muted)}
+.tga-foot{display:flex;gap:10px;margin-top:16px}
+.tga-cancel{padding:11px 20px;border-radius:12px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);font-size:.85rem;font-weight:600;cursor:pointer;flex:1}
+.tga-save{padding:11px 20px;border-radius:12px;border:none;background:var(--primary);color:#fff;font-size:.85rem;font-weight:700;cursor:pointer;flex:2}
+</style>
+<div class="tga-page">
+    <button class="tga-back" onclick="TestsManagerPage._renderGroupsList(TestsManagerPage._container)"><i class="fa-solid fa-arrow-left"></i> Назад</button>
+    <div class="tga-title">Призначити: ${Fmt.esc(group.title)}</div>
+    <div class="tga-sub">${(group.items || []).length} тест(ів) у групі. Оберіть співробітників, яким призначити всю групу.</div>
+    <div class="tga-dl">
+        <label>Дедлайн (необов'язково)</label>
+        <input type="datetime-local" id="tga-deadline">
+    </div>
+    <div class="tga-list" id="tga-list">
+        ${employees.map(e => `
+        <label class="tga-item">
+            <input type="checkbox" value="${e.id}" ${this._groupAssignSel.has(e.id) ? 'checked' : ''} onchange="TestsManagerPage._toggleGroupAssignSel('${e.id}', this.checked)">
+            <span class="tga-name">${Fmt.esc(e.full_name)}</span>
+            <span class="tga-pos">${Fmt.esc(e.job_position || '')}</span>
+        </label>`).join('')}
+    </div>
+    <div class="tga-foot">
+        <button class="tga-cancel" onclick="TestsManagerPage._renderGroupsList(TestsManagerPage._container)">Скасувати</button>
+        <button class="tga-save" onclick="TestsManagerPage._saveGroupAssign()"><i class="fa-solid fa-check"></i> Зберегти призначення</button>
+    </div>
+</div>`;
+    },
+
+    _toggleGroupAssignSel(userId, checked) {
+        if (checked) this._groupAssignSel.add(userId);
+        else this._groupAssignSel.delete(userId);
+    },
+
+    async _saveGroupAssign() {
+        const dlInp = document.getElementById('tga-deadline');
+        const deadlineAt = dlInp?.value ? new Date(dlInp.value).toISOString() : null;
+        const groupId = this._groupAssignId;
+        Loader.show();
+        try {
+            const before = await TestsManagerAPI.getGroupAssignedUsers(groupId);
+            const beforeIds = new Set(before.keys());
+            const afterIds  = this._groupAssignSel;
+            const toUnassign = [...beforeIds].filter(id => !afterIds.has(id));
+
+            if (afterIds.size) await TestsManagerAPI.assignGroup(groupId, [...afterIds], deadlineAt);
+            for (const uid of toUnassign) await TestsManagerAPI.unassignGroup(groupId, uid);
+
+            const newlyAssigned = [...afterIds].filter(id => !beforeIds.has(id));
+            if (newlyAssigned.length) {
+                const groupTitle = this._groupAssignTitle || 'групу тестів';
+                const rows = newlyAssigned.map(uid => ({
+                    user_id: uid, type: 'test_assigned',
+                    title: `Вам призначено групу тестів: ${groupTitle}`,
+                    message: 'Пройдіть призначені тести у вкладці «Мої тести»',
+                    link: 'my-tests'
+                }));
+                const r = await supabase.from('notifications').insert(rows);
+                if (r.error) console.error('[test group assign] notify:', r.error);
+            }
+
+            Toast.success('Призначення збережено');
+            await this._renderGroupsList(this._container);
+        } catch(e) { Toast.error('Помилка', e.message); }
+        finally { Loader.hide(); }
     },
 
     _rowHtml(t, i = 0) {
@@ -617,7 +1161,8 @@ const TestsManagerPage = {
             { id: 'tm-restart',  icon: 'fa-solid fa-arrow-rotate-left', label: 'Почати заново',        sub: 'Дозволити скинути прогрес і пройти тест з початку', on: !!test?.allow_restart },
             { id: 'tm-skip',     icon: 'fa-solid fa-forward',           label: 'Пропуск питань',        sub: 'Дозволити пропускати питання без відповіді',        on: !!test?.allow_skip },
             { id: 'tm-feedback', icon: 'fa-regular fa-circle-check',    label: 'Миттєвий фідбек',       sub: 'Показувати правильність відповіді після кожного питання', on: !!test?.show_answer_feedback },
-            { id: 'tm-wrong',    icon: 'fa-solid fa-list-check',        label: 'Протокол помилок',      sub: 'Показувати розбір невірних відповідей після завершення', on: !!test?.show_wrong_answers }
+            { id: 'tm-wrong',    icon: 'fa-solid fa-list-check',        label: 'Протокол помилок',      sub: 'Показувати розбір невірних відповідей після завершення', on: !!test?.show_wrong_answers },
+            { id: 'tm-grant-reassign', icon: 'fa-solid fa-rotate-right', label: 'Нова спроба при перепризначенні', sub: 'Напр. при записі на лекцію — якщо тест вже пройдено, додати ще одну спробу', on: !!test?.grant_attempt_on_reassign }
         ];
         container.innerHTML = `<style>
 .tset-page{max-width:920px}
@@ -684,6 +1229,10 @@ const TestsManagerPage = {
 .tm-cover-btn{padding:5px 12px;border-radius:8px;border:none;font-size:.78rem;font-weight:600;cursor:pointer;backdrop-filter:blur(6px)}
 .tm-cover-btn-change{background:rgba(255,255,255,.85);color:#111}
 .tm-cover-btn-del{background:rgba(239,68,68,.85);color:#fff}
+.tm-cover-stretch-row{display:flex;align-items:flex-start;gap:10px;padding:10px 4px 20px;cursor:pointer}
+.tm-cover-stretch-row input{width:17px;height:17px;margin-top:2px;accent-color:var(--primary);cursor:pointer;flex-shrink:0}
+.tm-cover-stretch-row b{font-size:.85rem;color:var(--text-primary)}
+.tm-cover-stretch-hint{font-size:.76rem;color:var(--text-muted)}
 </style>
 <div class="tset-page">
     <div class="tset-hero">
@@ -713,6 +1262,10 @@ const TestsManagerPage = {
                    </label>`}
         </div>
     </div>
+    <label class="tm-cover-stretch-row">
+        <input type="checkbox" id="tm-stretch-cover" ${test?.stretch_cover_image ? 'checked' : ''}>
+        <span><b>Розтягнути обкладинку</b><br><span class="tm-cover-stretch-hint">Картинка тесту заповнює всю ширину блока (без збереження пропорцій)</span></span>
+    </label>
     <div class="tset-grid">
         <div>
             <div class="tset-section">
@@ -858,6 +1411,8 @@ const TestsManagerPage = {
             allow_skip:             document.getElementById('tm-skip')?.checked      || false,
             show_answer_feedback:   document.getElementById('tm-feedback')?.checked  || false,
             show_wrong_answers:     document.getElementById('tm-wrong')?.checked     || false,
+            grant_attempt_on_reassign: document.getElementById('tm-grant-reassign')?.checked || false,
+            stretch_cover_image:    document.getElementById('tm-stretch-cover')?.checked || false,
             intern_category:        document.getElementById('tm-intern-cat')?.value  || null,
             is_published:           document.getElementById('tm-pub')?.checked || false,
             auto_assign_positions:  autoPositions,
@@ -3740,10 +4295,11 @@ const MyTestsPage = {
         this._assignments      = assignments;
         this._attempts         = attempts;
         this._completedTestIds = completedTestIds;
+        this._passedTestIds    = new Set(attempts.filter(a => a.passed).map(a => a.test_id));
 
         container.innerHTML = `
 <style>
-.mt-page{max-width:900px;}
+.mt-page{max-width:1100px;}
 .mt-hero{border-radius:22px;padding:30px 36px;margin-bottom:24px;background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 60%,#1e40af 100%);position:relative;overflow:hidden}
 .mt-hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 60% 80% at 80% 20%,rgba(201,162,39,.15),transparent);pointer-events:none}
 .mt-hero-inner{position:relative;display:flex;align-items:center;gap:18px}
@@ -3762,37 +4318,127 @@ const MyTestsPage = {
 .mt-ep-count{padding:1px 8px;border-radius:20px;font-size:.68rem;font-weight:800;line-height:1.6;background:var(--border);color:var(--text-muted)}
 .mt-tab.active .mt-ep-count{background:rgba(255,255,255,.25);color:#fff}
 
+.mt-section{margin-bottom:8px}
+.mt-section-sep{margin-top:28px;padding-top:24px;border-top:1px solid var(--border)}
+.mt-section-head{display:flex;align-items:center;gap:9px;font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:14px}
+.mt-section-head i{color:var(--primary)}
 .mt-list{
-    display:flex;flex-direction:column;animation:mt-in .3s ease;
-    background:var(--bg-surface);border:1px solid var(--border);
-    border-radius:16px;overflow:hidden
+    display:grid;grid-template-columns:repeat(3,1fr);gap:14px;animation:mt-in .3s ease
 }
+@media(max-width:980px){.mt-list{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:620px){.mt-list{grid-template-columns:1fr}}
 @keyframes mt-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 .mt-card{
-    background:transparent;border:none;border-bottom:1px solid var(--border);
-    border-radius:0;display:flex;transition:background .15s
+    position:relative;isolation:isolate;
+    border:1px solid color-mix(in srgb,#fff 30%,var(--border));
+    border-radius:16px;overflow:hidden;display:flex;flex-direction:column;
+    box-shadow:0 8px 24px rgba(0,0,0,.08);
+    transition:box-shadow .25s ease,transform .25s ease,border-color .25s ease
 }
-.mt-list .mt-card:last-child{border-bottom:none}
-.mt-card:hover{background:var(--bg-hover)}
-.mt-card-bar{width:4px;flex-shrink:0}
-.mt-card-bar.pending{background:linear-gradient(180deg,#f59e0b,#f97316)}
-.mt-card-bar.overdue{background:linear-gradient(180deg,#ef4444,#dc2626)}
-.mt-card-bar.done{background:linear-gradient(180deg,#10b981,#059669)}
-.mt-card-body{padding:16px 18px;flex:1;display:flex;align-items:center;gap:14px}
+/* Кольоровий "підклад" картки — саме його розмиває скляний шар над ним */
+.mt-card::before{
+    content:'';position:absolute;inset:-30%;z-index:0;opacity:.55;filter:blur(6px);
+    background:
+        radial-gradient(circle at 22% 20%,var(--mt-glow,#6366f1) 0%,transparent 55%),
+        radial-gradient(circle at 82% 78%,var(--mt-glow2,#8b5cf6) 0%,transparent 55%)
+}
+.mt-card-frost{
+    position:absolute;inset:0;z-index:1;
+    background:color-mix(in srgb,var(--bg-surface) 45%,transparent);
+    backdrop-filter:blur(22px) saturate(200%);
+    -webkit-backdrop-filter:blur(22px) saturate(200%)
+}
+/* Специкулярний блиск — над контентом */
+.mt-card::after{
+    content:'';position:absolute;inset:0;z-index:3;pointer-events:none;border-radius:inherit;
+    background:linear-gradient(135deg,rgba(255,255,255,.4) 0%,rgba(255,255,255,.1) 22%,transparent 50%);
+    mix-blend-mode:overlay;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.5),inset 0 -16px 22px -18px rgba(0,0,0,.2);
+}
+.mt-card:hover{
+    box-shadow:0 16px 38px rgba(0,0,0,.16);transform:translateY(-3px) scale(1.01);
+    border-color:color-mix(in srgb,#fff 40%,var(--primary))
+}
+.mt-card-bar{position:relative;z-index:2;width:100%;height:4px;flex-shrink:0}
+.mt-card-bar.pending{background:linear-gradient(90deg,#f59e0b,#f97316)}
+.mt-card-bar.overdue{background:linear-gradient(90deg,#ef4444,#dc2626)}
+.mt-card-bar.done{background:linear-gradient(90deg,#10b981,#059669)}
+.mt-card-body{position:relative;z-index:2;padding:16px 18px;flex:1;display:flex;flex-direction:column;gap:14px}
 .mt-card-info{flex:1;min-width:0}
 .mt-card-title{font-weight:700;font-size:.95rem;color:var(--text-primary);margin-bottom:5px}
 .mt-card-meta{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .mt-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:20px;font-size:.7rem;font-weight:600}
-.mt-badge-pending{background:rgba(245,158,11,.12);color:#f59e0b}
-.mt-badge-overdue{background:rgba(239,68,68,.1);color:#ef4444}
-.mt-badge-done{background:rgba(16,185,129,.12);color:#10b981}
-.mt-badge-fail{background:rgba(239,68,68,.1);color:#ef4444}
-.mt-badge-info{background:var(--bg-raised);color:var(--text-muted);border:1px solid var(--border)}
-.mt-btn-start{padding:.55rem .8rem;border-radius:8px;border:1px solid transparent;background:var(--primary);color:#fff;font-size:.8rem;font-weight:700;cursor:pointer;transition:background .15s;white-space:nowrap;flex-shrink:0}
-.mt-btn-start:hover{background:var(--primary-dark,#1d4ed8)}
-.mt-btn-view{padding:8px 16px;border-radius:12px;border:1.5px solid var(--border);background:transparent;color:var(--text-secondary);font-size:.83rem;font-weight:500;cursor:pointer;transition:all .15s;white-space:nowrap;flex-shrink:0}
+.mt-badge-pending{background:color-mix(in srgb,#f59e0b 45%,rgba(0,0,0,.35));color:#fff;border:1px solid rgba(245,158,11,.6)}
+.mt-badge-overdue{background:color-mix(in srgb,#ef4444 45%,rgba(0,0,0,.35));color:#fff;border:1px solid rgba(239,68,68,.6)}
+.mt-badge-done{background:color-mix(in srgb,#10b981 45%,rgba(0,0,0,.35));color:#fff;border:1px solid rgba(16,185,129,.6)}
+.mt-badge-fail{background:color-mix(in srgb,#ef4444 45%,rgba(0,0,0,.35));color:#fff;border:1px solid rgba(239,68,68,.6)}
+.mt-badge-info{background:color-mix(in srgb,var(--primary) 28%,rgba(255,255,255,.12));color:#fff;border:1px solid color-mix(in srgb,var(--primary) 50%,rgba(255,255,255,.25))}
+.mt-btn-start{
+    padding:.55rem .8rem;border-radius:8px;border:1px solid transparent;
+    background:linear-gradient(135deg,#C9A227,#e0b62f);color:#241c02;
+    font-size:.8rem;font-weight:800;cursor:pointer;transition:box-shadow .15s,transform .15s;
+    white-space:nowrap;flex-shrink:0;display:inline-flex;align-items:center;gap:6px;
+    box-shadow:0 4px 12px -2px rgba(201,162,39,.5)
+}
+.mt-btn-start:hover{box-shadow:0 6px 16px -2px rgba(201,162,39,.65);transform:translateY(-1px)}
+.mt-btn-locked{background:rgba(255,255,255,.16);color:#fff;box-shadow:none}
+.mt-btn-locked:hover{background:rgba(255,255,255,.28);box-shadow:none;transform:none}
+.mt-btn-result-pass{background:linear-gradient(135deg,#10b981,#059669);color:#fff;box-shadow:0 4px 12px -2px rgba(16,185,129,.5)}
+.mt-btn-result-pass:hover{box-shadow:0 6px 16px -2px rgba(16,185,129,.65)}
+.mt-btn-result-fail{background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;box-shadow:0 4px 12px -2px rgba(239,68,68,.5)}
+.mt-btn-result-fail:hover{box-shadow:0 6px 16px -2px rgba(239,68,68,.65)}
+.mt-gem-ico{color:#60a5fa;-webkit-text-stroke:1px #6b7280;text-stroke:1px #6b7280}
+.mt-btn-view{padding:8px 16px;border-radius:12px;border:1.5px solid var(--border);background:transparent;color:var(--text-secondary);font-size:.83rem;font-weight:500;cursor:pointer;transition:all .15s;white-space:nowrap;flex-shrink:0;display:inline-flex;align-items:center;gap:6px}
 .mt-btn-view:hover{border-color:var(--primary);color:var(--primary)}
-.mt-score-circle{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.82rem;font-weight:800;flex-shrink:0}
+.mt-card .mt-btn-start,.mt-card .mt-btn-view{width:100%;justify-content:center}
+.mt-score-circle{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.82rem;font-weight:800;flex-shrink:0;align-self:center}
+
+.mtg-grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+@media(max-width:820px){.mtg-grid2{grid-template-columns:1fr}}
+.mtg-card{
+    position:relative;isolation:isolate;
+    border:1px solid color-mix(in srgb,#fff 30%,var(--border));
+    border-radius:16px;overflow:hidden;display:flex;flex-direction:column;
+    box-shadow:0 8px 24px rgba(0,0,0,.08);
+    animation:mt-in .3s ease
+}
+.mtg-card::before{
+    content:'';position:absolute;inset:-30%;z-index:0;opacity:.75;filter:blur(14px);
+    background:linear-gradient(135deg,#0f172a 0%,#1e40af 45%,#C9A227 100%)
+}
+.mtg-frost{
+    position:absolute;inset:0;z-index:1;
+    background:color-mix(in srgb,var(--bg-surface) 30%,transparent);
+    backdrop-filter:blur(24px) saturate(220%);
+    -webkit-backdrop-filter:blur(24px) saturate(220%)
+}
+.mtg-head{
+    position:relative;z-index:2;padding:20px 22px;
+    background-image:linear-gradient(180deg,rgba(15,23,42,.55) 0%,rgba(15,23,42,.15) 100%);
+    background-size:cover;background-position:center;
+    border-bottom:1px solid rgba(255,255,255,.14);
+    display:flex;align-items:flex-start;justify-content:space-between;gap:14px
+}
+.mtg-head-main{min-width:0}
+.mtg-head-title{font-size:1.1rem;font-weight:800;color:#fff}
+.mtg-head-desc{font-size:.82rem;color:rgba(255,255,255,.85);margin-top:4px;max-width:640px}
+.mtg-head-badge{display:inline-flex;align-items:center;gap:5px;margin-top:10px;font-size:.68rem;font-weight:700;padding:3px 10px;border-radius:20px;background:rgba(255,255,255,.18);color:#fff}
+.mtg-head-side{display:flex;align-items:center;gap:12px;flex-shrink:0}
+.mtg-head-progress{font-size:.78rem;font-weight:700;color:#fff;background:rgba(255,255,255,.18);padding:3px 10px;border-radius:20px;white-space:nowrap}
+.mtg-toggle-btn{width:30px;height:30px;border-radius:9px;border:1.5px solid rgba(255,255,255,.3);background:rgba(255,255,255,.12);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s;flex-shrink:0}
+.mtg-toggle-btn:hover{background:rgba(255,255,255,.25)}
+.mtg-rows{position:relative;z-index:2;display:flex;flex-direction:column}
+.mtg-row{display:flex;align-items:center;gap:14px;padding:14px 18px;border-bottom:1px solid var(--border);transition:background .15s}
+.mtg-rows .mtg-row:last-child{border-bottom:none}
+.mtg-row:hover{background:var(--bg-hover)}
+.mtg-row.locked{opacity:.55}
+.mtg-row-idx{width:28px;height:28px;border-radius:50%;background:var(--bg-raised);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:.78rem;font-weight:800;color:var(--text-secondary);flex-shrink:0}
+.mtg-row-idx.done{background:rgba(16,185,129,.18);border:2px solid #fff;color:#10b981;font-size:.95rem;box-shadow:0 0 0 1px #10b981}
+.mtg-row-info{flex:1;min-width:0}
+.mtg-row .mt-card-meta{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+.mtg-row .mt-card-meta::-webkit-scrollbar{display:none}
+.mtg-row .mt-card-meta .mt-badge{flex-shrink:0;white-space:nowrap;font-size:.66rem;padding:2px 8px}
+.mtg-row-title{font-weight:700;font-size:.9rem;color:var(--text-primary);margin-bottom:5px}
 
 .mt-empty{display:flex;flex-direction:column;align-items:center;padding:5rem 2rem;text-align:center}
 .mt-empty-ico{font-size:3.5rem;margin-bottom:1rem;opacity:.3}
@@ -3838,24 +4484,83 @@ const MyTestsPage = {
             : this._historyHtml(this._attempts);
     },
 
-    _pendingHtml(assignments, completedTestIds) {
-        const pending = assignments.filter(a => !completedTestIds.has(a.test_id));
+    _toggleGroupCard(groupId) {
+        this._groupCollapsed = this._groupCollapsed || {};
+        const wasCollapsed = this._groupCollapsed[groupId] !== false; // за замовчуванням згорнуто (undefined === згорнуто)
+        const collapsed = !wasCollapsed;
+        this._groupCollapsed[groupId] = collapsed;
+        const rows = document.getElementById(`mtg-rows-${groupId}`);
+        if (rows) rows.style.display = collapsed ? 'none' : '';
+        const chev = document.getElementById(`mtg-chev-${groupId}`);
+        if (chev) chev.className = `fa-solid fa-chevron-${collapsed ? 'down' : 'up'}`;
+    },
 
-        if (!pending.length) return `
+    _lockedNotice(prevTitle) {
+        const msg = prevTitle
+            ? `Спочатку пройдіть тест «${Fmt.esc(prevTitle)}»`
+            : 'Спочатку пройдіть попередній тест за порядком';
+        Toast.warning('Тест заблоковано', msg);
+    },
+
+    _attemptsLeftForTest(test) {
+        if (!test.max_attempts) return null;
+        const used = (this._attempts || []).filter(a => a.test_id === test.id).length;
+        return test.max_attempts - used;
+    },
+
+    _pendingHtml(assignments, completedTestIds) {
+        const passedTestIds = this._passedTestIds || new Set();
+        const groupsMap = new Map();
+        const ungrouped = [];
+        for (const a of assignments) {
+            if (a.group_id && a.group) {
+                if (!groupsMap.has(a.group_id)) groupsMap.set(a.group_id, { group: a.group, items: [] });
+                groupsMap.get(a.group_id).items.push(a);
+            } else {
+                ungrouped.push(a);
+            }
+        }
+
+        const groupEntries = [...groupsMap.values()].map(g => {
+            g.items.sort((x, y) => (x._order ?? 0) - (y._order ?? 0));
+            g.done = g.items.every(a => completedTestIds.has(a.test_id));
+            g.earliest = g.items.map(a => a.deadline_at).filter(Boolean).sort()[0] || null;
+            return g;
+        }).filter(g => !g.done);
+
+        const pendingUngrouped = ungrouped.filter(a => !completedTestIds.has(a.test_id));
+
+        if (!groupEntries.length && !pendingUngrouped.length) return `
 <div class="mt-empty">
     <div class="mt-empty-ico"><i class="fa-solid fa-clipboard-list"></i></div>
     <div class="mt-empty-head">${assignments.length ? 'Всі тести пройдено!' : 'Немає призначених тестів'}</div>
     <div class="mt-empty-txt">${assignments.length ? 'Результати зберігаються у вкладці «Пройдені»' : 'Коли керівник призначить вам тест — він з\'явиться тут'}</div>
 </div>`;
 
-        const sorted = [...pending].sort((a,b) => {
+        const sortedGroups = groupEntries.sort((a,b) => {
+            if (a.earliest && b.earliest) return new Date(a.earliest) - new Date(b.earliest);
+            if (a.earliest) return -1;
+            if (b.earliest) return 1;
+            return 0;
+        });
+
+        const sorted = [...pendingUngrouped].sort((a,b) => {
             if (a.deadline_at && b.deadline_at) return new Date(a.deadline_at) - new Date(b.deadline_at);
             if (a.deadline_at) return -1;
             if (b.deadline_at) return 1;
             return new Date(b.created_at) - new Date(a.created_at);
         });
 
-        return `<div class="mt-list">${sorted.map(a => {
+        const groupsHtml = sortedGroups.length ? `
+<div class="mt-section">
+    <div class="mt-section-head"><i class="fa-solid fa-layer-group"></i> Групи тестів</div>
+    <div class="mtg-grid2">${sortedGroups.map(g => this._groupCardHtml(g, completedTestIds, passedTestIds)).join('')}</div>
+</div>` : '';
+
+        const listHtml = sorted.length ? `
+<div class="mt-section${sortedGroups.length ? ' mt-section-sep' : ''}">
+    ${sortedGroups.length ? `<div class="mt-section-head"><i class="fa-solid fa-file-pen"></i> Окремі тести</div>` : ''}
+    <div class="mt-list">${sorted.map(a => {
             const test = a.test;
             if (!test) return '';
             const isOverdue = a.deadline_at && new Date(a.deadline_at) < new Date();
@@ -3865,12 +4570,14 @@ const MyTestsPage = {
                 const cd = Fmt.countdown(a.deadline_at);
                 deadlineTxt = `<span class="mt-badge ${cd.expired || cd.urgent ? 'mt-badge-overdue' : 'mt-badge-info'}">${cd.html}</span>`;
             }
+            const glow = isOverdue ? ['#ef4444','#dc2626'] : ['#f59e0b','#f97316'];
             return `
-<div class="mt-card">
+<div class="mt-card" style="--mt-glow:${glow[0]};--mt-glow2:${glow[1]}">
+    <div class="mt-card-frost"></div>
     <div class="mt-card-bar ${isOverdue ? 'overdue' : 'pending'}"></div>
     <div class="mt-card-body">
         <div class="mt-card-info">
-            <div class="mt-card-title">${test.title}</div>
+            <div class="mt-card-title">${Fmt.esc(test.title)}</div>
             <div class="mt-card-meta">
                 <span class="mt-badge mt-badge-info"><i class="fa-solid fa-question"></i> ${qCount} питань</span>
                 ${test.time_limit_minutes ? `<span class="mt-badge mt-badge-info"><i class="fa-regular fa-clock"></i> ${test.time_limit_minutes} хв</span>` : ''}
@@ -3878,10 +4585,71 @@ const MyTestsPage = {
                 ${deadlineTxt}
             </div>
         </div>
-        <button class="mt-btn-start" onclick="Router.go('tests/${test.id}?from=expert-path')">Пройти тест <i class="fa-solid fa-arrow-right"></i></button>
+        <button class="mt-btn-start" onclick="Router.go('tests/${test.id}?from=expert-path')">Пройти тест</button>
     </div>
 </div>`;
-        }).join('')}</div>`;
+        }).join('')}</div>
+</div>` : '';
+
+        return groupsHtml + listHtml;
+    },
+
+    _groupCardHtml(g, completedTestIds, passedTestIds) {
+        const group = g.group;
+        const items = g.items;
+        const passedN  = items.filter(a => passedTestIds.has(a.test_id)).length;
+        const collapsed = this._groupCollapsed?.[group.id] !== false;
+        return `
+<div class="mtg-card">
+    <div class="mtg-frost"></div>
+    <div class="mtg-head" onclick="MyTestsPage._toggleGroupCard('${group.id}')" style="cursor:pointer;${group.cover_image ? `background-image:linear-gradient(180deg,rgba(15,23,42,.15),rgba(15,23,42,.75)),url('${Fmt.esc(group.cover_image)}')` : ''}">
+        <div class="mtg-head-main">
+            <div class="mtg-head-title">${Fmt.esc(group.title)}</div>
+            ${group.description ? `<div class="mtg-head-desc">${Fmt.esc(group.description)}</div>` : ''}
+            <span class="mtg-head-badge"><i class="fa-solid ${group.is_sequential ? 'fa-arrow-down-1-9' : 'fa-shuffle'}"></i> ${group.is_sequential ? 'Послідовне проходження' : 'У будь-якому порядку'}</span>
+        </div>
+        <div class="mtg-head-side">
+            <span class="mtg-head-progress">${passedN}/${items.length}</span>
+            <button type="button" class="mtg-toggle-btn" aria-label="Згорнути/розгорнути" onclick="event.stopPropagation(); MyTestsPage._toggleGroupCard('${group.id}')">
+                <i class="fa-solid fa-chevron-${collapsed ? 'down' : 'up'}" id="mtg-chev-${group.id}"></i>
+            </button>
+        </div>
+    </div>
+    <div class="mtg-rows" id="mtg-rows-${group.id}" style="${collapsed ? 'display:none' : ''}">
+        ${items.map((a, i) => {
+            const test = a.test;
+            if (!test) return '';
+            const passed  = passedTestIds.has(a.test_id);
+            const done    = completedTestIds.has(a.test_id);
+            const locked  = group.is_sequential && i > 0 && !passedTestIds.has(items[i-1].test_id);
+            const qCount  = test.questions?.length || 0;
+            const attemptsLeft   = this._attemptsLeftForTest(test);
+            const noMoreAttempts = attemptsLeft !== null && attemptsLeft <= 0;
+            let statusHtml;
+            if (passed) statusHtml = `<span class="mt-badge mt-badge-done"><i class="fa-solid fa-check"></i> Зараховано</span>`;
+            else if (done) statusHtml = `<span class="mt-badge mt-badge-fail"><i class="fa-solid fa-xmark"></i> Не зараховано</span>`;
+            else if (locked) statusHtml = `<span class="mt-badge mt-badge-info"><i class="fa-solid fa-lock"></i> Заблоковано</span>`;
+            const isResult = done && noMoreAttempts;
+            const btnLabel = isResult ? 'Результат' : (done && !passed ? 'Спробувати ще' : 'Пройти тест');
+            const btnClass = isResult ? (passed ? ' mt-btn-result-pass' : ' mt-btn-result-fail') : '';
+            return `
+<div class="mtg-row${locked ? ' locked' : ''}">
+    <span class="mtg-row-idx${passed ? ' done' : ''}">${passed ? '<i class="fa-solid fa-check"></i>' : (i + 1)}</span>
+    <div class="mtg-row-info">
+        <div class="mtg-row-title">${Fmt.esc(test.title)}</div>
+        <div class="mt-card-meta">
+            <span class="mt-badge mt-badge-info"><i class="fa-solid fa-question"></i> ${qCount} питань</span>
+            ${test.time_limit_minutes ? `<span class="mt-badge mt-badge-info"><i class="fa-regular fa-clock"></i> ${test.time_limit_minutes} хв</span>` : ''}
+            ${statusHtml || ''}
+        </div>
+    </div>
+    ${locked
+        ? `<button class="mt-btn-start mt-btn-locked" data-prev="${Fmt.esc(items[i-1].test?.title || '')}" onclick="MyTestsPage._lockedNotice(this.dataset.prev)"><i class="fa-solid fa-lock"></i></button>`
+        : `<button class="mt-btn-start${btnClass}" onclick="Router.go('tests/${test.id}?from=expert-path')">${btnLabel}</button>`}
+</div>`;
+        }).join('')}
+    </div>
+</div>`;
     },
 
     _historyHtml(attempts) {
@@ -3893,21 +4661,25 @@ const MyTestsPage = {
 </div>`;
 
         return `<div class="mt-list">${attempts.map(a => {
-            const pct = Math.round(a.percentage || 0);
+            const pct  = Math.round(a.percentage || 0);
+            const glow = a.needs_review ? ['#f59e0b','#d97706'] : a.passed ? ['#10b981','#059669'] : ['#ef4444','#dc2626'];
             return `
-<div class="mt-card">
-    <div class="mt-card-bar ${a.passed ? 'done' : 'overdue'}"></div>
+<div class="mt-card" style="--mt-glow:${glow[0]};--mt-glow2:${glow[1]}">
+    <div class="mt-card-frost"></div>
+    <div class="mt-card-bar ${a.needs_review ? '' : a.passed ? 'done' : 'overdue'}" style="${a.needs_review ? 'background:#f59e0b' : ''}"></div>
     <div class="mt-card-body">
         <div class="mt-card-info">
             <div class="mt-card-title">${a.test?.title || 'Тест'}</div>
             <div class="mt-card-meta">
                 <span class="mt-badge mt-badge-info">${Fmt.datetime(a.completed_at)}</span>
                 ${a.time_spent_seconds ? `<span class="mt-badge mt-badge-info"><i class="fa-regular fa-clock"></i> ${Math.floor(a.time_spent_seconds/60)} хв</span>` : ''}
-                <span class="mt-badge ${a.passed ? 'mt-badge-done' : 'mt-badge-fail'}">${a.passed ? '<i class="fa-solid fa-check"></i> Зараховано' : '<i class="fa-solid fa-xmark"></i> Не зараховано'}</span>
+                ${a.needs_review
+                    ? `<span class="mt-badge" style="background:rgba(245,158,11,.14);color:#f59e0b"><i class="fa-solid fa-hourglass-half"></i> На перевірці</span>`
+                    : `<span class="mt-badge ${a.passed ? 'mt-badge-done' : 'mt-badge-fail'}">${a.passed ? '<i class="fa-solid fa-check"></i> Зараховано' : '<i class="fa-solid fa-xmark"></i> Не зараховано'}</span>`}
             </div>
         </div>
-        <div class="mt-score-circle" style="background:${a.passed?'rgba(16,185,129,.12)':'rgba(239,68,68,.1)'};color:${a.passed?'#10b981':'#ef4444'}">
-            ${pct}%
+        <div class="mt-score-circle" style="background:${a.needs_review?'rgba(245,158,11,.12)':a.passed?'rgba(16,185,129,.12)':'rgba(239,68,68,.1)'};color:${a.needs_review?'#f59e0b':a.passed?'#10b981':'#ef4444'}">
+            ${a.needs_review ? '—' : pct + '%'}
         </div>
         <button class="mt-btn-view" onclick="Router.go('tests/${a.test_id}${this._fromExpert ? '?from=expert-path' : ''}')">Деталі</button>
     </div>

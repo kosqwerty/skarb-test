@@ -662,6 +662,244 @@ const API = {
         }
     },
 
+    // ── Lectures ─────────────────────────────────────────────────────
+    lectures: {
+        async getAll() {
+            const { data, error } = await supabase.from('lectures')
+                .select('*, lecturers:lecture_lecturers(profile:profiles!profile_id(id,full_name,avatar_url)), enrollments:lecture_enrollments(id)')
+                .order('start_date', { ascending: false });
+            if (error) throw error;
+            return data || [];
+        },
+
+        async getPublished() {
+            const { data, error } = await supabase.from('lectures')
+                .select(`*, lecturers:lecture_lecturers(profile:profiles!profile_id(id,full_name,avatar_url)),
+                    materials:lecture_materials(kind, ref_id, note),
+                    enrollments:lecture_enrollments(id, user_id, user:profiles!user_id(
+                        full_name, city, job_position, phone))`)
+                .eq('is_published', true)
+                .order('start_date', { ascending: true });
+            if (error) throw error;
+            return data || [];
+        },
+
+        async getById(id) {
+            const { data, error } = await supabase.from('lectures')
+                .select('*, lecturers:lecture_lecturers(profile:profiles!profile_id(id,full_name,avatar_url)), enrollments:lecture_enrollments(id, user_id)')
+                .eq('id', id).single();
+            if (error) throw error;
+            return data;
+        },
+
+        // Генерує наступні тижневі "групи" для лекцій-шаблонів (is_recurring=true),
+        // доганяючи до поточного тижня. Лектори копіюються з шаблону в кожну нову
+        // групу окремо — далі їх можна змінити для конкретного тижня.
+        async ensureRecurrences() {
+            const { data: templates, error } = await supabase.from('lectures')
+                .select('id, title, description, cover_image, duration_days, is_published, start_date, start_time, recurrence_interval_weeks')
+                .eq('is_recurring', true);
+            if (error) { console.error('[lectures] ensureRecurrences:', error); return; }
+            if (!templates?.length) return;
+
+            for (const tpl of templates) {
+                const [{ data: latestRows }, { data: tplLecturers }] = await Promise.all([
+                    supabase.from('lectures').select('start_date')
+                        .or(`id.eq.${tpl.id},recurrence_parent_id.eq.${tpl.id}`)
+                        .order('start_date', { ascending: false }).limit(1),
+                    supabase.from('lecture_lecturers').select('profile_id').eq('lecture_id', tpl.id)
+                ]);
+                const stepDays = Math.max(1, tpl.recurrence_interval_weeks || 1) * 7;
+                let cursor = new Date((latestRows?.[0]?.start_date || tpl.start_date) + 'T00:00:00');
+                const today = new Date(); today.setHours(0,0,0,0);
+                let guard = 0;
+                while (cursor < today && guard < 104) {
+                    cursor = new Date(cursor); cursor.setDate(cursor.getDate() + stepDays);
+                    const y = cursor.getFullYear(), m = String(cursor.getMonth()+1).padStart(2,'0'), d = String(cursor.getDate()).padStart(2,'0');
+                    const { data: created, error: insErr } = await supabase.from('lectures')
+                        .insert({
+                            title: tpl.title, description: tpl.description, cover_image: tpl.cover_image,
+                            start_date: `${y}-${m}-${d}`, start_time: tpl.start_time, duration_days: tpl.duration_days,
+                            is_published: tpl.is_published, recurrence_parent_id: tpl.id, is_recurring: false
+                        })
+                        .select().single();
+                    if (insErr) {
+                        if (insErr.code !== '23505') console.error('[lectures] ensureRecurrences insert:', insErr);
+                        guard++; continue;
+                    }
+                    if (tplLecturers?.length) {
+                        const { error: lecErr } = await supabase.from('lecture_lecturers')
+                            .insert(tplLecturers.map(l => ({ lecture_id: created.id, profile_id: l.profile_id })));
+                        if (lecErr) console.error('[lectures] ensureRecurrences lecturers:', lecErr);
+                    }
+                    guard++;
+                }
+            }
+        },
+
+        async create(fields) {
+            const { data, error } = await supabase.from('lectures')
+                .insert({ ...fields, created_by: AppState.user.id })
+                .select().single();
+            if (error) throw error;
+            return data;
+        },
+
+        async update(id, fields) {
+            const { data, error } = await supabase.from('lectures')
+                .update({ ...fields, updated_at: new Date().toISOString() })
+                .eq('id', id).select().single();
+            if (error) throw error;
+            return data;
+        },
+
+        async remove(id) {
+            const { error } = await supabase.from('lectures').delete().eq('id', id);
+            if (error) throw error;
+        },
+
+        async uploadCover(lectureId, file) {
+            const ext  = file.name.split('.').pop().toLowerCase();
+            const path = `lectures/${lectureId}/cover.${ext}`;
+            const opts = { upsert: true };
+            if (file.type) opts.contentType = file.type;
+            const { error } = await supabase.storage.from(APP_CONFIG.buckets.thumbnails).upload(path, file, opts);
+            if (error) throw error;
+            return `${APP_CONFIG.storagePublicUrl}/${APP_CONFIG.buckets.thumbnails}/${path}`;
+        }
+    },
+
+    lectureLecturers: {
+        async getForLecture(lectureId) {
+            const { data, error } = await supabase.from('lecture_lecturers')
+                .select('id, profile_id, profile:profiles!profile_id(id,full_name,job_position)')
+                .eq('lecture_id', lectureId);
+            if (error) throw error;
+            return data || [];
+        },
+
+        // Замінює повний список лекторів лекції на переданий (для конкретного тижня).
+        async setForLecture(lectureId, profileIds) {
+            const { error: delErr } = await supabase.from('lecture_lecturers').delete().eq('lecture_id', lectureId);
+            if (delErr) throw delErr;
+            if (!profileIds.length) return;
+            const { error } = await supabase.from('lecture_lecturers')
+                .insert(profileIds.map(id => ({ lecture_id: lectureId, profile_id: id })));
+            if (error) throw error;
+        }
+    },
+
+    lectureMaterials: {
+        async getForLecture(lectureId) {
+            const { data, error } = await supabase.from('lecture_materials')
+                .select('*').eq('lecture_id', lectureId).order('order_index');
+            if (error) throw error;
+            return data || [];
+        },
+
+        // Замінює повний список матеріалів підготовки для лекції (тести/групи/курси/файли).
+        async setForLecture(lectureId, items) {
+            const { error: delErr } = await supabase.from('lecture_materials').delete().eq('lecture_id', lectureId);
+            if (delErr) throw delErr;
+            if (!items.length) return;
+            const rows = items.map((it, i) => ({
+                lecture_id: lectureId, kind: it.kind, ref_id: it.ref_id,
+                note: it.note || null, order_index: i
+            }));
+            const { error } = await supabase.from('lecture_materials').insert(rows);
+            if (error) throw error;
+        },
+
+        // Виконує підготовчі матеріали лекції для конкретного користувача (при записі):
+        // призначає тест(и)/групу тестів, записує на курс. Файли бази знань нічого не
+        // призначають — вони просто показуються студенту як посилання з інструкцією.
+        async applyForUser(lectureId, userId) {
+            let materials = [];
+            try { materials = await this.getForLecture(lectureId); }
+            catch(e) { console.error('[lectureMaterials] applyForUser load:', e); return; }
+
+            for (const m of materials) {
+                try {
+                    if (m.kind === 'test') {
+                        await TestsManagerAPI.assign(m.ref_id, [userId], null);
+                        const { data: test } = await supabase.from('tests')
+                            .select('grant_attempt_on_reassign').eq('id', m.ref_id).single();
+                        if (test?.grant_attempt_on_reassign) {
+                            const { count } = await supabase.from('test_attempts')
+                                .select('id', { count: 'exact', head: true })
+                                .eq('test_id', m.ref_id).eq('user_id', userId)
+                                .not('completed_at', 'is', null);
+                            if (count > 0) await API.attempts.grantExtra(m.ref_id, userId);
+                        }
+                    } else if (m.kind === 'test_group') {
+                        await TestsManagerAPI.assignGroup(m.ref_id, [userId], null);
+                    } else if (m.kind === 'course') {
+                        await API.enrollments.enroll(m.ref_id);
+                    }
+                } catch(e) { console.error(`[lectureMaterials] apply ${m.kind}:${m.ref_id}:`, e); }
+            }
+        }
+    },
+
+    lectureEnrollments: {
+        async getMine() {
+            const { data, error } = await supabase.from('lecture_enrollments')
+                .select('lecture_id')
+                .eq('user_id', AppState.user.id);
+            if (error) throw error;
+            return new Set((data || []).map(r => r.lecture_id));
+        },
+
+        async enroll(lectureId) {
+            const { error } = await supabase.from('lecture_enrollments')
+                .insert({ lecture_id: lectureId, user_id: AppState.user.id });
+            if (error) throw error;
+        },
+
+        async unenroll(lectureId) {
+            const { error } = await supabase.from('lecture_enrollments')
+                .delete().eq('lecture_id', lectureId).eq('user_id', AppState.user.id);
+            if (error) throw error;
+        },
+
+        async getParticipants(lectureId) {
+            const { data, error } = await supabase.from('lecture_enrollments')
+                .select('id, user_id, enrolled_at, user:profiles!user_id(id,full_name,email,job_position)')
+                .eq('lecture_id', lectureId);
+            if (error) throw error;
+            return data || [];
+        },
+
+        // Створює по одній події в особистому календарі на кожен день лекції
+        // (з часом і нагадуванням за день), викликається при самозаписі.
+        async addCalendarEvents(lecture) {
+            const days = Math.max(1, lecture.duration_days || 1);
+            const start = new Date(lecture.start_date + 'T00:00:00');
+            const p = n => String(n).padStart(2, '0');
+            const rows = [];
+            for (let i = 0; i < days; i++) {
+                const d = new Date(start); d.setDate(d.getDate() + i);
+                rows.push({
+                    user_id: AppState.user.id,
+                    lecture_id: lecture.id,
+                    title: `🎓 ${lecture.title}`,
+                    date: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`,
+                    time: lecture.start_time || null,
+                    color: '#ec4899',
+                    remind_before_days: 1
+                });
+            }
+            const { error } = await supabase.from('personal_cal_events').insert(rows);
+            if (error) throw error;
+        },
+
+        async removeCalendarEvents(lectureId) {
+            const { error } = await supabase.from('personal_cal_events')
+                .delete().eq('lecture_id', lectureId).eq('user_id', AppState.user.id);
+            if (error) throw error;
+        }
+    },
+
     // ── Tests ────────────────────────────────────────────────────────
     tests: {
         async getByCourse(courseId) {
@@ -945,14 +1183,15 @@ const API = {
             return data;
         },
 
-        async complete(attemptId, { score, maxScore, percentage, passed, timeSpent, answers }) {
+        async complete(attemptId, { score, maxScore, percentage, passed, timeSpent, answers, needsReview = false }) {
             // Save attempt result
             const { error: e1 } = await supabase.from('test_attempts')
                 .update({
                     score, max_score: maxScore,
                     percentage, passed,
                     completed_at: new Date().toISOString(),
-                    time_spent_seconds: timeSpent
+                    time_spent_seconds: timeSpent,
+                    needs_review: needsReview
                 }).eq('id', attemptId);
             if (e1) throw e1;
 
@@ -964,7 +1203,8 @@ const API = {
                         question_id: a.questionId,
                         selected_answer_ids: a.selectedIds,
                         is_correct: a.isCorrect,
-                        points_earned: a.pointsEarned
+                        points_earned: a.pointsEarned,
+                        answer_text: a.textAnswer || null
                     }))
                 );
                 if (e2) throw e2;
@@ -976,6 +1216,55 @@ const API = {
                 .select('*').eq('attempt_id', attemptId);
             if (error) throw error;
             return data;
+        },
+
+        // ── Ручна перевірка відкритих (text) питань ─────────────────────
+
+        async getPendingReview() {
+            const { data, error } = await supabase.from('test_attempts')
+                .select(`id, completed_at, user:profiles!user_id(id,full_name,job_position),
+                    test:tests(id,title,passing_score)`)
+                .eq('needs_review', true)
+                .order('completed_at', { ascending: true });
+            if (error) throw error;
+            return data || [];
+        },
+
+        async getTextAnswersForGrading(attemptId) {
+            const { data, error } = await supabase.from('attempt_answers')
+                .select('id, question_id, answer_text, is_correct, points_earned, review_comment, question:questions(id,question_text,points,order_index)')
+                .eq('attempt_id', attemptId)
+                .not('answer_text', 'is', null);
+            if (error) throw error;
+            (data || []).sort((a, b) => (a.question?.order_index || 0) - (b.question?.order_index || 0));
+            return data || [];
+        },
+
+        // grades: [{ answerId, isCorrect, pointsEarned, comment }] — по одному на кожне text-питання спроби.
+        async gradeTextAnswers(attemptId, grades) {
+            for (const g of grades) {
+                const { error } = await supabase.from('attempt_answers')
+                    .update({ is_correct: g.isCorrect, points_earned: g.pointsEarned, review_comment: g.comment || null })
+                    .eq('id', g.answerId);
+                if (error) throw error;
+            }
+            const { data: allAnswers, error: aErr } = await supabase.from('attempt_answers')
+                .select('points_earned').eq('attempt_id', attemptId);
+            if (aErr) throw aErr;
+            const { data: attempt, error: tErr } = await supabase.from('test_attempts')
+                .select('max_score, test:tests(passing_score)').eq('id', attemptId).single();
+            if (tErr) throw tErr;
+            const score = (allAnswers || []).reduce((s, a) => s + (Number(a.points_earned) || 0), 0);
+            const maxScore = Number(attempt.max_score) || 0;
+            const percentage = maxScore > 0 ? (score / maxScore * 100) : 0;
+            const passed = percentage >= (attempt.test?.passing_score || 0);
+            const { error: uErr } = await supabase.from('test_attempts')
+                .update({
+                    score, percentage, passed, needs_review: false,
+                    reviewed_by: AppState.user.id, reviewed_at: new Date().toISOString()
+                }).eq('id', attemptId);
+            if (uErr) throw uErr;
+            return { score, maxScore, percentage, passed };
         },
 
         async getAll() {

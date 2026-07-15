@@ -16,6 +16,7 @@ const AdminPage = {
                     { id: 'directories',  label: 'Довідник',         icon: 'fa-address-book',        show: canManageUsers },
                     { id: 'courses',      label: 'Курси',             icon: 'fa-book-open',           show: true },
                     { id: 'tests',        label: 'Тести',             icon: 'fa-file-pen',            show: true },
+                    { id: 'lectures',     label: 'Лекції',            icon: 'fa-chalkboard-user',     show: true },
                     { id: 'news',         label: 'Новини',            icon: 'fa-newspaper',           show: true },
                 ]
             },
@@ -57,8 +58,9 @@ const AdminPage = {
         UI.setBreadcrumb([{ label: AppState.isSmm() ? 'Контент' : 'Адміністрування' }]);
 
         this._groups = this._buildGroups(canManageUsers);
-        const initTab   = params.tab || (canManageUsers ? 'users' : 'courses');
-        const initGroup = this._groups.find(g => g.tabs.some(t => t.id === initTab))?.id || this._groups[0]?.id;
+        const hasTab    = !!params.tab;
+        const initTab   = params.tab || null;
+        const initGroup = initTab ? (this._groups.find(g => g.tabs.some(t => t.id === initTab))?.id || this._groups[0]?.id) : null;
         this._tab   = initTab;
         this._group = initGroup;
 
@@ -166,7 +168,8 @@ const AdminPage = {
             </style>`;
 
         this._editCourseId = params.edit || null;
-        await this._loadTab();
+        if (hasTab) await this._loadTab();
+        else        this._renderWelcome();
     },
 
     // ── Огляд системи — окрема сторінка (5-та картка в ряду adm-groups) ─────
@@ -319,7 +322,7 @@ const AdminPage = {
             this._updateGroupCardDesc(tabGroup, tabGroupObj.tabs.find(t => t.id === tab)?.label);
         }
         const tabLabels = {
-            'users': 'Користувачі', 'directories': 'Довідник', 'courses': 'Курси', 'tests': 'Тести', 'news': 'Новини',
+            'users': 'Користувачі', 'directories': 'Довідник', 'courses': 'Курси', 'tests': 'Тести', 'lectures': 'Лекції', 'news': 'Новини',
             'access-groups': 'Групи доступу', 'trash': 'Кошик', 'supersearch': 'Супер пошук',
             'activity': 'Активність', 'sessions': 'Сесії', 'nav-stats': 'Навігація',
             'task-report': 'Завдання', 'feedback': "Зворотний зв'язок",
@@ -330,6 +333,45 @@ const AdminPage = {
             entity_title: 'Адміністрування · ' + (tabLabels[tab] || tab),
         });
         await this._loadTab();
+    },
+
+    // Показується при переході на голий маршрут admin (клік по «Адміністрування» в сайдбарі),
+    // коли ще не обрано жодного розділу — пояснює, що є в кожній групі та як цим користуватись.
+    _renderWelcome() {
+        const el = document.getElementById('admin-content');
+        if (!el) return;
+        el.innerHTML = `
+<style>
+.adm-welcome{text-align:center;padding:20px 10px 8px}
+.adm-welcome-icon{width:64px;height:64px;border-radius:18px;margin:0 auto 14px;background:color-mix(in srgb,var(--primary) 14%,transparent);color:var(--primary);display:flex;align-items:center;justify-content:center;font-size:1.6rem}
+.adm-welcome h2{margin:0 0 6px;font-size:1.3rem;font-weight:800;color:var(--text-primary)}
+.adm-welcome-sub{margin:0 0 26px;color:var(--text-muted);font-size:.88rem}
+.adm-welcome-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;text-align:left;margin-bottom:22px}
+.adm-welcome-card{border:1.5px solid var(--border);border-radius:14px;padding:14px 16px;background:var(--bg-surface)}
+.adm-welcome-card-head{display:flex;align-items:center;gap:8px;font-weight:700;font-size:.88rem;color:var(--grp-c);margin-bottom:3px}
+.adm-welcome-card-desc{font-size:.74rem;color:var(--text-muted);margin-bottom:10px}
+.adm-welcome-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.adm-welcome-list li{display:flex;align-items:center;gap:8px;font-size:.8rem;color:var(--text-secondary)}
+.adm-welcome-list li i{width:16px;color:var(--grp-c);flex-shrink:0;font-size:.74rem}
+.adm-welcome-hint{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:12px;background:var(--bg-raised);border:1px solid var(--border);color:var(--text-secondary);font-size:.82rem}
+.adm-welcome-hint i{color:var(--primary)}
+</style>
+<div class="adm-welcome">
+    <div class="adm-welcome-icon"><i class="fa-solid fa-shield-halved"></i></div>
+    <h2>Адміністрування</h2>
+    <p class="adm-welcome-sub">Тут зібрані всі інструменти управління платформою. Оберіть розділ вище, щоб почати.</p>
+    <div class="adm-welcome-grid">
+        ${this._groups.map(g => `
+        <div class="adm-welcome-card" style="--grp-c:${g.color || 'var(--primary)'}">
+            <div class="adm-welcome-card-head"><i class="fa-solid ${g.icon}"></i> ${Fmt.esc(g.label)}</div>
+            <div class="adm-welcome-card-desc">${Fmt.esc(g.desc || '')}</div>
+            <ul class="adm-welcome-list">
+                ${g.tabs.map(t => `<li><i class="fa-solid ${t.icon}"></i> ${Fmt.esc(t.label)}</li>`).join('')}
+            </ul>
+        </div>`).join('')}
+    </div>
+    <div class="adm-welcome-hint"><i class="fa-solid fa-circle-info"></i> Натисніть на одну з карток вище (напр. «${Fmt.esc(this._groups[0]?.label || 'Контент')}»), щоб відкрити список розділів, і оберіть потрібний пункт</div>
+</div>`;
     },
 
     async _loadTab() {
@@ -343,6 +385,7 @@ const AdminPage = {
                 case 'directories': await this._renderDirectories(el); break;
                 case 'courses':     await this._renderCourses(el);     break;
                 case 'tests':       await this._renderTests(el);       break;
+                case 'lectures':    await LecturesPage.renderTab(el);   break;
                 case 'news':        await this._renderNews(el);        break;
                 case 'access-groups': await AccessGroupsPage.renderTab(el);  break;
                 case 'trash':         await this._renderTrash(el);                  break;

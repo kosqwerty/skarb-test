@@ -264,6 +264,7 @@ const App = {
             'expert-path': async ({ container }) => {
                 if (!requireTrusted()) return;
                 await ExpertPathPage.init(container);
+                return () => ExpertPathPage.destroy?.();
             },
 
             'interns': async ({ container }) => {
@@ -541,7 +542,7 @@ const ActivityTracker = {
         'results': 'Мої результати', 'branch-docs': 'Куточок споживача',
     },
     _adminTabNames: {
-        'users': 'Користувачі', 'courses': 'Курси', 'tests': 'Тести', 'news': 'Новини',
+        'users': 'Користувачі', 'courses': 'Курси', 'tests': 'Тести', 'lectures': 'Лекції', 'news': 'Новини',
         'access-groups': 'Доступ до ресурсів',
         'trash': 'Кошик', 'logs': 'Логи', 'supersearch': 'Супер пошук', 'activity': 'Активність',
     },

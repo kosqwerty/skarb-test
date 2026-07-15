@@ -217,41 +217,67 @@ const Auth = {
                     kickedByAdmin:  this._kickedByAdmin,
                     signingOut:     this._signingOut,
                 });
-                AppState._sessionId = null;
-                this._signingOut = false;
-                AppState._realRole = null;
-                RolePreviewBanner.hide();
-                InactivityWatcher.stop();
-                Heartbeat.removeSession().catch(() => {});
-                Heartbeat.stop();
-                SchedulerPage.stopTimer();
-                if (this._blockChannel) {
-                    supabase.removeChannel(this._blockChannel);
-                    this._blockChannel = null;
-                }
-                if (UI._notifChannel) {
-                    supabase.removeChannel(UI._notifChannel);
-                    UI._notifChannel = null;
-                }
-                AppState.user    = null;
-                AppState.profile = null;
-                AppState.session = null;
-                location.hash    = '';
-                try { Modal.close(); } catch(_) {}
-                this._showAuth();
-                if (this._blockedByAdmin) {
-                    this._blockedByAdmin = false;
-                    Toast.error('Доступ заблоковано', 'Ваш обліковий запис заблоковано адміністратором');
-                }
-                if (this._kickedByAdmin) {
-                    this._kickedByAdmin = false;
-                    Toast.warning('Сесію завершено', 'Адміністратор завершив вашу сесію');
-                }
-            } else if (event === 'TOKEN_REFRESHED' && session) {
+                // Дві вкладки одного браузера ділять localStorage-сесію: якщо обидві
+                // одночасно оновлюють токен, "програвша" вкладка може отримати
+                // SIGNED_OUT попри те, що сусідня вкладка щойно записала свіжу валідну
+                // сесію. Даємо їй частку секунди долетіти й перевіряємо ще раз, перш
+                // ніж реально розлогінювати — справжній вихід (ручний/блок/неактивність)
+                // завжди чистить сесію насправді, тож ця перевірка для нього безпечна.
+                this._recheckAfterSignedOut();
+                return;
+            }
+            if (event === 'TOKEN_REFRESHED' && session) {
                 AppState.session = session;
                 AppState.user    = session.user;
             }
         });
+    },
+
+    async _recheckAfterSignedOut() {
+        await new Promise(r => setTimeout(r, 400));
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                console.warn('[Auth] SIGNED_OUT проігноровано — сусідня вкладка щойно оновила сесію');
+                AppState.session = session;
+                AppState.user    = session.user;
+                return;
+            }
+        } catch(_) {}
+        this._finishSignOut();
+    },
+
+    _finishSignOut() {
+        AppState._sessionId = null;
+        this._signingOut = false;
+        AppState._realRole = null;
+        RolePreviewBanner.hide();
+        InactivityWatcher.stop();
+        Heartbeat.removeSession().catch(() => {});
+        Heartbeat.stop();
+        SchedulerPage.stopTimer();
+        if (this._blockChannel) {
+            supabase.removeChannel(this._blockChannel);
+            this._blockChannel = null;
+        }
+        if (UI._notifChannel) {
+            supabase.removeChannel(UI._notifChannel);
+            UI._notifChannel = null;
+        }
+        AppState.user    = null;
+        AppState.profile = null;
+        AppState.session = null;
+        location.hash    = '';
+        try { Modal.close(); } catch(_) {}
+        this._showAuth();
+        if (this._blockedByAdmin) {
+            this._blockedByAdmin = false;
+            Toast.error('Доступ заблоковано', 'Ваш обліковий запис заблоковано адміністратором');
+        }
+        if (this._kickedByAdmin) {
+            this._kickedByAdmin = false;
+            Toast.warning('Сесію завершено', 'Адміністратор завершив вашу сесію');
+        }
     },
 
     async _showApp() {

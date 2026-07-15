@@ -7,24 +7,40 @@ const ExpertPathPage = {
 
     async init(container) {
         UI.setBreadcrumb([{ label: 'Моє навчання' }]);
-        this._tab          = 'courses';
+        this._tab          = null;
         this._courseSubTab = 'all';
         this._coursesData  = null;
         this._renderShell(container);
-        await this._loadTab('courses');
+        this._renderIntro();
         this._fetchAndShowCounts();
+    },
+
+    _renderIntro() {
+        const area = document.getElementById('ep-content');
+        if (!area) return;
+        area.innerHTML = `
+<div class="ep-empty">
+    <div class="ep-empty-icon"><i class="fa-solid fa-hand-pointer"></i></div>
+    <div class="ep-empty-title">Оберіть розділ вище</div>
+    <div class="ep-empty-sub">Лекції, тести, опитування, курси або завершене навчання — все зібрано в одному місці</div>
+</div>`;
     },
 
     async _fetchAndShowCounts() {
         try {
             const uid = AppState.user.id;
             // Fetch raw data for accurate filtering
-            const [enrollments, assignments, attempts, surveyResponses, surveys] = await Promise.all([
+            const canManage = AppState.isAdmin() || AppState.profile?.role === 'smm' || AppState.isStaff();
+
+            const [enrollments, assignments, attempts, surveyResponses, surveys, lectures, surveyAssignments, pendingReview] = await Promise.all([
                 supabase.from('enrollments').select('id, completed_at, run_id, course_runs(end_date)').eq('user_id', uid),
                 supabase.from('test_assignments').select('test_id').eq('user_id', uid),
                 supabase.from('test_attempts').select('test_id, completed_at').eq('user_id', uid).not('completed_at', 'is', null),
                 supabase.from('survey_responses').select('survey_id').eq('user_id', uid),
                 supabase.from('surveys').select('id').eq('is_published', true),
+                supabase.from('lectures').select('id, start_date, duration_days').eq('is_published', true),
+                canManage ? Promise.resolve({ data: null }) : supabase.from('survey_assignments').select('survey_id').eq('user_id', uid),
+                AppState.isStaff() ? supabase.from('test_attempts').select('id', { count: 'exact', head: true }).eq('needs_review', true) : Promise.resolve({ count: 0 }),
             ]);
 
             const today = new Date().toISOString().slice(0, 10);
@@ -37,13 +53,28 @@ const ExpertPathPage = {
             );
             const activeEnr  = allEnr.filter(e => !completedEnr.includes(e));
             const activeTests    = (assignments.data || []).filter(a => !completedTestIds.has(a.test_id));
-            const activeSurveys  = (surveys.data || []).filter(s => !respondedSurveyIds.has(s.id));
+            // Регулярні користувачі бачать лише опитування, призначені їм через survey_assignments
+            // (як у SurveysPage.renderInTab) — інакше бейдж рахує чужі опубліковані опитування.
+            let activeSurveys;
+            if (canManage) {
+                activeSurveys = (surveys.data || []).filter(s => !respondedSurveyIds.has(s.id));
+            } else {
+                const assignedSurveyIds = new Set((surveyAssignments.data || []).map(a => a.survey_id));
+                activeSurveys = (surveys.data || []).filter(s => assignedSurveyIds.has(s.id) && !respondedSurveyIds.has(s.id));
+            }
+            const upcomingLectures = (lectures.data || []).filter(l => {
+                const end = new Date(l.start_date + 'T00:00:00');
+                end.setDate(end.getDate() + (l.duration_days || 1) - 1);
+                return end >= new Date(new Date().toDateString());
+            });
 
             this._updateTabBadges({
                 courses:   activeEnr.length,
                 tests:     activeTests.length,
                 surveys:   activeSurveys.length,
+                lectures:  upcomingLectures.length,
                 completed: completedEnr.length + completedTestIds.size + respondedSurveyIds.size,
+                review:    pendingReview.count || 0,
             });
         } catch(e) {}
     },
@@ -71,7 +102,7 @@ const ExpertPathPage = {
     _renderShell(container) {
         container.innerHTML = `
 <style>
-.ep-wrap{max-width:1100px}
+.ep-wrap{max-width:1320px}
 
 /* ── Hero ────────────────────────────────────────────────────── */
 .ep-hero{
@@ -87,16 +118,20 @@ const ExpertPathPage = {
     background:linear-gradient(90deg,transparent,#d4af37 20%,#f5e0a3 50%,#d4af37 80%,transparent)
 }
 .ep-hero-spark{
-    position:absolute;width:5px;height:5px;background:#f5d78e;opacity:.5;
-    transform:rotate(45deg);pointer-events:none;
+    position:absolute;background:#f5d78e;opacity:.5;
+    transform:translate(var(--tx,0),var(--ty,0)) rotate(45deg);
+    pointer-events:none;will-change:transform;
     animation:ep-twinkle 3s ease-in-out infinite
 }
-@keyframes ep-twinkle{0%,100%{opacity:.15;transform:rotate(45deg) scale(.8)}50%{opacity:.7;transform:rotate(45deg) scale(1.15)}}
+@keyframes ep-twinkle{
+    0%,100%{opacity:.15;transform:translate(var(--tx,0),var(--ty,0)) rotate(45deg) scale(.8)}
+    50%{opacity:.7;transform:translate(var(--tx,0),var(--ty,0)) rotate(45deg) scale(1.15)}
+}
 .ep-hero-body{position:relative;z-index:1;min-width:0}
 .ep-hero-tag{
     display:flex;align-items:center;gap:10px;
-    font-family:Georgia,'Times New Roman',serif;
-    font-size:1.55rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+    font-family:'Inter',sans-serif;
+    font-size:1.55rem;font-weight:800;letter-spacing:.02em;text-transform:uppercase;
     margin-bottom:8px;color:#fff
 }
 .ep-hero-tag i{font-size:1.15rem;color:#f0c766;filter:drop-shadow(0 0 6px rgba(240,199,102,.5))}
@@ -158,7 +193,7 @@ body.light-theme .ep-hero-deco i{color:#b4870f;filter:drop-shadow(0 4px 10px rgb
 .ep-tab:hover:not(.active){background:var(--bg-hover)}
 .ep-tab.active{background:var(--bg-hover)}
 .ep-tab.active::before{
-    content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--ep-accent)
+    content:'';position:absolute;left:0;right:0;bottom:0;height:3px;background:var(--ep-accent)
 }
 
 .ep-tab-icon-wrap{
@@ -293,8 +328,12 @@ body.light-theme .ep-hero-deco i{color:#b4870f;filter:drop-shadow(0 4px 10px rgb
 }
 </style>
 <div class="ep-wrap">
-    <div class="ep-hero">
-        ${Array.from({length:7}).map((_,i) => `<div class="ep-hero-spark" style="left:${8+Math.random()*70}%;top:${10+Math.random()*70}%;animation-delay:${(i*0.4).toFixed(2)}s"></div>`).join('')}
+    <div class="ep-hero" id="ep-hero">
+        ${Array.from({length:10}).map((_,i) => {
+            const size  = (3 + Math.random()*7).toFixed(1);
+            const depth = (0.4 + Math.random()*1.1).toFixed(2);
+            return `<div class="ep-hero-spark" data-depth="${depth}" style="left:${8+Math.random()*70}%;top:${10+Math.random()*70}%;width:${size}px;height:${size}px;animation-delay:${(i*0.35).toFixed(2)}s"></div>`;
+        }).join('')}
         <div class="ep-hero-body">
             <div class="ep-hero-tag"><i class="fa-solid fa-star"></i> Моє навчання</div>
             <p class="ep-hero-sub">Продовжуй навчатися — кожен крок робить тебе кращим спеціалістом</p>
@@ -302,12 +341,12 @@ body.light-theme .ep-hero-deco i{color:#b4870f;filter:drop-shadow(0 4px 10px rgb
         <div class="ep-hero-deco"><i class="fa-solid fa-graduation-cap"></i></div>
     </div>
     <div class="ep-tabs">
-        <button class="ep-tab active" data-tab="courses" style="--ep-accent:#6366f1" onclick="ExpertPathPage.switchTab('courses',this)">
-            <div class="ep-tab-icon-wrap"><i class="fa-solid fa-graduation-cap"></i></div>
+        <button class="ep-tab" data-tab="lectures" style="--ep-accent:#ec4899" onclick="ExpertPathPage.switchTab('lectures',this)">
+            <div class="ep-tab-icon-wrap"><i class="fa-solid fa-chalkboard-user"></i></div>
             <div class="ep-tab-text">
-                <span class="ep-tab-label">Мої курси</span>
+                <span class="ep-tab-label">Лекції</span>
                 <span class="ep-tab-count">—</span>
-                <span class="ep-tab-caption">Активні курси</span>
+                <span class="ep-tab-caption">Доступно для запису</span>
             </div>
         </button>
         <button class="ep-tab" data-tab="tests" style="--ep-accent:#3b82f6" onclick="ExpertPathPage.switchTab('tests',this)">
@@ -326,17 +365,81 @@ body.light-theme .ep-hero-deco i{color:#b4870f;filter:drop-shadow(0 4px 10px rgb
                 <span class="ep-tab-caption">Доступно опитувань</span>
             </div>
         </button>
+        <button class="ep-tab" data-tab="courses" style="--ep-accent:#6366f1" onclick="ExpertPathPage.switchTab('courses',this)">
+            <div class="ep-tab-icon-wrap"><i class="fa-solid fa-graduation-cap"></i></div>
+            <div class="ep-tab-text">
+                <span class="ep-tab-label">Мої курси</span>
+                <span class="ep-tab-count">—</span>
+                <span class="ep-tab-caption">Активні курси</span>
+            </div>
+        </button>
         <button class="ep-tab" data-tab="completed" style="--ep-accent:#f59e0b" onclick="ExpertPathPage.switchTab('completed',this)">
             <div class="ep-tab-icon-wrap"><i class="fa-solid fa-trophy"></i></div>
             <div class="ep-tab-text">
                 <span class="ep-tab-label">Завершені</span>
                 <span class="ep-tab-count">—</span>
-                <span class="ep-tab-caption">Курси завершено</span>
+                <span class="ep-tab-caption">Курси, тести, опитування</span>
             </div>
         </button>
+        ${AppState.isStaff() ? `
+        <button class="ep-tab" data-tab="review" style="--ep-accent:#ef4444" onclick="ExpertPathPage.switchTab('review',this)">
+            <div class="ep-tab-icon-wrap"><i class="fa-solid fa-clipboard-check"></i></div>
+            <div class="ep-tab-text">
+                <span class="ep-tab-label">Перевірка</span>
+                <span class="ep-tab-count">—</span>
+                <span class="ep-tab-caption">Відкриті питання</span>
+            </div>
+        </button>` : ''}
     </div>
     <div id="ep-content"></div>
 </div>`;
+        this._initHeroParallax();
+    },
+
+    // Зірочки в ep-hero злегка зсуваються за курсором (глибина різна на зірочку) —
+    // suplement до twinkle-анімації, яка керує лише opacity/scale.
+    _initHeroParallax() {
+        this._stopHeroParallax();
+        const hero = document.getElementById('ep-hero');
+        if (!hero) return;
+        const sparks = [...hero.querySelectorAll('.ep-hero-spark')].map(el => ({
+            el, tx: 0, ty: 0, tgx: 0, tgy: 0, depth: parseFloat(el.dataset.depth) || 1
+        }));
+        if (!sparks.length) return;
+
+        const onMove = e => {
+            const rect = hero.getBoundingClientRect();
+            const mx = (e.clientX - rect.left) / rect.width  - 0.5;
+            const my = (e.clientY - rect.top)  / rect.height - 0.5;
+            sparks.forEach(s => { s.tgx = mx * 30 * s.depth; s.tgy = my * 30 * s.depth; });
+        };
+        const onLeave = () => sparks.forEach(s => { s.tgx = 0; s.tgy = 0; });
+        const tick = () => {
+            sparks.forEach(s => {
+                s.tx += (s.tgx - s.tx) * 0.08;
+                s.ty += (s.tgy - s.ty) * 0.08;
+                s.el.style.setProperty('--tx', `${s.tx.toFixed(2)}px`);
+                s.el.style.setProperty('--ty', `${s.ty.toFixed(2)}px`);
+            });
+            this._heroRaf = requestAnimationFrame(tick);
+        };
+
+        hero.addEventListener('mousemove', onMove);
+        hero.addEventListener('mouseleave', onLeave);
+        this._heroRaf = requestAnimationFrame(tick);
+        this._heroParallaxCleanup = () => {
+            cancelAnimationFrame(this._heroRaf);
+            hero.removeEventListener('mousemove', onMove);
+            hero.removeEventListener('mouseleave', onLeave);
+        };
+    },
+
+    _stopHeroParallax() {
+        if (this._heroParallaxCleanup) { this._heroParallaxCleanup(); this._heroParallaxCleanup = null; }
+    },
+
+    destroy() {
+        this._stopHeroParallax();
     },
 
     async switchTab(tab, btn) {
@@ -352,7 +455,9 @@ body.light-theme .ep-hero-deco i{color:#b4870f;filter:drop-shadow(0 4px 10px rgb
         try {
             if      (tab === 'courses')   await this._renderCourses(area);
             else if (tab === 'tests')     await this._renderTests(area);
+            else if (tab === 'lectures')  await LecturesPage.renderStudentTab(area);
             else if (tab === 'completed') await this._renderCompleted(area);
+            else if (tab === 'review')    await TestReviewPage.renderInTab(area);
             else                          this._renderSurveys(area);
         } catch(e) {
             area.innerHTML = `<div class="ep-empty"><div class="ep-empty-icon"><i class="fa-solid fa-triangle-exclamation"></i></div><div class="ep-empty-title">${Fmt.esc(e.message)}</div></div>`;
@@ -474,8 +579,13 @@ body.light-theme .ep-hero-deco i{color:#b4870f;filter:drop-shadow(0 4px 10px rgb
             { id: 'enrolled', label: `Записані (${enrollments.length})`,  courses: enrollments.map(e => e.course).filter(Boolean) },
             { id: 'done',     label: `Завершені (${completed.length})`,   courses: completed.map(e => e.course).filter(Boolean) },
         ];
+        this._courseSubTab = 'all';
 
-        area.innerHTML = `<div id="ep-course-list">${cardsFn(allCourses || [])}</div>`;
+        area.innerHTML = `
+<div class="ep-sub-tabs">
+    ${this._courseTabs.map(t => `<button type="button" class="ep-sub-tab${t.id === 'all' ? ' active' : ''}" onclick="ExpertPathPage._switchCourseTab('${t.id}', this)">${Fmt.esc(t.label)}</button>`).join('')}
+</div>
+<div id="ep-course-list">${cardsFn(allCourses || [])}</div>`;
     },
 
     _switchCourseTab(id, btn) {
@@ -487,6 +597,17 @@ body.light-theme .ep-hero-deco i{color:#b4870f;filter:drop-shadow(0 4px 10px rgb
     },
 
     // ── Завершені курси ───────────────────────────────────────────────
+    _toggleCompletedFilter(type, el) {
+        const wasActive = el.classList.contains('active');
+        document.querySelectorAll('.ep-done-stat').forEach(s => s.classList.remove('active'));
+        document.querySelectorAll('.ep-done-sec').forEach(s => s.style.display = '');
+        if (wasActive) return;
+        el.classList.add('active');
+        document.querySelectorAll('.ep-done-sec').forEach(s => {
+            s.style.display = s.dataset.sec === type ? '' : 'none';
+        });
+    },
+
     async _renderCompleted(area) {
         const uid = AppState.user.id;
         const [completedCourses, attemptsRes, surveyRes] = await Promise.all([
@@ -503,7 +624,13 @@ body.light-theme .ep-hero-deco i{color:#b4870f;filter:drop-shadow(0 4px 10px rgb
                 .order('submitted_at', { ascending: false }),
         ]);
 
-        const attempts  = attemptsRes.data  || [];
+        // Лише останню (за completed_at) спробу на тест — щоб не дублювати старі перескладання
+        const seenTestIds = new Set();
+        const attempts = (attemptsRes.data || []).filter(a => {
+            if (seenTestIds.has(a.test_id)) return false;
+            seenTestIds.add(a.test_id);
+            return true;
+        });
         const responses = surveyRes.data     || [];
         const total = completedCourses.length + attempts.length + responses.length;
 
@@ -542,6 +669,12 @@ body.light-theme .ep-hero-deco i{color:#b4870f;filter:drop-shadow(0 4px 10px rgb
         .ep-done-section{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin:1rem 0 .5rem;display:flex;align-items:center;gap:.4rem}
         .ep-done-avatars{display:flex;flex-wrap:wrap;gap:.25rem}
         .ep-done-avatar{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:700;overflow:hidden;flex-shrink:0;border:2px solid var(--bg-surface)}
+        .ep-done-stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:1.2rem}
+        .ep-done-stat{display:flex;align-items:center;gap:8px;padding:10px 16px;border-radius:14px;background:var(--bg-surface);border:1.5px solid var(--border);font-size:.82rem;color:var(--text-secondary);cursor:pointer;transition:all .15s;user-select:none}
+        .ep-done-stat:hover{border-color:var(--primary);color:var(--primary)}
+        .ep-done-stat.active{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 10%,var(--bg-surface));color:var(--primary)}
+        .ep-done-stat i{font-size:.9rem;color:var(--primary)}
+        .ep-done-stat b{font-size:1rem;font-weight:800;color:var(--text-primary)}
         </style>`;
 
         // ── Courses ──────────────────────────────────────────────────
@@ -640,7 +773,17 @@ body.light-theme .ep-hero-deco i{color:#b4870f;filter:drop-shadow(0 4px 10px rgb
             </div>`).join('')}
         </div>` : '';
 
-        area.innerHTML = styles + coursesHtml + testsHtml + surveysHtml;
+        const statsHtml = `
+        <div class="ep-done-stats">
+            <div class="ep-done-stat" data-filter="courses" onclick="ExpertPathPage._toggleCompletedFilter('courses',this)"><i class="fa-solid fa-graduation-cap"></i> <b>${completedCourses.length}</b> курсів</div>
+            <div class="ep-done-stat" data-filter="tests" onclick="ExpertPathPage._toggleCompletedFilter('tests',this)"><i class="fa-solid fa-clipboard-list"></i> <b>${attempts.length}</b> тестів</div>
+            <div class="ep-done-stat" data-filter="surveys" onclick="ExpertPathPage._toggleCompletedFilter('surveys',this)"><i class="fa-solid fa-square-poll-horizontal"></i> <b>${responses.length}</b> опитувань</div>
+        </div>`;
+
+        area.innerHTML = styles + statsHtml
+            + `<div class="ep-done-sec" data-sec="courses">${coursesHtml}</div>`
+            + `<div class="ep-done-sec" data-sec="tests">${testsHtml}</div>`
+            + `<div class="ep-done-sec" data-sec="surveys">${surveysHtml}</div>`;
     },
 
     // ── Тести (реюз MyTestsPage) ─────────────────────────────────────

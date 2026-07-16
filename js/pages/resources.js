@@ -87,7 +87,7 @@ const ResourcesPage = {
                     <div class="page-actions">
                         <div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:center">
                         ${AppState.isStaff() && AppState.canMutate() ? '<button class="btn btn-primary" onclick="ResourcesPage.openForm()"><i class="fa-solid fa-plus"></i> Додати</button>' : ''}
-                            ${AppState.isOwner() ? '<button class="btn btn-ghost btn-sm" onclick="ResourcesPage._openTrash()" title="Кошик"><i class="fa-solid fa-trash"></i> Кошик</button>' : ''}
+                            ${AppState.isSuperAdmin() ? '<button class="btn btn-ghost btn-sm" onclick="ResourcesPage._openTrash()" title="Кошик"><i class="fa-solid fa-trash"></i> Кошик</button>' : ''}
                         ${HelpTip.render('docs', {
                     icon: 'fa-file-lines',
                     gradient: '135deg,#ef4444,#f97316',
@@ -355,7 +355,7 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
     </div>
     <div style="display:flex;align-items:center;gap:.5rem;flex-shrink:0">
         ${AppState.isStaff() && AppState.canMutate() ? '<button class="btn btn-primary kb-add-btn" onclick="ResourcesPage.openForm()"><i class="fa-solid fa-plus"></i> Додати ресурс</button>' : ''}
-        ${AppState.isOwner() ? '<button class="btn btn-ghost btn-sm kb-add-btn" onclick="ResourcesPage._openTrash()" title="Кошик"><i class="fa-solid fa-trash"></i> Кошик</button>' : ''}
+        ${AppState.isSuperAdmin() ? '<button class="btn btn-ghost btn-sm kb-add-btn" onclick="ResourcesPage._openTrash()" title="Кошик"><i class="fa-solid fa-trash"></i> Кошик</button>' : ''}
     </div>
 </div>
 
@@ -385,7 +385,7 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
                 { icon: 'fa-table-list', text: 'Перемикайте вигляд між сіткою та списком кнопками у правому кутку панелі інструментів.' },
                 { icon: 'fa-graduation-cap', color: '#10b981', text: 'Матеріали з позначкою «Курс» прив\'язані до конкретного курсу — прогрес враховується автоматично.' },
                 { icon: 'fa-plus', color: '#8b5cf6', text: 'Кнопка «Додати» дозволяє завантажити новий матеріал для бази знань.', roles: ['staff'] },
-                { icon: 'fa-trash', color: '#ef4444', text: 'Кошик зберігає видалені матеріали — їх можна відновити протягом 30 днів.', roles: ['owner'] },
+                { icon: 'fa-trash', color: '#ef4444', text: 'Кошик зберігає видалені матеріали — їх можна відновити протягом 30 днів.', roles: ['superadmin'] },
             ]
         })}
     </div>
@@ -545,7 +545,7 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
         const token = ++this._renderToken;
         content.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
         try {
-            const isOwner = AppState.isOwner();
+            const isOwner = AppState.isSuperAdmin();
             const [docsRes, allEmps] = await Promise.all([
                 API.resources.getAll({ trackedOnly: true, pageSize: 200 }),
                 API.documentDownloads.getAllEmployees()
@@ -665,7 +665,7 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
 
     _openStatusModal(docId) {
         if (!this._statusCache) return;
-        const defaultFilter = AppState.isOwner() ? 'all' : 'acked';
+        const defaultFilter = AppState.isSuperAdmin() ? 'all' : 'acked';
         this._modalState = { docId, filter: defaultFilter, search: '', page: 0 };
         const doc = this._statusCache.docs.find(d => d.id === docId);
         if (!doc) return;
@@ -1300,7 +1300,7 @@ body.dark-theme .kb-card-footer{border-top-color:var(--border)}
 
             // Frontend access filter: staff and managers in docs view see all
             let filtered = data;
-            const bypassFilter = !AppState.isPreviewing() && (AppState.isStaff() || (this._view === 'docs' && AppState.isManager()));
+            const bypassFilter = AppState.isStaff() || (this._view === 'docs' && AppState.isManager());
             if (!bypassFilter) {
                 filtered = data.filter(r => AccessGroupsPage.checkAccess(r.access_group));
             }
@@ -2439,7 +2439,7 @@ const ResourceViewPage = {
                             <div class="empty-icon">🔒</div>
                             <h3>Немає доступу</h3>
                             <p style="color:var(--text-muted)">У вас немає прав для перегляду цього документа.</p>
-                            <button class="btn btn-primary" onclick="Router.back()" style="display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i> Назад</button>
+                            <button class="btn-back" onclick="Router.back()"><i class="fa-solid fa-arrow-left"></i> Назад</button>
                         </div>`;
                     return;
                 }
@@ -2455,7 +2455,7 @@ const ResourceViewPage = {
                                 <div class="empty-icon">🔒</div>
                                 <h3>Немає доступу</h3>
                                 <p style="color:var(--text-muted)">Цей документ доступний лише для певних категорій співробітників.</p>
-                                <button class="btn btn-primary" onclick="Router.back()" style="display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i> Назад</button>
+                                <button class="btn-back" onclick="Router.back()"><i class="fa-solid fa-arrow-left"></i> Назад</button>
                             </div>`;
                         return;
                     }
@@ -2477,7 +2477,7 @@ const ResourceViewPage = {
                 <div class="empty-state">
                     <div class="empty-icon">⚠️</div>
                     <h3>${e.message}</h3>
-                    <button class="btn btn-primary" onclick="Router.back()" style="display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i> Назад</button>
+                    <button class="btn-back" onclick="Router.back()"><i class="fa-solid fa-arrow-left"></i> Назад</button>
                 </div>`;
         }
     },
@@ -2575,7 +2575,7 @@ const ResourceViewPage = {
 
                 <!-- Header -->
                 <div style="display:flex;align-items:flex-start;gap:1rem;flex-wrap:wrap">
-                    <button class="btn btn-ghost btn-sm" onclick="ResourceViewPage._goBack()" style="flex-shrink:0;margin-top:.2rem;display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i> Назад</button>
+                    <button class="btn-back" style="flex-shrink:0;margin-top:.2rem" onclick="ResourceViewPage._goBack()"><i class="fa-solid fa-arrow-left"></i> Назад</button>
                     <div style="flex:1;min-width:0">
                         <div style="display:flex;align-items:center;gap:10px;margin-bottom:.4rem;flex-wrap:wrap">
                             <h1 style="margin:0;font-size:1.4rem;font-weight:700;line-height:1.3">${Fmt.esc(resource.title)}</h1>

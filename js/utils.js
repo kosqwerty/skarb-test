@@ -572,8 +572,17 @@ const UI = {
         const badge = document.getElementById('history-bell-badge');
         if (badge) badge.classList.add('hidden');
     },
+    // Звужує пункти сайдбару, якщо для цього акаунта superadmin налаштував
+    // персональні обмеження (AppState._navAllowed, кешується в Auth._loadProfile
+    // за grantами з admin_tab_permissions з префіксом 'nav:'). null = без обмежень.
+    _applyNavRestriction(sections) {
+        if (!AppState._navAllowed) return sections;
+        return sections
+            .map(s => ({ ...s, items: s.items.filter(i => AppState._navAllowed.has(i.route)) }))
+            .filter(s => s.items.length > 0);
+    },
     _getNavItems(role) {
-        const expertItem   = { icon: '<i class="fa-solid fa-book-open" style="color:#a78bfa"></i>', label: 'Моє навчання', route: 'expert-path' };
+        const expertItem   = { icon: '<i class="fa-solid fa-book-open" style="color:#a78bfa"></i>', label: 'Моє навчання', route: 'expert-path', badgeId: 'nav-learn-badge' };
         const common = [
             { icon: '<i class="fa-solid fa-house"     style="color:#C9A227"></i>', label: 'Головна', route: 'dashboard', impBadgeId: 'nav-imp-bolt' },
             expertItem,
@@ -597,42 +606,35 @@ const UI = {
         const internsItem     = { icon: '<i class="fa-solid fa-user-graduate"  style="color:#8b5cf6"></i>', label: 'Стажери',          route: 'interns' };
 
         if (role === 'ceo') {
-            return [
+            return this._applyNavRestriction([
                 { title: 'Навчання',    items: contentItems },
                 { title: 'Управління',  items: [ analyticsItem, schedulerItem, adminItem ] },
                 { title: 'Особисте',    items: [ contactsItem, bmItem ] }
-            ];
+            ]);
         }
-        if (role === 'owner' || role === 'admin') {
-            return [
+        if (role === 'superadmin' || role === 'admin') {
+            return this._applyNavRestriction([
                 { title: 'Навчання',    items: contentItems },
                 { title: 'Управління',  items: [ analyticsItem, collectionsItem, schedulerItem, internsItem, adminItem ] },
                 { title: 'Особисте',    items: [ contactsItem, bmItem ] }
-            ];
+            ]);
         }
         if (role === 'manager') {
-            return [
+            return this._applyNavRestriction([
                 { title: 'Навчання',   items: contentItems },
                 { title: 'Управління', items: [ schedulerItem, internsItem ] },
                 { title: 'Особисте',   items: [ contactsItem, bmItem ] }
-            ];
+            ]);
         }
         if (role === 'smm') {
-            return [
+            return this._applyNavRestriction([
                 { title: 'Навчання',   items: contentItems },
                 { title: 'Управління', items: [ analyticsItem, contentAdmItem, schedulerItemNs ] },
                 { title: 'Особисте',   items: [ contactsItem, bmItem ] }
-            ];
-        }
-        if (role === 'teacher') {
-            return [
-                { title: 'Навчання',   items: contentItems },
-                { title: 'Управління', items: [ analyticsItem, schedulerItemNs ] },
-                { title: 'Особисте',   items: [ contactsItem, bmItem ] }
-            ];
+            ]);
         }
         // Стажер: навчання + закладки, без документів/контактів/сповіщень
-        if (AppState.profile?.label === 'intern') {
+        if (AppState.isIntern()) {
             const internContentItems = [
                 ...common,
                 { icon: '<i class="fa-solid fa-folder-open" style="color:#C9A227"></i>', label: 'База знань', route: 'knowledge-base' },
@@ -713,7 +715,7 @@ const UI = {
             ? `<img src="${profile.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
             : initials;
 
-        const isTopRole = profile?.role === 'owner' || profile?.role === 'admin';
+        const isTopRole = profile?.role === 'superadmin' || profile?.role === 'admin';
         const crownHtml = isTopRole ? '<i class="fa-solid fa-crown" style="color:#C9A227;font-size:.65rem"></i>'
                         : profile?.role === 'ceo' ? '<i class="fa-solid fa-crown" style="color:#a78bfa;font-size:.65rem"></i>' : '';
         const meta = profile?.city || '';
@@ -736,7 +738,7 @@ const UI = {
         if (!popup) return;
         const isOpen = popup.classList.contains('open');
         if (isOpen) { this.closeUserPopup(); return; }
-        this.initRolePreview();
+        this.initRoleSwitcher();
         popup.classList.remove('hidden');
         requestAnimationFrame(() => popup.classList.add('open'));
         document.getElementById('su-chevron-icon')?.classList.add('su-rotated');
@@ -760,29 +762,28 @@ const UI = {
         document.removeEventListener('click', this._boundPopupHandler);
     },
 
-    initRolePreview() {
-        // Показуємо секцію тільки для owner/admin
-        const realRole = AppState._realRole || AppState.profile?.role;
-        const canPreview = realRole === 'owner' || realRole === 'admin';
-        const section = document.getElementById('su-preview-section');
+    initRoleSwitcher() {
+        // Видно лише справжньому superadmin (base_role) — незалежно від того,
+        // яку роль він зараз тестує, інакше він втратить UI-шлях назад.
+        const section = document.getElementById('su-roleswitch-section');
         if (!section) return;
-        if (!canPreview) { section.classList.add('hidden'); return; }
+        if (AppState.profile?.base_role !== 'superadmin') { section.classList.add('hidden'); return; }
         section.classList.remove('hidden');
 
         const ROLES = [
-            { role: 'admin',   label: 'Адмін',     icon: 'fa-user-shield' },
-            { role: 'smm',     label: 'SMM',        icon: 'fa-pen-nib' },
-            { role: 'teacher', label: 'Вчитель',    icon: 'fa-chalkboard-user' },
-            { role: 'manager', label: 'Менеджер',   icon: 'fa-briefcase' },
-            { role: 'ceo',     label: 'CEO',        icon: 'fa-crown' },
-            { role: 'user',    label: 'Користувач', icon: 'fa-user' },
+            { role: 'admin',   label: 'Адміністратор', icon: 'fa-user-shield' },
+            { role: 'smm',     label: 'SMM',            icon: 'fa-pen-nib' },
+            { role: 'manager', label: 'Керівник',       icon: 'fa-briefcase' },
+            { role: 'ceo',     label: 'CEO',            icon: 'fa-crown' },
+            { role: 'user',    label: 'Користувач',     icon: 'fa-user' },
+            { role: 'intern',  label: 'Стажер',         icon: 'fa-seedling' },
         ];
 
         const current = AppState.profile?.role;
-        const container = document.getElementById('su-preview-btns');
+        const container = document.getElementById('su-roleswitch-btns');
         if (!container) return;
         container.innerHTML = ROLES.map(r => `
-            <button onclick="UI.closeUserPopup();AppState.previewAs('${r.role}')"
+            <button onclick="UI.closeUserPopup();AppState.switchRole('${r.role}').catch(e=>Toast.error('Помилка', e.message))"
                 style="display:flex;align-items:center;gap:.6rem;padding:.4rem .5rem;border-radius:6px;
                        border:none;background:${r.role===current?'var(--primary-muted, rgba(99,102,241,.12))':'transparent'};
                        color:${r.role===current?'var(--primary)':'var(--text-secondary)'};
@@ -795,10 +796,10 @@ const UI = {
                 ${r.role===current ? '<i class="fa-solid fa-check" style="margin-left:auto;font-size:.7rem"></i>' : ''}
             </button>`).join('');
 
-        // Якщо зараз в режимі перегляду — показуємо кнопку "Повернутись"
-        if (AppState.isPreviewing()) {
+        // Якщо зараз в режимі тестування — показуємо кнопку "Повернутись"
+        if (AppState.isRoleSwitched()) {
             container.insertAdjacentHTML('afterbegin', `
-                <button onclick="UI.closeUserPopup();AppState.stopPreview()"
+                <button onclick="UI.closeUserPopup();AppState.exitRoleSwitch().catch(e=>Toast.error('Помилка', e.message))"
                     style="display:flex;align-items:center;gap:.6rem;padding:.4rem .5rem;border-radius:6px;
                            border:1px solid var(--primary);background:transparent;
                            color:var(--primary);font-size:.82rem;font-weight:600;
@@ -806,7 +807,7 @@ const UI = {
                     onmouseenter="this.style.background='var(--bg-hover)'"
                     onmouseleave="this.style.background='transparent'">
                     <i class="fa-solid fa-rotate-left" style="width:14px;text-align:center"></i>
-                    <span>Повернутись (${Fmt.role(realRole)})</span>
+                    <span>Повернутись (SuperAdmin)</span>
                 </button>`);
         }
     },
@@ -857,6 +858,52 @@ const UI = {
                 badge.classList.add('hidden');
             }
         } catch { /* silent */ }
+    },
+
+    // Total pending assignments (tests + courses + surveys) shown on "Моє навчання".
+    // Mirrors ExpertPathPage._fetchAndShowCounts()'s per-tab logic, summed into one badge.
+    async loadLearnBadge() {
+        if (!AppState.user?.id) return;
+        try {
+            const uid = AppState.user.id;
+            const canManage = AppState.isAdmin() || AppState.profile?.role === 'smm' || AppState.isStaff();
+            const today = new Date().toISOString().slice(0, 10);
+
+            const [enrollments, assignments, attempts, surveys, surveyResponses, surveyAssignments] = await Promise.all([
+                supabase.from('enrollments').select('id, completed_at, run_id, course_runs(end_date)').eq('user_id', uid),
+                supabase.from('test_assignments').select('test_id').eq('user_id', uid),
+                supabase.from('test_attempts').select('test_id, completed_at').eq('user_id', uid).not('completed_at', 'is', null),
+                supabase.from('surveys').select('id').eq('is_published', true),
+                supabase.from('survey_responses').select('survey_id').eq('user_id', uid),
+                canManage ? Promise.resolve({ data: null }) : supabase.from('survey_assignments').select('survey_id').eq('user_id', uid),
+            ]);
+
+            const completedTestIds   = new Set((attempts.data || []).map(a => a.test_id));
+            const respondedSurveyIds = new Set((surveyResponses.data || []).map(r => r.survey_id));
+
+            const allEnr       = enrollments.data || [];
+            const completedEnr = allEnr.filter(e => e.completed_at || (e.course_runs?.end_date && e.course_runs.end_date < today));
+            const activeEnr    = allEnr.filter(e => !completedEnr.includes(e));
+            const activeTests  = (assignments.data || []).filter(a => !completedTestIds.has(a.test_id));
+
+            let activeSurveys;
+            if (canManage) {
+                activeSurveys = (surveys.data || []).filter(s => !respondedSurveyIds.has(s.id));
+            } else {
+                const assignedSurveyIds = new Set((surveyAssignments.data || []).map(a => a.survey_id));
+                activeSurveys = (surveys.data || []).filter(s => assignedSurveyIds.has(s.id) && !respondedSurveyIds.has(s.id));
+            }
+
+            const total = activeEnr.length + activeTests.length + activeSurveys.length;
+            const badge = document.getElementById('nav-learn-badge');
+            if (!badge) return;
+            if (total > 0) {
+                badge.textContent = total > 99 ? '99+' : total;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+        } catch { /* silent */ }
     }
 };
 
@@ -902,10 +949,10 @@ const Fmt = {
         return `${size.toFixed(1)} ${units[i]}`;
     },
     role(r) {
-        return { owner: 'Admin', ceo: 'CEO', admin: 'Адміністратор', smm: 'SMM-менеджер', teacher: 'Викладач', manager: 'Керівник', user: 'Користувач', intern: 'Стажер', student: 'Користувач' }[r] || r || '—';
+        return { superadmin: 'SuperAdmin', ceo: 'CEO', admin: 'Адміністратор', smm: 'SMM-менеджер', manager: 'Керівник', user: 'Користувач', intern: 'Стажер', student: 'Користувач' }[r] || r || '—';
     },
     roleBadge(r) {
-        if (r === 'owner')   return `<span class="badge badge-warning">👑 Admin</span>`;
+        if (r === 'superadmin') return `<span class="badge badge-warning">👑 SuperAdmin</span>`;
         if (r === 'ceo')     return `<span class="badge badge-ceo">👑 CEO</span>`;
         if (r === 'admin')   return `<span class="badge badge-admin">👑 Адміністратор</span>`;
         if (r === 'smm')     return `<span class="badge badge-info">📰 SMM-менеджер</span>`;
@@ -913,8 +960,7 @@ const Fmt = {
         if (r === 'intern')  return `<span class="badge badge-success">🌱 Стажер</span>`;
         if (r === 'user' || r === 'student')
             return `<span class="badge" style="background:none;border:none;color:#d946ef;text-shadow:0 0 8px rgba(217,70,239,.4);padding-left:0;padding-right:0">💎 ${Fmt.role(r)}</span>`;
-        const cls = { teacher: 'badge-primary' }[r] || 'badge-muted';
-        return `<span class="badge ${cls}">${Fmt.role(r)}</span>`;
+        return `<span class="badge badge-muted">${Fmt.role(r)}</span>`;
     },
     level(l) {
         return { beginner: 'Початковий', intermediate: 'Середній', advanced: 'Просунутий' }[l] || l || '—';
@@ -1095,6 +1141,200 @@ const SearchSelect = {
     }
 };
 
+// ── Ukrainian date-time picker ──────────────────────────────────────
+// Drop-in replacement for <input type="datetime-local"> — Chrome/Edge always render
+// the native picker in the OS UI language, ignoring the page's lang="uk", so we render
+// our own. The real value lives on a hidden input with the *same id and value format*
+// (YYYY-MM-DDTHH:mm) the native control used, so existing Dom.val()/`.value` reads,
+// and onchange/oninput attributes written directly on the input, keep working unchanged.
+const UaDateTime = {
+    _months:    ['Січень','Лютий','Березень','Квітень','Травень','Червень','Липень','Серпень','Вересень','Жовтень','Листопад','Грудень'],
+    _monthsGen: ['січня','лютого','березня','квітня','травня','червня','липня','серпня','вересня','жовтня','листопада','грудня'],
+    _days:      ['Пн','Вт','Ср','Чт','Пт','Сб','Нд'],
+    _state:     null,
+
+    // extraAttrs: raw HTML attributes to place on the hidden input (e.g. onchange="...")
+    // opts.mode: 'datetime' (default, value 'YYYY-MM-DDTHH:mm') | 'date' (value 'YYYY-MM-DD', no time row)
+    html(id, value = '', extraAttrs = '', opts = {}) {
+        const mode  = opts.mode === 'date' ? 'date' : 'datetime';
+        const label = value ? this._fmt(value, mode) : this._placeholder(mode);
+        return `
+        <div class="uadt-wrap" data-uadt="${id}" data-uadt-mode="${mode}">
+            <button type="button" class="uadt-trigger" onclick="UaDateTime._toggle(this)">
+                <i class="fa-regular fa-calendar uadt-trigger-ico"></i>
+                <span class="uadt-txt">${label}</span>
+                <i class="fa-solid fa-chevron-down uadt-trigger-chev"></i>
+            </button>
+            <input type="hidden" id="${id}" value="${value || ''}" ${extraAttrs}>
+        </div>`;
+    },
+
+    _placeholder(mode) { return mode === 'date' ? 'Оберіть дату' : 'Оберіть дату й час'; },
+
+    // Programmatic set (e.g. deadline presets) — updates hidden value + visible label,
+    // mirrors what the native input's .value= assignment used to do (no change event).
+    set(id, value) {
+        const hidden = document.getElementById(id);
+        if (!hidden) return;
+        const wrap = document.querySelector(`.uadt-wrap[data-uadt="${id}"]`);
+        const mode = wrap?.dataset.uadtMode === 'date' ? 'date' : 'datetime';
+        hidden.value = value || '';
+        const txt = wrap?.querySelector('.uadt-txt');
+        if (txt) txt.textContent = value ? this._fmt(value, mode) : this._placeholder(mode);
+    },
+
+    _pad(n) { return String(n).padStart(2, '0'); },
+
+    _fmt(value, mode = 'datetime') {
+        const [datePart, timePart] = value.split('T');
+        const [y, m, d] = datePart.split('-').map(Number);
+        return `${this._pad(d)} ${this._monthsGen[m - 1]} ${y}${(mode !== 'date' && timePart) ? ', ' + timePart : ''}`;
+    },
+
+    _toggle(btn) {
+        const wrap = btn.closest('.uadt-wrap');
+        const existing = document.querySelector('.uadt-pop');
+        const wasOpenForThis = existing && existing._forWrap === wrap;
+        this._close();
+        if (!wasOpenForThis) this._open(wrap);
+    },
+
+    _open(wrap) {
+        const id = wrap.dataset.uadt;
+        const mode = wrap.dataset.uadtMode === 'date' ? 'date' : 'datetime';
+        const hidden = document.getElementById(id);
+        const val = hidden?.value;
+        let y, mo, d, h, mi;
+        if (val) {
+            const [datePart, timePart] = val.split('T');
+            [y, mo, d] = datePart.split('-').map(Number);
+            [h, mi] = (timePart || '00:00').split(':').map(Number);
+        } else {
+            const now = new Date();
+            y = now.getFullYear(); mo = now.getMonth() + 1; d = now.getDate(); h = now.getHours(); mi = 0;
+        }
+        this._state = { id, mode, y, mo, d, h, mi, viewY: y, viewM: mo };
+        const pop = document.createElement('div');
+        pop.className = 'uadt-pop';
+        pop._forWrap = wrap;
+        pop.innerHTML = this._popHtml();
+        document.body.appendChild(pop);
+        this._position(wrap, pop);
+    },
+
+    _position(wrap, pop) {
+        const r = wrap.getBoundingClientRect();
+        pop.style.top  = (window.scrollY + r.bottom + 6) + 'px';
+        pop.style.left = (window.scrollX + r.left) + 'px';
+        requestAnimationFrame(() => {
+            const pr = pop.getBoundingClientRect();
+            if (pr.right > window.innerWidth - 8) pop.style.left = Math.max(8, window.scrollX + r.right - pr.width) + 'px';
+            if (pr.bottom > window.innerHeight - 8 && r.top - pr.height - 6 > 0) pop.style.top = (window.scrollY + r.top - pr.height - 6) + 'px';
+        });
+    },
+
+    _close() {
+        document.querySelectorAll('.uadt-pop').forEach(p => p.remove());
+    },
+
+    _popHtml() {
+        const s = this._state;
+        const firstDow = (new Date(s.viewY, s.viewM - 1, 1).getDay() + 6) % 7; // Monday = 0
+        const daysInMonth = new Date(s.viewY, s.viewM, 0).getDate();
+        const cells = [];
+        for (let i = 0; i < firstDow; i++) cells.push('<span class="uadt-cell uadt-cell-empty"></span>');
+        for (let dd = 1; dd <= daysInMonth; dd++) {
+            const isSel = dd === s.d && s.viewM === s.mo && s.viewY === s.y;
+            cells.push(`<button type="button" class="uadt-cell${isSel ? ' sel' : ''}" onclick="UaDateTime._pickDay(${dd})">${dd}</button>`);
+        }
+        return `
+        <div class="uadt-nav">
+            <button type="button" class="uadt-nav-btn" onclick="UaDateTime._navMonth(-1)"><i class="fa-solid fa-chevron-left"></i></button>
+            <span class="uadt-nav-lbl">${this._months[s.viewM - 1]} ${s.viewY}</span>
+            <button type="button" class="uadt-nav-btn" onclick="UaDateTime._navMonth(1)"><i class="fa-solid fa-chevron-right"></i></button>
+        </div>
+        <div class="uadt-dow">${this._days.map(d => `<span>${d}</span>`).join('')}</div>
+        <div class="uadt-grid">${cells.join('')}</div>
+        ${s.mode === 'date' ? '' : `
+        <div class="uadt-time">
+            <i class="fa-regular fa-clock"></i>
+            <input type="number" min="0" max="23" class="uadt-time-inp" id="uadt-h" value="${this._pad(s.h)}" onchange="UaDateTime._setTime()">
+            <span>:</span>
+            <input type="number" min="0" max="59" class="uadt-time-inp" id="uadt-m" value="${this._pad(s.mi)}" onchange="UaDateTime._setTime()">
+        </div>`}
+        <div class="uadt-actions">
+            <button type="button" class="uadt-btn uadt-btn-ghost" onclick="UaDateTime._clear()">Очистити</button>
+            <button type="button" class="uadt-btn uadt-btn-primary" onclick="UaDateTime._apply()">Готово</button>
+        </div>`;
+    },
+
+    _navMonth(dir) {
+        const s = this._state;
+        s.viewM += dir;
+        if (s.viewM < 1)  { s.viewM = 12; s.viewY--; }
+        if (s.viewM > 12) { s.viewM = 1;  s.viewY++; }
+        this._refresh();
+    },
+
+    _pickDay(dd) {
+        const s = this._state;
+        s.d = dd; s.mo = s.viewM; s.y = s.viewY;
+        this._refresh();
+    },
+
+    _setTime() {
+        const s = this._state;
+        const hEl = document.getElementById('uadt-h'), mEl = document.getElementById('uadt-m');
+        if (!hEl || !mEl) return; // date-only mode has no time row
+        s.h  = Math.max(0, Math.min(23, parseInt(hEl.value) || 0));
+        s.mi = Math.max(0, Math.min(59, parseInt(mEl.value) || 0));
+    },
+
+    _refresh() {
+        const pop = document.querySelector('.uadt-pop');
+        if (pop) pop.innerHTML = this._popHtml();
+    },
+
+    _apply() {
+        const s = this._state;
+        this._setTime();
+        const val = s.mode === 'date'
+            ? `${s.y}-${this._pad(s.mo)}-${this._pad(s.d)}`
+            : `${s.y}-${this._pad(s.mo)}-${this._pad(s.d)}T${this._pad(s.h)}:${this._pad(s.mi)}`;
+        const hidden = document.getElementById(s.id);
+        if (hidden) {
+            hidden.value = val;
+            hidden.dispatchEvent(new Event('input', { bubbles: true }));
+            hidden.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        const wrap = document.querySelector(`.uadt-wrap[data-uadt="${s.id}"]`);
+        const txt = wrap?.querySelector('.uadt-txt');
+        if (txt) txt.textContent = this._fmt(val, s.mode);
+        this._close();
+    },
+
+    _clear() {
+        const s = this._state;
+        const hidden = document.getElementById(s.id);
+        if (hidden) {
+            hidden.value = '';
+            hidden.dispatchEvent(new Event('input', { bubbles: true }));
+            hidden.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        const wrap = document.querySelector(`.uadt-wrap[data-uadt="${s.id}"]`);
+        const txt = wrap?.querySelector('.uadt-txt');
+        if (txt) txt.textContent = this._placeholder(s.mode);
+        this._close();
+    },
+
+    init() {
+        document.addEventListener('click', e => {
+            if (e.target.closest('.uadt-pop') || e.target.closest('.uadt-trigger')) return;
+            this._close();
+        });
+    }
+};
+
 // ── Theme ─────────────────────────────────────────────────────────
 const Theme = {
     init() {
@@ -1141,12 +1381,12 @@ const Theme = {
 
 // ── Creatable Select (autocomplete + inline create) ───────────────
 // Використовується для полів з довідників (positions, subdivisions)
-// де admin/owner/smm може створювати нові значення прямо на місці.
+// де admin/superadmin/smm може створювати нові значення прямо на місці.
 const CreatableSelect = {
     // table: 'positions' | 'subdivisions'
     html(id, table, items, selected = '') {
         const selLabel = items.find(i => i === selected) ? selected : '';
-        const canCreate = ['owner','admin','smm'].includes(AppState.profile?.role);
+        const canCreate = ['superadmin','admin','smm'].includes(AppState.profile?.role);
         return `
             <div class="cs-wrap" data-cs="${id}" data-cs-table="${table}">
                 <input class="cs-input form-input" type="text" autocomplete="off"
@@ -1301,7 +1541,7 @@ const CreatableMultiSelect = (() => {
 
         const addRow = document.getElementById(`cms-add-row-${id}`);
         if (addRow) {
-            const canCreate = ['owner', 'admin'].includes(AppState.profile?.role);
+            const canCreate = ['superadmin', 'admin'].includes(AppState.profile?.role);
             const exact = s.options.some(o => o.name.toLowerCase() === ql);
             const show = canCreate && ql.length > 0 && !exact;
             addRow.hidden = !show;
@@ -1360,7 +1600,7 @@ const CreatableMultiSelect = (() => {
     return {
         html(id) {
             _bindGlobal();
-            const canCreate = ['owner', 'admin'].includes(AppState.profile?.role);
+            const canCreate = ['superadmin', 'admin'].includes(AppState.profile?.role);
             return `
 <div class="cms-wrap" id="cms-wrap-${id}">
     <div class="cms-field">
@@ -1710,16 +1950,23 @@ const Excel = {
 const AuditLog = {
     async write(action, entityType, entityName, meta = {}) {
         const p = AppState.profile;
-        if (!p || !['owner','admin','smm'].includes(p.role)) return;
+        // Гейт і actor_role — за справжньою роллю (base_role), а не поточною
+        // перемкнутою: інакше аудит мовчки переставав писатись саме під час
+        // тестування нижчої ролі, коли реальні мутації все ще відбуваються.
+        const realRole = p?.base_role || p?.role;
+        if (!p || !['superadmin','admin','smm'].includes(realRole)) return;
+        const fullMeta = AppState.isRoleSwitched()
+            ? { ...meta, acting_as: p.role }
+            : (Object.keys(meta).length ? meta : null);
         try {
             await supabase.from('activity_logs').insert({
                 user_id:     AppState.user.id,
                 actor_name:  p.full_name,
-                actor_role:  p.role,
+                actor_role:  realRole,
                 action,
                 entity_type: entityType,
                 entity_name: String(entityName || ''),
-                meta: Object.keys(meta).length ? meta : null
+                meta: fullMeta
             });
         } catch(e) {
             console.warn('AuditLog.write failed:', e.message);
@@ -1727,62 +1974,52 @@ const AuditLog = {
     }
 };
 
-
-
-// ── Role Preview Banner ───────────────────────────────────────────
-const RolePreviewBanner = {
+// ── Role Switch Banner — superadmin testing as another role ─────────
+// На відміну від старого (видаленого) RolePreviewBanner, це не клієнтська
+// декорація: profiles.role реально змінений в БД через switch_active_role(),
+// тож RLS/навігація/доступ до файлів відпрацьовують по-справжньому.
+const RoleSwitchBanner = {
     _ROLES: [
-        { role: 'admin',   label: 'Адмін',    icon: 'fa-user-shield' },
-        { role: 'smm',     label: 'SMM',       icon: 'fa-pen-nib' },
-        { role: 'teacher', label: 'Вчитель',   icon: 'fa-chalkboard-user' },
-        { role: 'manager', label: 'Менеджер',  icon: 'fa-briefcase' },
-        { role: 'ceo',     label: 'CEO',       icon: 'fa-crown' },
-        { role: 'user',    label: 'Користувач',icon: 'fa-user' },
+        { role: 'admin',   label: 'Адміністратор', icon: 'fa-user-shield' },
+        { role: 'smm',     label: 'SMM',            icon: 'fa-pen-nib' },
+        { role: 'manager', label: 'Керівник',       icon: 'fa-briefcase' },
+        { role: 'ceo',     label: 'CEO',            icon: 'fa-crown' },
+        { role: 'user',    label: 'Користувач',     icon: 'fa-user' },
+        { role: 'intern',  label: 'Стажер',         icon: 'fa-seedling' },
     ],
 
-    show(previewRole, realRole) {
-        let el = document.getElementById('role-preview-banner');
+    show(role, baseRole) {
+        let el = document.getElementById('role-switch-banner');
         if (!el) {
             el = document.createElement('div');
-            el.id = 'role-preview-banner';
+            el.id = 'role-switch-banner';
             document.body.appendChild(el);
         }
-        const roleLabel = this._ROLES.find(r => r.role === previewRole)?.label || previewRole;
-        const btns = this._ROLES
-            .filter(r => r.role !== realRole)
-            .map(r => `
-                <button onclick="AppState.previewAs('${r.role}')"
-                    style="padding:3px 10px;border-radius:6px;border:1.5px solid rgba(255,255,255,${r.role===previewRole?'1':'0.35'});
-                           background:${r.role===previewRole?'rgba(255,255,255,.25)':'transparent'};
-                           color:#fff;font-size:.75rem;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap"
-                    onmouseenter="this.style.background='rgba(255,255,255,.2)'"
-                    onmouseleave="this.style.background='${r.role===previewRole?'rgba(255,255,255,.25)':'transparent'}'">
-                    <i class="fa-solid ${r.icon}"></i> ${r.label}
-                </button>`).join('');
+        const roleLabel = this._ROLES.find(r => r.role === role)?.label || Fmt.role(role);
         el.innerHTML = `
             <span style="display:inline-flex;align-items:center;gap:.4rem;font-size:.85rem">
-                <i class="fa-solid fa-eye"></i>
-                <span>Режим перегляду:</span>
-                <strong>${roleLabel}</strong>
+                <i class="fa-solid fa-user-secret"></i>
+                <span>Тестування як:</span>
+                <strong>${Fmt.esc(roleLabel)}</strong>
+                <span style="opacity:.75;font-size:.78rem">— дії зараз реальні, виконуються під вашим акаунтом</span>
             </span>
-            <div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap">${btns}</div>
-            <button onclick="AppState.stopPreview()"
-                style="padding:4px 12px;border-radius:6px;border:1.5px solid rgba(255,255,255,.5);
-                       background:transparent;color:#fff;font-size:.78rem;font-weight:600;cursor:pointer;
-                       white-space:nowrap;transition:background .15s;margin-left:.25rem"
-                onmouseenter="this.style.background='rgba(255,255,255,.15)'"
+            <button onclick="AppState.exitRoleSwitch().catch(e=>Toast.error('Помилка', e.message))"
+                style="padding:5px 14px;border-radius:8px;border:1.5px solid rgba(255,255,255,.55);
+                       background:transparent;color:#fff;font-size:.8rem;font-weight:700;cursor:pointer;
+                       white-space:nowrap;transition:background .15s"
+                onmouseenter="this.style.background='rgba(255,255,255,.18)'"
                 onmouseleave="this.style.background='transparent'">
-                ✕ Вийти
+                <i class="fa-solid fa-rotate-left"></i> Повернутись (${Fmt.esc(Fmt.role(baseRole))})
             </button>`;
         el.style.cssText = `position:fixed;bottom:0;left:0;right:0;z-index:9999;
-            background:linear-gradient(90deg,#0f766e,#0d9488);color:#fff;
+            background:linear-gradient(90deg,#7c2d12,#b45309);color:#fff;
             padding:8px 20px;display:flex;align-items:center;justify-content:center;
-            gap:.75rem;flex-wrap:wrap;font-size:.875rem;box-shadow:0 -2px 16px rgba(0,0,0,.2);`;
+            gap:1rem;flex-wrap:wrap;font-size:.875rem;box-shadow:0 -2px 16px rgba(0,0,0,.25);`;
         document.body.style.paddingBottom = '50px';
     },
 
     hide() {
-        const el = document.getElementById('role-preview-banner');
+        const el = document.getElementById('role-switch-banner');
         if (el) el.remove();
         document.body.style.paddingBottom = '';
     }
@@ -1797,7 +2034,7 @@ const HelpTip = {
             if (rl === 'admin')   return AppState.isAdmin();
             if (rl === 'staff')   return AppState.isStaff();
             if (rl === 'manager') return AppState.isManager() || AppState.isAdmin();
-            if (rl === 'owner')   return AppState.isOwner();
+            if (rl === 'superadmin')   return AppState.isSuperAdmin();
             return r === rl;
         });
     },

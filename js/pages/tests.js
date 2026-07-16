@@ -122,12 +122,6 @@ const TestsPage = {
                 .btn-tight{padding:.55rem .8rem;font-size:.8rem;border-radius:8px}
                 .btn-primary.btn-tight{border:1px solid transparent}
                 .ti-wrap{max-width:1100px}
-                .ti-back{
-                    display:inline-flex;align-items:center;gap:8px;padding:9px 16px;border-radius:12px;
-                    border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);
-                    font-size:.85rem;font-weight:600;cursor:pointer;margin-bottom:16px;transition:all .15s;font-family:inherit
-                }
-                .ti-back:hover{border-color:#C9A227;color:#C9A227}
 
                 .ti-layout{display:grid;grid-template-columns:minmax(280px,1fr) minmax(320px,1.35fr);gap:20px;align-items:stretch;margin-bottom:20px}
                 @media(max-width:820px){.ti-layout{grid-template-columns:1fr}}
@@ -237,7 +231,7 @@ const TestsPage = {
                 @media(max-width:560px){.th-row{flex-wrap:wrap}.th-info{order:3;flex-basis:100%}}
             </style>
             <div class="ti-wrap">
-                <button class="ti-back" onclick="Router.go('${this._from==='expert-path'?'expert-path':test.course_id?'courses/'+test.course_id:'dashboard'}')">
+                <button class="btn-back" style="margin-bottom:16px" onclick="Router.go('${this._from==='expert-path'?'expert-path':test.course_id?'courses/'+test.course_id:'dashboard'}')">
                     <i class="fa-solid fa-arrow-left"></i> Назад
                 </button>
 
@@ -1356,7 +1350,7 @@ const TestsPage = {
                 </div>
                 <input type="hidden" id="qf-test-id" value="${testId}">`,
             footer: `
-                <button class="btn btn-secondary" onclick="TestsPage.openQuestionEditor('${testId}')" style="display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i> Назад</button>
+                <button class="btn-back" onclick="TestsPage.openQuestionEditor('${testId}')"><i class="fa-solid fa-arrow-left"></i> Назад</button>
                 <button class="btn btn-primary" onclick="TestsPage.saveQuestion('${q?.id || ''}','${testId}')"><i class="fa-regular fa-floppy-disk"></i> Зберегти</button>`
         });
     },

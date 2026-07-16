@@ -28,13 +28,13 @@
 //   USING (
 //     user_id = auth.uid()
 //     OR created_by = auth.uid()
-//     OR EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('owner','admin','manager'))
+//     OR EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('superadmin','admin','manager'))
 //   );
 // -- INSERT: admins/managers only
 // CREATE POLICY "ntf_insert" ON notifications FOR INSERT
 //   WITH CHECK (EXISTS (
 //     SELECT 1 FROM profiles WHERE id = auth.uid()
-//     AND role IN ('owner','admin','manager')
+//     AND role IN ('superadmin','admin','manager')
 //   ));
 // -- UPDATE: users can mark their own as read
 // CREATE POLICY "ntf_update" ON notifications FOR UPDATE

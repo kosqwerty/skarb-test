@@ -60,7 +60,7 @@ const LessonViewPage = {
             <div style="display:grid;grid-template-columns:1fr 280px;gap:2rem;align-items:start" class="lesson-layout">
                 <div>
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:.75rem">
-                        <button class="btn btn-ghost btn-sm" onclick="Router.go('${courseUrl}')" style="display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i> Назад до курсу</button>
+                        <button class="btn-back" onclick="Router.go('${courseUrl}')"><i class="fa-solid fa-arrow-left"></i> Назад до курсу</button>
                         <div style="display:flex;gap:.5rem">
                             ${prevLesson ? `<button class="btn btn-secondary btn-sm" onclick="Router.go('lessons/${prevLesson.id}${fromSuffix}')" style="display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i> Попередній</button>` : ''}
                             ${nextLesson ? `<button class="btn btn-secondary btn-sm" onclick="Router.go('lessons/${nextLesson.id}${fromSuffix}')">Наступний →</button>` : ''}

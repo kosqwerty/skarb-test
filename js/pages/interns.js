@@ -43,14 +43,14 @@
         this._container = container;
         this._tab = 'list';
         this._interns = [];
-        this._canManage = AppState.isAdmin(); // owner + admin
+        this._canManage = AppState.isAdmin(); // superadmin + admin
         this._isManager = AppState.isManager();
         this._loadFilters();
 
         UI.setBreadcrumb([{ label: 'Стажери' }]);
         this._injectStyles();
 
-        // access check for non-owner/non-admin/non-manager
+        // access check for non-superadmin/non-admin/non-manager
         if (!this._canManage && !this._isManager) {
             this._isViewer = await API.internViewers.isViewer(AppState.profile.id);
             if (!this._isViewer) { Router.go('dashboard'); return; }
@@ -85,10 +85,10 @@
 
     // ── render ────────────────────────────────────────────────────────────────
     _render() {
-        this._renderOwnerView();
+        this._renderManageView();
     },
 
-    _renderOwnerView() {
+    _renderManageView() {
         const c = this._container;
         c.innerHTML = `
         <div class="in-page">
@@ -107,7 +107,7 @@
             <div class="in-tabs">
                 <button class="in-tab ${this._tab === 'list' ? 'in-tab-active' : ''}" onclick="InternsPage._switchTab('list')"><i class="fa-solid fa-list"></i> Список</button>
                 ${!this._isManager ? `<button class="in-tab ${this._tab === 'analytics' ? 'in-tab-active' : ''}" onclick="InternsPage._switchTab('analytics')"><i class="fa-solid fa-chart-bar"></i> Аналітика HRD</button>` : ''}
-                ${AppState.isOwner() ? `<button class="in-tab ${this._tab === 'log' ? 'in-tab-active' : ''}" onclick="InternsPage._switchTab('log')"><i class="fa-solid fa-clock-rotate-left"></i> Журнал дій</button>` : ''}
+                ${AppState.isSuperAdmin() ? `<button class="in-tab ${this._tab === 'log' ? 'in-tab-active' : ''}" onclick="InternsPage._switchTab('log')"><i class="fa-solid fa-clock-rotate-left"></i> Журнал дій</button>` : ''}
             </div>
             <div id="in-tab-content"></div>
         </div>`;
@@ -1011,7 +1011,7 @@
     },
 
     _buildInlineEditForm(intern) {
-        const profiles  = this._allProfiles.filter(p => ['manager','admin','owner'].includes(p.role));
+        const profiles  = this._allProfiles.filter(p => ['manager','admin','superadmin'].includes(p.role));
         const statusOpts = [
             { v: 'active',    l: 'Навчається' },
             { v: 'completed', l: 'Завершив' },
@@ -2223,7 +2223,7 @@ ${discs.length ? `<table>
             const [cData, sData, mData] = await Promise.all([
                 API.directories.getAll('cities'),
                 API.directories.getAll('subdivisions'),
-                supabase.from('profiles').select('id, full_name, job_position').in('role', ['manager', 'admin', 'owner']).order('full_name'),
+                supabase.from('profiles').select('id, full_name, job_position').in('role', ['manager', 'admin', 'superadmin']).order('full_name'),
             ]);
             cities       = (cData || []).map(r => r.name);
             subdivisions = (sData || []).map(r => r.name);
@@ -2636,7 +2636,7 @@ select.ia-input{cursor:pointer}
                 { v: 'completed', l: 'Завершив' },
                 { v: 'dropped',   l: 'Відмовився' }
             ];
-            const profiles = this._allProfiles.filter(p => ['manager','admin','owner'].includes(p.role));
+            const profiles = this._allProfiles.filter(p => ['manager','admin','superadmin'].includes(p.role));
 
             const bodyHtml = `
             <div class="inf-form">
@@ -2741,7 +2741,7 @@ select.ia-input{cursor:pointer}
     _renderInternModal(intern) {
         this._editFromDetail = false;
         const isEdit = !!intern;
-        const profiles = this._allProfiles.filter(p => ['manager','admin','owner'].includes(p.role));
+        const profiles = this._allProfiles.filter(p => ['manager','admin','superadmin'].includes(p.role));
         const statusOpts = [
             { v: 'active',    l: 'Навчається' },
             { v: 'completed', l: 'Завершив' },
@@ -3607,7 +3607,7 @@ select.ia-input{cursor:pointer}
 
         area.innerHTML = `
             <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.85rem">
-                <button class="btn btn-ghost btn-sm" onclick="InternsPage._renderTemplateManager()" title="Назад до списку"><i class="fa-solid fa-arrow-left"></i></button>
+                <button class="btn-back btn-back-icon" onclick="InternsPage._renderTemplateManager()" title="Назад до списку"><i class="fa-solid fa-arrow-left"></i></button>
                 <span style="font-weight:700;font-size:.9rem">${templateId ? 'Редагувати шаблон' : 'Новий шаблон'}</span>
             </div>
             <div style="display:flex;flex-direction:column;gap:1rem">
@@ -4752,7 +4752,7 @@ select.ia-input{cursor:pointer}
                     <label class="be-label">Керівник</label>
                     <select id="be-manager" class="form-control" style="max-width:320px">
                         <option value="">— не змінювати —</option>
-                        ${this._allProfiles.filter(p => ['manager','admin','owner'].includes(p.role)).sort((a,b)=>(a.full_name||'').localeCompare(b.full_name||'')).map(p => `<option value="${p.id}">${Fmt.esc(p.full_name)}</option>`).join('')}
+                        ${this._allProfiles.filter(p => ['manager','admin','superadmin'].includes(p.role)).sort((a,b)=>(a.full_name||'').localeCompare(b.full_name||'')).map(p => `<option value="${p.id}">${Fmt.esc(p.full_name)}</option>`).join('')}
                     </select>
                 </div>
             </div>`,

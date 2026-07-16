@@ -179,7 +179,7 @@ const RedFolderPage = {
 
     async _load() {
         try {
-            const canManage = AppState.isAdmin() && !AppState.isPreviewing();
+            const canManage = AppState.isAdmin();
             const seeAll = AppState.isAdmin() || AppState.isManager() || AppState.isSmm();
             const [items, docs, myDovs, pages, pageDovs, allDov, headerDocs, tabs] = await Promise.all([
                 API.redFolderItems.getAll(),

@@ -7,6 +7,7 @@ const FeedbackFab = {
     _fbItems:  [],
     _fbCtx:    null,
     _fabTimer: null,
+    _fbDraft:  null,
 
     init() {
         this._injectCSS();
@@ -41,6 +42,9 @@ const FeedbackFab = {
             }
         };
         document.addEventListener('paste', el._pasteHandler);
+        // Sidebar navigation changes the URL hash without clicking the overlay — close on it too
+        el._hashHandler = () => FeedbackFab._closeModal();
+        window.addEventListener('hashchange', el._hashHandler);
         this._fbLoadAndRoute();
         // Resume polling after close
         const obs = new MutationObserver(() => {
@@ -55,8 +59,19 @@ const FeedbackFab = {
     _closeModal() {
         const el = document.getElementById('global-fb-modal');
         if (!el) return;
+        this._fbSaveDraft();
         if (el._pasteHandler) document.removeEventListener('paste', el._pasteHandler);
+        if (el._hashHandler) window.removeEventListener('hashchange', el._hashHandler);
         el.remove();
+    },
+
+    _fbSaveDraft() {
+        const msgEl = document.getElementById('sgfb-msg');
+        if (!msgEl) return; // "new feedback" form isn't open — nothing to save
+        const title   = document.getElementById('sgfb-title')?.value || '';
+        const message = msgEl.value || '';
+        const type    = document.querySelector('.sgfb-type.active')?.dataset.type || 'bug';
+        this._fbDraft = (title || message) ? { title, message, type } : null;
     },
 
     async _startPolling() {
@@ -305,6 +320,14 @@ const FeedbackFab = {
         ? `<button class="sgfb-cancel-btn" onclick="FeedbackFab._fbGoList()">Скасувати</button>`
         : `<button class="sgfb-cancel-btn" onclick="FeedbackFab._closeModal()">Скасувати</button>`}
 </div>`;
+        if (this._fbDraft) {
+            const t = document.getElementById('sgfb-title');
+            const m = document.getElementById('sgfb-msg');
+            if (t) t.value = this._fbDraft.title;
+            if (m) m.value = this._fbDraft.message;
+            const typeBtn = document.querySelector(`.sgfb-type[data-type="${this._fbDraft.type}"]`);
+            if (typeBtn) { document.querySelectorAll('.sgfb-type').forEach(b => b.classList.remove('active')); typeBtn.classList.add('active'); }
+        }
         setTimeout(() => document.getElementById('sgfb-msg')?.focus(), 50);
     },
 
@@ -349,6 +372,7 @@ const FeedbackFab = {
             }
             await API.feedback.submit({ type, priority: 'medium', title, message: msg, screenshotUrls: paths, context: this._fbCtx || {} });
             this._fbFiles = [];
+            this._fbDraft = null;
             Toast.success('Дякуємо!', 'Звернення надіслано адміністратору');
             this._fbItems = await API.feedback.getMine().catch(() => []);
             const inner = document.getElementById('sgfb-inner');

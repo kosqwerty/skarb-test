@@ -116,7 +116,7 @@ const CollectionsPage = {
 
         const adminBtns = AppState.isStaff() && AppState.canMutate() ? `
             <div style="display:flex;gap:.4rem" onclick="event.stopPropagation()">
-                ${!p.is_home && AppState.isOwner() ? `<button onclick="CollectionsPage.setHome('${p.id}')"
+                ${!p.is_home && AppState.isSuperAdmin() ? `<button onclick="CollectionsPage.setHome('${p.id}')"
                         style="width:30px;height:30px;border-radius:50%;border:1.5px solid var(--border);background:var(--bg-raised);color:var(--text-secondary);font-size:.85rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:border-color var(--transition)"
                         onmouseenter="this.style.borderColor='var(--primary)'"
                         onmouseleave="this.style.borderColor='var(--border)'"
@@ -189,7 +189,7 @@ const CollectionsPage = {
                                 <div class="empty-icon">🔒</div>
                                 <h3>Доступ обмежено</h3>
                                 <p style="color:var(--text-muted)">Ця сторінка доступна лише для певних груп користувачів</p>
-                                <button class="btn btn-primary" onclick="Router.back()" style="display:inline-flex;align-items:center;gap:.35rem;margin-top:1rem"><i class="fa-solid fa-angle-left"></i> Назад</button>
+                                <button class="btn-back" style="margin-top:1rem" onclick="Router.back()"><i class="fa-solid fa-arrow-left"></i> Назад</button>
                             </div>`;
                         return;
                     }
@@ -204,7 +204,7 @@ const CollectionsPage = {
                                 <div class="empty-icon">🔒</div>
                                 <h3>Доступ обмежено</h3>
                                 <p style="color:var(--text-muted)">Ця сторінка доступна лише для певних довіреностей</p>
-                                <button class="btn btn-primary" onclick="Router.back()" style="display:inline-flex;align-items:center;gap:.35rem;margin-top:1rem"><i class="fa-solid fa-angle-left"></i> Назад</button>
+                                <button class="btn-back" style="margin-top:1rem" onclick="Router.back()"><i class="fa-solid fa-arrow-left"></i> Назад</button>
                             </div>`;
                         return;
                     }
@@ -223,7 +223,7 @@ const CollectionsPage = {
             this._renderView(container, { ...page, html_content: resolvedHtml });
         } catch (e) {
             container.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>${e.message}</h3>
-                <button class="btn btn-primary" onclick="Router.go('collections')" style="display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i> Назад</button></div>`;
+                <button class="btn-back" onclick="Router.go('collections')"><i class="fa-solid fa-arrow-left"></i> Назад</button></div>`;
         }
     },
 
@@ -314,7 +314,7 @@ const CollectionsPage = {
         container.innerHTML = `
             <div style="display:flex;flex-direction:column;gap:1rem">
                 <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
-                    ${page.is_home ? '' : '<button class="btn btn-ghost btn-sm" onclick="Router.back()" style="display:inline-flex;align-items:center;gap:.35rem;flex-shrink:0"><i class="fa-solid fa-angle-left"></i> Назад</button>'}
+                    ${page.is_home ? '' : '<button class="btn-back" style="flex-shrink:0" onclick="Router.back()"><i class="fa-solid fa-arrow-left"></i> Назад</button>'}
                     <div style="display:flex;align-items:center;gap:.5rem;flex:1;min-width:0">
                         <h1 style="margin:0;font-size:1.4rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${page.title}</h1>
                         <button class="res-star-btn${Bookmarks.isBookmarked('collections/'+page.id) ? ' active' : ''}"
@@ -327,26 +327,37 @@ const CollectionsPage = {
                 <div style="display:flex;gap:1.25rem;align-items:flex-start">
                     <div id="page-rendered" style="flex:1;min-width:0;padding-bottom:3rem">
                         ${page.search_enabled ? `
-                        <div id="pg-search-bar" style="display:flex;align-items:center;gap:.5rem;padding:.5rem .75rem .5rem 1rem;background:linear-gradient(135deg,var(--bg-raised) 0%,var(--bg-surface) 100%);border:1px solid var(--border);border-radius:var(--radius-lg);margin-bottom:1rem;box-shadow:0 2px 8px rgba(0,0,0,.06);transition:border-color .2s,box-shadow .2s" onfocusin="this.style.borderColor='var(--primary)';this.style.boxShadow='0 0 0 3px rgba(99,102,241,.12),0 2px 8px rgba(0,0,0,.06)'" onfocusout="this.style.borderColor='var(--border)';this.style.boxShadow='0 2px 8px rgba(0,0,0,.06)'">
-                            <i class="fa-solid fa-magnifying-glass" style="color:var(--primary);font-size:.85rem;flex-shrink:0;opacity:.8"></i>
-                            <input id="pg-search-input" type="text" placeholder="Пошук на сторінці…"
-                                   oninput="CollectionsPage._onSearchInput()"
-                                   onkeydown="if(event.key==='Enter'){event.preventDefault();CollectionsPage._searchNav(1);}if(event.key==='Escape'){this.value='';CollectionsPage._applySearch('');}"
-                                   style="flex:1;border:none;background:transparent;outline:none;font-size:.9rem;color:var(--text-primary);font-family:inherit">
+                        <style>
+                            .col-search-bar{margin-bottom:1rem;display:flex;align-items:center;gap:.75rem}
+                            .col-search-wrap{position:relative;flex:1}
+                            .col-search-wrap input{width:100%;height:58px;padding:0 20px 0 54px;border-radius:20px;
+                                border:1.5px solid rgba(255,255,255,.85);background:rgba(255,255,255,.78);
+                                backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+                                color:#1e293b;font-size:1rem;font-weight:500;outline:none;
+                                transition:border-color .2s,box-shadow .2s;box-sizing:border-box;
+                                box-shadow:0 10px 35px rgba(15,23,42,.06);font-family:inherit}
+                            .col-search-wrap input::placeholder{color:#94a3b8;font-weight:400}
+                            .col-search-wrap input:focus{border-color:var(--primary);
+                                box-shadow:0 0 0 4px var(--primary-glow),0 20px 45px rgba(15,23,42,.08)}
+                            body.dark-theme .col-search-wrap input{background:var(--bg-surface);backdrop-filter:none;-webkit-backdrop-filter:none;border-color:var(--border);color:var(--text-primary)}
+                            .col-search-icon{position:absolute;left:18px;top:50%;transform:translateY(-50%);color:#94a3b8;pointer-events:none;font-size:1rem;z-index:2}
+                            body.dark-theme .col-search-icon{color:var(--text-muted)}
+                            .col-search-wrap input:-webkit-autofill,
+                            .col-search-wrap input:-webkit-autofill:hover,
+                            .col-search-wrap input:-webkit-autofill:focus {
+                                -webkit-box-shadow: 0 0 0 1000px transparent inset;
+                                -webkit-text-fill-color: inherit;
+                                transition: background-color 99999s ease-in-out 0s;
+                            }
+                        </style>
+                        <div id="pg-search-bar" class="col-search-bar">
+                            <div class="col-search-wrap">
+                                <span class="col-search-icon"><i class="fa-solid fa-magnifying-glass"></i></span>
+                                <input id="pg-search-input" type="text" placeholder="Пошук на сторінці…" autocomplete="off"
+                                       oninput="CollectionsPage._onSearchInput()"
+                                       onkeydown="if(event.key==='Enter'){event.preventDefault();CollectionsPage._searchNav(1);}if(event.key==='Escape'){this.value='';CollectionsPage._applySearch('');}">
+                            </div>
                             <span id="pg-search-count" style="font-size:.75rem;font-weight:600;color:var(--text-muted);white-space:nowrap;min-width:72px;text-align:right;letter-spacing:.01em"></span>
-                            <div style="width:1px;height:18px;background:var(--border);flex-shrink:0;margin:0 .15rem"></div>
-                            <button onclick="CollectionsPage._searchNav(-1)" title="Попередній"
-                                style="width:28px;height:28px;border-radius:8px;border:1px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;flex-shrink:0;transition:all .15s"
-                                onmouseenter="this.style.background='var(--bg-hover)';this.style.borderColor='var(--primary)';this.style.color='var(--primary)'"
-                                onmouseleave="this.style.background='var(--bg-surface)';this.style.borderColor='var(--border)';this.style.color='var(--text-secondary)'">
-                                <i class="fa-solid fa-chevron-up" style="font-size:.6rem"></i>
-                            </button>
-                            <button onclick="CollectionsPage._searchNav(1)" title="Наступний"
-                                style="width:28px;height:28px;border-radius:8px;border:1px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;flex-shrink:0;transition:all .15s"
-                                onmouseenter="this.style.background='var(--bg-hover)';this.style.borderColor='var(--primary)';this.style.color='var(--primary)'"
-                                onmouseleave="this.style.background='var(--bg-surface)';this.style.borderColor='var(--border)';this.style.color='var(--text-secondary)'">
-                                <i class="fa-solid fa-chevron-down" style="font-size:.6rem"></i>
-                            </button>
                         </div>` : ''}
                         <iframe id="page-iframe" style="width:100%;border:none;display:block" scrolling="no"
                                 sandbox="allow-scripts allow-forms allow-popups allow-top-navigation-by-user-activation allow-same-origin allow-downloads"></iframe>
@@ -602,8 +613,8 @@ document.addEventListener('click', function(e) {
                 <!-- Row 1: back | icon+title | spacer | timestamp | save-split | publish | more -->
                 <div style="display:flex;align-items:center;gap:.6rem">
 
-                    <button class="btn btn-ghost btn-sm" onclick="Router.back()" style="display:inline-flex;align-items:center;gap:.35rem;flex-shrink:0;padding:.35rem .6rem">
-                        <i class="fa-solid fa-angle-left"></i> Назад
+                    <button class="btn-back" style="flex-shrink:0" onclick="Router.back()">
+                        <i class="fa-solid fa-arrow-left"></i> Назад
                     </button>
 
                     <div style="width:32px;height:32px;border-radius:9px;background:rgba(99,102,241,.12);border:1px solid rgba(99,102,241,.2);display:flex;align-items:center;justify-content:center;flex-shrink:0">
@@ -1739,6 +1750,7 @@ tr:hover td { background: #f8fafc; }
     _insertAttachmentLink(attId) {
         const att = this._attachments.find(a => a.id === attId);
         if (!att) return;
+        const scrollY = window.scrollY;
         const ext   = att.file_name.split('.').pop().toLowerCase();
         const isPdf = ext === 'pdf' || att.file_type?.includes('pdf');
         const isImg = att.file_type?.startsWith('image/') || ['jpg','jpeg','png','gif','webp','svg'].includes(ext);
@@ -1757,6 +1769,8 @@ tr:hover td { background: #f8fafc; }
             this._cmHtml.scrollIntoView(null);
             this._markDirty();
             this._updatePreview();
+            // CodeMirror's hidden input can pull page scroll to it — restore position
+            requestAnimationFrame(() => window.scrollTo(0, scrollY));
         } else {
             const ta = document.getElementById('editor-html');
             if (ta) {
@@ -1918,7 +1932,7 @@ tr:hover td { background: #f8fafc; }
         if (btn) btn.disabled = true;
         try {
             const { data: admins } = await supabase.from('profiles')
-                .select('id').eq('is_active', true).in('role', ['owner', 'admin']);
+                .select('id').eq('is_active', true).in('role', ['superadmin', 'admin']);
             const adminIds = (admins || []).map(a => a.id);
             if (!adminIds.length) { Toast.info('Адміністраторів не знайдено'); return; }
             const sender  = AppState.profile?.full_name || 'Користувач';

@@ -334,6 +334,21 @@ h4 { font-size: 1.125rem; font-weight: 500; }
 
 .btn-sm { padding: 0.55rem 0.8rem; font-size: 0.8rem; }
 
+/* ── Back button — canonical style for every "Назад" page-navigation button ──
+   Use this everywhere instead of a page-local class or inline style. */
+.btn-back {
+    display: inline-flex; align-items: center; gap: .4rem;
+    padding: .55rem 1rem; border-radius: 10px;
+    border: 1.5px solid var(--border); background: var(--bg-surface);
+    color: var(--text-secondary); font-size: .83rem; font-weight: 600;
+    cursor: pointer; transition: all .15s; font-family: inherit; text-decoration: none;
+    white-space: nowrap;
+}
+.btn-back:hover { border-color: var(--primary); color: var(--primary); background: var(--bg-hover); }
+.btn-back i { font-size: .75rem; }
+/* Icon-only variant (compact headers with no room for a label) */
+.btn-back-icon { width: 34px; height: 34px; padding: 0; justify-content: center; gap: 0; }
+
 /* "Modern" pill buttons — style established by the create-user form (admin.js).
    Use for headline primary/secondary actions (modal footers, page-level create/save),
    not for small inline icon buttons inside tables/cards. */
@@ -746,6 +761,55 @@ select option { background: var(--bg-raised); }
 }
 .ss-opt:first-child { color: var(--text-muted); }
 .ss-opt:hover { background: var(--bg-hover); }
+
+/* ── Ukrainian date-time picker (UaDateTime) ──────────────────────── */
+.uadt-wrap { position: relative; width: 260px; max-width: 100%; }
+.uadt-trigger {
+    width: 100%; display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px; background: var(--bg-raised); border: 1.5px solid var(--border);
+    border-radius: 12px; font-size: .9rem; color: var(--text-primary); font-family: inherit;
+    cursor: pointer; outline: none; transition: border-color .15s, box-shadow .15s; box-sizing: border-box;
+}
+.uadt-trigger:hover, .uadt-trigger:focus { border-color: var(--primary); }
+.uadt-trigger-ico { color: var(--primary); font-size: .85rem; flex-shrink: 0; }
+.uadt-txt { flex: 1; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.uadt-trigger-chev { font-size: .65rem; color: var(--text-muted); flex-shrink: 0; }
+.uadt-pop {
+    position: absolute; z-index: 950; width: 280px; padding: 14px;
+    background: var(--bg-surface); border: 1px solid var(--border); border-radius: 14px;
+    box-shadow: var(--shadow-lg); animation: fadeIn .12s ease;
+}
+.uadt-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.uadt-nav-lbl { font-size: .85rem; font-weight: 700; color: var(--text-primary); }
+.uadt-nav-btn {
+    width: 26px; height: 26px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--bg-raised); color: var(--text-secondary); cursor: pointer;
+    display: flex; align-items: center; justify-content: center; font-size: .7rem; transition: all .15s;
+}
+.uadt-nav-btn:hover { border-color: var(--primary); color: var(--primary); }
+.uadt-dow { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-bottom: 4px; }
+.uadt-dow span { text-align: center; font-size: .68rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; }
+.uadt-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-bottom: 12px; }
+.uadt-cell {
+    aspect-ratio: 1; border: none; background: transparent; border-radius: 8px;
+    font-size: .8rem; color: var(--text-primary); cursor: pointer; transition: background .15s;
+}
+.uadt-cell:hover { background: var(--bg-hover); }
+.uadt-cell.sel { background: var(--primary); color: #fff; font-weight: 700; }
+.uadt-cell-empty { cursor: default; }
+.uadt-time { display: flex; align-items: center; gap: 8px; padding-top: 10px; border-top: 1px solid var(--border); color: var(--text-muted); font-size: .85rem; }
+.uadt-time-inp {
+    width: 48px; padding: 5px 6px; text-align: center; border: 1.5px solid var(--border);
+    border-radius: 8px; background: var(--bg-raised); color: var(--text-primary); font-family: inherit;
+    font-size: .85rem; outline: none;
+}
+.uadt-time-inp:focus { border-color: var(--primary); }
+.uadt-actions { display: flex; justify-content: space-between; gap: 8px; margin-top: 12px; }
+.uadt-btn { padding: 7px 14px; border-radius: 9px; font-size: .78rem; font-weight: 600; cursor: pointer; border: 1.5px solid transparent; }
+.uadt-btn-ghost { background: transparent; border-color: var(--border); color: var(--text-muted); }
+.uadt-btn-ghost:hover { border-color: var(--danger); color: var(--danger); }
+.uadt-btn-primary { background: var(--primary); color: #fff; }
+.uadt-btn-primary:hover { background: var(--primary-dark); }
 
 /* ── Creatable Select ───────────────────────────────────────────── */
 .cs-wrap { position: relative; }

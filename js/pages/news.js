@@ -25,7 +25,7 @@ const NewsPage = {
         container.innerHTML = `
             <div class="page-header">
                 <div class="page-title">
-                    <button class="btn btn-ghost btn-sm" onclick="Router.go('dashboard')" style="display:inline-flex;align-items:center;gap:.35rem;margin-bottom:.5rem"><i class="fa-solid fa-angle-left"></i> Назад</button>
+                    <button class="btn-back" style="margin-bottom:.5rem" onclick="Router.go('dashboard')"><i class="fa-solid fa-arrow-left"></i> Назад</button>
                     <h1>📰 Новини та оголошення</h1>
                     <p>Останні події</p>
                 </div>
@@ -314,7 +314,7 @@ const NewsPage = {
 
             if (news.allow_reactions !== false) this._loadReactions(news.id);
         } catch(e) {
-            container.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>Новину не знайдено</h3><button class="btn btn-primary" onclick="Router.go('news')" style="display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i> Назад</button></div>`;
+            container.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>Новину не знайдено</h3><button class="btn-back" onclick="Router.go('news')"><i class="fa-solid fa-arrow-left"></i> Назад</button></div>`;
         }
     },
 
@@ -558,12 +558,12 @@ const NewsPage = {
 
                         <div class="nf-field">
                             <label><i class="fa-regular fa-calendar" style="color:var(--primary);margin-right:.3rem"></i>Опубліковано</label>
-                            <input id="n-published-at" type="datetime-local" value="${pubDateVal}" class="nf-date">
+                            ${UaDateTime.html('n-published-at', pubDateVal)}
                         </div>
 
                         <div class="nf-field">
                             <label><i class="fa-regular fa-calendar-xmark" style="color:var(--text-muted);margin-right:.3rem"></i>Актуально до</label>
-                            <input id="n-expires-at" type="datetime-local" value="${expDateVal}" class="nf-date">
+                            ${UaDateTime.html('n-expires-at', expDateVal)}
                         </div>
 
                         <div class="nf-sep"></div>

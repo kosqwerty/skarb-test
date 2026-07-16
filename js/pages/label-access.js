@@ -1,6 +1,6 @@
 ﻿// ================================================================
 // EduFlow LMS — Обмеження доступу по мітках
-// Access: owner, admin
+// Access: superadmin, admin
 //
 // SQL (run once in Supabase):
 // CREATE TABLE IF NOT EXISTS label_restrictions (
@@ -14,9 +14,9 @@
 // ALTER TABLE label_restrictions ENABLE ROW LEVEL SECURITY;
 // CREATE POLICY "lr_select" ON label_restrictions FOR SELECT USING (true);
 // CREATE POLICY "lr_insert" ON label_restrictions FOR INSERT
-//     WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('owner','admin')));
+//     WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('superadmin','admin')));
 // CREATE POLICY "lr_delete" ON label_restrictions FOR DELETE
-//     USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('owner','admin')));
+//     USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('superadmin','admin')));
 // ================================================================
 
 // ── Sections that can be restricted ──────────────────────────────
@@ -54,7 +54,7 @@ const AccessRestrictions = {
     canAccess(route) {
         const profile = AppState.profile;
         if (!profile?.label) return true;
-        if (['owner', 'admin', 'manager', 'smm', 'teacher'].includes(profile.role)) return true;
+        if (['superadmin', 'admin', 'manager', 'smm'].includes(profile.role)) return true;
         return !this.isRestricted(profile.label, route);
     },
 
@@ -73,7 +73,7 @@ const LabelAccessPage = {
     _rules:    [],
 
     async init(container) {
-        if (!AppState.isOwner() && !AppState.isAdmin?.()) {
+        if (!AppState.isSuperAdmin() && !AppState.isAdmin?.()) {
             Toast.error('Заборонено');
             Router.go('dashboard');
             return;

@@ -8,43 +8,59 @@ const AdminPage = {
     _groups: [],
     _onOverview: false,
 
-    _buildGroups(canManageUsers) {
+    // allowedTabs: null = без обмежень (усі роль-дозволені вкладки); Set —
+    // додатково звужує до цих id (застосовується лише коли superadmin явно
+    // налаштував права для конкретного admin через вкладку "Права адмінів")
+    _buildGroups(canManageUsers, allowedTabs = null) {
         return [
             {
                 id: 'content', label: 'Контент', icon: 'fa-layer-group', desc: 'Люди та навчальні матеріали', color: '#3b82f6', tabs: [
-                    { id: 'users',        label: 'Користувачі',      icon: 'fa-users',               show: canManageUsers },
-                    { id: 'directories',  label: 'Довідник',         icon: 'fa-address-book',        show: canManageUsers },
-                    { id: 'courses',      label: 'Курси',             icon: 'fa-book-open',           show: true },
-                    { id: 'tests',        label: 'Тести',             icon: 'fa-file-pen',            show: true },
-                    { id: 'lectures',     label: 'Лекції',            icon: 'fa-chalkboard-user',     show: true },
-                    { id: 'news',         label: 'Новини',            icon: 'fa-newspaper',           show: true },
+                    { id: 'users',        label: 'Користувачі',      icon: 'fa-users',               color: '#3b82f6', show: canManageUsers },
+                    { id: 'directories',  label: 'Довідник',         icon: 'fa-address-book',        color: '#06b6d4', show: canManageUsers },
+                    { id: 'courses',      label: 'Курси',             icon: 'fa-book-open',           color: '#6366f1', show: true },
+                    { id: 'tests',        label: 'Тести',             icon: 'fa-file-pen',            color: '#f59e0b', show: true },
+                    { id: 'lectures',     label: 'Лекції',            icon: 'fa-chalkboard-user',     color: '#ec4899', show: true },
+                    { id: 'surveys',      label: 'Опитування',        icon: 'fa-square-poll-horizontal', color: '#10b981', show: AppState.isAdmin() || AppState.isSmm() },
+                    { id: 'news',         label: 'Новини',            icon: 'fa-newspaper',           color: '#f43f5e', show: true },
                 ]
             },
             {
                 id: 'access', label: 'Доступ', icon: 'fa-shield-halved', desc: 'Права та обмеження', color: '#8b5cf6', tabs: [
-                    { id: 'access-groups', label: 'Групи доступу',   icon: 'fa-lock',                show: canManageUsers },
-                    { id: 'trusted-ips',   label: 'Довірені IP',     icon: 'fa-network-wired',       show: AppState.isAdmin() },
+                    { id: 'access-groups',      label: 'Групи доступу',   icon: 'fa-lock',            color: '#8b5cf6', show: canManageUsers },
+                    { id: 'trusted-ips',        label: 'Довірені IP',     icon: 'fa-network-wired',   color: '#14b8a6', show: AppState.isAdmin() },
+                    { id: 'admin-permissions',  label: 'Права адмінів',   icon: 'fa-user-lock',       color: '#f97316', show: AppState.isSuperAdmin() },
                 ]
             },
             {
                 id: 'monitor', label: 'Моніторинг', icon: 'fa-chart-line', desc: 'Активність у системі', color: '#10b981', tabs: [
-                    { id: 'activity',    label: 'Активність',         icon: 'fa-clock-rotate-left',  show: AppState.isOwner() },
-                    { id: 'sessions',    label: 'Сесії',              icon: 'fa-list-ul',             show: AppState.isOwner() },
-                    { id: 'nav-stats',   label: 'Навігація',          icon: 'fa-route',               show: AppState.isOwner() },
-                    { id: 'task-report', label: 'Завдання',           icon: 'fa-list-check',          show: AppState.isOwner() },
+                    { id: 'activity',    label: 'Активність',         icon: 'fa-clock-rotate-left',  color: '#10b981', show: AppState.isSuperAdmin() },
+                    { id: 'sessions',    label: 'Сесії',              icon: 'fa-list-ul',             color: '#3b82f6', show: AppState.isSuperAdmin() },
+                    { id: 'nav-stats',   label: 'Навігація',          icon: 'fa-route',               color: '#f59e0b', show: AppState.isSuperAdmin() },
+                    { id: 'task-report', label: 'Завдання',           icon: 'fa-list-check',          color: '#ef4444', show: AppState.isSuperAdmin() },
                 ]
             },
             {
                 id: 'tools', label: 'Інструменти', icon: 'fa-screwdriver-wrench', desc: 'Пошук, кошик, звернення', color: '#f59e0b', tabs: [
-                    { id: 'supersearch',  label: 'Супер пошук',      icon: 'fa-magnifying-glass-chart', show: canManageUsers },
-                    { id: 'trash',        label: 'Кошик',            icon: 'fa-trash',               show: AppState.isOwner() },
-                    { id: 'feedback',     label: "Зворотний зв'язок", icon: 'fa-comment-dots',       show: AppState.isAdmin() },
-                    { id: 'ai-assistant', label: 'AI Помічник',      icon: 'fa-robot',               show: AppState.isAdmin() },
-                    { id: 'pleso',        label: 'Pleso',            icon: 'fa-tag',                  show: AppState.isAdmin() },
+                    { id: 'supersearch',  label: 'Супер пошук',      icon: 'fa-magnifying-glass-chart', color: '#6366f1', show: canManageUsers },
+                    { id: 'trash',        label: 'Кошик',            icon: 'fa-trash',               color: '#ef4444', show: AppState.isSuperAdmin() },
+                    { id: 'feedback',     label: "Зворотний зв'язок", icon: 'fa-comment-dots',       color: '#ec4899', show: AppState.isAdmin() },
+                    { id: 'ai-assistant', label: 'AI Помічник',      icon: 'fa-robot',               color: '#06b6d4', show: AppState.isAdmin() },
+                    { id: 'pleso',        label: 'Pleso',            icon: 'fa-tag',                  color: '#f59e0b', show: AppState.isAdmin() },
                 ]
             },
-        ].map(g => ({ ...g, tabs: g.tabs.filter(t => t.show) }))
+        ].map(g => ({ ...g, tabs: g.tabs.filter(t => t.show && (!allowedTabs || allowedTabs.has(t.id))) }))
          .filter(g => g.tabs.length > 0);
+    },
+
+    // Повний перелік вкладок, якими можна керувати через "Права адмінів"
+    // (усе, крім суто-superadmin розділів — їх неможливо видати звичайному
+    // admin незалежно від налаштувань)
+    _SUPERADMIN_ONLY_TABS: ['trash', 'admin-permissions'],
+    _manageableTabGroups() {
+        return this._buildGroups(true, null)
+            .filter(g => g.id !== 'monitor')
+            .map(g => ({ ...g, tabs: g.tabs.filter(t => !this._SUPERADMIN_ONLY_TABS.includes(t.id)) }))
+            .filter(g => g.tabs.length > 0);
     },
 
     async init(container, params) {
@@ -57,7 +73,18 @@ const AdminPage = {
         const canManageUsers = AppState.isAdmin() || AppState.isCeo();
         UI.setBreadcrumb([{ label: AppState.isSmm() ? 'Контент' : 'Адміністрування' }]);
 
-        this._groups = this._buildGroups(canManageUsers);
+        // Персональні обмеження вкладок стосуються лише role==='admin' —
+        // superadmin/smm/ceo завжди бачать свій звичний набір
+        let allowedTabs = null;
+        if (AppState.profile?.role === 'admin') {
+            try {
+                const keys = await API.adminTabPermissions.getForUser(AppState.user.id);
+                const panelKeys = keys.filter(k => !k.startsWith('nav:'));
+                if (panelKeys.length) allowedTabs = new Set(panelKeys);
+            } catch(_) { /* немає налаштувань — без обмежень */ }
+        }
+
+        this._groups = this._buildGroups(canManageUsers, allowedTabs);
         const hasTab    = !!params.tab;
         const initTab   = params.tab || null;
         const initGroup = initTab ? (this._groups.find(g => g.tabs.some(t => t.id === initTab))?.id || this._groups[0]?.id) : null;
@@ -89,11 +116,11 @@ const AdminPage = {
         const tabsHtml = this._groups.map(g => g.tabs.map(t => `
             <button type="button" class="tab adm-tab-vert${t.id === initTab ? ' active' : ''}"
                     data-tab="${t.id}" data-group="${g.id}"
-                    style="--tab-c:${g.color || 'var(--primary)'};${g.id !== initGroup ? 'display:none' : ''}"
+                    style="--tab-c:${g.color || 'var(--primary)'};--tab-ic:${t.color || g.color || 'var(--primary)'};${g.id !== initGroup ? 'display:none' : ''}"
                     onclick="AdminPage.switchTab('${t.id}', this)">
                 <span class="adm-tab-ico"><i class="fa-solid ${t.icon}"></i></span>
                 <span class="adm-tab-lbl">${t.label}</span>
-            </button>`).join('')).join('');
+            </button>${['directories', 'surveys'].includes(t.id) ? `<div class="adm-tab-sep" data-group="${g.id}" style="${g.id !== initGroup ? 'display:none' : ''}"></div>` : ''}`).join('')).join('');
 
         const activeGroupObj = this._groups.find(g => g.id === initGroup);
 
@@ -151,18 +178,19 @@ const AdminPage = {
 }
 .adm-tab-ico {
     width:26px;height:26px;border-radius:8px;flex-shrink:0;
-    background:var(--bg-raised);color:var(--text-muted);
+    background:color-mix(in srgb,var(--tab-ic,var(--tab-c)) 15%,transparent);color:var(--tab-ic,var(--tab-c));
     display:flex;align-items:center;justify-content:center;font-size:.75rem;
     transition:all .16s;
 }
 .adm-tab-lbl { flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
 .adm-tab-vert:hover:not(.active) { background:var(--bg-hover);color:var(--text-primary); }
-.adm-tab-vert:hover:not(.active) .adm-tab-ico { background:var(--bg-surface); }
+.adm-tab-vert:hover:not(.active) .adm-tab-ico { background:color-mix(in srgb,var(--tab-ic,var(--tab-c)) 28%,transparent); }
 .adm-tab-vert.active {
-    background:color-mix(in srgb,var(--tab-c) 12%,var(--bg-surface));
-    color:var(--tab-c);box-shadow:inset 3px 0 0 var(--tab-c);
+    background:color-mix(in srgb,var(--tab-ic,var(--tab-c)) 12%,var(--bg-surface));
+    color:var(--tab-ic,var(--tab-c));box-shadow:inset 3px 0 0 var(--tab-ic,var(--tab-c));
 }
-.adm-tab-vert.active .adm-tab-ico { background:var(--tab-c);color:#fff; }
+.adm-tab-vert.active .adm-tab-ico { background:var(--tab-ic,var(--tab-c));color:#fff; }
+.adm-tab-sep { height:2px;background:var(--border-light);margin:6px 4px;border-radius:1px; }
 @keyframes adm-desc-in { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:none} }
 @media (prefers-reduced-motion:reduce) { .nav-detail{animation:none} }
             </style>`;
@@ -273,6 +301,7 @@ const AdminPage = {
         this._group = groupId;
         document.querySelectorAll('.adm-grp-btn').forEach(b => b.classList.toggle('active', b.dataset.group === groupId));
         document.querySelectorAll('#admin-tabs .tab').forEach(t => { t.style.display = t.dataset.group === groupId ? '' : 'none'; });
+        document.querySelectorAll('#admin-tabs .adm-tab-sep').forEach(s => { s.style.display = s.dataset.group === groupId ? '' : 'none'; });
         this._updateTabsSidebarHeader(groupId);
         this._openTabsDropdown();
     },
@@ -294,7 +323,7 @@ const AdminPage = {
     },
 
     async switchTab(tab, el) {
-        if (tab === 'activity' && !AppState.isOwner()) {
+        if (tab === 'activity' && !AppState.isSuperAdmin()) {
             Toast.error('Заборонено', 'Тільки для власника системи');
             return;
         }
@@ -317,12 +346,13 @@ const AdminPage = {
             document.querySelectorAll('.adm-grp-btn').forEach(b => b.classList.toggle('active', b.dataset.group === tabGroup));
             if (groupChanged) {
                 document.querySelectorAll('#admin-tabs .tab').forEach(t => { t.style.display = t.dataset.group === tabGroup ? '' : 'none'; });
+                document.querySelectorAll('#admin-tabs .adm-tab-sep').forEach(s => { s.style.display = s.dataset.group === tabGroup ? '' : 'none'; });
                 this._updateTabsSidebarHeader(tabGroup);
             }
             this._updateGroupCardDesc(tabGroup, tabGroupObj.tabs.find(t => t.id === tab)?.label);
         }
         const tabLabels = {
-            'users': 'Користувачі', 'directories': 'Довідник', 'courses': 'Курси', 'tests': 'Тести', 'lectures': 'Лекції', 'news': 'Новини',
+            'users': 'Користувачі', 'directories': 'Довідник', 'courses': 'Курси', 'tests': 'Тести', 'lectures': 'Лекції', 'surveys': 'Опитування', 'news': 'Новини',
             'access-groups': 'Групи доступу', 'trash': 'Кошик', 'supersearch': 'Супер пошук',
             'activity': 'Активність', 'sessions': 'Сесії', 'nav-stats': 'Навігація',
             'task-report': 'Завдання', 'feedback': "Зворотний зв'язок",
@@ -386,6 +416,15 @@ const AdminPage = {
                 case 'courses':     await this._renderCourses(el);     break;
                 case 'tests':       await this._renderTests(el);       break;
                 case 'lectures':    await LecturesPage.renderTab(el);   break;
+                case 'surveys':
+                    // SurveysPage internally re-queries document.getElementById('ep-content')
+                    // for in-place navigation (builder, back, etc.) — give it that anchor here too.
+                    el.innerHTML = '<div id="ep-content"></div>';
+                    // Explicit true — _allowCreate persists across renders (see surveys.js), so
+                    // without this the admin tab could silently inherit `false` left behind by
+                    // a prior visit to "Моє навчання" earlier in the same session.
+                    await SurveysPage.renderInTab(document.getElementById('ep-content'), { allowCreate: true });
+                    break;
                 case 'news':        await this._renderNews(el);        break;
                 case 'access-groups': await AccessGroupsPage.renderTab(el);  break;
                 case 'trash':         await this._renderTrash(el);                  break;
@@ -398,6 +437,7 @@ const AdminPage = {
                 case 'trusted-ips':   await this._renderTrustedIps(el);             break;
                 case 'ai-assistant':  await this._renderAiAssistant(el);            break;
                 case 'pleso':         this._renderPleso(el);                        break;
+                case 'admin-permissions': await this._renderAdminPermissions(el);   break;
             }
         } catch(e) {
             el.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>${e.message}</h3></div>`;
@@ -503,24 +543,53 @@ const AdminPage = {
                 .uf-tr:last-child .uf-td{border-bottom:none}
                 .uf-tr:hover .uf-td{background:var(--bg-hover)}
                 .uf-tr:hover .uf-td-pib,.uf-tr:hover .uf-td-cb{background:var(--bg-hover)}
-                .uf-tr-owner .uf-td,.uf-tr-owner .uf-td-pib,.uf-tr-owner .uf-td-cb{background:var(--bg-raised)}
-                .uf-tr-owner:hover .uf-td,.uf-tr-owner:hover .uf-td-pib,.uf-tr-owner:hover .uf-td-cb{background:var(--bg-hover)}
+                .uf-tr-superadmin .uf-td,.uf-tr-superadmin .uf-td-pib,.uf-tr-superadmin .uf-td-cb{background:var(--bg-raised)}
+                .uf-tr-superadmin:hover .uf-td,.uf-tr-superadmin:hover .uf-td-pib,.uf-tr-superadmin:hover .uf-td-cb{background:var(--bg-hover)}
                 .uf-pib-inner{display:flex;align-items:center;gap:.55rem;cursor:pointer}
                 .uf-pib-name{font-weight:600;font-size:.83rem;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px;text-decoration-color:var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}
                 .uf-pib-email{font-size:.71rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}
                 .uf-avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--secondary));display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden}
                 .uf-act-col{display:flex;gap:.2rem;align-items:center;justify-content:center}
+
+                /* Toolbar buttons — same gold treasury style as "Створити користувача" */
+                .uf-toolbar {
+                    --uf-gold: #e8c76a;
+                    --uf-gold-grad: linear-gradient(135deg,#fff3cc,#e8c76a 55%,#d4af37);
+                    --uf-gold-glow: rgba(232,199,106,.4);
+                    --uf-gold-ink: #241a04;
+                }
+                body.light-theme .uf-toolbar {
+                    --uf-gold: #c9962a;
+                    --uf-gold-grad: linear-gradient(135deg,#f2ce7c,#c9962a 55%,#a3720a);
+                    --uf-gold-glow: rgba(201,150,42,.25);
+                    --uf-gold-ink: #2c2005;
+                }
+                .uf-btn-gold {
+                    display: inline-flex; align-items: center; gap: 8px; padding: 9px 20px; border-radius: 12px;
+                    background: var(--uf-gold-grad); border: none; color: var(--uf-gold-ink);
+                    font-weight: 700; font-size: .85rem; cursor: pointer; transition: all .2s; font-family: inherit;
+                    box-shadow: 0 6px 16px var(--uf-gold-glow);
+                }
+                .uf-btn-gold:hover { transform: translateY(-1px); box-shadow: 0 10px 22px var(--uf-gold-glow); }
+                .uf-btn-gold:active { transform: scale(.97); }
+                .uf-btn-gold-outline {
+                    display: inline-flex; align-items: center; gap: 8px; padding: 9px 18px; border-radius: 12px;
+                    background: transparent; border: 1.5px solid var(--border); color: var(--text-secondary);
+                    font-weight: 600; font-size: .85rem; cursor: pointer; transition: all .2s; font-family: inherit;
+                }
+                .uf-btn-gold-outline:hover { border-color: var(--uf-gold); color: var(--uf-gold); background: var(--bg-hover); }
+                .uf-btn-gold-outline:active { transform: scale(.97); }
             </style>
 
             <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.85rem">
                 <h3 style="margin:0">👥 Всі користувачі</h3>
             </div>
 
-            <div style="display:flex;gap:.75rem;margin-bottom:.65rem;flex-wrap:wrap;align-items:center;justify-content:space-between">
+            <div class="uf-toolbar" style="display:flex;gap:.75rem;margin-bottom:.65rem;flex-wrap:wrap;align-items:center;justify-content:space-between">
                 <div style="display:flex;gap:.65rem;flex-wrap:wrap">
-                    ${AppState.canMutate() ? `<button class="btn btn-primary" onclick="AdminPage.openCreateUser()"><i class="fa-solid fa-plus"></i> Створити користувача</button>` : ''}
-                    ${AppState.canMutate() ? `<button class="btn btn-ghost" onclick="AdminPage.importUsers()"><i class="fa-solid fa-upload"></i> Імпорт</button>` : ''}
-                    <button class="btn btn-success" onclick="AdminPage.exportUsers(${JSON.stringify(list).replace(/"/g,'&quot;')})"><i class="fa-solid fa-download"></i> Експорт</button>
+                    ${AppState.canMutate() ? `<button class="uf-btn-gold" onclick="AdminPage.openCreateUser()"><i class="fa-solid fa-plus"></i> Створити користувача</button>` : ''}
+                    ${AppState.canMutate() ? `<button class="uf-btn-gold-outline" onclick="AdminPage.importUsers()"><i class="fa-solid fa-upload"></i> Імпорт</button>` : ''}
+                    <button class="uf-btn-gold-outline" onclick="AdminPage.exportUsers(${JSON.stringify(list).replace(/"/g,'&quot;')})"><i class="fa-solid fa-download"></i> Експорт</button>
                 </div>
                 <div style="display:flex;align-items:center;gap:.65rem">
                     <span style="font-size:.8rem;color:var(--text-muted)">Показано <span id="users-shown">0</span> з <span id="users-total">${list.length}</span></span>
@@ -584,12 +653,11 @@ const AdminPage = {
                             <th class="uf-th uf-fth uf-col-role">
                                 <select id="uf-role" class="uf-fselect" onchange="AdminPage._applyUserFilters()">
                                     <option value="">Всі ролі</option>
-                                    <option value="owner">👑 Admin</option>
+                                    <option value="superadmin">👑 SuperAdmin</option>
                                     <option value="ceo">👑 CEO</option>
                                     <option value="admin">👑 Адміністратор</option>
                                     <option value="manager">👑 Керівник</option>
                                     <option value="smm">📰 SMM</option>
-                                    <option value="teacher">Викладач</option>
                                     <option value="user">Користувач</option>
                                 </select>
                             </th>
@@ -635,12 +703,12 @@ const AdminPage = {
     },
 
     _userRow(u) {
-        const isOwnerRow = u.role === 'owner';
+        const isSuperAdminRow = u.role === 'superadmin';
         const isSelf     = u.id === AppState.user?.id;
-        const canEdit    = AppState.canMutate() && (!isOwnerRow || AppState.isOwner());
-        const canHide    = AppState.canMutate() && AppState.isAdmin() && !isSelf && !isOwnerRow;
+        const canEdit    = AppState.canMutate() && (!isSuperAdminRow || AppState.isSuperAdmin());
+        const canHide    = AppState.canMutate() && AppState.isAdmin() && !isSelf && !isSuperAdminRow;
         const esc        = s => (s || '').toLowerCase().replace(/"/g, '');
-        const trCls      = isOwnerRow ? 'uf-tr uf-tr-owner' : 'uf-tr';
+        const trCls      = isSuperAdminRow ? 'uf-tr uf-tr-superadmin' : 'uf-tr';
 
         return `
             <tr id="urow-${u.id}" class="${trCls}"
@@ -654,7 +722,7 @@ const AdminPage = {
                 data-status="${u.is_active !== false ? 'active' : 'blocked'}">
                 <td class="uf-td uf-td-cb" style="text-align:center;padding:.7rem .4rem">
                     <input type="checkbox" class="user-cb" data-uid="${u.id}"
-                           ${isOwnerRow ? 'disabled title="Власника не можна вибрати"' : ''}
+                           ${isSuperAdminRow ? 'disabled title="SuperAdmin-а не можна вибрати"' : ''}
                            onchange="AdminPage._onUserCheckbox(this)">
                 </td>
                 <td class="uf-td uf-td-pib">
@@ -1197,7 +1265,7 @@ const AdminPage = {
                         <div style="font-size:.875rem;color:var(--text-secondary);line-height:1.6">${Fmt.esc(u.bio)}</div>
                     </div>` : ''}
                     ${canSetBdReminder ? `<div class="up-section">${this._birthdayReminderBlock(u, bdReminder)}</div>` : ''}
-                    ${AppState.isOwner() ? `<div class="up-section">
+                    ${AppState.isSuperAdmin() ? `<div class="up-section">
                         <button class="btn btn-ghost btn-sm" style="width:100%;justify-content:center;gap:.4rem"
                             onclick="Modal.close();AdminPage.switchTab('activity',document.querySelector('#admin-tabs .tab[data-tab=activity]'));AdminPage._ualPreselect('${u.id}')">
                             <i class="fa-solid fa-clock-rotate-left"></i> Переглянути активність
@@ -1207,7 +1275,7 @@ const AdminPage = {
                 <div class="up-footer">
                     <button class="btn btn-secondary" onclick="Modal.close()"><i class="fa-solid fa-xmark"></i> Закрити</button>
                     <div class="up-footer-right">
-                        ${AppState.canMutate() && AppState.isAdmin() && u.id !== AppState.user?.id && u.role !== 'owner' ? `
+                        ${AppState.canMutate() && AppState.isAdmin() && u.id !== AppState.user?.id && u.role !== 'superadmin' ? `
                             <button class="btn btn-ghost" style="color:${isActive ? 'var(--danger)' : 'var(--success)'}"
                                 onclick="Modal.close();AdminPage.toggleBlock('${u.id}',${isActive})">
                                 <i class="fa-solid fa-${isActive ? 'lock' : 'lock-open'}"></i> ${isActive ? 'Заблокувати' : 'Розблокувати'}
@@ -1217,7 +1285,7 @@ const AdminPage = {
                                 onclick="Modal.close();AdminPage._forceLogoutUser('${u.id}',${JSON.stringify(u.full_name||'').replace(/"/g,'&quot;')})">
                                 <i class="fa-solid fa-right-from-bracket"></i> Завершити сесію
                             </button>` : ''}
-                        ${AppState.canMutate() && (u.role !== 'owner' || AppState.isOwner()) ? `
+                        ${AppState.canMutate() && (u.role !== 'superadmin' || AppState.isSuperAdmin()) ? `
                             <button class="btn btn-primary" onclick="Modal.close();AdminPage.openEditUser(AdminPage._usersAll.find(x=>x.id==='${u.id}'))">
                                 <i class="fa-solid fa-pen"></i> Редагувати
                             </button>` : ''}
@@ -1508,13 +1576,14 @@ const AdminPage = {
     },
 
     async changeRole(userId, role) {
-        if (role === 'owner') {
-            Toast.error('Помилка', 'Для передачі прав власника скористайтесь кнопкою 👑');
+        if (role === 'superadmin') {
+            Toast.error('Помилка', 'Для передачі прав SuperAdmin скористайтесь кнопкою 👑');
             return;
         }
         try {
-            await API.profiles.updateRole(userId, role);
-            AuditLog.write('role_change', 'user', userId, { role });
+            // RPC сама виставляє і role, і base_role, блокує 'superadmin' і пише аудит
+            const { error } = await supabase.rpc('admin_set_user_role', { p_user_id: userId, p_role: role });
+            if (error) throw error;
             Toast.success('Роль змінено');
             this._renderUsersList(document.getElementById('admin-content'));
         } catch(e) { Toast.error('Помилка', e.message); }
@@ -1522,20 +1591,22 @@ const AdminPage = {
 
     async transferOwnership(toUserId, toUserName) {
         const ok = await Modal.confirm({
-            title: '👑 Передати права власника',
-            message: `Ви впевнені, що хочете передати права власника користувачу <strong>${toUserName}</strong>?<br><br>Ваша роль буде змінена на Адміністратор.`,
+            title: '👑 Передати права SuperAdmin',
+            message: `Ви впевнені, що хочете передати права SuperAdmin користувачу <strong>${toUserName}</strong>?<br><br>Ваша роль буде змінена на Адміністратор.`,
             confirmText: 'Передати',
             danger: true
         });
         if (!ok) return;
         try {
             Loader.show();
-            await API.profiles.updateRole(toUserId, 'owner');
-            // DB trigger enforce_single_owner automatically demotes previous owner to admin
+            // RPC виставляє role+base_role цілі, демотить викликача, пише аудит
+            // (тригер enforce_single_superadmin — незалежний другий рівень захисту)
+            const { error } = await supabase.rpc('admin_transfer_superadmin', { p_to_user_id: toUserId });
+            if (error) throw error;
             await Auth._loadProfile(); // refresh own profile
-            AuditLog.write('ownership_transfer', 'user', toUserName);
-            Toast.success('Права власника передано', toUserName);
+            Toast.success('Права SuperAdmin передано', toUserName);
             UI.renderNavigation(AppState.profile?.role);
+            UI.renderSidebarUser(AppState.profile);
             this._renderUsersList(document.getElementById('admin-content'));
         } catch(e) {
             Toast.error('Помилка', e.message);
@@ -1673,434 +1744,433 @@ const AdminPage = {
             .filter(u => u.role === 'manager')
             .map(u => ({ value: u.id, label: u.full_name + (u.job_position ? ' · ' + u.job_position : '') }));
         el.innerHTML = `
-    <div class="user-create-container">
+    <div class="cuf-container">
         <!-- Хедер -->
-        <div class="create-header">
-            <button class="back-btn" onclick="AdminPage._renderUsersList(document.getElementById('admin-content'))">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M19 12H5M12 19l-7-7 7-7"/>
-                </svg>
-                Назад
+        <div class="cuf-topbar">
+            <button class="btn-back" onclick="AdminPage._renderUsersList(document.getElementById('admin-content'))">
+                <i class="fa-solid fa-arrow-left"></i> Назад
             </button>
-            <h2 class="create-title">
-                <span class="title-icon">👤</span> 
-                Новий користувач
-            </h2>
+            <div class="cuf-heading">
+                <span class="cuf-heading-ico"><i class="fa-solid fa-user-plus"></i></span>
+                <h2>Новий користувач</h2>
+            </div>
         </div>
 
         <!-- Форма -->
-        <div class="create-form-grid">
-            
+        <div class="cuf-grid">
+
             <!-- Секция 1: ПІБ -->
-            <div class="form-section glass-panel">
-                <div class="section-header">
-                    <span class="section-badge">1</span>
+            <div class="cuf-card">
+                <div class="cuf-card-head">
+                    <span class="cuf-badge">1</span>
                     <h4>Особисті дані</h4>
+                    <span class="cuf-head-ico"><i class="fa-solid fa-user"></i></span>
                 </div>
-                <div class="input-group">
-                    <label class="input-label">
-                        <span>Прізвище <span class="required-star">*</span></span>
-                        <input id="cu-last-name" type="text" placeholder="" autocomplete="off"
-                               oninput="AdminPage._autoLogin()">
+                <div class="cuf-fields">
+                    <label class="cuf-label">
+                        <span>Прізвище <span class="cuf-req">*</span></span>
+                        <div class="cuf-field">
+                            <input id="cu-last-name" type="text" placeholder="Введіть прізвище" autocomplete="off"
+                                   oninput="AdminPage._autoLogin()">
+                        </div>
                     </label>
-                    <label class="input-label">
-                        <span>Ім'я <span class="required-star">*</span></span>
-                        <input id="cu-first-name" type="text" placeholder="" autocomplete="off"
-                               oninput="AdminPage._autoLogin()">
+                    <label class="cuf-label">
+                        <span>Ім'я <span class="cuf-req">*</span></span>
+                        <div class="cuf-field">
+                            <input id="cu-first-name" type="text" placeholder="Введіть ім'я" autocomplete="off"
+                                   oninput="AdminPage._autoLogin()">
+                        </div>
                     </label>
-                    <label class="input-label">
+                    <label class="cuf-label">
                         <span>По батькові</span>
-                        <input id="cu-patronymic" type="text" placeholder="" autocomplete="off" oninput="applyGenderFromPatronymic('cu-patronymic','cu-gender')">
+                        <div class="cuf-field">
+                            <input id="cu-patronymic" type="text" placeholder="Введіть по батькові" autocomplete="off" oninput="applyGenderFromPatronymic('cu-patronymic','cu-gender')">
+                        </div>
                     </label>
-                </div>
-                <div class="input-group">
-                    <label class="input-label">
+                    <label class="cuf-label">
                         <span>Стать</span>
-                        <div class="gender-picker-modern">
+                        <div class="cuf-gender">
                             <input type="hidden" id="cu-gender" value="">
-                            <button type="button" class="gender-chip" onclick="this.closest('.gender-picker-modern').querySelector('input').value='male';this.closest('.gender-picker-modern').querySelectorAll('.gender-chip').forEach(b=>b.classList.remove('active'));this.classList.add('active')">
+                            <button type="button" class="cuf-gender-chip" onclick="this.closest('.cuf-gender').querySelector('input').value='male';this.closest('.cuf-gender').querySelectorAll('.cuf-gender-chip').forEach(b=>b.classList.remove('active'));this.classList.add('active')">
                                 <span>♂</span> Чоловік
                             </button>
-                            <button type="button" class="gender-chip" onclick="this.closest('.gender-picker-modern').querySelector('input').value='female';this.closest('.gender-picker-modern').querySelectorAll('.gender-chip').forEach(b=>b.classList.remove('active'));this.classList.add('active')">
+                            <button type="button" class="cuf-gender-chip" onclick="this.closest('.cuf-gender').querySelector('input').value='female';this.closest('.cuf-gender').querySelectorAll('.cuf-gender-chip').forEach(b=>b.classList.remove('active'));this.classList.add('active')">
                                 <span>♀</span> Жінка
                             </button>
                         </div>
                     </label>
-                    <div class="input-row-2col">
-                        <label class="input-label">
+                    <div class="cuf-row-2">
+                        <label class="cuf-label">
                             <span>Дата народження</span>
-                            <input id="cu-birthdate" type="date" value="2000-01-01" oninput="AdminPage._autoPassword()" onpaste="Fmt.parseDatePaste(event,this)">
+                            <div class="cuf-field">
+                                <i class="fa-regular fa-calendar cuf-ico"></i>
+                                <input id="cu-birthdate" type="date" value="2000-01-01" class="cuf-has-ico" oninput="AdminPage._autoPassword()" onpaste="Fmt.parseDatePaste(event,this)">
+                            </div>
                         </label>
-                        <label class="input-label">
+                        <label class="cuf-label">
                             <span>Телефон</span>
-                            <input id="cu-phone" type="tel" placeholder="+380 XX XXX XX XX">
+                            <div class="cuf-field">
+                                <input id="cu-phone" type="tel" placeholder="+380 XX XXX XX XX">
+                            </div>
                         </label>
                     </div>
-                    
                 </div>
             </div>
 
             <!-- Секция 2: Доступ -->
-            <div class="form-section glass-panel">
-                <div class="section-header">
-                    <span class="section-badge">2</span>
+            <div class="cuf-card">
+                <div class="cuf-card-head">
+                    <span class="cuf-badge">2</span>
                     <h4>Дані для входу</h4>
+                    <span class="cuf-head-ico"><i class="fa-solid fa-lock"></i></span>
                 </div>
-                <div class="input-group">
-                    <label class="input-label">
-                        <span>Логін <span class="required-star">*</span></span>
-                        <input id="cu-login" type="text" placeholder="ПризвіщеІм'я" autocomplete="off">
+                <div class="cuf-fields">
+                    <label class="cuf-label">
+                        <span>Логін <span class="cuf-req">*</span></span>
+                        <div class="cuf-field">
+                            <i class="fa-solid fa-user cuf-ico"></i>
+                            <input id="cu-login" type="text" placeholder="Придумайте логін" autocomplete="off" class="cuf-has-ico">
+                        </div>
                     </label>
-                    <label class="input-label">
-                        <span>Email <span class="required-star">*</span></span>
-                        <input id="cu-email" type="email" placeholder="user@example.com" autocomplete="off">
+                    <label class="cuf-label">
+                        <span>Email <span class="cuf-req">*</span></span>
+                        <div class="cuf-field">
+                            <i class="fa-solid fa-envelope cuf-ico"></i>
+                            <input id="cu-email" type="email" placeholder="example@email.com" autocomplete="off" class="cuf-has-ico">
+                        </div>
                     </label>
-                    <label class="input-label">
-                        <span>Пароль <span class="required-star">*</span></span>
-                        <div style="position:relative">
-                            <input id="cu-password" type="password" placeholder="••••••••" autocomplete="new-password" style="width:100%;box-sizing:border-box;padding-right:42px">
-                            <button type="button" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;display:flex;align-items:center"
+                    <label class="cuf-label">
+                        <span>Пароль <span class="cuf-req">*</span></span>
+                        <div class="cuf-field">
+                            <i class="fa-solid fa-lock cuf-ico"></i>
+                            <input id="cu-password" type="password" placeholder="••••••••" autocomplete="new-password" class="cuf-has-ico" style="padding-right:42px" oninput="AdminPage._updatePwStrength(this)">
+                            <button type="button" class="cuf-eye-btn"
                                 onclick="const i=document.getElementById('cu-password');i.type=i.type==='password'?'text':'password';this.innerHTML=i.type==='password'?'<i class=&quot;fa-solid fa-eye&quot;></i>':'<i class=&quot;fa-solid fa-eye-slash&quot;></i>'">
                                 <i class="fa-solid fa-eye"></i>
                             </button>
                         </div>
-                        <small class="field-hint">Мінімум 6 символів</small>
+                        <div class="cuf-pw-row">
+                            <div class="cuf-pw-meter"><span id="cu-pw-bar" class="cuf-pw-bar"></span></div>
+                            <span class="cuf-hint">Мінімум 6 символів</span>
+                            <button type="button" class="cuf-pw-gen" onclick="AdminPage._genStrongPassword()">Надійний пароль</button>
+                        </div>
                     </label>
-                    <label class="input-label">
+                    <label class="cuf-label">
                         <span>Роль</span>
-                        <div class="custom-select-wrapper">
-                            <select id="cu-role" onchange="AdminPage._onRoleChange(this.value)">
-                                <option value="user">👤 Користувач</option>
-                                <option value="intern">🌱 Стажер</option>
-                                <option value="teacher">📚 Викладач</option>
-                                <option value="smm">📱 SMM-менеджер</option>
-                                <option value="manager">👔 Керівник</option>
-                                <option value="admin">⚡ Адміністратор</option>
-                                <option value="ceo">👑 CEO</option>
+                        <div class="cuf-field">
+                            <i class="fa-solid fa-shield-halved cuf-ico"></i>
+                            <select id="cu-role" class="cuf-select cuf-has-ico" onchange="AdminPage._onRoleChange(this.value)">
+                                <option value="user">Користувач</option>
+                                <option value="intern">Стажер</option>
+                                <option value="smm">SMM-менеджер</option>
+                                <option value="manager">Керівник</option>
+                                <option value="admin">Адміністратор</option>
+                                <option value="ceo">CEO</option>
                             </select>
+                            <i class="fa-solid fa-chevron-down cuf-chev"></i>
                         </div>
                     </label>
                 </div>
             </div>
 
             <!-- Секция 3: Работа -->
-            <div class="form-section glass-panel">
-                <div class="section-header">
-                    <span class="section-badge">3</span>
+            <div class="cuf-card">
+                <div class="cuf-card-head">
+                    <span class="cuf-badge">3</span>
                     <h4>Робоча інформація</h4>
+                    <span class="cuf-head-ico"><i class="fa-solid fa-briefcase"></i></span>
                 </div>
-                <div class="input-group">
-                        <label class="input-label">
+                <div class="cuf-fields">
+                    <label class="cuf-label">
                         <span>Місто</span>
-                        ${CreatableSelect.html('cu-city', 'cities', cities.map(i=>i.name), '')}
-                         </label>
-                        <label class="input-label">
-                            <span>Підрозділ</span>
+                        <div class="cuf-field cuf-field-embed">
+                            <i class="fa-solid fa-location-dot cuf-ico"></i>
+                            ${CreatableSelect.html('cu-city', 'cities', cities.map(i=>i.name), '')}
+                        </div>
+                    </label>
+                    <label class="cuf-label">
+                        <span>Підрозділ</span>
+                        <div class="cuf-field cuf-field-embed">
+                            <i class="fa-solid fa-building cuf-ico"></i>
                             ${CreatableSelect.html('cu-subdivision', 'subdivisions', subdivisions.map(i => i.name), '')}
-                        </label>
-                        <label class="input-label">
-                            <span>Посада</span>
+                        </div>
+                    </label>
+                    <label class="cuf-label">
+                        <span>Посада</span>
+                        <div class="cuf-field cuf-field-embed">
+                            <i class="fa-solid fa-briefcase cuf-ico"></i>
                             ${CreatableSelect.html('cu-job-position', 'positions', positions.map(i => i.name), '')}
-                        </label>
-                        
-                    
-                    <label class="input-label">
+                        </div>
+                    </label>
+                    <label class="cuf-label">
                         <span>Керівник</span>
-                        ${SearchSelect.html('cu-manager', mgItems, '')}
+                        <div class="cuf-field cuf-field-embed">
+                            <i class="fa-solid fa-user-tie cuf-ico"></i>
+                            ${SearchSelect.html('cu-manager', mgItems, '')}
+                        </div>
                     </label>
-                    <label class="input-label">
+                    <label class="cuf-label">
                         <span>Довіреність</span>
-                        ${CreatableMultiSelect.html('cu-dovirenosti')}
+                        <div class="cuf-field cuf-field-embed cuf-field-embed-cms">
+                            <i class="fa-solid fa-file-lines cuf-ico"></i>
+                            ${CreatableMultiSelect.html('cu-dovirenosti')}
+                        </div>
                     </label>
-                    <div class="input-row-2col">
-                        <label class="input-label"><span>Дата оформлення</span><input id="cu-hired-at" type="date" onpaste="Fmt.parseDatePaste(event,this)"></label>
-                        <label class="input-label"><span>На посаді з</span><input id="cu-position-since" type="date" onpaste="Fmt.parseDatePaste(event,this)"></label>
+                    <div class="cuf-row-2">
+                        <label class="cuf-label">
+                            <span>Дата оформлення</span>
+                            <div class="cuf-field">
+                                <i class="fa-regular fa-calendar cuf-ico"></i>
+                                <input id="cu-hired-at" type="date" class="cuf-has-ico" onpaste="Fmt.parseDatePaste(event,this)">
+                            </div>
+                        </label>
+                        <label class="cuf-label">
+                            <span>На посаді з</span>
+                            <div class="cuf-field">
+                                <i class="fa-regular fa-calendar cuf-ico"></i>
+                                <input id="cu-position-since" type="date" class="cuf-has-ico" onpaste="Fmt.parseDatePaste(event,this)">
+                            </div>
+                        </label>
                     </div>
                 </div>
             </div>
         </div>
 
         <!-- Футер с кнопками -->
-        <div class="form-actions">
-            <button class="btn-secondary-modern" onclick="AdminPage._renderUsersList(document.getElementById('admin-content'))">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M6 18L18 6M6 6l12 12"/>
-                </svg>
-                Скасувати
-            </button>
-            <button class="btn-primary-modern" onclick="AdminPage.createUser()">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 5v14M5 12h14"/>
-                </svg>
-                Створити користувача
-            </button>
+        <div class="cuf-footer">
+            <div class="cuf-footer-hint">
+                <span class="cuf-footer-ico"><i class="fa-solid fa-circle-info"></i></span>
+                <div>
+                    <div>Усі поля, позначені <b>*</b>, є обов'язковими для заповнення</div>
+                    <div class="cuf-footer-sub">Перевірте правильність введених даних перед збереженням</div>
+                </div>
+            </div>
+            <div class="cuf-footer-actions">
+                <button class="cuf-btn-ghost" onclick="AdminPage._renderUsersList(document.getElementById('admin-content'))">
+                    <i class="fa-solid fa-xmark"></i> Скасувати
+                </button>
+                <button class="cuf-btn-gold" onclick="AdminPage.createUser()">
+                    <i class="fa-solid fa-user-plus"></i> Створити користувача
+                </button>
+            </div>
         </div>
     </div>
 
     <style>
-        .user-create-container {
+        .cuf-container {
+            /* Dark theme (default) — treasury gold-on-navy */
+            --cuf-card-bg: linear-gradient(160deg,#0e1226 0%,#131a35 55%,#1b2350 100%);
+            --cuf-card-border: rgba(232,199,106,.28);
+            --cuf-card-border-focus: rgba(232,199,106,.6);
+            --cuf-gold: #e8c76a;
+            --cuf-gold-soft: rgba(232,199,106,.16);
+            --cuf-gold-glow: rgba(232,199,106,.4);
+            --cuf-gold-grad: linear-gradient(135deg,#fff3cc,#e8c76a 55%,#d4af37);
+            --cuf-gold-ink: #241a04;
+            --cuf-input-bg: rgba(255,255,255,.04);
+            --cuf-input-border: rgba(255,255,255,.1);
+            --cuf-text: #f1e9d2;
+            --cuf-text-soft: rgba(241,233,210,.64);
+            --cuf-text-mute: rgba(241,233,210,.4);
+            --cuf-danger: #f87171;
+
             max-width: 1400px;
-            
             padding: 4px;
-            animation: fadeSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            animation: cufFadeUp .45s cubic-bezier(.16,1,.3,1);
         }
 
-        @keyframes fadeSlideUp {
-            from { opacity: 0; transform: translateY(12px); }
+        body.light-theme .cuf-container {
+            /* Light theme — bronze-gold on ivory */
+            --cuf-card-bg: linear-gradient(160deg,#fffaf0 0%,#fff6e2 100%);
+            --cuf-card-border: rgba(201,150,42,.3);
+            --cuf-card-border-focus: rgba(201,150,42,.55);
+            --cuf-gold: #c9962a;
+            --cuf-gold-soft: rgba(201,150,42,.12);
+            --cuf-gold-glow: rgba(201,150,42,.25);
+            --cuf-gold-grad: linear-gradient(135deg,#f2ce7c,#c9962a 55%,#a3720a);
+            --cuf-gold-ink: #2c2005;
+            --cuf-input-bg: #ffffff;
+            --cuf-input-border: #e7dcc0;
+            --cuf-text: #2c2410;
+            --cuf-text-soft: #6b5d3a;
+            --cuf-text-mute: #9c8c62;
+            --cuf-danger: #dc2626;
+        }
+
+        @keyframes cufFadeUp {
+            from { opacity: 0; transform: translateY(14px); }
             to { opacity: 1; transform: translateY(0); }
         }
 
-        .create-header {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            margin-bottom: 32px;
+        .cuf-topbar { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; }
+
+        .cuf-heading { display: flex; align-items: center; gap: 12px; }
+        .cuf-heading-ico {
+            width: 34px; height: 34px; border-radius: 11px; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            background: var(--cuf-gold-grad); color: var(--cuf-gold-ink);
+            font-size: .92rem; box-shadow: 0 6px 18px var(--cuf-gold-glow);
+        }
+        .cuf-heading h2 {
+            margin: 0; font-size: 1.35rem; font-weight: 800;
+            letter-spacing: -0.02em; color: var(--text-primary);
         }
 
-        .back-btn {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            padding: 8px 16px;
-            background: transparent;
-            border: 1px solid var(--border);
-            border-radius: 40px;
-            color: var(--text-secondary);
-            font-weight: 500;
-            font-size: 0.95rem;
-            transition: all 0.2s;
-            cursor: pointer;
+        .cuf-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+
+        .cuf-card {
+            background: var(--cuf-card-bg);
+            border: 1.5px solid var(--cuf-card-border);
+            border-radius: 22px;
+            padding: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,.22);
+            position: relative;
+            transition: border-color .25s ease, box-shadow .25s ease;
+        }
+        .cuf-card::before {
+            content: ''; position: absolute; inset: 0; pointer-events: none;
+            border-radius: inherit;
+            background: radial-gradient(circle at 92% -12%, var(--cuf-gold-soft), transparent 55%);
+        }
+        .cuf-card:focus-within {
+            border-color: var(--cuf-card-border-focus);
+            box-shadow: 0 14px 36px rgba(0,0,0,.28), 0 0 0 3px var(--cuf-gold-soft);
         }
 
-        .back-btn:hover {
-            background: var(--bg-hover);
-            border-color: var(--border-light);
-            transform: translateX(-2px);
+        .cuf-card-head {
+            display: flex; align-items: center; gap: 12px;
+            margin-bottom: 12px; padding-bottom: 10px;
+            border-bottom: 1px dashed var(--cuf-card-border);
+            position: relative; z-index: 1;
+        }
+        .cuf-badge {
+            width: 30px; height: 30px; border-radius: 10px; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            background: var(--cuf-gold-grad); color: var(--cuf-gold-ink);
+            font-weight: 800; font-size: .85rem;
+            box-shadow: 0 4px 12px var(--cuf-gold-glow);
+        }
+        .cuf-card-head h4 {
+            flex: 1; margin: 0; font-size: 1.05rem; font-weight: 700;
+            color: var(--cuf-text); letter-spacing: -0.01em;
+        }
+        .cuf-head-ico {
+            width: 30px; height: 30px; border-radius: 10px; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            background: var(--cuf-gold-soft); color: var(--cuf-gold); font-size: .85rem;
         }
 
-        .create-title {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin: 0;
-            font-size: 1.9rem;
-            font-weight: 600;
-            letter-spacing: -0.02em;
-            color: var(--text-primary);
+        .cuf-fields { display: flex; flex-direction: column; gap: 10px; position: relative; z-index: 1; }
+        .cuf-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+        .cuf-label {
+            display: flex; flex-direction: column; gap: 4px;
+            font-size: .78rem; font-weight: 600; color: var(--cuf-text-soft);
+        }
+        .cuf-req { color: var(--cuf-danger); margin-left: 2px; }
+
+        .cuf-field { position: relative; display: flex; align-items: center; }
+        .cuf-field input, .cuf-field select {
+            width: 100%; box-sizing: border-box;
+            padding: 8px 14px; border-radius: 12px;
+            background: var(--cuf-input-bg); border: 1.5px solid var(--cuf-input-border);
+            color: var(--cuf-text); font-size: .9rem; font-family: inherit; outline: none;
+            transition: all .15s ease;
+        }
+        .cuf-field input::placeholder { color: var(--cuf-text-mute); font-weight: 400; }
+        .cuf-field input:hover, .cuf-field select:hover { border-color: var(--cuf-gold-glow); }
+        .cuf-field input:focus, .cuf-field select:focus {
+            border-color: var(--cuf-gold); box-shadow: 0 0 0 4px var(--cuf-gold-soft);
+        }
+        .cuf-ico {
+            position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+            color: var(--cuf-gold); font-size: .82rem; z-index: 2; pointer-events: none;
+        }
+        .cuf-field input.cuf-has-ico, .cuf-field select.cuf-has-ico { padding-left: 40px; }
+        .cuf-select { appearance: none; -webkit-appearance: none; cursor: pointer; padding-right: 34px; }
+        .cuf-chev {
+            position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+            color: var(--cuf-text-mute); font-size: .72rem; pointer-events: none;
         }
 
-        .title-icon {
-            font-size: 1.8rem;
-            line-height: 1;
-        }
+        /* Embedded CreatableSelect / SearchSelect / CreatableMultiSelect widgets */
+        .cuf-field-embed { width: 100%; }
+        .cuf-field-embed > div { width: 100%; }
+        .cuf-field-embed .cs-input,
+        .cuf-field-embed .ss-input { padding-left: 40px !important; }
+        .cuf-field-embed-cms .cms-field { padding-left: 34px; }
 
-        /* Grid Layout */
-        .create-form-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 10px;
+        /* Gender picker */
+        .cuf-gender { display: flex; gap: 10px; }
+        .cuf-gender-chip {
+            flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px;
+            padding: 7px 0; background: var(--cuf-input-bg); border: 1.5px solid var(--cuf-input-border);
+            border-radius: 40px; font-weight: 600; color: var(--cuf-text-soft);
+            cursor: pointer; transition: all .15s; font-family: inherit;
         }
+        .cuf-gender-chip span { font-size: 16px; }
+        .cuf-gender-chip.active { background: var(--cuf-gold-soft); border-color: var(--cuf-gold); color: var(--cuf-gold); }
 
-        .glass-panel {
-            background: var(--bg-surface);
-            border-radius: 24px;
-            padding: 24px;
-            box-shadow: var(--shadow-sm);
-            border: 1px solid var(--border);
-            transition: box-shadow 0.3s ease, border-color 0.3s ease;
+        /* Password extras */
+        .cuf-eye-btn {
+            position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+            background: none; border: none; cursor: pointer; color: var(--cuf-text-mute);
+            padding: 4px; display: flex; align-items: center; z-index: 3;
         }
+        .cuf-eye-btn:hover { color: var(--cuf-gold); }
+        .cuf-pw-row { display: flex; align-items: center; gap: 10px; margin-top: 2px; }
+        .cuf-pw-meter { flex: 1; height: 5px; border-radius: 4px; background: var(--cuf-input-border); overflow: hidden; }
+        .cuf-pw-bar {
+            display: block; height: 100%; width: 0%; border-radius: 4px;
+            background: linear-gradient(90deg,#ef4444,#f59e0b,#10b981);
+            transition: width .25s ease;
+        }
+        .cuf-hint { font-size: .72rem; color: var(--cuf-text-mute); white-space: nowrap; font-weight: 400; }
+        .cuf-pw-gen {
+            border: none; background: none; color: var(--cuf-gold);
+            font-size: .72rem; font-weight: 600; cursor: pointer; white-space: nowrap; font-family: inherit;
+        }
+        .cuf-pw-gen:hover { text-decoration: underline; }
 
-        .glass-panel:focus-within {
-            box-shadow: var(--shadow-md);
-            border-color: var(--border-light);
+        /* Footer */
+        .cuf-footer {
+            display: flex; align-items: center; justify-content: space-between; gap: 20px;
+            margin-top: 14px; padding: 12px 18px; border-radius: 16px;
+            background: var(--cuf-gold-soft); border: 1px solid var(--cuf-card-border);
+            flex-wrap: wrap;
         }
+        .cuf-footer-hint { display: flex; align-items: flex-start; gap: 12px; font-size: .82rem; color: var(--text-secondary); }
+        .cuf-footer-ico {
+            width: 30px; height: 30px; border-radius: 10px; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            background: var(--cuf-gold-grad); color: var(--cuf-gold-ink); font-size: .8rem;
+        }
+        .cuf-footer-sub { color: var(--text-muted); margin-top: 2px; }
+        .cuf-footer-actions { display: flex; gap: 12px; }
 
-        .section-header {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            margin-bottom: 24px;
-            padding-bottom: 12px;
-            border-bottom: 1px dashed var(--border);
+        .cuf-btn-ghost {
+            display: inline-flex; align-items: center; gap: 8px; padding: 9px 20px; border-radius: 12px;
+            background: transparent; border: 1.5px solid var(--border); color: var(--text-secondary);
+            font-weight: 600; font-size: .88rem; cursor: pointer; transition: all .2s; font-family: inherit;
         }
-
-        .section-badge {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 28px;
-            height: 28px;
-            background: var(--primary-glow);
-            color: var(--primary);
-            border-radius: 12px;
-            font-weight: 700;
-            font-size: 14px;
+        .cuf-btn-ghost:hover { background: var(--bg-hover); border-color: var(--border-light); }
+        .cuf-btn-gold {
+            display: inline-flex; align-items: center; gap: 8px; padding: 9px 24px; border-radius: 12px;
+            background: var(--cuf-gold-grad); border: none; color: var(--cuf-gold-ink);
+            font-weight: 700; font-size: .88rem; cursor: pointer; transition: all .2s;
+            box-shadow: 0 6px 18px var(--cuf-gold-glow);
         }
-
-        .section-header h4 {
-            margin: 0;
-            font-size: 1.1rem;
-            font-weight: 600;
-            color: var(--text-primary);
-        }
-
-        .input-group {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
-
-        .input-row-2col {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 16px;
-        }
-
-        .input-label {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            font-size: 0.9rem;
-            font-weight: 500;
-            color: var(--text-secondary);
-        }
-
-        .input-label input,
-        .input-label select,
-        .custom-select-wrapper select {
-            padding: 10px 14px;
-            background: var(--bg-raised);
-            border: 1.5px solid var(--border);
-            border-radius: 16px;
-            font-size: 0.95rem;
-            color: var(--text-primary);
-            transition: all 0.15s ease;
-            font-family: inherit;
-            outline: none;
-        }
-
-        .input-label input:hover {
-            border-color: var(--border-light);
-        }
-
-        .input-label input:focus,
-        .input-label select:focus {
-            border-color: var(--primary);
-            box-shadow: 0 0 0 4px var(--primary-glow);
-        }
-
-        .input-label input::placeholder {
-            color: var(--text-muted);
-            font-weight: 400;
-            opacity: 0.7;
-        }
-
-        .required-star {
-            color: var(--danger);
-            margin-left: 2px;
-        }
-
-        .field-hint {
-            margin-top: 4px;
-            color: var(--text-muted);
-            font-size: 0.8rem;
-            font-weight: 400;
-        }
-
-        /* Gender Picker */
-        .gender-picker-modern {
-            display: flex;
-            gap: 10px;
-        }
-
-        .gender-chip {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            padding: 10px 0;
-            background: var(--bg-raised);
-            border: 1.5px solid var(--border);
-            border-radius: 40px;
-            font-weight: 500;
-            color: var(--text-secondary);
-            cursor: pointer;
-            transition: all 0.15s;
-        }
-
-        .gender-chip span {
-            font-size: 18px;
-        }
-
-        .gender-chip.active {
-            background: var(--primary-glow);
-            border-color: var(--primary);
-            color: var(--primary);
-            font-weight: 600;
-        }
-
-        /* Buttons Footer */
-        .form-actions {
-            display: flex;
-            justify-content: flex-end;
-            gap: 16px;
-            margin-top: 40px;
-            padding-top: 16px;
-            border-top: 1px solid var(--border);
-        }
-
-        .btn-primary-modern, .btn-secondary-modern {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 12px 28px;
-            border-radius: 48px;
-            font-weight: 600;
-            font-size: 1rem;
-            border: none;
-            cursor: pointer;
-            transition: all 0.2s;
-            line-height: 1;
-        }
-
-        .btn-primary-modern {
-            background: var(--primary);
-            color: white;
-            box-shadow: 0 4px 12px var(--primary-glow);
-        }
-
-        .btn-primary-modern:hover {
-            background: var(--primary-dark);
-            transform: scale(1.02);
-            box-shadow: 0 8px 18px var(--primary-glow);
-        }
-
-        .btn-secondary-modern {
-            background: transparent;
-            color: var(--text-secondary);
-            border: 1.5px solid var(--border);
-        }
-
-        .btn-secondary-modern:hover {
-            background: var(--bg-hover);
-            border-color: var(--border-light);
-        }
+        .cuf-btn-gold:hover { transform: translateY(-1px); box-shadow: 0 10px 24px var(--cuf-gold-glow); }
+        .cuf-btn-gold:active, .cuf-btn-ghost:active { transform: scale(.97); }
 
         /* Responsive */
         @media (max-width: 1000px) {
-            .create-form-grid {
-                grid-template-columns: 1fr;
-                gap: 16px;
-            }
-            .create-title {
-                font-size: 1.5rem;
-            }
+            .cuf-grid { grid-template-columns: 1fr; }
+            .cuf-heading h2 { font-size: 1.35rem; }
+            .cuf-footer { flex-direction: column; align-items: flex-start; }
         }
-
-        /* Интеграция с CreatableSelect (предполагаем, что он генерит инпуты) */
-        .input-label > div[class*="select"] {
-            width: 100%;
+        @media (prefers-reduced-motion: reduce) {
+            .cuf-container { animation: none; }
         }
     </style>
 `;
@@ -2120,7 +2190,32 @@ const AdminPage = {
         const [y, m, d] = val.split('-');
         if (!y || y.length !== 4) return;
         const pwd = document.getElementById('cu-password');
-        if (pwd) pwd.value = d + m + y;
+        if (pwd) { pwd.value = d + m + y; this._updatePwStrength(pwd); }
+    },
+
+    _updatePwStrength(input) {
+        const v = input.value || '';
+        let score = 0;
+        if (v.length >= 6)  score++;
+        if (v.length >= 10) score++;
+        if (/[A-ZА-ЯҐЄІЇ]/.test(v) && /[a-zа-яґєії]/.test(v)) score++;
+        if (/\d/.test(v)) score++;
+        if (/[^a-zA-Zа-яА-ЯҐЄІЇґєії0-9]/.test(v)) score++;
+        const bar = document.getElementById('cu-pw-bar');
+        if (bar) bar.style.width = v ? `${Math.max((score / 5) * 100, 12)}%` : '0%';
+    },
+
+    _genStrongPassword() {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
+        let pwd = '';
+        for (let i = 0; i < 12; i++) pwd += chars[Math.floor(Math.random() * chars.length)];
+        const input = document.getElementById('cu-password');
+        if (!input) return;
+        input.type = 'text';
+        input.value = pwd;
+        this._updatePwStrength(input);
+        const eyeBtn = input.parentElement.querySelector('.cuf-eye-btn');
+        if (eyeBtn) eyeBtn.innerHTML = '<i class="fa-solid fa-eye-slash"></i>';
     },
 
     _autoLogin() {
@@ -2548,7 +2643,7 @@ const AdminPage = {
 
     async _bulkBlock() {
         const users = this._usersAll.filter(u =>
-            this._selectedUsers.has(u.id) && u.role !== 'owner' && u.id !== AppState.user?.id
+            this._selectedUsers.has(u.id) && u.role !== 'superadmin' && u.id !== AppState.user?.id
         );
         if (!users.length) { Toast.info('', 'Серед вибраних немає користувачів для блокування'); return; }
         const ok = await Modal.confirm({
@@ -2589,7 +2684,7 @@ const AdminPage = {
     },
 
     _bulkChangeRole() {
-        const users = this._usersAll.filter(u => this._selectedUsers.has(u.id) && u.role !== 'owner');
+        const users = this._usersAll.filter(u => this._selectedUsers.has(u.id) && u.role !== 'superadmin');
         if (!users.length) { Toast.info('', 'Серед вибраних немає доступних користувачів'); return; }
         const ids = JSON.stringify(users.map(u => u.id)).replace(/"/g,'&quot;');
         Modal.open({
@@ -2601,9 +2696,8 @@ const AdminPage = {
                 </p>
                 <select id="bulk-role-sel">
                     <option value="user">Користувач</option>
-                    <option value="teacher">Викладач</option>
                     <option value="smm">📰 SMM-менеджер</option>
-                    ${AppState.isOwner() ? '<option value="admin">👑 Адміністратор</option>' : ''}
+                    ${AppState.isSuperAdmin() ? '<option value="admin">👑 Адміністратор</option>' : ''}
                 </select>`,
             footer: `
                 <button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
@@ -2635,15 +2729,15 @@ const AdminPage = {
     async _bulkDelete() {
         const toDelete = this._usersAll.filter(u =>
             this._selectedUsers.has(u.id) &&
-            u.role !== 'owner' &&
+            u.role !== 'superadmin' &&
             u.id !== AppState.user?.id
         );
         if (!toDelete.length) {
-            Toast.error('Немає кого видаляти', 'Owner та власний акаунт виключені');
+            Toast.error('Немає кого видаляти', 'SuperAdmin та власний акаунт виключені');
             return;
         }
         const adminCount = toDelete.filter(u => u.role === 'admin').length;
-        const adminNote  = adminCount && !AppState.isOwner()
+        const adminNote  = adminCount && !AppState.isSuperAdmin()
             ? `<br><span style="color:var(--danger);font-size:.82rem">⚠️ Адміністраторів (${adminCount}) може видалити лише власник — їх буде пропущено</span>`
             : adminCount
             ? `<br><span style="color:var(--warning);font-size:.82rem">Серед вибраних ${adminCount} адміністратор(ів)</span>`
@@ -2670,7 +2764,7 @@ const AdminPage = {
         const terminatedAt = await new Promise(resolve => {
             Modal.open({
                 title: '<i class="fa-solid fa-trash"></i> Видалити користувачів',
-                body: '<p>Ви впевнені, що хочете <strong>остаточно видалити ' + toDelete.length + ' користувач(ів)</strong>?' + adminNote + '<br><br>Дія незворотна.' + (AppState.isOwner() ? ' Дані будуть збережені в Кошику на 7 днів.' : '') + '</p>' + internBlock,
+                body: '<p>Ви впевнені, що хочете <strong>остаточно видалити ' + toDelete.length + ' користувач(ів)</strong>?' + adminNote + '<br><br>Дія незворотна.' + (AppState.isSuperAdmin() ? ' Дані будуть збережені в Кошику на 7 днів.' : '') + '</p>' + internBlock,
                 footer: '<button class="btn btn-danger btn-sm" onclick="AdminPage._bulkDeleteResolve(document.getElementById(\'bulk-terminated-at\')?.value||null)"><i class="fa-solid fa-trash"></i> Видалити ' + toDelete.length + '</button>'
                       + '<button class="btn btn-ghost btn-sm" onclick="AdminPage._bulkDeleteResolve(false)">Скасувати</button>'
             });
@@ -2754,7 +2848,7 @@ const AdminPage = {
         const header = this._importHeaders.join(';');
         const rows = [
             'Іваненко;Олег;Петрович;o.ivanenko;oleg@company.com;pass123;user;male;+380501234567;1990-05-15;Київ;Менеджер;Відділ продажів;Новий;Ф-47',
-            'Коваль;Марія;Андріївна;m.koval;maria@company.com;pass456;teacher;female;+380671112233;20.11.1985;Львів;Викладач;HR;;Ф-47|Ф-112',
+            'Коваль;Марія;Андріївна;m.koval;maria@company.com;pass456;smm;female;+380671112233;20.11.1985;Львів;Викладач;HR;;Ф-47|Ф-112',
             'Сидоренко;Андрій;Васильович;a.sydorenko;andrii@company.com;secure99;admin;male;+380931234567;1978-03-10;Харків;Адміністратор;IT;;',
             'Бондаренко;Олена;;o.bondar;olena@company.com;qwerty1;smm;female;;;Одеса;SMM-спеціаліст;Маркетинг;;',
             'Гриценко;Ірина;Олексіївна;i.hrytsenko;iryna@company.com;pass789;manager;female;+380671234567;15.03.1992;Дніпро;Керівник відділу;Операційний;'
@@ -2822,7 +2916,7 @@ const AdminPage = {
             if (!row.email)      row._errors.push('Email');
             if (!row.password)   row._errors.push('Пароль');
             if (row.password && row.password.length < 6) row._errors.push('Пароль (мін. 6 символів)');
-            const validRoles = ['owner','admin','smm','teacher','manager','user'];
+            const validRoles = ['superadmin','admin','smm','manager','user'];
             if (row.role && !validRoles.includes(row.role)) row._errors.push('Роль (невірне значення)');
             if (row.gender && !['male','female'].includes(row.gender)) row._errors.push('Стать (male або female)');
             if (row.birth_date && !/^\d{4}-\d{2}-\d{2}$/.test(row.birth_date)) row._errors.push('Дата нар. (формат РРРР-ММ-ДД)');
@@ -3095,7 +3189,6 @@ const AdminPage = {
             { id: 'media',     icon: 'fa-photo-film',         label: 'Медіа',      color: '#ec4899' },
             ...(isEdit ? [
                 { id: 'runs',      icon: 'fa-users-rectangle', label: 'Групи',     color: '#f59e0b' },
-                { id: 'teachers',  icon: 'fa-chalkboard-user', label: 'Викладачі', color: '#10b981' },
             ] : []),
             { id: 'schedule',  icon: 'fa-calendar-days',      label: 'Розклад',   color: '#0ea5e9' },
         ];
@@ -3119,7 +3212,7 @@ const AdminPage = {
 
         <div class="cf-wrap">
             <div class="cf-header">
-                <button class="btn btn-ghost btn-sm" onclick="AdminPage._renderCourses(AdminPage._coursesEl)">
+                <button class="btn-back" onclick="AdminPage._renderCourses(AdminPage._coursesEl)">
                     <i class="fa-solid fa-arrow-left"></i> Назад
                 </button>
                 <h3 style="margin:0;font-size:1.1rem">${isEdit ? `<i class="fa-solid fa-pen" style="color:var(--primary)"></i> ${Fmt.esc(course.title)}` : '<i class="fa-solid fa-plus"></i> Новий курс'}</h3>
@@ -3240,20 +3333,6 @@ const AdminPage = {
                 </div>
             </div>` : ''}
 
-            <!-- ВИКЛАДАЧІ -->
-            ${isEdit ? `
-            <div class="cf-tab-pane cf-pane" data-tab="teachers" style="display:none">
-                <div class="cf-section">
-                    <div style="display:flex;align-items:center;justify-content:space-between">
-                        <div class="cf-section-title" style="margin:0">Викладачі</div>
-                        <button class="btn btn-ghost btn-sm" onclick="AdminPage._courseTeacherAdd('${id}')"><i class="fa-solid fa-plus"></i> Додати</button>
-                    </div>
-                    <div id="c-course-teachers" style="display:flex;flex-direction:column;gap:.4rem">
-                        <div style="color:var(--text-muted);font-size:.82rem">Завантаження...</div>
-                    </div>
-                </div>
-            </div>` : ''}
-
             <!-- РОЗКЛАД -->
             <div class="cf-tab-pane cf-pane" data-tab="schedule" style="display:none">
                 <div class="cf-section">
@@ -3296,7 +3375,6 @@ const AdminPage = {
         this._scheduleInit(course?.schedule || []);
         if (isEdit) {
             this._runsLoad(course.id);
-            this._courseTeachersLoad(course.id);
         }
     },
 
@@ -3436,121 +3514,6 @@ const AdminPage = {
             await API.courseRuns.remove(runId);
             await this._runsLoad(courseId);
             Toast.success('Видалено');
-        } catch(e) { Toast.error('Помилка', e.message); }
-        finally { Loader.hide(); }
-    },
-
-    // ── Course teachers (admin) ───────────────────────────────────────
-    _courseTeachersData: [],
-
-    async _courseTeachersLoad(courseId) {
-        try {
-            const [teachers, profRes] = await Promise.all([
-                API.courseTeachers.getByCourse(courseId),
-                API.profiles.getAll({ pageSize: 500 })
-            ]);
-            this._courseTeachersData = teachers;
-            this._courseTeachersProfiles = (profRes.data || []).sort((a,b) => (a.full_name||'').localeCompare(b.full_name||'','uk'));
-            this._courseTeachersRender(courseId);
-        } catch(e) {
-            const el = document.getElementById('c-course-teachers');
-            if (el) el.innerHTML = `<div style="color:var(--danger);font-size:.82rem">${e.message}</div>`;
-        }
-    },
-
-    _courseTeachersProfiles: [],
-
-    _courseTeachersRender(courseId) {
-        const el = document.getElementById('c-course-teachers');
-        if (!el) return;
-        if (!this._courseTeachersData.length) {
-            el.innerHTML = `<div style="color:var(--text-muted);font-size:.82rem">Викладачів не призначено</div>`;
-            return;
-        }
-        el.innerHTML = this._courseTeachersData.map(t => `
-            <div style="display:flex;align-items:center;gap:.5rem;padding:.45rem .7rem;background:var(--bg-raised);border-radius:var(--radius-sm);border:1px solid var(--border)">
-                <i class="fa-solid fa-chalkboard-user" style="color:var(--primary);font-size:.85rem"></i>
-                <span style="flex:1;font-size:.85rem;font-weight:500">${Fmt.esc(t.profile?.full_name || t.user_id)}</span>
-                ${t.label ? `<span style="font-size:.75rem;background:var(--primary-glow);color:var(--primary);padding:.1rem .5rem;border-radius:999px">${Fmt.esc(t.label)}</span>` : ''}
-                <button type="button" class="btn btn-ghost btn-sm" title="Редагувати мітку"
-                    onclick="AdminPage._courseTeacherEditLabel('${t.id}','${courseId}')">
-                    <i class="fa-solid fa-pen" style="font-size:.72rem"></i>
-                </button>
-                <button type="button" class="btn btn-danger btn-sm"
-                    data-name="${Fmt.esc(t.profile?.full_name || '')}"
-                    onclick="AdminPage._courseTeacherRemove('${t.id}','${courseId}',this.dataset.name)">
-                    <i class="fa-solid fa-xmark"></i>
-                </button>
-            </div>`).join('');
-    },
-
-    async _courseTeacherAdd(courseId) {
-        Modal.open({
-            title: 'Додати викладача',
-            body: `
-                <div class="form-group">
-                    <label>Викладач *</label>
-                    <select id="ct-user-sel" style="width:100%">
-                        <option value="">— Оберіть людину —</option>
-                        ${this._courseTeachersProfiles.map(p => `
-                            <option value="${p.id}">${Fmt.esc(p.full_name || p.email)}</option>`).join('')}
-                    </select>
-                </div>
-                <div class="form-group" style="margin-top:.75rem">
-                    <label>Мітка групи (необов'язково)</label>
-                    <input id="ct-label-inp" type="text" placeholder='Наприклад: "Група A", "Тиждень 2"' style="width:100%">
-                </div>`,
-            footer: `
-                <button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
-                <button class="btn btn-primary" onclick="AdminPage._courseTeacherSaveNew('${courseId}')">Додати</button>`
-        });
-    },
-
-    async _courseTeacherSaveNew(courseId) {
-        const userId = document.getElementById('ct-user-sel')?.value;
-        const label  = document.getElementById('ct-label-inp')?.value.trim() || null;
-        if (!userId) { Toast.error('Помилка', 'Оберіть людину'); return; }
-        Loader.show();
-        try {
-            await supabase.from('course_teachers').insert({ course_id: courseId, user_id: userId, label, is_active: true });
-            Modal.close();
-            await this._courseTeachersLoad(courseId);
-        } catch(e) { Toast.error('Помилка', e.message); }
-        finally { Loader.hide(); }
-    },
-
-    async _courseTeacherEditLabel(entryId, courseId) {
-        const current = this._courseTeachersData.find(t => t.id === entryId)?.label || '';
-        Modal.open({
-            title: 'Мітка групи',
-            body: `<div class="form-group">
-                <label>Група або тиждень</label>
-                <input id="ct-edit-label" type="text" value="${Fmt.esc(current)}" placeholder='Наприклад: "Група A"' style="width:100%">
-            </div>`,
-            footer: `
-                <button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
-                <button class="btn btn-primary" onclick="AdminPage._courseTeacherSaveLabel('${entryId}','${courseId}')">Зберегти</button>`
-        });
-    },
-
-    async _courseTeacherSaveLabel(entryId, courseId) {
-        const label = document.getElementById('ct-edit-label')?.value.trim() || null;
-        Loader.show();
-        try {
-            await API.courseTeachers.updateLabel(entryId, label);
-            Modal.close();
-            await this._courseTeachersLoad(courseId);
-        } catch(e) { Toast.error('Помилка', e.message); }
-        finally { Loader.hide(); }
-    },
-
-    async _courseTeacherRemove(entryId, courseId, name) {
-        const ok = await Modal.confirm({ message: `Видалити викладача "${name}" з курсу?`, danger: true });
-        if (!ok) return;
-        Loader.show();
-        try {
-            await API.courseTeachers.remove(entryId);
-            await this._courseTeachersLoad(courseId);
         } catch(e) { Toast.error('Помилка', e.message); }
         finally { Loader.hide(); }
     },
@@ -4106,7 +4069,7 @@ const AdminPage = {
 
     // ── Кошик (тільки власник) ────────────────────────────────────
     async _renderTrash(el) {
-        if (!AppState.isOwner()) {
+        if (!AppState.isSuperAdmin()) {
             el.innerHTML = `<div class="empty-state"><div class="empty-icon">🔒</div><h3>Доступ лише для власника</h3></div>`;
             return;
         }
@@ -5721,6 +5684,318 @@ ${item?.is_deleted ? `
     _fbtSend() {}, // no-op
 
     /* PLACEHOLDER BLOCK END */
+    // ── Права адмінів (superadmin-only, звужує доступ до вкладок для конкретних admin) ──
+    _permAdmins: [],
+    _permSelectedId: null,
+    _permSelectedTabs: new Set(),
+    _permSelectedNav: new Set(),
+    _permUnrestricted: true,
+    _permSearch: '',
+
+    // Пункти бокового меню, доступні ролі admin (див. UI._getNavItems,
+    // гілка role==='superadmin'||'admin') — ключі зберігаються в
+    // admin_tab_permissions з префіксом 'nav:', щоб не перетинатись з
+    // ключами вкладок адмінпанелі в тій самій таблиці
+    _MANAGEABLE_NAV: [
+        { route: 'dashboard',     label: 'Головна',           icon: 'fa-house',                  color: '#C9A227' },
+        { route: 'expert-path',   label: 'Моє навчання',      icon: 'fa-book-open',               color: '#a78bfa' },
+        { route: 'knowledge-base',label: 'База знань',        icon: 'fa-folder-open',              color: '#C9A227' },
+        { route: 'documents',     label: 'Документи',         icon: 'fa-file-lines',               color: '#f87171' },
+        { route: 'analytics',     label: 'Аналітика',         icon: 'fa-chart-bar',                color: '#34d399' },
+        { route: 'collections',   label: 'Сторінки',          icon: 'fa-wand-magic-sparkles',      color: '#c084fc' },
+        { route: 'scheduler',     label: 'Розділ планування', icon: 'fa-calendar-days',            color: '#60a5fa' },
+        { route: 'interns',       label: 'Стажери',           icon: 'fa-user-graduate',            color: '#8b5cf6' },
+        { route: 'admin',         label: 'Адміністрування',   icon: 'fa-gear',                     color: '#f87171' },
+        { route: 'contacts',      label: 'Контакти',          icon: 'fa-address-book',             color: '#059669' },
+        { route: 'bookmarks',     label: 'Закладки',          icon: 'fa-bookmark',                 color: '#FBBF24' },
+    ],
+
+    async _renderAdminPermissions(el) {
+        if (!AppState.isSuperAdmin()) { el.innerHTML = ''; return; }
+
+        el.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
+        try {
+            const [{ data: admins }, allGrants] = await Promise.all([
+                API.profiles.getAll({ role: 'admin', pageSize: 500 }),
+                supabase.from('admin_tab_permissions').select('user_id, tab_key')
+            ]);
+            const grantsByUser = new Map();
+            (allGrants.data || []).forEach(r => {
+                if (!grantsByUser.has(r.user_id)) grantsByUser.set(r.user_id, new Set());
+                grantsByUser.get(r.user_id).add(r.tab_key);
+            });
+            this._permAdmins = (admins || [])
+                .sort((a, b) => (a.full_name || '').localeCompare(b.full_name || '', 'uk'))
+                .map(a => ({ ...a, _grants: grantsByUser.get(a.id) || null }));
+        } catch(e) {
+            el.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>${Fmt.esc(e.message)}</h3></div>`;
+            return;
+        }
+
+        el.innerHTML = `
+        <div class="atp-wrap">
+            <div class="atp-hint">
+                <i class="fa-solid fa-circle-info"></i>
+                За замовчуванням кожен admin бачить усе бокове меню й усі вкладки адмінпанелі, доступні цій ролі.
+                Тут можна звузити набір для конкретної людини — без обмежень для інших.
+            </div>
+            <div class="atp-layout">
+                <div class="atp-list-col">
+                    <div class="atp-search">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input type="text" placeholder="Пошук адміна..." oninput="AdminPage._permFilterList(this.value)">
+                    </div>
+                    <div id="atp-admin-list" class="atp-admin-list">${this._permRenderList()}</div>
+                </div>
+                <div id="atp-detail" class="atp-detail">${this._permRenderDetail()}</div>
+            </div>
+        </div>
+
+        <style>
+        .atp-wrap { max-width: 1100px; }
+        .atp-hint {
+            display: flex; align-items: flex-start; gap: .6rem; font-size: .82rem; color: var(--text-secondary);
+            background: var(--bg-raised); border: 1px solid var(--border); border-radius: 12px;
+            padding: .75rem 1rem; margin-bottom: 1.1rem;
+        }
+        .atp-hint i { color: #f97316; margin-top: .1rem; }
+        .atp-layout { display: grid; grid-template-columns: 300px 1fr; gap: 1.1rem; align-items: start; }
+        @media (max-width: 900px) { .atp-layout { grid-template-columns: 1fr; } }
+
+        .atp-search { position: relative; margin-bottom: .6rem; }
+        .atp-search i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: .82rem; }
+        .atp-search input {
+            width: 100%; box-sizing: border-box; padding: .5rem .7rem .5rem 2.1rem;
+            border-radius: 10px; border: 1.5px solid var(--border); background: var(--bg-surface);
+            color: var(--text-primary); font-size: .85rem; outline: none; font-family: inherit;
+        }
+        .atp-search input:focus { border-color: #f97316; box-shadow: 0 0 0 3px rgba(249,115,22,.15); }
+
+        .atp-admin-list { display: flex; flex-direction: column; gap: 4px; max-height: 70vh; overflow-y: auto; }
+        .atp-admin-row {
+            display: flex; align-items: center; gap: .6rem; padding: .5rem .6rem; border-radius: 12px;
+            border: 1.5px solid transparent; background: var(--bg-surface); cursor: pointer; transition: all .15s; text-align: left;
+        }
+        .atp-admin-row:hover { background: var(--bg-hover); }
+        .atp-admin-row.active { border-color: #f97316; background: color-mix(in srgb, #f97316 8%, var(--bg-surface)); }
+        .atp-admin-avatar {
+            width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0; overflow: hidden;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            display: flex; align-items: center; justify-content: center; font-size: .72rem; font-weight: 700; color: #fff;
+        }
+        .atp-admin-avatar img { width: 100%; height: 100%; object-fit: cover; }
+        .atp-admin-name { font-size: .84rem; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .atp-admin-badge { font-size: .66rem; font-weight: 700; padding: 2px 7px; border-radius: 999px; margin-left: auto; flex-shrink: 0; white-space: nowrap; }
+        .atp-admin-badge.full { background: rgba(16,185,129,.12); color: #10b981; }
+        .atp-admin-badge.limited { background: rgba(249,115,22,.12); color: #f97316; }
+
+        .atp-detail { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 16px; padding: 1.25rem; min-height: 300px; }
+        .atp-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .6rem; padding: 3rem 1rem; color: var(--text-muted); text-align: center; }
+        .atp-empty i { font-size: 2rem; opacity: .4; }
+
+        .atp-detail-head { display: flex; align-items: center; gap: .75rem; margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px dashed var(--border); }
+        .atp-detail-avatar {
+            width: 44px; height: 44px; border-radius: 50%; flex-shrink: 0; overflow: hidden;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            display: flex; align-items: center; justify-content: center; font-size: .9rem; font-weight: 700; color: #fff;
+        }
+        .atp-detail-avatar img { width: 100%; height: 100%; object-fit: cover; }
+        .atp-detail-name { font-size: 1.05rem; font-weight: 700; color: var(--text-primary); }
+        .atp-detail-sub { font-size: .78rem; color: var(--text-muted); margin-top: 1px; }
+
+        .atp-master-row {
+            display: flex; align-items: center; gap: .7rem; padding: .8rem .9rem; border-radius: 12px;
+            background: var(--bg-raised); border: 1.5px solid var(--border); margin-bottom: 1.1rem; cursor: pointer; user-select: none;
+        }
+        .atp-master-text { flex: 1; }
+        .atp-master-label { font-size: .87rem; font-weight: 700; color: var(--text-primary); }
+        .atp-master-sub { font-size: .74rem; color: var(--text-muted); margin-top: 1px; }
+
+        .atp-sw { position: relative; flex-shrink: 0; width: 40px; height: 23px; border-radius: 999px; background: var(--bg-hover); border: 1.5px solid var(--border); transition: all .2s; }
+        .atp-sw::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--text-muted); transition: all .2s cubic-bezier(.4,0,.2,1); }
+        .atp-sw.on { background: #f97316; border-color: #f97316; }
+        .atp-sw.on::after { left: 19px; background: #fff; }
+
+        .atp-groups { display: flex; flex-direction: column; gap: 1rem; transition: opacity .2s; }
+        .atp-groups.disabled { opacity: .45; pointer-events: none; }
+        .atp-group-title { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); margin-bottom: .5rem; }
+        .atp-tab-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: .5rem; }
+        .atp-tab-row {
+            display: flex; align-items: center; gap: .6rem; padding: .55rem .7rem; border-radius: 12px;
+            background: var(--bg-raised); border: 1.5px solid var(--border); cursor: pointer; transition: all .15s; user-select: none;
+        }
+        .atp-tab-row:hover { border-color: var(--border-light); }
+        .atp-tab-row.checked { border-color: var(--tab-c); background: color-mix(in srgb, var(--tab-c) 8%, var(--bg-raised)); }
+        .atp-tab-ico { width: 26px; height: 26px; border-radius: 8px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: .72rem; background: color-mix(in srgb, var(--tab-c) 15%, transparent); color: var(--tab-c); }
+        .atp-tab-lbl { flex: 1; font-size: .82rem; font-weight: 600; color: var(--text-primary); }
+        .atp-tab-check { width: 18px; height: 18px; border-radius: 6px; border: 1.5px solid var(--border); flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: .65rem; color: #fff; transition: all .15s; }
+        .atp-tab-row.checked .atp-tab-check { background: var(--tab-c); border-color: var(--tab-c); }
+        .atp-section-sep { height: 1px; background: var(--border); margin: .25rem 0 .5rem; }
+
+        .atp-detail-footer { display: flex; align-items: center; gap: .6rem; margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+        .atp-detail-footer-hint { font-size: .76rem; color: var(--text-muted); }
+        </style>`;
+    },
+
+    _permFilterList(q) {
+        this._permSearch = (q || '').trim().toLowerCase();
+        const list = document.getElementById('atp-admin-list');
+        if (list) list.innerHTML = this._permRenderList();
+    },
+
+    _permRenderList() {
+        const items = this._permAdmins.filter(a =>
+            !this._permSearch || (a.full_name || '').toLowerCase().includes(this._permSearch)
+        );
+        if (!items.length) return `<div style="padding:1rem;text-align:center;color:var(--text-muted);font-size:.82rem">Нікого не знайдено</div>`;
+        return items.map(a => {
+            const isActive = a.id === this._permSelectedId;
+            const isFull   = !a._grants;
+            return `
+            <button type="button" class="atp-admin-row${isActive ? ' active' : ''}" onclick="AdminPage._permSelect('${a.id}')">
+                <div class="atp-admin-avatar">${a.avatar_url ? `<img src="${a.avatar_url}">` : Fmt.initials(a.full_name)}</div>
+                <span class="atp-admin-name">${Fmt.esc(a.full_name || a.email)}</span>
+                <span class="atp-admin-badge ${isFull ? 'full' : 'limited'}">${isFull ? 'Повний' : `${a._grants.size}`}</span>
+            </button>`;
+        }).join('');
+    },
+
+    _permSelect(userId) {
+        this._permSelectedId = userId;
+        const admin = this._permAdmins.find(a => a.id === userId);
+        this._permUnrestricted = !admin?._grants;
+        const grants = admin?._grants || new Set();
+        this._permSelectedTabs = new Set([...grants].filter(k => !k.startsWith('nav:')));
+        this._permSelectedNav  = new Set([...grants].filter(k => k.startsWith('nav:')).map(k => k.slice(4)));
+        document.getElementById('atp-admin-list').innerHTML = this._permRenderList();
+        document.getElementById('atp-detail').innerHTML = this._permRenderDetail();
+    },
+
+    _permRenderDetail() {
+        const admin = this._permAdmins.find(a => a.id === this._permSelectedId);
+        if (!admin) {
+            return `<div class="atp-empty"><i class="fa-solid fa-user-lock"></i><div>Оберіть адміна зі списку зліва,<br>щоб налаштувати доступ</div></div>`;
+        }
+
+        const navHtml = `
+            <div>
+                <div class="atp-group-title">Бокове меню</div>
+                <div class="atp-tab-grid">
+                    ${this._MANAGEABLE_NAV.map(n => {
+                        const checked = this._permUnrestricted || this._permSelectedNav.has(n.route);
+                        return `
+                        <div class="atp-tab-row${checked ? ' checked' : ''}" style="--tab-c:${n.color}" onclick="AdminPage._permToggleNav('${n.route}')">
+                            <span class="atp-tab-ico"><i class="fa-solid ${n.icon}"></i></span>
+                            <span class="atp-tab-lbl">${Fmt.esc(n.label)}</span>
+                            <span class="atp-tab-check">${checked ? '<i class="fa-solid fa-check"></i>' : ''}</span>
+                        </div>`;
+                    }).join('')}
+                </div>
+            </div>`;
+
+        const groups = this._manageableTabGroups();
+        const groupsHtml = groups.map(g => `
+            <div>
+                <div class="atp-group-title">${Fmt.esc(g.label)}</div>
+                <div class="atp-tab-grid">
+                    ${g.tabs.map(t => {
+                        const checked = this._permUnrestricted || this._permSelectedTabs.has(t.id);
+                        return `
+                        <div class="atp-tab-row${checked ? ' checked' : ''}" style="--tab-c:${t.color}" onclick="AdminPage._permToggleTab('${t.id}')">
+                            <span class="atp-tab-ico"><i class="fa-solid ${t.icon}"></i></span>
+                            <span class="atp-tab-lbl">${Fmt.esc(t.label)}</span>
+                            <span class="atp-tab-check">${checked ? '<i class="fa-solid fa-check"></i>' : ''}</span>
+                        </div>`;
+                    }).join('')}
+                </div>
+            </div>`).join('');
+
+        return `
+            <div class="atp-detail-head">
+                <div class="atp-detail-avatar">${admin.avatar_url ? `<img src="${admin.avatar_url}">` : Fmt.initials(admin.full_name)}</div>
+                <div>
+                    <div class="atp-detail-name">${Fmt.esc(admin.full_name || admin.email)}</div>
+                    <div class="atp-detail-sub">${Fmt.esc(admin.job_position || admin.email || '')}</div>
+                </div>
+            </div>
+
+            <div class="atp-master-row" onclick="AdminPage._permToggleUnrestricted()">
+                <div class="atp-master-text">
+                    <div class="atp-master-label">Повний доступ</div>
+                    <div class="atp-master-sub">Без обмежень — бачить усе меню й усі вкладки, доступні ролі "Адміністратор"</div>
+                </div>
+                <span class="atp-sw${this._permUnrestricted ? ' on' : ''}"></span>
+            </div>
+
+            <div class="atp-groups${this._permUnrestricted ? ' disabled' : ''}">
+                ${navHtml}
+                <div class="atp-section-sep"></div>
+                ${groupsHtml}
+            </div>
+
+            <div class="atp-detail-footer">
+                <span class="atp-detail-footer-hint">Зміни діють з наступного входу цього адміна</span>
+                <div style="flex:1"></div>
+                <button class="btn btn-ghost" onclick="AdminPage._permSelect('${admin.id}')">Скасувати</button>
+                <button class="btn btn-primary" onclick="AdminPage._permSave()"><i class="fa-solid fa-check"></i> Зберегти</button>
+            </div>`;
+    },
+
+    _permToggleUnrestricted() {
+        this._permUnrestricted = !this._permUnrestricted;
+        if (this._permUnrestricted) { this._permSelectedTabs = new Set(); this._permSelectedNav = new Set(); }
+        document.getElementById('atp-detail').innerHTML = this._permRenderDetail();
+    },
+
+    _permToggleNav(route) {
+        if (this._permUnrestricted) return;
+        if (this._permSelectedNav.has(route)) this._permSelectedNav.delete(route);
+        else this._permSelectedNav.add(route);
+        document.getElementById('atp-detail').innerHTML = this._permRenderDetail();
+    },
+
+    _permToggleTab(tabId) {
+        if (this._permUnrestricted) return;
+        if (this._permSelectedTabs.has(tabId)) this._permSelectedTabs.delete(tabId);
+        else this._permSelectedTabs.add(tabId);
+        document.getElementById('atp-detail').innerHTML = this._permRenderDetail();
+    },
+
+    async _permSave() {
+        const admin = this._permAdmins.find(a => a.id === this._permSelectedId);
+        if (!admin) return;
+        Loader.show();
+        try {
+            if (this._permUnrestricted) {
+                await API.adminTabPermissions.clearForUser(admin.id);
+                admin._grants = null;
+            } else {
+                const keys = [...this._permSelectedTabs, ...[...this._permSelectedNav].map(r => 'nav:' + r)];
+                await API.adminTabPermissions.setForUser(admin.id, keys);
+                admin._grants = new Set(keys);
+            }
+            AuditLog.write('admin_tabs_change', 'user', admin.full_name || admin.email, {
+                unrestricted: this._permUnrestricted,
+                nav:  this._permUnrestricted ? null : [...this._permSelectedNav],
+                tabs: this._permUnrestricted ? null : [...this._permSelectedTabs],
+            });
+            // Права застосовуються при завантаженні профілю (Auth._loadProfile) —
+            // тож завершуємо поточну сесію адміна, щоб зміни подіяли негайно,
+            // а не аж після того, як він сам колись перелогіниться
+            try {
+                await API.profiles.forceLogout(admin.id);
+                await Promise.all([
+                    supabase.from('profiles').update({ last_seen_at: null }).eq('id', admin.id),
+                    API.userSessions.removeAll(admin.id).catch(() => {})
+                ]);
+            } catch(_) { /* права вже збережено — вихід best-effort, не критично */ }
+            Toast.success('Права збережено', `${admin.full_name || admin.email} буде розлогінено для застосування змін`);
+            document.getElementById('atp-admin-list').innerHTML = this._permRenderList();
+        } catch(e) {
+            Toast.error('Помилка', e.message);
+        } finally { Loader.hide(); }
+    },
+
     // ── Довірені IP ───────────────────────────────────────────────
     async _renderTrustedIps(el) {
         if (!AppState.isAdmin()) { el.innerHTML = ''; return; }

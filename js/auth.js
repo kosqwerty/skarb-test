@@ -46,6 +46,29 @@ const Auth = {
             Toast.error('Доступ заблоковано', 'Ваш обліковий запис заблоковано адміністратором');
             throw new Error('blocked');
         }
+        // Автоскидання застряглого режиму "тестувати як" (>4 год без дії) —
+        // захист від забутої вкладки в перемкнутій ролі
+        const p = AppState.profile;
+        if (p && p.role !== p.base_role && p.role_switched_at) {
+            const ageMs = Date.now() - new Date(p.role_switched_at).getTime();
+            if (ageMs > 4 * 60 * 60 * 1000) {
+                try {
+                    await supabase.rpc('reset_active_role');
+                    AppState.profile.role = AppState.profile.base_role;
+                    AppState.profile.role_switched_at = null;
+                } catch(_) {}
+            }
+        }
+        // Персональні обмеження сайдбару, якщо superadmin їх налаштував
+        // ("Права адмінів" в адмінпанелі) — кешуємо раз на сесію
+        AppState._navAllowed = null;
+        if (p && p.role === 'admin') {
+            try {
+                const keys = await API.adminTabPermissions.getForUser(AppState.user.id);
+                const navKeys = keys.filter(k => k.startsWith('nav:')).map(k => k.slice(4));
+                if (navKeys.length) AppState._navAllowed = new Set(navKeys);
+            } catch(_) { /* немає налаштувань — без обмежень */ }
+        }
     },
 
     async login() {
@@ -71,6 +94,14 @@ const Auth = {
             AppState.session = data.session;
             AppState.user    = data.user;
             await this._loadProfile();
+            // Свіжий інтерактивний вхід завжди скидає режим "тестувати як"
+            try {
+                await supabase.rpc('reset_active_role');
+                if (AppState.profile) {
+                    AppState.profile.role = AppState.profile.base_role;
+                    AppState.profile.role_switched_at = null;
+                }
+            } catch(_) {}
             this._showApp();
         } catch(e) {
             Toast.error('Помилка входу', e.message === 'Invalid login credentials'
@@ -130,6 +161,7 @@ const Auth = {
 
         UI.closeUserPopup();
         try { API.activityLog.log('logout'); } catch(_) {}
+        try { await supabase.rpc('reset_active_role'); } catch(_) {}
         try { await supabase.auth.signOut(); } catch(_) {}
         AppState.user    = null;
         AppState.profile = null;
@@ -244,14 +276,29 @@ const Auth = {
                 return;
             }
         } catch(_) {}
+
+        // Немає локальної сесії — якщо це не навмисний вихід (ручний/блок/кік),
+        // пробуємо один раз явно освіжити токен. SDK іноді сам ловить
+        // транзієнтний 403 (rate-limit, мережевий збій) на internal auto-refresh,
+        // хоча сам refresh token ще дійсний і explicit refreshSession() встигає.
+        if (!this._signingOut) {
+            try {
+                const { data, error } = await supabase.auth.refreshSession();
+                if (!error && data?.session) {
+                    console.warn('[Auth] SIGNED_OUT проігноровано — вдалося явно освіжити токен');
+                    AppState.session = data.session;
+                    AppState.user    = data.session.user;
+                    return;
+                }
+            } catch(_) {}
+        }
+
         this._finishSignOut();
     },
 
     _finishSignOut() {
         AppState._sessionId = null;
         this._signingOut = false;
-        AppState._realRole = null;
-        RolePreviewBanner.hide();
         InactivityWatcher.stop();
         Heartbeat.removeSession().catch(() => {});
         Heartbeat.stop();

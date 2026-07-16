@@ -172,7 +172,7 @@ const ScheduleGraphPage = {
         this._container = container;
         this._locSortAlpha = !!localStorage.getItem('sg_loc_sort_alpha');
 
-        if (!AppState.isManager() && !AppState.isAdmin() && !AppState.isOwner()) {
+        if (!AppState.isManager() && !AppState.isAdmin() && !AppState.isSuperAdmin()) {
             await ScheduleGraphEmployee.init(container);
             return;
         }
@@ -214,11 +214,11 @@ const ScheduleGraphPage = {
     async _loadLocations() {
         let query = supabase.from('schedule_locations')
             .select('*').is('deleted_at', null).order('created_at');
-        if (!AppState.isOwner()) query = query.eq('created_by', AppState.user.id);
+        if (!AppState.isSuperAdmin()) query = query.eq('created_by', AppState.user.id);
         const { data } = await query;
         this._locations = data || [];
         this._applyLocOrder();
-        if (AppState.isOwner() && this._locations.length) {
+        if (AppState.isSuperAdmin() && this._locations.length) {
             const ids = [...new Set(this._locations.map(l => l.created_by).filter(Boolean))];
             if (ids.length) {
                 const { data: profs } = await supabase.from('profiles').select('id, full_name').in('id', ids);
@@ -252,7 +252,7 @@ const ScheduleGraphPage = {
     },
 
     _isViewOnlyLoc(locId) {
-        if (!AppState.isOwner()) return false;
+        if (!AppState.isSuperAdmin()) return false;
         const loc = this._locations.find(l => l.id === locId);
         return !!loc && loc.created_by !== AppState.user.id;
     },
@@ -916,7 +916,7 @@ ${this._styles()}`;
     <div class="sg-loc-sidebar-head">
         <span class="sg-loc-sidebar-title">Розділ локацій</span>
         <div style="display:flex;gap:4px;align-items:center">
-            ${AppState.isOwner() ? `
+            ${AppState.isSuperAdmin() ? `
             <button class="sg-loc-add-ico${this._locSortAlpha ? ' active' : ''}"
                 onclick="ScheduleGraphPage._toggleLocSort()"
                 title="${this._locSortAlpha ? 'Вимкнути сортування А→Я' : 'Сортувати А→Я'}">
@@ -1009,7 +1009,7 @@ ${this._styles()}`;
         const viewOnly = this._isViewOnlyLoc(this._locId);
 
         const loc = this._locations.find(l => l.id === this._locId);
-        const creatorName = AppState.isOwner() && loc?.created_by ? (this._locCreators[loc.created_by] || null) : null;
+        const creatorName = AppState.isSuperAdmin() && loc?.created_by ? (this._locCreators[loc.created_by] || null) : null;
         const trashCount = this._deletedLocations.length;
         const svcHtml = `<div class="sg-v2-card sg-v2-service">
             <div class="sg-v2-card-label">Сервіс</div>
@@ -1269,7 +1269,7 @@ ${this._styles()}`;
         return `
 <div class="sg-section" style="padding:14px 20px 4px">
     <div style="margin-bottom:12px">
-        <button class="sg-back-btn" onclick="ScheduleGraphPage._switchTab('schedule')"><i class="fa-solid fa-arrow-left"></i> Назад</button>
+        <button class="btn-back" onclick="ScheduleGraphPage._switchTab('schedule')"><i class="fa-solid fa-arrow-left"></i> Назад</button>
     </div>
     ${!this._log.length ? `
     <div class="empty-state" style="margin:2rem 0">
@@ -4530,7 +4530,7 @@ ${this._styles()}`;
         const p       = a.profile || null;
         const name    = p?.full_name || a.employee_name || 'Без імені';
         const fired   = a.user_id === null;
-        const isOwner = AppState.isAdmin() || AppState.isOwner() ||
+        const isOwner = AppState.isAdmin() || AppState.isSuperAdmin() ||
                         (typeof AppState.isManager === 'function' && AppState.isManager());
 
         // Gender from patronymic (3rd word), fallback to surname ending
@@ -4978,8 +4978,6 @@ ${this._styles()}`;
 .sg-v2-svc-title { font-size:.8rem;font-weight:600;color:var(--text-primary); }
 .sg-v2-svc-sub { font-size:.68rem;color:var(--text-muted);margin-top:1px; }
 .sg-v2-svc-arr { font-size:.65rem;color:var(--text-muted);flex-shrink:0; }
-.sg-back-btn { display:inline-flex;align-items:center;gap:6px;background:var(--bg-raised);color:var(--text-secondary);border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:.8rem;cursor:pointer;transition:all .15s; }
-.sg-back-btn:hover { background:var(--bg-elevated);color:var(--text-primary); }
 .sg-v2-loc-address { font-size:.75rem;color:var(--text-muted);display:flex;align-items:center;gap:6px; }
 .sg-loc-label { font-size:.75rem;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px; }
 
@@ -6691,7 +6689,7 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
     },
 
     _empHero(locName, locId) {
-        const isManager = AppState.isManager?.() || AppState.isAdmin?.() || AppState.isOwner?.();
+        const isManager = AppState.isManager?.() || AppState.isAdmin?.() || AppState.isSuperAdmin?.();
         const asgn = locId ? this._assignments.find(a => a.locId === locId) : null;
         const whText = (asgn?.work_start && asgn?.work_end)
             ? `${asgn.work_start.slice(0,5)} — ${asgn.work_end.slice(0,5)}` : '';

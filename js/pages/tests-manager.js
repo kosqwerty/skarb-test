@@ -177,7 +177,7 @@ const TestsManagerAPI = {
     async getAllEmployees() {
         const { data, error } = await supabase.from('profiles')
             .select('id, full_name, email, job_position, manager_id, avatar_url')
-            .in('role', ['user', 'teacher', 'smm', 'manager', 'admin', 'owner'])
+            .in('role', ['user', 'smm', 'manager', 'admin', 'superadmin'])
             .order('full_name');
         if (error) throw error;
         return data || [];
@@ -186,7 +186,7 @@ const TestsManagerAPI = {
     async getPositions() {
         const { data, error } = await supabase.from('profiles')
             .select('job_position')
-            .in('role', ['user', 'teacher', 'smm', 'manager'])
+            .in('role', ['user', 'smm', 'manager'])
             .not('job_position', 'is', null)
             .neq('job_position', '');
         if (error) throw error;
@@ -893,8 +893,6 @@ const TestsManagerPage = {
         container.innerHTML = `
 <style>
 .tga-page{max-width:720px}
-.tga-back{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);font-size:.83rem;font-weight:600;cursor:pointer;margin-bottom:16px}
-.tga-back:hover{border-color:#C9A227;color:#C9A227}
 .tga-title{font-size:1.1rem;font-weight:800;color:var(--text-primary);margin-bottom:4px}
 .tga-sub{font-size:.82rem;color:var(--text-muted);margin-bottom:18px}
 .tga-dl{margin-bottom:14px}
@@ -912,12 +910,12 @@ const TestsManagerPage = {
 .tga-save{padding:11px 20px;border-radius:12px;border:none;background:var(--primary);color:#fff;font-size:.85rem;font-weight:700;cursor:pointer;flex:2}
 </style>
 <div class="tga-page">
-    <button class="tga-back" onclick="TestsManagerPage._renderGroupsList(TestsManagerPage._container)"><i class="fa-solid fa-arrow-left"></i> Назад</button>
+    <button class="btn-back" style="margin-bottom:16px" onclick="TestsManagerPage._renderGroupsList(TestsManagerPage._container)"><i class="fa-solid fa-arrow-left"></i> Назад</button>
     <div class="tga-title">Призначити: ${Fmt.esc(group.title)}</div>
     <div class="tga-sub">${(group.items || []).length} тест(ів) у групі. Оберіть співробітників, яким призначити всю групу.</div>
     <div class="tga-dl">
         <label>Дедлайн (необов'язково)</label>
-        <input type="datetime-local" id="tga-deadline">
+        ${UaDateTime.html('tga-deadline')}
     </div>
     <div class="tga-list" id="tga-list">
         ${employees.map(e => `
@@ -929,7 +927,7 @@ const TestsManagerPage = {
     </div>
     <div class="tga-foot">
         <button class="tga-cancel" onclick="TestsManagerPage._renderGroupsList(TestsManagerPage._container)">Скасувати</button>
-        <button class="tga-save" onclick="TestsManagerPage._saveGroupAssign()"><i class="fa-solid fa-check"></i> Зберегти призначення</button>
+        <button class="tga-save" onclick="TestsManagerPage._saveGroupAssign()"><i class="fa-solid fa-check"></i> Призначити</button>
     </div>
 </div>`;
     },
@@ -960,7 +958,7 @@ const TestsManagerPage = {
                     user_id: uid, type: 'test_assigned',
                     title: `Вам призначено групу тестів: ${groupTitle}`,
                     message: 'Пройдіть призначені тести у вкладці «Мої тести»',
-                    link: 'my-tests'
+                    link: 'expert-path?tab=tests'
                 }));
                 const r = await supabase.from('notifications').insert(rows);
                 if (r.error) console.error('[test group assign] notify:', r.error);
@@ -1168,8 +1166,6 @@ const TestsManagerPage = {
 .tset-page{max-width:920px}
 .tset-hero{display:flex;align-items:center;gap:14px;padding:18px 22px;margin-bottom:22px;border-radius:18px;border:1px solid var(--border);
     background:linear-gradient(135deg,color-mix(in srgb,var(--primary) 14%,var(--bg-surface)),color-mix(in srgb,var(--primary) 4%,var(--bg-surface)))}
-.tset-back{width:38px;height:38px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);cursor:pointer;transition:all .15s;flex-shrink:0;display:flex;align-items:center;justify-content:center}
-.tset-back:hover{border-color:var(--primary);color:var(--primary)}
 .tset-hero-icon{width:42px;height:42px;border-radius:12px;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0;box-shadow:0 4px 14px color-mix(in srgb,var(--primary) 40%,transparent)}
 .tset-hero-text{flex:1;min-width:0}
 .tset-hero-title{font-size:1.05rem;font-weight:700;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -1236,7 +1232,7 @@ const TestsManagerPage = {
 </style>
 <div class="tset-page">
     <div class="tset-hero">
-        <button class="tset-back" onclick="TestsManagerPage._goBack(TestsManagerPage._container)" title="Назад"><i class="fa-solid fa-arrow-left"></i></button>
+        <button class="btn-back btn-back-icon" onclick="TestsManagerPage._goBack(TestsManagerPage._container)" title="Назад"><i class="fa-solid fa-arrow-left"></i></button>
         <div class="tset-hero-icon"><i class="fa-solid fa-gear"></i></div>
         <div class="tset-hero-text">
             <div class="tset-hero-title">${isEdit ? Fmt.esc(test.title) : 'Новий тест'}</div>
@@ -1539,7 +1535,7 @@ const TestsManagerPage = {
         try {
             const [{ data: emps }, { data: already }] = await Promise.all([
                 supabase.from('profiles').select('id')
-                    .in('role', ['user','teacher','smm','manager'])
+                    .in('role', ['user','smm','manager'])
                     .in('job_position', positions),
                 supabase.from('test_assignments').select('user_id').eq('test_id', testId)
             ]);
@@ -1584,8 +1580,6 @@ const TestsManagerPage = {
 .te-topbar{display:flex;align-items:center;gap:12px;padding:14px 18px;border-radius:16px;margin-bottom:0;flex-shrink:0;flex-wrap:wrap;
     background:linear-gradient(135deg,color-mix(in srgb,var(--primary) 12%,var(--bg-surface)),color-mix(in srgb,var(--primary) 3%,var(--bg-surface)));
     border:1px solid var(--border)}
-.te-back{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);font-size:.83rem;font-weight:500;cursor:pointer;transition:all .15s;text-decoration:none}
-.te-back:hover{border-color:var(--primary);color:var(--primary)}
 .te-test-title{font-size:1.1rem;font-weight:700;color:var(--text-primary);flex:1}
 .te-body{display:flex;flex:1;gap:0;overflow:hidden;margin-top:16px;border:1px solid var(--border);border-radius:18px;overflow:hidden}
 
@@ -1835,7 +1829,7 @@ button.te-save-btn-ghost:hover{background:color-mix(in srgb,var(--zc-color,var(-
 
 <div class="te-wrap">
     <div class="te-topbar">
-        <button class="te-back" onclick="TestsManagerPage._checkDirty().then(()=>{TestsManagerPage._dirty=false;TestsManagerPage._renderList(TestsManagerPage._container)})"><i class="fa-solid fa-arrow-left"></i> Тести</button>
+        <button class="btn-back" onclick="TestsManagerPage._checkDirty().then(()=>{TestsManagerPage._dirty=false;TestsManagerPage._renderList(TestsManagerPage._container)})"><i class="fa-solid fa-arrow-left"></i> Тести</button>
         <span class="te-test-title">${Fmt.esc(this._curTest.title)}</span>
     </div>
     <div class="te-body">
@@ -3422,8 +3416,6 @@ body.light-theme .tm-src-ta{background:#f6f8fa;color:#24292f;border-color:#d0d7d
         container.innerHTML = `<style>
 .tprev-page{max-width:780px}
 .tprev-topbar{display:flex;align-items:center;gap:12px;padding-bottom:16px;border-bottom:1px solid var(--border);margin-bottom:24px}
-.tprev-back{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);font-size:.83rem;font-weight:500;cursor:pointer;transition:all .15s}
-.tprev-back:hover{border-color:var(--primary);color:var(--primary)}
 .tprev-badge{padding:4px 12px;border-radius:20px;background:rgba(245,158,11,.12);color:#f59e0b;font-size:.78rem;font-weight:700}
 .tprev-q{border:1px solid var(--border);border-radius:16px;padding:20px;margin-bottom:14px;background:var(--bg-surface)}
 .tprev-qnum{font-size:.73rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
@@ -3444,7 +3436,7 @@ body.light-theme .tm-src-ta{background:#f6f8fa;color:#24292f;border-color:#d0d7d
 </style>
 <div class="tprev-page">
     <div class="tprev-topbar">
-        <button class="tprev-back" onclick="TestsManagerPage._goBack(TestsManagerPage._container)"><i class="fa-solid fa-arrow-left"></i> Назад</button>
+        <button class="btn-back" onclick="TestsManagerPage._goBack(TestsManagerPage._container)"><i class="fa-solid fa-arrow-left"></i> Назад</button>
         <span style="font-size:1.1rem;font-weight:700;color:var(--text-primary);flex:1">${test.title}</span>
         <span class="tprev-badge"><i class="fa-solid fa-eye"></i> Перегляд</span>
     </div>
@@ -3557,6 +3549,9 @@ body.light-theme .tm-src-ta{background:#f6f8fa;color:#24292f;border-color:#d0d7d
         const commonDl    = deadlines.length && deadlines.every(d => d === deadlines[0])
             ? _dtLocal(deadlines[0]) : '';
         this._assignTitle = testTitle;
+        // Snapshot for _doAssign — comparing against this (rather than trusting a dataset
+        // flag set by the picker's onchange chain) reliably detects an actual edit.
+        this._asgnOriginalDeadline = commonDl;
 
         const positions     = [...new Set(employees.map(e => e.job_position).filter(Boolean))].sort();
         const mgrIds        = [...new Set(employees.map(e => e.manager_id).filter(Boolean))];
@@ -3574,8 +3569,6 @@ body.light-theme .tm-src-ta{background:#f6f8fa;color:#24292f;border-color:#d0d7d
         container.innerHTML = `<style>
 .tasgn-page{display:flex;flex-direction:column;height:calc(100vh - 120px)}
 .tasgn-hero{display:flex;align-items:center;gap:12px;padding-bottom:16px;border-bottom:1px solid var(--border);margin-bottom:18px;flex-shrink:0}
-.tasgn-back{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);font-size:.83rem;font-weight:600;cursor:pointer;transition:all .15s;font-family:inherit}
-.tasgn-back:hover{border-color:#C9A227;color:#C9A227}
 .tasgn-hero-icon{width:32px;height:32px;border-radius:9px;background:rgba(201,162,39,.15);color:#C9A227;display:flex;align-items:center;justify-content:center;font-size:.85rem;flex-shrink:0}
 .tasgn-hero-title{font-size:1.02rem;font-weight:700;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
@@ -3674,7 +3667,7 @@ body.light-theme .tm-src-ta{background:#f6f8fa;color:#24292f;border-color:#d0d7d
 </style>
 <div class="tasgn-page">
     <div class="tasgn-hero">
-        <button class="tasgn-back" onclick="TestsManagerPage._goBack(TestsManagerPage._container)"><i class="fa-solid fa-arrow-left"></i> Назад</button>
+        <button class="btn-back" onclick="TestsManagerPage._goBack(TestsManagerPage._container)"><i class="fa-solid fa-arrow-left"></i> Назад</button>
         <div class="tasgn-hero-icon"><i class="fa-solid fa-user-group"></i></div>
         <span class="tasgn-hero-title">${Fmt.esc(testTitle)}</span>
     </div>
@@ -3772,7 +3765,7 @@ body.light-theme .tm-src-ta{background:#f6f8fa;color:#24292f;border-color:#d0d7d
                     <div class="tasgn-card-ico" style="background:rgba(6,182,212,.12);color:#06b6d4"><i class="fa-regular fa-calendar"></i></div>
                     <div><div class="tasgn-card-title">Терміни</div><div class="tasgn-card-sub">Дедлайн для проходження</div></div>
                 </div>
-                <input type="datetime-local" id="tm-deadline" class="tasgn-dl-inp" style="width:100%;box-sizing:border-box" value="${commonDl}" onchange="this.dataset.changed='true'">
+                ${UaDateTime.html('tm-deadline', commonDl)}
                 <div class="tasgn-dl-presets">
                     <button type="button" onclick="TestsManagerPage._setDeadlinePreset(1)">+1 день</button>
                     <button type="button" onclick="TestsManagerPage._setDeadlinePreset(3)">+3 дні</button>
@@ -3780,7 +3773,7 @@ body.light-theme .tm-src-ta{background:#f6f8fa;color:#24292f;border-color:#d0d7d
                 </div>
             </div>
             <div class="tasgn-foot">
-                <button class="tasgn-save" onclick="TestsManagerPage._doAssign('${testId}')"><i class="fa-regular fa-floppy-disk"></i> Зберегти призначення</button>
+                <button class="tasgn-save" onclick="TestsManagerPage._doAssign('${testId}')"><i class="fa-regular fa-floppy-disk"></i> Призначити</button>
                 <button type="button" class="tasgn-remind" onclick="TestsManagerPage._remindInactive('${testId}',this)"><i class="fa-regular fa-bell"></i> Нагадати неактивним</button>
                 <button type="button" class="tasgn-cancel" onclick="TestsManagerPage._goBack(TestsManagerPage._container)">Скасувати</button>
             </div>
@@ -3799,10 +3792,8 @@ body.light-theme .tm-src-ta{background:#f6f8fa;color:#24292f;border-color:#d0d7d
         const d = new Date();
         d.setDate(d.getDate() + days);
         const p = n => String(n).padStart(2, '0');
-        const inp = document.getElementById('tm-deadline');
-        if (!inp) return;
-        inp.value = `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
-        inp.dataset.changed = 'true';
+        if (!document.getElementById('tm-deadline')) return;
+        UaDateTime.set('tm-deadline', `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`);
     },
 
     // Нагадування призначеним, які ще не почали тест
@@ -3911,7 +3902,7 @@ body.light-theme .tm-src-ta{background:#f6f8fa;color:#24292f;border-color:#d0d7d
         const checkboxes    = [...document.querySelectorAll('.tm-assign-item input[type=checkbox]')];
         const deadlineRaw   = Dom.val('tm-deadline');
         const deadlineIso   = deadlineRaw ? new Date(deadlineRaw).toISOString() : null;
-        const deadlineChanged = document.getElementById('tm-deadline')?.dataset.changed === 'true';
+        const deadlineChanged = deadlineRaw !== (this._asgnOriginalDeadline || '');
 
         // Users newly ticked — always assign (with deadline if set)
         const toAssignNew   = checkboxes
@@ -4030,8 +4021,6 @@ body.light-theme .tm-src-ta{background:#f6f8fa;color:#24292f;border-color:#d0d7d
         container.innerHTML = `<style>
 .tres-page{max-width:900px;display:flex;flex-direction:column;height:calc(100vh - 120px)}
 .tres-topbar{display:flex;align-items:center;gap:12px;padding-bottom:16px;border-bottom:1px solid var(--border);margin-bottom:20px;flex-shrink:0}
-.tres-back{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);font-size:.83rem;font-weight:500;cursor:pointer;transition:all .15s}
-.tres-back:hover{border-color:var(--primary);color:var(--primary)}
 .tres-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:18px;flex-shrink:0}
 .tres-stat{padding:14px 16px;border-radius:14px;border:1px solid var(--border);background:var(--bg-surface);position:relative;overflow:hidden}
 .tres-stat::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--tile-c,var(--primary))}
@@ -4055,7 +4044,7 @@ body.light-theme .tm-src-ta{background:#f6f8fa;color:#24292f;border-color:#d0d7d
 </style>
 <div class="tres-page">
     <div class="tres-topbar">
-        <button class="tres-back" onclick="TestsManagerPage._goBack(TestsManagerPage._container)"><i class="fa-solid fa-arrow-left"></i> Назад</button>
+        <button class="btn-back" onclick="TestsManagerPage._goBack(TestsManagerPage._container)"><i class="fa-solid fa-arrow-left"></i> Назад</button>
         <span style="font-size:1.1rem;font-weight:700;color:var(--text-primary);flex:1"><i class="fa-solid fa-chart-column" style="color:#16a34a"></i> ${Fmt.esc(test.title)}</span>
         ${results.length ? `<button style="display:inline-flex;align-items:center;gap:6px;padding:7px 16px;border-radius:10px;border:none;cursor:pointer;font-size:.82rem;font-weight:700;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;box-shadow:0 4px 14px rgba(22,163,74,.35);transition:all .2s" onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform=''" onclick="TestsManagerPage._exportCSV(TestsManagerPage._lastResults,${JSON.stringify(test.title||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-file-csv"></i> Звіт</button>` : ''}
     </div>
@@ -4368,21 +4357,21 @@ const MyTestsPage = {
 .mt-card-title{font-weight:700;font-size:.95rem;color:var(--text-primary);margin-bottom:5px}
 .mt-card-meta{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .mt-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:20px;font-size:.7rem;font-weight:600}
-.mt-badge-pending{background:color-mix(in srgb,#f59e0b 45%,rgba(0,0,0,.35));color:#fff;border:1px solid rgba(245,158,11,.6)}
-.mt-badge-overdue{background:color-mix(in srgb,#ef4444 45%,rgba(0,0,0,.35));color:#fff;border:1px solid rgba(239,68,68,.6)}
-.mt-badge-done{background:color-mix(in srgb,#10b981 45%,rgba(0,0,0,.35));color:#fff;border:1px solid rgba(16,185,129,.6)}
-.mt-badge-fail{background:color-mix(in srgb,#ef4444 45%,rgba(0,0,0,.35));color:#fff;border:1px solid rgba(239,68,68,.6)}
-.mt-badge-info{background:color-mix(in srgb,var(--primary) 28%,rgba(255,255,255,.12));color:#fff;border:1px solid color-mix(in srgb,var(--primary) 50%,rgba(255,255,255,.25))}
+.mt-badge-pending{background:rgba(245,158,11,.16);color:#f59e0b;border:1px solid rgba(245,158,11,.4)}
+.mt-badge-overdue{background:rgba(239,68,68,.16);color:#ef4444;border:1px solid rgba(239,68,68,.4)}
+.mt-badge-done{background:rgba(16,185,129,.16);color:#10b981;border:1px solid rgba(16,185,129,.4)}
+.mt-badge-fail{background:rgba(239,68,68,.16);color:#ef4444;border:1px solid rgba(239,68,68,.4)}
+.mt-badge-info{background:color-mix(in srgb,var(--primary) 16%,transparent);color:var(--primary);border:1px solid color-mix(in srgb,var(--primary) 40%,transparent)}
 .mt-btn-start{
     padding:.55rem .8rem;border-radius:8px;border:1px solid transparent;
     background:linear-gradient(135deg,#C9A227,#e0b62f);color:#241c02;
-    font-size:.8rem;font-weight:800;cursor:pointer;transition:box-shadow .15s,transform .15s;
+    font-size:.8rem;font-weight:600;cursor:pointer;transition:box-shadow .15s,transform .15s;
     white-space:nowrap;flex-shrink:0;display:inline-flex;align-items:center;gap:6px;
     box-shadow:0 4px 12px -2px rgba(201,162,39,.5)
 }
 .mt-btn-start:hover{box-shadow:0 6px 16px -2px rgba(201,162,39,.65);transform:translateY(-1px)}
-.mt-btn-locked{background:rgba(255,255,255,.16);color:#fff;box-shadow:none}
-.mt-btn-locked:hover{background:rgba(255,255,255,.28);box-shadow:none;transform:none}
+.mt-btn-locked{background:var(--bg-hover);color:var(--primary);border:1px solid var(--border);box-shadow:none}
+.mt-btn-locked:hover{background:var(--bg-raised);box-shadow:none;transform:none}
 .mt-btn-result-pass{background:linear-gradient(135deg,#10b981,#059669);color:#fff;box-shadow:0 4px 12px -2px rgba(16,185,129,.5)}
 .mt-btn-result-pass:hover{box-shadow:0 6px 16px -2px rgba(16,185,129,.65)}
 .mt-btn-result-fail{background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;box-shadow:0 4px 12px -2px rgba(239,68,68,.5)}
@@ -4427,7 +4416,7 @@ const MyTestsPage = {
 .mtg-head-progress{font-size:.78rem;font-weight:700;color:#fff;background:rgba(255,255,255,.18);padding:3px 10px;border-radius:20px;white-space:nowrap}
 .mtg-toggle-btn{width:30px;height:30px;border-radius:9px;border:1.5px solid rgba(255,255,255,.3);background:rgba(255,255,255,.12);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s;flex-shrink:0}
 .mtg-toggle-btn:hover{background:rgba(255,255,255,.25)}
-.mtg-rows{position:relative;z-index:2;display:flex;flex-direction:column}
+.mtg-rows{position:relative;z-index:2;display:flex;flex-direction:column;background:var(--bg-surface)}
 .mtg-row{display:flex;align-items:center;gap:14px;padding:14px 18px;border-bottom:1px solid var(--border);transition:background .15s}
 .mtg-rows .mtg-row:last-child{border-bottom:none}
 .mtg-row:hover{background:var(--bg-hover)}

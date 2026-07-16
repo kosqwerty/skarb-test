@@ -4,14 +4,21 @@ const ExpertPathPage = {
     _coursesData:   null,
     _courseTabs:    null,
     _courseCardsFn: null,
+    _sectionVisibility: {},
 
-    async init(container) {
+    async init(container, params = {}) {
         UI.setBreadcrumb([{ label: 'Моє навчання' }]);
         this._tab          = null;
         this._courseSubTab = 'all';
         this._coursesData  = null;
+        this._sectionVisibility = await API.system.getSectionVisibility().catch(() => ({}));
         this._renderShell(container);
-        this._renderIntro();
+        const validTabs = ['courses', 'tests', 'surveys', 'lectures', 'completed', 'review'];
+        if (params.tab && validTabs.includes(params.tab)) {
+            await this.switchTab(params.tab);
+        } else {
+            this._renderIntro();
+        }
         this._fetchAndShowCounts();
     },
 
@@ -214,6 +221,20 @@ body.light-theme .ep-hero-deco i{color:#b4870f;filter:drop-shadow(0 4px 10px rgb
 }
 .ep-tab-caption{font-size:.68rem;color:var(--text-muted);white-space:nowrap}
 
+.ep-tab-vis-btn{
+    position:absolute;top:8px;right:12px;z-index:3;
+    width:24px;height:24px;border-radius:7px;border:1px solid var(--border);
+    background:var(--bg-surface);color:var(--text-muted);cursor:pointer;
+    display:flex;align-items:center;justify-content:center;font-size:.7rem;
+    transition:all .15s;padding:0
+}
+.ep-tab-vis-btn:hover{border-color:var(--ep-accent);color:var(--ep-accent);background:color-mix(in srgb,var(--ep-accent) 12%,transparent)}
+.ep-tab-hidden{opacity:.55}
+.ep-tab-hidden .ep-tab-vis-btn{border-color:#ef4444;color:#ef4444;background:rgba(239,68,68,.1)}
+.ep-tab-hidden-badge{
+    font-size:.6rem;font-weight:700;color:#ef4444;letter-spacing:.03em;text-transform:uppercase
+}
+
 /* ── Sub-tabs ─────────────────────────────────────────────────── */
 .ep-sub-tabs{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap}
 .ep-sub-tab{
@@ -341,14 +362,16 @@ body.light-theme .ep-hero-deco i{color:#b4870f;filter:drop-shadow(0 4px 10px rgb
         <div class="ep-hero-deco"><i class="fa-solid fa-graduation-cap"></i></div>
     </div>
     <div class="ep-tabs">
-        <button class="ep-tab" data-tab="lectures" style="--ep-accent:#ec4899" onclick="ExpertPathPage.switchTab('lectures',this)">
+        ${(!this._sectionVisibility.ep_lectures || AppState.isAdmin()) ? `
+        <button class="ep-tab${this._sectionVisibility.ep_lectures ? ' ep-tab-hidden' : ''}" data-tab="lectures" style="--ep-accent:#ec4899" onclick="ExpertPathPage.switchTab('lectures',this)">
+            ${AppState.isAdmin() ? `<span class="ep-tab-vis-btn" title="${this._sectionVisibility.ep_lectures ? 'Розділ прихований від користувачів — показати' : 'Приховати розділ від користувачів'}" onclick="event.stopPropagation();ExpertPathPage._toggleSection('ep_lectures','Лекції',this)"><i class="fa-solid ${this._sectionVisibility.ep_lectures ? 'fa-eye-slash' : 'fa-eye'}"></i></span>` : ''}
             <div class="ep-tab-icon-wrap"><i class="fa-solid fa-chalkboard-user"></i></div>
             <div class="ep-tab-text">
                 <span class="ep-tab-label">Лекції</span>
                 <span class="ep-tab-count">—</span>
-                <span class="ep-tab-caption">Доступно для запису</span>
+                <span class="ep-tab-caption">${this._sectionVisibility.ep_lectures ? '<span class="ep-tab-hidden-badge">приховано</span>' : 'Доступно для запису'}</span>
             </div>
-        </button>
+        </button>` : ''}
         <button class="ep-tab" data-tab="tests" style="--ep-accent:#3b82f6" onclick="ExpertPathPage.switchTab('tests',this)">
             <div class="ep-tab-icon-wrap"><i class="fa-solid fa-clipboard-list"></i></div>
             <div class="ep-tab-text">
@@ -381,13 +404,14 @@ body.light-theme .ep-hero-deco i{color:#b4870f;filter:drop-shadow(0 4px 10px rgb
                 <span class="ep-tab-caption">Курси, тести, опитування</span>
             </div>
         </button>
-        ${AppState.isStaff() ? `
-        <button class="ep-tab" data-tab="review" style="--ep-accent:#ef4444" onclick="ExpertPathPage.switchTab('review',this)">
+        ${AppState.isStaff() && (!this._sectionVisibility.ep_review || AppState.isAdmin()) ? `
+        <button class="ep-tab${this._sectionVisibility.ep_review ? ' ep-tab-hidden' : ''}" data-tab="review" style="--ep-accent:#ef4444" onclick="ExpertPathPage.switchTab('review',this)">
+            ${AppState.isAdmin() ? `<span class="ep-tab-vis-btn" title="${this._sectionVisibility.ep_review ? 'Розділ прихований від користувачів — показати' : 'Приховати розділ від користувачів'}" onclick="event.stopPropagation();ExpertPathPage._toggleSection('ep_review','Перевірка',this)"><i class="fa-solid ${this._sectionVisibility.ep_review ? 'fa-eye-slash' : 'fa-eye'}"></i></span>` : ''}
             <div class="ep-tab-icon-wrap"><i class="fa-solid fa-clipboard-check"></i></div>
             <div class="ep-tab-text">
                 <span class="ep-tab-label">Перевірка</span>
                 <span class="ep-tab-count">—</span>
-                <span class="ep-tab-caption">Відкриті питання</span>
+                <span class="ep-tab-caption">${this._sectionVisibility.ep_review ? '<span class="ep-tab-hidden-badge">приховано</span>' : 'Відкриті питання'}</span>
             </div>
         </button>` : ''}
     </div>
@@ -446,6 +470,34 @@ body.light-theme .ep-hero-deco i{color:#b4870f;filter:drop-shadow(0 4px 10px rgb
         this._tab = tab;
         document.querySelectorAll('.ep-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
         await this._loadTab(tab);
+    },
+
+    async _toggleSection(key, label, btn) {
+        const willHide = !this._sectionVisibility[key];
+        const ok = await Modal.confirm({
+            title: willHide ? 'Приховати розділ?' : 'Показати розділ?',
+            message: willHide
+                ? `Розділ «${label}» стане недоступним для звичайних користувачів — його бачитимуть лише адміністратори. Продовжити?`
+                : `Розділ «${label}» знову стане видимим для всіх користувачів. Продовжити?`,
+            confirmText: willHide ? 'Приховати' : 'Показати',
+            danger: willHide
+        });
+        if (!ok) return;
+        try {
+            await API.system.setSectionVisibility(key, willHide);
+            this._sectionVisibility[key] = willHide;
+            const tabBtn = btn.closest('.ep-tab');
+            tabBtn?.classList.toggle('ep-tab-hidden', willHide);
+            const icon = btn.querySelector('i');
+            if (icon) icon.className = `fa-solid ${willHide ? 'fa-eye-slash' : 'fa-eye'}`;
+            btn.title = willHide ? 'Розділ прихований від користувачів — показати' : 'Приховати розділ від користувачів';
+            const defaultCaptions = { ep_lectures: 'Доступно для запису', ep_review: 'Відкриті питання' };
+            const caption = tabBtn?.querySelector('.ep-tab-caption');
+            if (caption) caption.innerHTML = willHide ? '<span class="ep-tab-hidden-badge">приховано</span>' : defaultCaptions[key];
+            Toast.success(willHide ? 'Розділ приховано' : 'Розділ знову видимий');
+        } catch(e) {
+            Toast.error('Помилка', e.message);
+        }
     },
 
     async _loadTab(tab) {
@@ -852,6 +904,8 @@ body.light-theme .ep-hero-deco i{color:#b4870f;filter:drop-shadow(0 4px 10px rgb
 
     // ── Опитування ───────────────────────────────────────────────────
     _renderSurveys(area) {
-        SurveysPage.renderInTab(area);
+        // Створення/редагування опитувань тепер в Адмін-панелі → Контент → Опитування;
+        // тут лише перегляд/проходження.
+        SurveysPage.renderInTab(area, { allowCreate: false });
     }
 };

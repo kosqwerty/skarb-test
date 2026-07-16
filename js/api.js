@@ -99,6 +99,39 @@ const API = {
         }
     },
 
+    // ── Adm tab permissions (per-admin admin-panel tab access, superadmin-managed) ──
+    adminTabPermissions: {
+        async getForUser(userId) {
+            const { data, error } = await supabase
+                .from('admin_tab_permissions')
+                .select('tab_key')
+                .eq('user_id', userId);
+            if (error) throw error;
+            return (data || []).map(r => r.tab_key);
+        },
+
+        // Замінює повний набір дозволених вкладок для юзера. Порожній масив
+        // means: явно нічого не дозволено (а НЕ "без обмежень" — щоб зняти
+        // обмеження повністю, використовуй clearForUser()).
+        async setForUser(userId, tabKeys) {
+            const { error: delErr } = await supabase
+                .from('admin_tab_permissions')
+                .delete()
+                .eq('user_id', userId);
+            if (delErr) throw delErr;
+            if (tabKeys.length) {
+                const rows = tabKeys.map(tab_key => ({ user_id: userId, tab_key, granted_by: AppState.user.id }));
+                const { error: insErr } = await supabase.from('admin_tab_permissions').insert(rows);
+                if (insErr) throw insErr;
+            }
+        },
+
+        async clearForUser(userId) {
+            const { error } = await supabase.from('admin_tab_permissions').delete().eq('user_id', userId);
+            if (error) throw error;
+        }
+    },
+
     // ── Courses ─────────────────────────────────────────────────────
     courses: {
         async getAll({ published, search, page = 0, pageSize = APP_CONFIG.pageSize } = {}) {
@@ -185,7 +218,6 @@ const API = {
         }
     },
 
-    // ── Course teachers ─────────────────────────────────────────────
     // ── Course Runs (потоки) ──────────────────────────────────────────
     courseRuns: {
         async getByCourse(courseId) {
@@ -228,35 +260,6 @@ const API = {
             const { error } = await supabase.from('course_runs').delete().eq('id', id);
             if (error) throw error;
         },
-    },
-
-    courseTeachers: {
-        async getByCourse(courseId) {
-            const { data, error } = await supabase.from('course_teachers')
-                .select('*, profile:profiles(id, full_name, avatar_url, job_position)')
-                .eq('course_id', courseId)
-                .eq('is_active', true)
-                .order('created_at');
-            if (error) throw error;
-            return data || [];
-        },
-
-        async setMe(courseId, label) {
-            const { error } = await supabase.from('course_teachers')
-                .insert({ course_id: courseId, user_id: AppState.user.id, label: label || null, is_active: true });
-            if (error) throw error;
-        },
-
-        async updateLabel(id, label) {
-            const { error } = await supabase.from('course_teachers')
-                .update({ label }).eq('id', id);
-            if (error) throw error;
-        },
-
-        async remove(id) {
-            const { error } = await supabase.from('course_teachers').delete().eq('id', id);
-            if (error) throw error;
-        }
     },
 
     // ── Enrollments ─────────────────────────────────────────────────
@@ -1121,7 +1124,7 @@ const API = {
         },
 
         async notifyResourcePublished(resource, overrideLink = null, isUpdate = false) {
-            const staffRoles = ['owner', 'admin', 'smm', 'teacher', 'manager'];
+            const staffRoles = ['superadmin', 'admin', 'smm', 'manager'];
             const { data: staffData } = await supabase.from('profiles').select('id').eq('is_active', true).in('role', staffRoles);
             const staffIds = (staffData || []).map(p => p.id);
             const regularIds = await this._resolveNotifyUserIds(resource.id, resource.access_group_id);
@@ -1772,7 +1775,7 @@ const API = {
         async getAllEmployees() {
             const { data, error } = await supabase.from('profiles')
                 .select('id, full_name, job_position, city, subdivision, role, manager_id, profile_dovirenosti(dovirenost_id)')
-                .in('role', ['user', 'teacher', 'smm', 'manager'])
+                .in('role', ['user', 'smm', 'manager'])
                 .order('full_name');
             if (error) throw error;
             return data || [];
@@ -1822,7 +1825,7 @@ const API = {
 
         // Send notifications to all users who have access to a document
         async notifyOnPublish(resource, isUpdate = false) {
-            const staffRoles = ['owner', 'admin', 'smm', 'teacher', 'manager'];
+            const staffRoles = ['superadmin', 'admin', 'smm', 'manager'];
             const { data: staffData } = await supabase.from('profiles').select('id').eq('is_active', true).in('role', staffRoles);
             const staffIds = (staffData || []).map(p => p.id);
             // For tracked docs: only notify regular users who have the matching dovirenost.
@@ -1873,7 +1876,7 @@ const API = {
         async getManagerLocations() {
             let q = supabase.from('schedule_locations')
                 .select('id, name').is('deleted_at', null).order('name');
-            if (!AppState.isOwner()) q = q.eq('created_by', AppState.user.id);
+            if (!AppState.isSuperAdmin()) q = q.eq('created_by', AppState.user.id);
             const { data, error } = await q;
             if (error) throw error;
             return data || [];
@@ -2057,6 +2060,22 @@ const API = {
             const { data, error } = await supabase.rpc('get_db_size');
             if (error) throw error;
             return data; // { bytes, pretty }
+        },
+        async getSectionVisibility() {
+            const { data, error } = await supabase.from('app_section_visibility').select('key,is_hidden');
+            if (error) throw error;
+            const map = {};
+            (data || []).forEach(r => { map[r.key] = r.is_hidden; });
+            return map;
+        },
+        async setSectionVisibility(key, isHidden) {
+            const { error } = await supabase.from('app_section_visibility').upsert({
+                key,
+                is_hidden: isHidden,
+                updated_by: AppState._realProfile?.id || AppState.profile?.id,
+                updated_at: new Date().toISOString()
+            });
+            if (error) throw error;
         }
     },
 
@@ -2505,7 +2524,7 @@ const API = {
                 })
                 .select('id').single();
             if (error) throw error;
-            // Notify all owners
+            // Notify all superadmins
             return data?.id;
         },
 
@@ -2615,7 +2634,7 @@ const API = {
             // Отримуємо всіх адмінів та овнерів
             const { data: admins, error } = await supabase.from('profiles')
                 .select('id')
-                .in('role', ['admin', 'owner'])
+                .in('role', ['admin', 'superadmin'])
                 .eq('is_active', true);
             if (error) throw error;
             if (!admins?.length) return;

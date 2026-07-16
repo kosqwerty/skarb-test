@@ -154,11 +154,10 @@ const ContactsPage = {
 
     _roleCorner(role) {
         const map = {
-            owner:   { icon: 'fa-crown',           color: '#f59e0b' },
+            superadmin: { icon: 'fa-crown',        color: '#f59e0b' },
             ceo:     { icon: 'fa-crown',           color: '#a78bfa' },
             admin:   { icon: 'fa-shield-halved',    color: '#6366f1' },
             smm:     { icon: 'fa-bullhorn',         color: '#ec4899' },
-            teacher: { icon: 'fa-graduation-cap',   color: '#10b981' },
             manager: { icon: 'fa-briefcase',        color: '#0ea5e9' },
         };
         return map[role] || null;
@@ -168,11 +167,10 @@ const ContactsPage = {
     _roleBannerBadge(role) {
         if (role === 'ceo') return '';
         const map = {
-            owner:   '👑 Admin',
+            superadmin: '👑 SuperAdmin',
             admin:   '👑 Адміністратор',
             smm:     '📰 SMM-менеджер',
             manager: '👔 Керівник',
-            teacher: '📚 Викладач',
             user:    '👤 Користувач',
         };
         const label = map[role] || role;

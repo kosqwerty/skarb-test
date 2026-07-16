@@ -167,7 +167,7 @@ const BranchDocsPage = {
 
     async renderInTab(area) {
         this._injectStyles();
-        const canManage = AppState.isAdmin() && !AppState.isPreviewing();
+        const canManage = AppState.isAdmin();
         const seeAll = AppState.isAdmin() || AppState.isManager() || AppState.isSmm();
         area.innerHTML = `<div id="bd-content" style="padding:.25rem 0"><div style="text-align:center;padding:3rem 1rem;color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin"></i> Завантаження...</div></div>`;
         try {
@@ -224,7 +224,7 @@ const BranchDocsPage = {
 
     async init(container) {
         UI.setBreadcrumb([{ label: 'Куточок споживача' }]);
-        const canManage = AppState.isAdmin() && !AppState.isPreviewing();
+        const canManage = AppState.isAdmin();
         const seeAll = AppState.isAdmin() || AppState.isManager() || AppState.isSmm();
         let userDovIds = [];
         if (!canManage) {
@@ -513,7 +513,7 @@ const BranchDocsPage = {
             if (dovIds.length) await API.resources.setDovirenosti(res.id, dovIds);
             Modal.close();
             Toast.success('Файл додано');
-            await this._reload(AppState.isAdmin() && !AppState.isPreviewing());
+            await this._reload(AppState.isAdmin());
         } catch (e) {
             Toast.error('Помилка', e.message);
         } finally {
@@ -580,7 +580,7 @@ const BranchDocsPage = {
             await API.resources.setDovirenosti(id, dovIds);
             Modal.close();
             Toast.success('Збережено');
-            await this._reload(AppState.isAdmin() && !AppState.isPreviewing());
+            await this._reload(AppState.isAdmin());
         } catch (e) {
             Toast.error('Помилка', e.message);
         } finally {
@@ -594,7 +594,7 @@ const BranchDocsPage = {
             Loader.show();
             await API.resources.delete(id);
             Toast.success('Видалено');
-            await this._reload(AppState.isAdmin() && !AppState.isPreviewing());
+            await this._reload(AppState.isAdmin());
         } catch (e) {
             Toast.error('Помилка', e.message);
         } finally {
@@ -704,7 +704,7 @@ const BranchDocsPage = {
         document.querySelectorAll('.bd-item-btn').forEach(b => b.classList.remove('active'));
         document.getElementById(`bd-ibtn-${id}`)?.classList.add('active');
         const content = document.getElementById('bd-split-content');
-        if (content) content.innerHTML = this._buildBlockContent(id, AppState.isAdmin() && !AppState.isPreviewing());
+        if (content) content.innerHTML = this._buildBlockContent(id, AppState.isAdmin());
     },
 
     // ── Tab management ────────────────────────────────────────────────
@@ -713,7 +713,7 @@ const BranchDocsPage = {
         this._selectedTab = id;
         const visibleBlocks = this._blocks.filter(b => b.tab_id === id || b.tab_id == null);
         this._selectedBlock = visibleBlocks[0]?.id || null;
-        this._render(AppState.isAdmin() && !AppState.isPreviewing());
+        this._render(AppState.isAdmin());
     },
 
     _addTabModal() {
@@ -738,7 +738,7 @@ const BranchDocsPage = {
             const tab = await API.bdTabs.create(title);
             this._selectedTab = tab.id;
             Modal.close();
-            await this._reload(AppState.isAdmin() && !AppState.isPreviewing());
+            await this._reload(AppState.isAdmin());
         } catch (e) {
             Toast.error('Помилка', e.message);
         } finally {
@@ -789,7 +789,7 @@ const BranchDocsPage = {
             Loader.show();
             await API.bdTabs.update(id, title, dovIds);
             Modal.close();
-            await this._reload(AppState.isAdmin() && !AppState.isPreviewing());
+            await this._reload(AppState.isAdmin());
         } catch (e) {
             Toast.error('Помилка', e.message);
         } finally {
@@ -806,7 +806,7 @@ const BranchDocsPage = {
             Loader.show();
             await API.bdTabs.remove(id);
             if (this._selectedTab === id) this._selectedTab = null;
-            await this._reload(AppState.isAdmin() && !AppState.isPreviewing());
+            await this._reload(AppState.isAdmin());
         } catch (e) {
             Toast.error('Помилка', e.message);
         } finally {
@@ -1089,7 +1089,7 @@ const BranchDocsPage = {
             a.number = numB;
             b.number = numA;
             this._blocks.sort((x, y) => x.number - y.number);
-            this._render(AppState.isAdmin() && !AppState.isPreviewing());
+            this._render(AppState.isAdmin());
         } catch (e) {
             Toast.error('Помилка переміщення', e.message);
         }

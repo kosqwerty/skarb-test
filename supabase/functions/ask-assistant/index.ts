@@ -75,7 +75,7 @@ Deno.serve(async (req) => {
       const { data: profile } = await supabase
         .from('profiles').select('role').eq('id', userId).single()
 
-      const isAdmin = ['owner', 'admin'].includes(profile?.role || '')
+      const isAdmin = ['superadmin', 'admin'].includes(profile?.role || '')
 
       if (!isAdmin) {
         const today = new Date().toISOString().slice(0, 10)

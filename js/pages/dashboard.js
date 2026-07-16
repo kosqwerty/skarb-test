@@ -80,10 +80,9 @@ const DashboardPage = {
 
         const role   = AppState.profile?.role || 'user';
         const roleColors = {
-            owner:   { from: '#7c3aed', to: '#4f46e5' },
+            superadmin: { from: '#7c3aed', to: '#4f46e5' },
             admin:   { from: '#4f46e5', to: '#0ea5e9' },
             smm:     { from: '#ec4899', to: '#8b5cf6' },
-            teacher: { from: '#10b981', to: '#0ea5e9' },
             manager: { from: '#f59e0b', to: '#ef4444' },
             user:    { from: '#6366f1', to: '#8b5cf6' },
         };
@@ -375,7 +374,7 @@ const DashboardPage = {
         const unreadCount = recentNotifs.length;
 
         // Unacked docs + pending assignments (interns have no access to documents)
-        const isIntern = AppState.profile?.label === 'intern';
+        const isIntern = AppState.isIntern();
         const [unackedDocs, testsCount, surveysCount] = await Promise.all([
             isIntern ? Promise.resolve([]) : this._getUnackedDocs().catch(() => []),
             API.tests.getMyPendingCount().catch(() => 0),
@@ -679,9 +678,9 @@ const DashboardPage = {
                 title: 'Ви готові!',
                 text: (() => {
                     const r = AppState.profile?.role;
-                    const isStaff  = ['owner','admin','smm','teacher'].includes(r);
+                    const isStaff  = ['superadmin','admin','smm'].includes(r);
                     const isMgr    = r === 'manager';
-                    const isIntern = AppState.profile?.label === 'intern';
+                    const isIntern = AppState.isIntern();
                     const base = isStaff
                         ? 'Досліджуйте портал через бокове меню: <strong>Моє навчання</strong>, <strong>Новини</strong>, <strong>База знань</strong>, <strong>Документи</strong>, <strong>Сторінки</strong>. В розділі <strong>Управління</strong> — аналітика, планування та адміністрування.'
                         : isMgr
@@ -713,7 +712,7 @@ const DashboardPage = {
                 { id: 'demo-doc-3', title: 'Положення про преміювання співробітників' },
             ],
             [
-                { id: 'demo-ntf-1', title: 'Призначено новий тест', message: 'Оцінка техніки безпеки', type: 'test_assigned', is_read: false, link: 'my-tests' },
+                { id: 'demo-ntf-1', title: 'Призначено новий тест', message: 'Оцінка техніки безпеки', type: 'test_assigned', is_read: false, link: 'expert-path?tab=tests' },
                 { id: 'demo-ntf-2', title: 'Новий курс для вас', message: 'Клієнтський сервіс 2026', type: 'course_enrolled', is_read: false, link: 'courses' },
                 { id: 'demo-ntf-3', title: 'Нагадування', message: 'Перегляньте оновлені документи', type: 'doc_reminder', is_read: false, link: 'documents' },
             ]
@@ -1439,7 +1438,7 @@ const DashboardPage = {
         const unreadCount = recentNotifs.length;
 
         if (docsEl) {
-            if (AppState.profile?.label === 'intern') { docsEl.style.display = 'none'; return; }
+            if (AppState.isIntern()) { docsEl.style.display = 'none'; return; }
             const hasIssue = unackedDocs.length > 0;
             if (!hasIssue) { docsEl.style.display = 'none'; }
             else { docsEl.style.display = ''; }
@@ -1888,7 +1887,7 @@ const DashboardPage = {
         if (!el) return;
 
         const role = AppState.profile?.role || 'user';
-        const accent = { owner:'#2563eb', admin:'#2563eb', smm:'#ec4899', teacher:'#10b981', manager:'#f59e0b', user:'#3b82f6' }[role] || '#3b82f6';
+        const accent = { superadmin:'#2563eb', admin:'#2563eb', smm:'#ec4899', manager:'#f59e0b', user:'#3b82f6' }[role] || '#3b82f6';
 
         const fullName  = AppState.profile?.full_name || '';
         const parts = fullName.trim().split(/\s+/);
@@ -1929,7 +1928,7 @@ const DashboardPage = {
         const _hex2rgb = h => [parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)].join(',');
         const chipDefs = [
             { icon:'fa-book-open',             count:incompleteCount, label:`${_cap(incompleteCount)} ${_courseLabel(incompleteCount)}`, route:'expert-path', color:'#6366f1', title:'Незавершені курси' },
-            { icon:'fa-file-pen',              count:testsCount,      label:`${_cap(testsCount)} ${_testLabel(testsCount)}`,             route:'my-tests',    color:'#f59e0b', title:'Тести' },
+            { icon:'fa-file-pen',              count:testsCount,      label:`${_cap(testsCount)} ${_testLabel(testsCount)}`,             route:'expert-path?tab=tests', color:'#f59e0b', title:'Тести' },
             { icon:'fa-square-poll-horizontal', count:surveysCount,    label:`${_cap(surveysCount)} опитувань`,                           route:'expert-path', color:'#8b5cf6', title:'Опитування' },
         ];
         const chips = chipDefs.filter(c => c.count > 0).map(c => {

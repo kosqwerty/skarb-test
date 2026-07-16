@@ -43,10 +43,9 @@ const APP_CONFIG = {
     },
 
     roles: {
-        OWNER:   'owner',
+        SUPERADMIN: 'superadmin',
         ADMIN:   'admin',
         SMM:     'smm',
-        TEACHER: 'teacher',
         MANAGER: 'manager',
         USER:    'user'
     },
@@ -69,7 +68,6 @@ const AppState = {
     user:    null,
     profile: null,
     session: null,
-    _realRole: null,
     isTrustedNetwork: false,  // встановлюється після checkTrustedNetwork()
     _clientIp: null,
 
@@ -90,37 +88,42 @@ const AppState = {
         }
     },
 
-    isOwner()   { return this.profile?.role === 'owner'; },
-    isAdmin()   { return this.profile?.role === 'admin' || this.profile?.role === 'owner'; },
+    isSuperAdmin() { return this.profile?.role === 'superadmin'; },
+    isAdmin()   { return this.profile?.role === 'admin' || this.profile?.role === 'superadmin'; },
     isSmm()     { return this.profile?.role === 'smm'; },
-    isTeacher() { return this.profile?.role === 'teacher'; },
     isManager() { return this.profile?.role === 'manager'; },
     isCeo()     { return this.profile?.role === 'ceo'; },
-    canSchedule(){ return ['owner','admin','manager'].includes(this.profile?.role); },
-    isStaff()   { return ['owner','admin','smm','teacher','ceo'].includes(this.profile?.role); },
-    isIntern()  { return this.profile?.label === 'intern'; },
-    canMutate() { return this.profile?.role !== 'ceo' && !this._realRole; },
+    canSchedule(){ return ['superadmin','admin','manager'].includes(this.profile?.role); },
+    isStaff()   { return ['superadmin','admin','smm','ceo'].includes(this.profile?.role); },
+    // label === 'intern' — справжній стажер; role === 'intern' — superadmin
+    // тестує роль "Стажер" (перемикання не чіпає label, тож перевіряємо обидва)
+    isIntern()  { return this.profile?.label === 'intern' || this.profile?.role === 'intern'; },
+    canMutate() { return this.profile?.role !== 'ceo'; },
 
-    isPreviewing() { return !!this._realRole; },
+    // ── Role switching (superadmin testing as another role) ──────────
+    isRoleSwitched() { return !!this.profile && this.profile.role !== this.profile.base_role; },
+    canSwitchRole()  { return this.profile?.base_role === 'superadmin'; },
 
-    previewAs(role) {
-        if (!this.profile) return;
-        if (!this._realRole) this._realRole = this.profile.role;
-        this.profile = { ...this.profile, role };
-        RolePreviewBanner.show(role, this._realRole);
+    async switchRole(role) {
+        const { error } = await supabase.rpc('switch_active_role', { p_role: role });
+        if (error) throw error;
+        this.profile.role = role;
+        this.profile.role_switched_at = new Date().toISOString();
         UI.renderNavigation(role);
         UI.renderSidebarUser(this.profile);
-        const defaultRoute = ['owner','admin','smm','teacher','ceo'].includes(role) ? 'dashboard' : 'knowledge-base';
+        RoleSwitchBanner.show(role, this.profile.base_role);
+        const defaultRoute = ['admin','smm','manager','ceo'].includes(role) ? 'dashboard' : 'knowledge-base';
         Router.go(defaultRoute);
     },
 
-    stopPreview() {
-        if (!this._realRole) return;
-        this.profile = { ...this.profile, role: this._realRole };
-        this._realRole = null;
-        RolePreviewBanner.hide();
+    async exitRoleSwitch() {
+        const { error } = await supabase.rpc('reset_active_role');
+        if (error) throw error;
+        this.profile.role = this.profile.base_role;
+        this.profile.role_switched_at = null;
         UI.renderNavigation(this.profile.role);
         UI.renderSidebarUser(this.profile);
+        RoleSwitchBanner.hide();
         Router.go('dashboard');
-    }
+    },
 };

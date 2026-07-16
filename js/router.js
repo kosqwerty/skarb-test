@@ -14,7 +14,10 @@ const Router = {
 
     go(path) {
         if (window.innerWidth <= 1024) UI.closeSidebar?.();
-        location.hash = '#/' + path;
+        // Guard against stale stored links that already include a leading '#' or '#/'
+        // (e.g. old notification rows) — without this a double hash breaks routing to dashboard.
+        const clean = String(path).replace(/^#\/?/, '');
+        location.hash = '#/' + clean;
     },
 
     back() {

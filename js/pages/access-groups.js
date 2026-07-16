@@ -174,7 +174,7 @@ const AccessGroupsPage = {
         container.innerHTML = `
             <!-- Breadcrumb row -->
             <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem">
-                <button class="btn btn-ghost btn-sm" onclick="AccessGroupsPage.cancelForm()" style="display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i> Назад</button>
+                <button class="btn-back" onclick="AccessGroupsPage.cancelForm()"><i class="fa-solid fa-arrow-left"></i> Назад</button>
                 <span style="color:var(--text-muted)">›</span>
                 <span style="font-weight:600">${isEdit ? 'Редагувати групу' : 'Нова група доступу'}</span>
             </div>

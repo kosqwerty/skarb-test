@@ -48,26 +48,25 @@ Hash-based: `#/courses/123` → route `courses/:id`. Defined in `js/app.js` via 
 
 ### Role system
 
-Six roles checked via `AppState`: `owner > admin > smm > teacher > manager > user`. Key helpers:
+Five roles checked via `AppState`: `superadmin > admin > smm > manager > user`. Key helpers:
 
 | Helper | Roles included |
 |--------|---------------|
-| `AppState.isOwner()` | owner |
-| `AppState.isAdmin()` | admin, owner |
-| `AppState.isStaff()` | owner, admin, smm, teacher |
-| `AppState.canSchedule()` | owner, admin, manager |
+| `AppState.isSuperAdmin()` | superadmin |
+| `AppState.isAdmin()` | admin, superadmin |
+| `AppState.isStaff()` | superadmin, admin, smm, ceo |
+| `AppState.canSchedule()` | superadmin, admin, manager |
 | `AppState.isManager()` | manager only |
 
 Default redirect after login: staff → `dashboard`, user/manager → `knowledge-base`. Pages redirect to `dashboard` (or `knowledge-base`) if the user lacks the required role.
 
-### Impersonation
+### Role switching ("Тестувати як")
 
-Admins can preview the app as another user. Key methods on `AppState`:
-- `AppState.impersonate(targetProfile)` — saves real profile to `_realProfile`, swaps `AppState.profile`, re-renders sidebar and navigation
-- `AppState.stopImpersonating()` — restores real profile
-- `AppState.isImpersonating()` — returns `true` when impersonation is active
+`profiles.role` means "current effective role" everywhere in the app (RLS policies, `is_admin()`/`is_staff()`/`is_superadmin()` etc., `AppState.isX()`). `profiles.base_role` (v157) is the durable, real identity — used only where identity (not current capability) matters: the single-superadmin trigger, "cannot delete/ban the superadmin" guards, and the switch-permission gate itself.
 
-`ImpersonationBanner` (global, defined in `js/app.js`) shows/hides the banner UI. When writing permission checks, use `AppState.profile.role` — it already reflects the impersonated role.
+A superadmin can temporarily switch their own `role` to test navigation/access as another role, via `AppState.switchRole(role)` / `AppState.exitRoleSwitch()` (`js/config.js`), which call the SECURITY DEFINER RPCs `switch_active_role(p_role)` / `reset_active_role()`. This is a **real** role change enforced by RLS (not a client-side simulation) — mutations performed while switched are real, under the superadmin's own account. `RoleSwitchBanner` (`js/utils.js`) shows while `profile.role !== profile.base_role`; entry point is "Тестувати як" in the user popup (`UI.initRoleSwitcher()`), gated on `profile.base_role === 'superadmin'` (never on `isSuperAdmin()` — that would hide the way back out while switched). Auto-resets on fresh interactive login, on logout, and after 4h of inactivity (`role_switched_at` staleness check in `Auth._loadProfile()`).
+
+Permanent role reassignment (admin managing another user's role) goes through `admin_set_user_role(p_user_id, p_role)` RPC — keeps `role`/`base_role` in sync, blocks granting `superadmin` (use `admin_transfer_superadmin(p_to_user_id)` instead, called from `AdminPage.transferOwnership()`).
 
 ### Global objects (all window-scoped)
 
@@ -108,7 +107,7 @@ Full namespace list: `API.profiles`, `API.courses`, `API.enrollments`, `API.less
 
 ### Database migrations
 
-`sql/schema.sql` — consolidated schema snapshot of the current DB state. All migrations v2–v152 have been merged into this single file. When adding a new column/table, create `sql/migration_v153.sql` (increment from 153) and run it in the Supabase SQL Editor. **Latest is v152**.
+`sql/schema.sql` — consolidated schema snapshot of the current DB state as of v152 (migrations v153–v158 are written but not yet merged into this file — regenerate schema.sql from the live DB after running them). When adding a new column/table, create `sql/migration_v159.sql` (increment from 159) and run it in the Supabase SQL Editor. **Latest is v158** (`admin_tab_permissions` — per-admin admin-panel tab restrictions, see admin.js "Права адмінів" below).
 
 When writing a migration, always include `IF NOT EXISTS` / `IF EXISTS` guards and end with RLS + policies.
 
@@ -117,12 +116,12 @@ When writing a migration, always include `IF NOT EXISTS` / `IF EXISTS` guards an
 | File | What it does |
 |------|-------------|
 | `js/config.js` | Supabase credentials, `AppState`, `APP_CONFIG` (buckets, roles, `pageSize: 12`) |
-| `js/app.js` | Route definitions, sidebar rendering, post-login bootstrap, `ImpersonationBanner` |
+| `js/app.js` | Route definitions, sidebar rendering, post-login bootstrap |
 | `js/api.js` | All DB/storage access — add new methods here, never call `supabase` from page files |
 | `js/pages/dashboard.js` | Main dashboard: 2-row CSS grid layout (docs/notif/calendar + continue/news), Realtime notification badge. `CompanyBirthdayModal._initDashboardChat()` called on init — renders birthday chat card in `.db-cal-col` (visible only on 9 Nov or via `demo()`). News modal: `DashboardPage._openNewsModal(id)` — `.dnm-hero` / `.dnm-hero-bg` / `.dnm-hero-img` styles defined inline inside `_openNewsModal`. |
 | `js/pages/tests-manager.js` | Largest page (~2300 lines): test builder, question editor (Quill), auto-assign, results |
-| `js/pages/admin.js` | Multi-tab admin panel: users, courses, tests, logs |
-| `js/pages/scheduler.js` | Schedule management (owner/admin/manager only — `canSchedule()`) |
+| `js/pages/admin.js` | Multi-tab admin panel: users, courses, tests, logs. "Права адмінів" tab (`admin-permissions`, superadmin-only) restricts which **sidebar nav items** (`nav:`-prefixed keys, e.g. `nav:documents`) and which **admin-panel tabs** (bare keys, e.g. `courses`) individual `role='admin'` users see — same `admin_tab_permissions` table, distinguished by the `nav:` prefix. No rows for a user = unrestricted (default). `_buildGroups(canManageUsers, allowedTabs)` filters panel tabs; `UI._applyNavRestriction()` (`js/utils.js`) filters sidebar sections using `AppState._navAllowed`, cached once per session in `Auth._loadProfile()`. `_manageableTabGroups()` / `AdminPage._MANAGEABLE_NAV` list what's grantable. Changes apply on the target admin's next login. |
+| `js/pages/scheduler.js` | Schedule management (superadmin/admin/manager only — `canSchedule()`) |
 | `js/pages/schedule-graph.js` | Visual schedule graph |
 | `js/pages/access-groups.js` | Access group management (city/position/department/label filters) |
 | `js/pages/label-access.js` | Label-based content access rules |
@@ -212,7 +211,7 @@ All PKs are UUID. All tables have `created_at TIMESTAMPTZ DEFAULT NOW()`. Tables
 | `notifications` | `NotificationsPage` | Has `destroy()` cleanup |
 | `contacts` | `ContactsPage` | |
 | `bookmarks` | `BookmarksPage` | |
-| `label-access` | `LabelAccessPage` | owner/admin only |
+| `label-access` | `LabelAccessPage` | superadmin/admin only |
 | `expert-path` | `ExpertPathPage` | |
 | `profile` | inline in `App` | |
 | `results` | inline in `App` | |
@@ -313,10 +312,9 @@ Nav items visible per role:
 
 | Role | Sections |
 |------|---------|
-| owner / admin | Навчання, Управління (Аналітика + Планування + Адміністрування + Обмеження доступу), Особисте |
+| superadmin / admin | Навчання, Управління (Аналітика + Планування + Адміністрування + Обмеження доступу), Особисте |
 | manager | Навчання, Управління (Планування only), Особисте |
 | smm | Навчання, Управління (Аналітика + **Контент** + Планування), Особисте |
-| teacher | Навчання, Управління (Аналітика + Планування), Особисте |
 | user | Навчання, Особисте (+ Планування hidden) |
 
 Note: `smm` sees the `admin` route labelled **"Контент"** — same page, different label.
@@ -354,6 +352,75 @@ Defined in `APP_CONFIG.buckets`. Each bucket needs a migration for creation + RL
 ## CSS conventions
 
 All colours and spacing use CSS variables from `css/main.css`. Always use `var(--primary)`, `var(--border)`, `var(--bg-surface)`, etc. — never hardcode hex values except in one-off inline styles inside JS template literals where a variable isn't accessible.
+
+## Canonical UI patterns — buttons, search bars, badges
+
+Reuse these everywhere. Do not invent a new one-off button/search/badge style inline in a page unless it's a genuinely unique hero/card component (e.g. `mt-btn-start`, `sgfb-send-btn`) — plain action buttons, search inputs, and status pills must match the patterns below across all pages.
+
+### Buttons
+
+Global classes live in `css/main.css` (~line 220) — always prefer these over ad-hoc inline-styled `<button>`s:
+
+```html
+<button class="btn btn-primary">Зберегти</button>      <!-- primary action -->
+<button class="btn btn-secondary">...</button>          <!-- secondary -->
+<button class="btn btn-ghost">Скасувати</button>        <!-- outline/transparent, most common for secondary actions -->
+<button class="btn btn-danger">Видалити</button>
+<button class="btn btn-success">...</button>
+<button class="btn btn-warning">...</button>
+```
+
+Size modifiers: `.btn-sm` (`padding:.55rem .8rem;font-size:.8rem`), `.btn-lg`, `.btn-full` (100% width), `.btn-icon` (icon-only, square padding). Combine, e.g. `class="btn btn-ghost btn-sm"`.
+
+`.btn-ghost` is the default choice for toolbar/inline secondary buttons (`border:1px solid var(--border)`, transparent background, hover → `var(--bg-hover)`). Small icon-only circular buttons (e.g. prev/next, delete-on-hover) that don't fit `.btn` still follow the same visual language: `border:1px solid var(--border);background:var(--bg-surface);color:var(--text-secondary)`, hover → `border-color:var(--primary);color:var(--primary);background:var(--bg-hover)`. See `_searchNav`-style buttons or `.adel` in `collections.js` for the reference hover pattern.
+
+Never hardcode a gradient/indigo (`#6366f1`, `rgba(99,102,241,...)`) for a generic button glow — the app's real primary is `var(--primary)` / `var(--primary-glow)` (blue, `rgba(42,94,232,...)`). Indigo/purple gradients are reserved for specific branded surfaces that already use them consistently (feedback widget `sgfb-*`, some hero banners) — don't introduce them elsewhere.
+
+### Search bars ("pill search")
+
+Canonical pattern, originally from `resources.js` (`.kb-search-bar` / `.kb-search-wrap` / `.kb-search-icon`), replicated in `collections.js` (`.col-search-bar` / `.col-search-wrap` / `.col-search-icon`) for the in-page search. When adding a search input anywhere, copy this pattern with a page-appropriate class prefix rather than styling a bare `<input>`:
+
+```css
+.xx-search-bar{margin-bottom:1rem;display:flex;align-items:center;gap:.75rem}
+.xx-search-wrap{position:relative;flex:1}
+.xx-search-wrap input{width:100%;height:58px;padding:0 20px 0 54px;border-radius:20px;
+    border:1.5px solid rgba(255,255,255,.85);background:rgba(255,255,255,.78);
+    backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+    color:#1e293b;font-size:1rem;font-weight:500;outline:none;
+    transition:border-color .2s,box-shadow .2s;box-sizing:border-box;
+    box-shadow:0 10px 35px rgba(15,23,42,.06);font-family:inherit}
+.xx-search-wrap input::placeholder{color:#94a3b8;font-weight:400}
+.xx-search-wrap input:focus{border-color:var(--primary);
+    box-shadow:0 0 0 4px var(--primary-glow),0 20px 45px rgba(15,23,42,.08)}
+body.dark-theme .xx-search-wrap input{background:var(--bg-surface);backdrop-filter:none;-webkit-backdrop-filter:none;border-color:var(--border);color:var(--text-primary)}
+.xx-search-icon{position:absolute;left:18px;top:50%;transform:translateY(-50%);color:#94a3b8;pointer-events:none;font-size:1rem;z-index:2}
+body.dark-theme .xx-search-icon{color:var(--text-muted)}
+```
+
+```html
+<div class="xx-search-bar">
+    <div class="xx-search-wrap">
+        <span class="xx-search-icon"><i class="fa-solid fa-magnifying-glass"></i></span>
+        <input type="text" placeholder="Пошук…" autocomplete="off" oninput="...">
+    </div>
+</div>
+```
+
+Rules:
+- Always `autocomplete="off"` on these inputs — without it, Chrome/Edge may offer native saved-value autofill (a yellow-highlighted dropdown/background we cannot restyle) on any field that looks like a name/phone/address field to the browser's heuristics.
+- Never hardcode `rgba(99,102,241,...)` for the focus glow — use `var(--primary-glow)` so it matches the theme's actual primary color.
+- If autofill still slips through despite `autocomplete="off"`, neutralize it explicitly (see `.auth-card input:-webkit-autofill` in `main.css` for the reference pattern): `-webkit-box-shadow: 0 0 0 1000px <bg> inset; -webkit-text-fill-color: <fg>; transition: background-color 99999s ease-in-out 0s;`
+- Small compact search fields (e.g. inside a modal, filter row) that don't warrant the full pill treatment can fall back to the global `input:focus` rule in `main.css` (~line 685) — just don't add a competing hardcoded focus color.
+
+### Badges
+
+Global `.badge` + color modifier in `main.css` (~line 866): `.badge-primary`, `.badge-success`, `.badge-danger`, `.badge-warning`, `.badge-info`, `.badge-muted`, plus role-specific ones (`.badge-admin`, `.badge-manager`, `.badge-ceo`).
+
+```html
+<span class="badge badge-success">Активний</span>
+```
+
+For user roles, prefer `Fmt.roleBadge(role)` (from `js/utils.js`) over hand-rolling the markup — it already returns the correctly classed `<span>`. For status pills specific to one feature (test pass/fail, document tracked/overdue, etc.), it's fine to add a scoped modifier class following the same shape (`display:inline-flex;align-items:center;gap:.25rem;padding:.2rem .65rem;border-radius:var(--radius-full);font-size:.72rem;font-weight:600`) rather than reusing `.badge-*` colors for an unrelated meaning.
 
 ## Security — write safe HTML from the start
 
@@ -454,7 +521,7 @@ Wrap the input in `position:relative` container. Button style: `position:absolut
 `profiles.label` is `intern` | `mentor` | null (CHECK constraint). Render as:
 - `intern` → `badge-success` + "🌱 Стажер"
 - `mentor` → `badge-warning` + "⭐ Наставник"
-In forms, use `<select>` — never a free text input. Only `owner`/`admin` can set it.
+In forms, use `<select>` — never a free text input. Only `superadmin`/`admin` can set it.
 
 ## schedule-graph.js specifics (second largest module, ~6200 lines)
 
@@ -469,8 +536,8 @@ Three objects in one file: `ScheduleGraphPage` (manager view), `ScheduleGraphEmp
 | `_entries` | `{userId_date → entry}` for current month |
 | `_tab` | `'schedule'` \| `'subst'` \| `'log'` \| `'trash'` |
 | `_quickType` | Active quick-fill shift type key, or null |
-| `_locSortAlpha` | Sort sidebar A→Z (owner only), persisted in localStorage |
-| `_locCreators` | `{created_by → full_name}` for owner display in header bar |
+| `_locSortAlpha` | Sort sidebar A→Z (superadmin only), persisted in localStorage |
+| `_locCreators` | `{created_by → full_name}` for superadmin display in header bar |
 | `_pastMonthUnlocked` | Whether past month editing is unlocked |
 
 ### Render flow
@@ -595,8 +662,8 @@ Returns resources where `red_folder_item_id IS NOT NULL`. Selects `id, title, re
 Entry point: `SurveysPage.renderInTab(area)` — called from `ExpertPathPage._renderSurveys(area)`.
 
 ### Visibility logic
-- `canManage` (admin/smm/owner): sees all surveys
-- `isStaff` (teacher): sees published surveys
+- `canManage` (admin/smm/superadmin): sees all surveys
+- `isStaff` (ceo): sees published surveys
 - regular user/manager: sees only assigned surveys via `survey_assignments` table
 
 ### State fields (avoid passing through onclick attrs)
@@ -702,8 +769,8 @@ if (btn) {
 
 | Маршрут | Роль | Що рендериться |
 |---------|------|----------------|
-| `admin?tab=pleso` | admin/owner | iframe `/admin_pleso.html` |
-| `admin?tab=trusted-ips` | admin/owner | `AdminPage._renderTrustedIps()` напряму |
+| `admin?tab=pleso` | admin/superadmin | iframe `/admin_pleso.html` |
+| `admin?tab=trusted-ips` | admin/superadmin | `AdminPage._renderTrustedIps()` напряму |
 
 ## interns.js specifics
 
@@ -712,7 +779,7 @@ if (btn) {
 ### Tabs in intern detail card
 `_detailTab`: `'info'` | `'schedule'` | `'characteristic'` | `'mentors'` | `'report'` | `'tabel'`
 
-Табель і Характеристика видимі тільки для `_canManage` (admin/owner).
+Табель і Характеристика видимі тільки для `_canManage` (admin/superadmin).
 
 ### Табель (`_renderDetailTabel`)
 - Секції залежать від посади: **Техніка** (всі) + **Магазин** (продавець/універсал) + **Дорогоцінні метали** (університет) + **Загальний** (всі)

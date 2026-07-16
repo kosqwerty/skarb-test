@@ -74,9 +74,8 @@ const ProfilePage = {
         container.innerHTML = `
     <div class="user-create-container">
         <div class="create-header">
-            <button class="back-btn" onclick="ProfilePage._cancel()">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-                Назад
+            <button class="btn-back" onclick="ProfilePage._cancel()">
+                <i class="fa-solid fa-arrow-left"></i> Назад
             </button>
             <h2 class="create-title"><span class="title-icon">👤</span> ${titleText}</h2>
         </div>
@@ -170,8 +169,8 @@ const ProfilePage = {
                     <label class="input-label">
                         <span>Роль</span>
                         <div class="custom-select-wrapper">
-                            <select id="pe-role" ${user.role === 'owner' ? 'disabled title="Змінюйте через передачу прав"' : ''}>
-                                ${(AppState.isOwner() ? ['owner','ceo','admin','smm','teacher','manager','user','intern'] : ['ceo','admin','smm','teacher','manager','user','intern'])
+                            <select id="pe-role" ${user.role === 'superadmin' ? 'disabled title="Змінюйте через передачу прав"' : ''}>
+                                ${(AppState.isSuperAdmin() ? ['superadmin','ceo','admin','smm','manager','user','intern'] : ['ceo','admin','smm','manager','user','intern'])
                                     .map(r => `<option value="${r}" ${user.role===r?'selected':''}>${Fmt.role(r)}</option>`).join('')}
                             </select>
                         </div>
@@ -234,8 +233,6 @@ const ProfilePage = {
         .user-create-container { max-width:1400px; padding:4px; animation:fadeSlideUp 0.4s cubic-bezier(0.16,1,0.3,1); }
         @keyframes fadeSlideUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
         .create-header { display:flex; align-items:center; gap:16px; margin-bottom:32px; }
-        .back-btn { display:flex;align-items:center;gap:6px;padding:8px 16px;background:transparent;border:1px solid var(--border);border-radius:40px;color:var(--text-secondary);font-weight:500;font-size:.95rem;transition:all .2s;cursor:pointer; }
-        .back-btn:hover { background:var(--bg-hover);border-color:var(--border-light);transform:translateX(-2px); }
         .create-title { display:flex;align-items:center;gap:10px;margin:0;font-size:1.9rem;font-weight:600;letter-spacing:-.02em;color:var(--text-primary); }
         .title-icon { font-size:1.8rem;line-height:1; }
         .create-form-grid { display:grid;grid-template-columns:repeat(3,1fr);gap:10px; }
@@ -361,10 +358,20 @@ const ProfilePage = {
                 payload.position_since = Dom.val('pe-position-since') || null;
                 if (isAdminEdit) payload.label = Dom.val('pe-role') === 'intern' ? 'intern' : null;
             }
-            if (canRole)  payload.role  = Dom.val('pe-role');
             if (avatarUrl !== undefined) payload.avatar_url = avatarUrl;
 
             const updated = await API.profiles.update(userId, payload);
+
+            // Роль — окремим викликом через RPC (виставляє і role, і base_role,
+            // блокує 'superadmin' тут — для передачі прав є окрема кнопка 👑)
+            if (canRole) {
+                const newRole = Dom.val('pe-role');
+                if (newRole && newRole !== user.role) {
+                    const { error: roleErr } = await supabase.rpc('admin_set_user_role', { p_user_id: userId, p_role: newRole });
+                    if (roleErr) throw new Error('Роль: ' + roleErr.message);
+                    updated.role = newRole;
+                }
+            }
 
             if (isAdminEdit && AppState.isAdmin()) {
                 const dovIds = CreatableMultiSelect.getValues('pe-dovirenosti');

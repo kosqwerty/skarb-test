@@ -1,14 +1,14 @@
 ﻿// ================================================================
 // EduFlow LMS — Планувальник сповіщень
-// Access: owner, admin, manager
-// Owner extra: see who created what, full send log
+// Access: superadmin, admin, manager
+// SuperAdmin extra: see who created what, full send log
 //
 // SQL (run once in Supabase SQL Editor):
 // ----------------------------------------------------------------
 // ALTER TABLE profiles
 //   DROP CONSTRAINT IF EXISTS profiles_role_check,
 //   ADD CONSTRAINT profiles_role_check
-//     CHECK (role IN ('owner','admin','smm','teacher','manager','user'));
+//     CHECK (role IN ('superadmin','admin','smm','manager','user'));
 //
 // CREATE TABLE IF NOT EXISTS scheduled_notifications (
 //   id           uuid DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -34,12 +34,12 @@
 //   USING (EXISTS (
 //     SELECT 1 FROM profiles
 //     WHERE profiles.id = auth.uid()
-//     AND profiles.role IN ('owner','admin','manager')
+//     AND profiles.role IN ('superadmin','admin','manager')
 //   ))
 //   WITH CHECK (EXISTS (
 //     SELECT 1 FROM profiles
 //     WHERE profiles.id = auth.uid()
-//     AND profiles.role IN ('owner','admin','manager')
+//     AND profiles.role IN ('superadmin','admin','manager')
 //   ));
 //
 // -- Birthday reminders (run once):
@@ -166,7 +166,7 @@ const SchedulerPage = {
     async _renderHub(container) {
         UI.setBreadcrumb([{ label: 'Розділ планування' }]);
         const uid = AppState.user.id;
-        const isManager = AppState.isManager() || AppState.isAdmin() || AppState.isOwner();
+        const isManager = AppState.isManager() || AppState.isAdmin() || AppState.isSuperAdmin();
 
         // For managers: show "Мій графік" only if added as employee to a non-owned location
         let showMySchedule = !isManager;
@@ -317,7 +317,7 @@ const SchedulerPage = {
     },
 
     _paintList(container) {
-        const isOwner = AppState.isOwner();
+        const isOwner = AppState.isSuperAdmin();
         const now = new Date();
 
         const stats = {
@@ -457,7 +457,7 @@ const SchedulerPage = {
         const empty  = document.getElementById('sch-empty');
         if (!tbody) return;
 
-        const isOwner = AppState.isOwner();
+        const isOwner = AppState.isSuperAdmin();
         const now     = new Date();
         const s       = this._filter.search.toLowerCase();
 
@@ -552,9 +552,8 @@ const SchedulerPage = {
 <div class="sch-form-page">
 
     <div class="sch-form-header">
-        <button class="back-btn" onclick="SchedulerPage._renderList(document.getElementById('page-content'))">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-            Назад
+        <button class="btn-back" onclick="SchedulerPage._renderList(document.getElementById('page-content'))">
+            <i class="fa-solid fa-arrow-left"></i> Назад
         </button>
         <h2 class="sch-form-title">${isEdit ? '<i class="fa-solid fa-pen"></i> Редагувати завдання' : '➕ Нове сповіщення'}</h2>
     </div>
@@ -575,10 +574,7 @@ const SchedulerPage = {
                 </label>
                 <label class="input-label">
                     <span>Дата та час <span style="color:var(--danger)">*</span></span>
-                    <div class="sch-dt-wrap">
-                        <svg class="sch-dt-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                        <input id="sf-datetime" type="datetime-local" value="${dtVal}" oninput="SchedulerPage._livePreview()">
-                    </div>
+                    ${UaDateTime.html('sf-datetime', dtVal, 'oninput="SchedulerPage._livePreview()"')}
                 </label>
             </div>
         </div>
@@ -711,18 +707,11 @@ const SchedulerPage = {
 .sch-ntf-card-body { font-size:.85rem;color:var(--text-secondary);line-height:1.5;white-space:pre-wrap;min-height:36px;border-top:1px dashed var(--border);padding-top:8px; }
 .sch-ntf-card-footer { display:flex;align-items:center;gap:6px;margin-top:10px;padding-top:8px;border-top:1px solid var(--border);font-size:.72rem;color:var(--text-muted); }
 .sch-ntf-card-dot { width:7px;height:7px;border-radius:50%;background:var(--primary);flex-shrink:0; }
-/* Datetime input */
-.sch-dt-wrap { position:relative; }
-.sch-dt-icon { position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-muted);pointer-events:none;z-index:1; }
-.sch-dt-wrap input[type="datetime-local"] { width:100%;padding:10px 14px 10px 36px;background:var(--bg-raised);border:1.5px solid var(--border);border-radius:16px;font-size:.9rem;color:var(--text-primary);font-family:inherit;outline:none;box-sizing:border-box;cursor:pointer;transition:border-color .15s;color-scheme:dark; }
-.sch-dt-wrap input[type="datetime-local"]:focus { border-color:var(--primary); }
 .sch-form-actions { display:flex;justify-content:flex-end;gap:10px;margin-top:28px;padding-top:16px;border-top:1px solid var(--border); }
 .sch-btn-secondary { display:flex;align-items:center;gap:6px;padding:10px 22px;background:var(--bg-raised);border:1.5px solid var(--border);border-radius:40px;font-weight:600;font-size:.9rem;cursor:pointer;transition:all .2s;color:var(--text-primary); }
 .sch-btn-secondary:hover { background:var(--bg-hover); }
 .sch-btn-primary { display:flex;align-items:center;gap:8px;padding:10px 22px;background:var(--primary);color:#fff;border:none;border-radius:40px;font-weight:600;font-size:.95rem;cursor:pointer;transition:all .2s;box-shadow:0 4px 12px var(--primary-glow); }
 .sch-btn-primary:hover { background:var(--primary-dark);transform:scale(1.02); }
-.back-btn { display:flex;align-items:center;gap:6px;padding:8px 16px;background:transparent;border:1px solid var(--border);border-radius:40px;color:var(--text-secondary);font-weight:500;font-size:.95rem;transition:all .2s;cursor:pointer; }
-.back-btn:hover { background:var(--bg-hover);border-color:var(--border-light);transform:translateX(-2px); }
 @media(max-width:1000px) { .sch-form-grid{grid-template-columns:1fr} }
 </style>`;
 
@@ -1127,7 +1116,7 @@ const SchedulerPage = {
         }
     },
 
-    // ── Log viewer (owner only) ───────────────────────────────────
+    // ── Log viewer (superadmin only) ───────────────────────────────────
 
     async _viewLog(taskId) {
         const task = this._tasks.find(t => t.id === taskId);

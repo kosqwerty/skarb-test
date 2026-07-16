@@ -7,6 +7,7 @@ const App = {
         Theme.init();
         SearchSelect.init();
         CreatableSelect.init();
+        UaDateTime.init();
 
         // Restore sidebar collapsed state
         const collapsed = localStorage.getItem('sidebar_collapsed') === 'true';
@@ -44,7 +45,7 @@ const App = {
         // Apply user's saved theme from DB
         Theme.applyFromProfile(profile);
 
-        // Start scheduler background ticker (owner/admin/manager only)
+        // Start scheduler background ticker (superadmin/admin/manager only)
         if (AppState.canSchedule()) SchedulerPage.startTimer();
 
         // Load restrictions before rendering nav (safe — never throws)
@@ -53,8 +54,8 @@ const App = {
         // Check if user is on a trusted network (IP whitelist)
         await AppState.checkTrustedNetwork();
 
-        // Init AI assistant (owner only, shown on dashboard + trusted network)
-        if (AppState.isOwner()) {
+        // Init AI assistant (superadmin only, shown on dashboard + trusted network)
+        if (AppState.isSuperAdmin()) {
             Assistant.init();
             Assistant.setVisible(false);
         }
@@ -76,10 +77,15 @@ const App = {
         UI.renderNavigation(profile.role);
         UI.renderSidebarUser(profile);
 
+        // Якщо режим "тестувати як" уже активний (наприклад, після оновлення
+        // сторінки) — показуємо банер одразу
+        if (AppState.isRoleSwitched()) RoleSwitchBanner.show(profile.role, profile.base_role);
+
         // Load unread counts after sidebar is in DOM
         UI.loadNotificationCount();
         UI.loadDocBadge();
         UI.loadNewsCount();
+        UI.loadLearnBadge();
         if (typeof RecentlyViewed !== 'undefined') RecentlyViewed.init();
 
         // Load bookmarks async (updates nav stars when done)
@@ -94,7 +100,7 @@ const App = {
 
         // Розділи закриті для стажерів
         const requireNotIntern = () => {
-            if (AppState.profile?.label !== 'intern') return true;
+            if (!AppState.isIntern()) return true;
             Router.go('knowledge-base');
             return false;
         };
@@ -130,6 +136,15 @@ const App = {
             'tests/:id': async ({ container, params }) => {
                 if (!requireTrusted()) return;
                 await TestsPage.init(container, params);
+            },
+
+            'surveys/:id': async ({ container, params }) => {
+                if (!requireTrusted()) return;
+                // SurveysPage internally targets document.getElementById('ep-content') for all
+                // its rendering (take/results/builder) — give it that anchor here too.
+                container.innerHTML = '<div id="ep-content"></div>';
+                SurveysPage._standaloneTake = true;
+                await SurveysPage.openTake(params.id);
             },
 
             'analytics': async ({ container, params }) => {
@@ -256,14 +271,14 @@ const App = {
                 Router.go('admin?tab=tests');
             },
 
-            'my-tests': async ({ container }) => {
+            'my-tests': async () => {
                 if (!requireTrusted()) return;
-                await MyTestsPage.init(container);
+                Router.go('expert-path?tab=tests');
             },
 
-            'expert-path': async ({ container }) => {
+            'expert-path': async ({ container, params }) => {
                 if (!requireTrusted()) return;
-                await ExpertPathPage.init(container);
+                await ExpertPathPage.init(container, params);
                 return () => ExpertPathPage.destroy?.();
             },
 
@@ -570,7 +585,7 @@ const ActivityTracker = {
         this._lastKeyTime = now;
 
         // Show AI assistant button only on dashboard and only for trusted network
-        if (typeof Assistant !== 'undefined' && AppState.isOwner()) {
+        if (typeof Assistant !== 'undefined' && AppState.isSuperAdmin()) {
             Assistant.setVisible(base === 'dashboard' && AppState.isTrustedNetwork);
         }
 

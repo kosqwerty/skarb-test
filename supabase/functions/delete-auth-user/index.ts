@@ -11,7 +11,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Verify caller is authenticated admin/owner
+    // Verify caller is authenticated admin/superadmin
     const authHeader = req.headers.get('authorization')
     if (!authHeader) throw new Error('Unauthorized')
 
@@ -31,7 +31,7 @@ Deno.serve(async (req) => {
       .eq('id', user.id)
       .single()
 
-    if (!caller || !['owner', 'admin'].includes(caller.role)) {
+    if (!caller || !['superadmin', 'admin'].includes(caller.role)) {
       throw new Error('Forbidden')
     }
 

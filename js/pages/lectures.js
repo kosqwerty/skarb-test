@@ -279,7 +279,7 @@ const LecturesPage = {
     <div class="lece-field lece-row2" style="grid-template-columns:1fr 1fr 1fr">
         <div>
             <label class="lece-label">Дата початку</label>
-            <input class="lece-inp" id="lece-start" type="date" value="${lecture?.start_date || ''}">
+            ${UaDateTime.html('lece-start', lecture?.start_date || '', '', { mode: 'date' })}
         </div>
         <div>
             <label class="lece-label">Час початку</label>

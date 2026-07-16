@@ -18,10 +18,9 @@ const CourseViewPage = {
         container.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
 
         try {
-            const [course, enrollmentRow, courseTeachers, activeRun, allRuns] = await Promise.all([
+            const [course, enrollmentRow, activeRun, allRuns] = await Promise.all([
                 API.courses.getById(courseId),
                 API.enrollments.isEnrolled(courseId),
-                API.courseTeachers.getByCourse(courseId).catch(() => []),
                 API.courseRuns.getActive(courseId).catch(() => null),
                 API.courseRuns.getByCourse(courseId).catch(() => [])
             ]);
@@ -30,7 +29,6 @@ const CourseViewPage = {
             this._enrollmentRow  = enrollmentRow;
             this._activeRun      = activeRun;
             this._allRuns        = allRuns;
-            this._courseTeachers = courseTeachers;
             UI.setBreadcrumb([{ label: backLabel, route: backRoute }, { label: course.title }]);
             RecentlyViewed.track({ type: 'course', id: course.id, title: course.title, thumbnail: course.thumbnail_url || null, route: `courses/${course.id}`, color: '#6366f1', icon: 'fa-book-open' });
             ActivityTracker.track('course_open', { entity_type: 'course', entity_id: course.id, entity_title: course.title, page: `courses/${course.id}` });
@@ -40,7 +38,7 @@ const CourseViewPage = {
                 <div class="empty-state">
                     <div class="empty-icon">⚠️</div>
                     <h3>Курс не знайдено</h3>
-                    <button class="btn btn-primary" onclick="Router.go('${fromExpert ? 'expert-path' : 'courses'}')" style="display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i> Назад</button>
+                    <button class="btn-back" onclick="Router.go('${fromExpert ? 'expert-path' : 'courses'}')"><i class="fa-solid fa-arrow-left"></i> Назад</button>
                 </div>`;
         }
     },
@@ -197,9 +195,7 @@ const CourseViewPage = {
 
         <div style="display:grid;grid-template-columns:1fr 300px;gap:2rem;align-items:start">
             <div>
-                <button onclick="Router.go('${this._from === 'expert-path' ? 'expert-path' : 'courses'}')"
-                    style="display:inline-flex;align-items:center;gap:.4rem;background:var(--bg-surface);border:1px solid var(--border);border-radius:20px;color:var(--text-muted);font-size:.78rem;font-weight:600;padding:.3rem .85rem;cursor:pointer;transition:all .15s;margin-bottom:.75rem"
-                    onmouseover="this.style.color='var(--text-primary)'" onmouseout="this.style.color='var(--text-muted)'">
+                <button class="btn-back" style="margin-bottom:.75rem" onclick="Router.go('${this._from === 'expert-path' ? 'expert-path' : 'courses'}')">
                     <i class="fa-solid fa-arrow-left"></i> Назад
                 </button>
                 ${AppState.isStaff() ? `
@@ -251,10 +247,6 @@ const CourseViewPage = {
                             <span class="cv-tab-label">Про курс</span>
                             ${AppState.isStaff() && AppState.canMutate() ? `<span onclick="event.stopPropagation();CourseViewPage._editCourseInfo('${course.id}')" style="position:absolute;top:6px;right:6px;display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;color:var(--text-muted);border:1px solid var(--border);background:var(--bg-raised);transition:all .15s" onmouseenter="this.style.borderColor='var(--primary)';this.style.color='var(--primary)'" onmouseleave="this.style.borderColor='var(--border)';this.style.color='var(--text-muted)'"><i class="fa-solid fa-pen-to-square" style="font-size:.65rem"></i></span>` : ''}
                         </button>
-                        <button class="cv-info-tab-btn" onclick="CourseViewPage._switchInfoTab('teachers')">
-                            <span class="cv-tab-icon">🎓</span>
-                            <span class="cv-tab-label">Викладачі</span>
-                        </button>
                         ${course.schedule?.length || AppState.isStaff() ? `
                         <button class="cv-info-tab-btn" onclick="CourseViewPage._switchInfoTab('schedule')">
                             <span class="cv-tab-icon">📅</span>
@@ -268,7 +260,6 @@ const CourseViewPage = {
                         </button>` : ''}
                     </div>
                     <div id="cv-info-tab-about" class="cv-info-tab-pane">${this._renderCourseInfoBody(course)}</div>
-                    <div id="cv-info-tab-teachers" class="cv-info-tab-pane" style="display:none">${this._renderTeachersBlock(this._courseTeachers, course.id)}</div>
                     ${course.schedule?.length || AppState.isStaff() ? `<div id="cv-info-tab-schedule" class="cv-info-tab-pane" style="display:none"></div>` : ''}
                     ${(course.course_info?.meet_url || AppState.isStaff()) ? `<div id="cv-info-tab-meet" class="cv-info-tab-pane" style="display:none">${enrolled || AppState.isStaff() ? this._renderMeetTab(course) : this._renderEnrollPrompt(course.id)}</div>` : ''}
                 </div>
@@ -375,196 +366,6 @@ const CourseViewPage = {
         finally { Loader.hide(); }
     },
 
-    _renderTeachersBlock(teachers, courseId) {
-        const isStaff   = AppState.isStaff();
-        const myEntry   = teachers.find(t => t.user_id === AppState.user?.id);
-        const others    = teachers.filter(t => t.user_id !== AppState.user?.id);
-        const allSorted = myEntry ? [myEntry, ...others] : others;
-
-        const colors = ['#6366f1','#10b981','#f59e0b','#ef4444','#ec4899','#3b82f6','#8b5cf6','#14b8a6'];
-        const colorFor = (uid) => colors[Math.abs([...uid].reduce((a,c)=>a+c.charCodeAt(0),0)) % colors.length];
-
-        const cards = allSorted.map(t => {
-            const c    = colorFor(t.user_id);
-            const name = Fmt.esc(t.profile?.full_name || '—');
-            const pos  = Fmt.esc(t.profile?.job_position || '');
-            const lbl  = t.label ? `<span style="font-size:.7rem;background:${c}22;color:${c};padding:.15rem .45rem;border-radius:999px;margin-top:.2rem;display:inline-block">${Fmt.esc(t.label)}</span>` : '';
-            const isMine = t.user_id === AppState.user?.id;
-            return `
-                <div style="display:flex;align-items:center;gap:.65rem;padding:.6rem .85rem;background:var(--bg-raised);border-radius:var(--radius-sm);border:1px solid ${isMine ? c+'55' : 'var(--border)'};flex:1;min-width:220px;max-width:360px">
-                    <div style="width:36px;height:36px;border-radius:50%;background:${c}22;display:flex;align-items:center;justify-content:center;font-size:.9rem;font-weight:700;color:${c};flex-shrink:0">
-                        ${t.profile?.avatar_url
-                            ? `<img src="${t.profile.avatar_url}" style="width:36px;height:36px;border-radius:50%;object-fit:cover">`
-                            : Fmt.initials(t.profile?.full_name || '?')}
-                    </div>
-                    <div style="flex:1;min-width:0">
-                        <div style="font-weight:600;font-size:.875rem">${name}${isMine ? ' <span style="font-size:.7rem;color:var(--text-muted)">(ви)</span>' : ''}</div>
-                        ${pos ? `<div style="font-size:.75rem;color:var(--text-muted)">${pos}</div>` : ''}
-                        ${lbl}
-                    </div>
-                    ${((isMine && isStaff) || AppState.isAdmin()) && AppState.canMutate() ? `
-                        <button class="btn btn-ghost btn-sm" title="Редагувати мітку"
-                            onclick="CourseViewPage._editMyLabel('${t.id}','${courseId}')">
-                            <i class="fa-solid fa-pen" style="font-size:.75rem"></i>
-                        </button>
-                        <button class="btn btn-danger btn-sm" title="${isMine ? 'Зняти себе' : 'Видалити'}"
-                            onclick="CourseViewPage._removeMe('${t.id}','${courseId}')">
-                            <i class="fa-solid fa-xmark" style="font-size:.75rem"></i>
-                        </button>` : ''}
-                </div>`;
-        }).join('');
-
-        const joinBtn = isStaff && !myEntry && AppState.canMutate() ? `
-            <button class="btn btn-secondary btn-sm" onclick="CourseViewPage._joinAsteacher('${courseId}')">
-                <i class="fa-solid fa-chalkboard-user"></i> Я веду цей курс
-            </button>` : '';
-
-        const addBtn = AppState.isAdmin() ? `
-            <button class="btn btn-ghost btn-sm" onclick="CourseViewPage._adminAddTeacher('${courseId}')">
-                <i class="fa-solid fa-plus"></i> Додати викладача
-            </button>` : '';
-
-        if (!allSorted.length && !isStaff) return '';
-
-        return `
-            <div id="cv-teachers-block" class="card" style="margin-bottom:1.5rem">
-                <div class="card-body" style="padding:1rem 1.25rem">
-                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
-                        <span style="font-weight:600;font-size:.9rem">
-                            <i class="fa-solid fa-chalkboard-user" style="color:var(--primary);margin-right:.4rem"></i>
-                            Викладачі курсу
-                        </span>
-                        <div style="display:flex;gap:.4rem">
-                            ${joinBtn}${addBtn}
-                        </div>
-                    </div>
-                    ${allSorted.length
-                        ? `<div style="display:flex;flex-wrap:wrap;gap:.5rem">${cards}</div>`
-                        : `<div style="font-size:.82rem;color:var(--text-muted)">Ніхто ще не відмітився як викладач цього курсу</div>`}
-                </div>
-            </div>`;
-    },
-
-    async _adminAddTeacher(courseId) {
-        Loader.show();
-        let profiles = [];
-        try { const r = await API.profiles.getAll({ pageSize: 500 }); profiles = (r.data || []).sort((a,b) => (a.full_name||'').localeCompare(b.full_name||'','uk')); }
-        catch(e) { Toast.error('Помилка', e.message); Loader.hide(); return; }
-        finally { Loader.hide(); }
-
-        Modal.open({
-            title: 'Додати викладача',
-            body: `
-                <div class="form-group">
-                    <label>Викладач *</label>
-                    <select id="cv-at-user" style="width:100%">
-                        <option value="">— Оберіть людину —</option>
-                        ${profiles.map(p => `<option value="${p.id}">${Fmt.esc(p.full_name || p.email)}</option>`).join('')}
-                    </select>
-                </div>
-                <div class="form-group" style="margin-top:.75rem">
-                    <label>Мітка групи (необов'язково)</label>
-                    <input id="cv-at-label" type="text" placeholder='Наприклад: "Група A", "Тиждень 2"' style="width:100%">
-                </div>`,
-            footer: `
-                <button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
-                <button class="btn btn-primary" onclick="CourseViewPage._adminAddTeacherSave('${courseId}')">Додати</button>`
-        });
-    },
-
-    async _adminAddTeacherSave(courseId) {
-        const userId = document.getElementById('cv-at-user')?.value;
-        const label  = document.getElementById('cv-at-label')?.value.trim() || null;
-        if (!userId) { Toast.error('Помилка', 'Оберіть людину'); return; }
-        Loader.show();
-        try {
-            const { error: insErr } = await supabase.from('course_teachers').insert({ course_id: courseId, user_id: userId, label, is_active: true });
-            if (insErr) { Toast.error('Помилка', insErr.message); return; }
-            Modal.close();
-            const teachers = await API.courseTeachers.getByCourse(courseId);
-            this._courseTeachers = teachers;
-            const el = document.getElementById('cv-teachers-block');
-            if (el) el.innerHTML = this._renderTeachersBlock(teachers, courseId);
-        } catch(e) { Toast.error('Помилка', e.message); }
-        finally { Loader.hide(); }
-    },
-
-    async _joinAsteacher(courseId) {
-        const label = await this._promptLabel();
-        Loader.show();
-        try {
-            await API.courseTeachers.setMe(courseId, label, true);
-            const teachers = await API.courseTeachers.getByCourse(courseId);
-            this._courseTeachers = teachers;
-            const el = document.getElementById('cv-teachers-block');
-            if (el) el.innerHTML = this._renderTeachersBlock(teachers, courseId);
-            Toast.success('Готово', 'Вас додано як викладача цього курсу');
-        } catch(e) { Toast.error('Помилка', e.message); }
-        finally { Loader.hide(); }
-    },
-
-    async _removeMe(entryId, courseId) {
-        const entry = (this._courseTeachers || []).find(t => t.id === entryId);
-        const isSelf = entry?.user_id === AppState.user?.id;
-        const name = entry?.profile?.full_name || '';
-        const msg = isSelf ? 'Зняти себе як викладача цього курсу?' : `Видалити викладача "${name}" з курсу?`;
-        const ok = await Modal.confirm({ message: msg, danger: true });
-        if (!ok) return;
-        Loader.show();
-        try {
-            await API.courseTeachers.remove(entryId);
-            const teachers = await API.courseTeachers.getByCourse(courseId);
-            this._courseTeachers = teachers;
-            const el = document.getElementById('cv-teachers-block');
-            if (el) el.innerHTML = this._renderTeachersBlock(teachers, courseId);
-        } catch(e) { Toast.error('Помилка', e.message); }
-        finally { Loader.hide(); }
-    },
-
-    async _editMyLabel(entryId, courseId) {
-        const current = this._courseTeachers.find(t => t.id === entryId)?.label || '';
-        Modal.open({
-            title: 'Мітка групи / тижня',
-            body: `<div class="form-group">
-                <label>Наприклад: "Група A", "Тиждень 2"</label>
-                <input id="cv-label-input" type="text" value="${Fmt.esc(current)}" placeholder="Необов'язково" style="width:100%">
-            </div>`,
-            footer: `
-                <button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
-                <button class="btn btn-primary" onclick="CourseViewPage._saveLabel('${entryId}','${courseId}')">Зберегти</button>`
-        });
-    },
-
-    async _saveLabel(entryId, courseId) {
-        const label = document.getElementById('cv-label-input')?.value.trim() || null;
-        Loader.show();
-        try {
-            await API.courseTeachers.updateLabel(entryId, label);
-            Modal.close();
-            const teachers = await API.courseTeachers.getByCourse(courseId);
-            this._courseTeachers = teachers;
-            const el = document.getElementById('cv-teachers-block');
-            if (el) el.innerHTML = this._renderTeachersBlock(teachers, courseId);
-        } catch(e) { Toast.error('Помилка', e.message); }
-        finally { Loader.hide(); }
-    },
-
-    async _promptLabel() {
-        return new Promise(resolve => {
-            Modal.open({
-                title: "Мітка (необов'язково)",
-                body: `<div class="form-group">
-                    <label>Група або тиждень, наприклад "Група A" або "Тиждень 1"</label>
-                    <input id="cv-join-label" type="text" placeholder="Залиште порожнім якщо не потрібно" style="width:100%">
-                </div>`,
-                footer: `
-                    <button class="btn btn-secondary" onclick="Modal.close();CourseViewPage._promptResolve('')">Пропустити</button>
-                    <button class="btn btn-primary" onclick="CourseViewPage._promptResolve(document.getElementById('cv-join-label').value.trim())">Додати</button>`
-            });
-            this._promptResolve = (v) => { Modal.close(); resolve(v); };
-        });
-    },
-
     _renderCourseInfoBody(course) {
         const info = course.course_info || {};
         const goals        = info.goals        || [];
@@ -601,7 +402,7 @@ const CourseViewPage = {
         document.querySelectorAll('.cv-info-tab-btn').forEach(b => b.classList.remove('active'));
         const active = [...document.querySelectorAll('.cv-info-tab-btn')].find(b => b.onclick?.toString().includes(`'${tab}'`));
         if (active) active.classList.add('active');
-        ['about','teachers','schedule','meet'].forEach(t => {
+        ['about','schedule','meet'].forEach(t => {
             const el = document.getElementById('cv-info-tab-' + t);
             if (el) el.style.display = t === tab ? '' : 'none';
         });

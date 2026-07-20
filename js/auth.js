@@ -339,6 +339,10 @@ const Auth = {
         UI.closeUserPopup();
         document.getElementById('app-shell').classList.add('hidden');
         document.getElementById('auth-screen').classList.remove('hidden');
+        const u = document.getElementById('login-username');
+        const p = document.getElementById('login-password');
+        if (u) u.value = '';
+        if (p) p.value = '';
         this.showLogin();
     },
 

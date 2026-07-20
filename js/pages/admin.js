@@ -656,9 +656,10 @@ const AdminPage = {
                                     <option value="superadmin">👑 SuperAdmin</option>
                                     <option value="ceo">👑 CEO</option>
                                     <option value="admin">👑 Адміністратор</option>
-                                    <option value="manager">👑 Керівник</option>
+                                    <option value="manager">👔 Керівник</option>
                                     <option value="smm">📰 SMM</option>
-                                    <option value="user">Користувач</option>
+                                    <option value="intern">🌱 Стажер</option>
+                                    <option value="user">💎 Користувач</option>
                                 </select>
                             </th>
                             <th class="uf-th uf-fth uf-col-date"><input id="uf-date" type="text" class="uf-finput" placeholder="дд.мм.рр" oninput="AdminPage._applyUserFilters()"></th>

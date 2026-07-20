@@ -1919,16 +1919,22 @@ const AdminPage = {
                     <div class="cuf-row-2">
                         <label class="cuf-label">
                             <span>Дата оформлення</span>
-                            <div class="cuf-field">
+                            <div class="cuf-field idp-wrap">
                                 <i class="fa-regular fa-calendar cuf-ico"></i>
-                                <input id="cu-hired-at" type="date" class="cuf-has-ico" onpaste="Fmt.parseDatePaste(event,this)">
+                                <input type="hidden" id="cu-hired-at" value="">
+                                <input id="cu-hired-at-disp" class="cuf-has-ico idp-disp" readonly placeholder="ДД.ММ.РРРР"
+                                       onclick="DatePicker.toggle('cu-hired-at','cu-hired-at-disp','cu-hired-at-popup',event)">
+                                <div id="cu-hired-at-popup" class="idp-popup" style="display:none"></div>
                             </div>
                         </label>
                         <label class="cuf-label">
                             <span>На посаді з</span>
-                            <div class="cuf-field">
+                            <div class="cuf-field idp-wrap">
                                 <i class="fa-regular fa-calendar cuf-ico"></i>
-                                <input id="cu-position-since" type="date" class="cuf-has-ico" onpaste="Fmt.parseDatePaste(event,this)">
+                                <input type="hidden" id="cu-position-since" value="">
+                                <input id="cu-position-since-disp" class="cuf-has-ico idp-disp" readonly placeholder="ДД.ММ.РРРР"
+                                       onclick="DatePicker.toggle('cu-position-since','cu-position-since-disp','cu-position-since-popup',event)">
+                                <div id="cu-position-since-popup" class="idp-popup" style="display:none"></div>
                             </div>
                         </label>
                     </div>
@@ -2110,6 +2116,26 @@ const AdminPage = {
         }
         .cuf-gender-chip span { font-size: 16px; }
         .cuf-gender-chip.active { background: var(--cuf-gold-soft); border-color: var(--cuf-gold); color: var(--cuf-gold); }
+
+        /* Custom calendar datepicker (shared .idp-* pattern, see interns.js) */
+        .idp-wrap { position: relative; }
+        .idp-disp { cursor: pointer !important; }
+        .idp-popup { position: absolute; top: calc(100% + 4px); left: 0; z-index: 1100; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); width: 256px; padding: .5rem; }
+        .idp-header { display: flex; align-items: center; justify-content: space-between; padding: .2rem .1rem .45rem; }
+        .idp-nav { background: none; border: none; cursor: pointer; font-size: 1.3rem; line-height: 1; color: var(--text-secondary); padding: .1rem .35rem; border-radius: 6px; transition: background .12s; }
+        .idp-nav:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .idp-month-lbl { font-size: .88rem; font-weight: 700; color: var(--text-primary); }
+        .idp-grid-head, .idp-grid { display: grid; grid-template-columns: repeat(7,1fr); }
+        .idp-dow { text-align: center; font-size: .68rem; font-weight: 600; color: var(--text-muted); padding: .15rem 0 .3rem; }
+        .idp-cell { text-align: center; font-size: .82rem; padding: .28rem 0; border-radius: 6px; cursor: pointer; color: var(--text-primary); transition: background .1s, color .1s; }
+        .idp-cell:hover:not(.idp-sel) { background: rgba(42,94,232,.1); color: var(--primary); }
+        .idp-other { color: var(--text-muted); }
+        .idp-today { font-weight: 700; color: var(--primary); }
+        .idp-sel { background: var(--primary) !important; color: #fff !important; font-weight: 700; }
+        .idp-footer { display: flex; justify-content: space-between; padding: .35rem .1rem 0; border-top: 1px solid var(--border); margin-top: .3rem; }
+        .idp-fb { background: none; border: none; cursor: pointer; font-size: .78rem; color: var(--text-muted); padding: .2rem .35rem; border-radius: 4px; transition: background .1s, color .1s; }
+        .idp-fb:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .idp-fb-today { color: var(--primary); font-weight: 600; }
 
         /* Password extras */
         .cuf-eye-btn {
@@ -5943,7 +5969,16 @@ ${item?.is_deleted ? `
 
     _permToggleUnrestricted() {
         this._permUnrestricted = !this._permUnrestricted;
-        if (this._permUnrestricted) { this._permSelectedTabs = new Set(); this._permSelectedNav = new Set(); }
+        if (this._permUnrestricted) {
+            this._permSelectedTabs = new Set();
+            this._permSelectedNav = new Set();
+        } else {
+            // Switching TO restricted mode: start from "everything allowed"
+            // so the admin just unchecks what they want to remove, instead
+            // of starting from an empty set and having to check each item.
+            this._permSelectedTabs = new Set(this._manageableTabGroups().flatMap(g => g.tabs.map(t => t.id)));
+            this._permSelectedNav  = new Set(this._MANAGEABLE_NAV.map(n => n.route));
+        }
         document.getElementById('atp-detail').innerHTML = this._permRenderDetail();
     },
 

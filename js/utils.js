@@ -1014,13 +1014,105 @@ function applyGenderFromPatronymic(patronymicInputId, genderInputId) {
     const inp = document.getElementById(genderInputId);
     if (!inp) return;
     inp.value = gender;
-    inp.closest('.gender-picker-modern')?.querySelectorAll('.gender-chip').forEach(b => {
+    inp.closest('.gender-picker-modern, .cuf-gender')?.querySelectorAll('.gender-chip, .cuf-gender-chip').forEach(b => {
         b.classList.toggle('active',
             (gender === 'male'   && b.textContent.includes('Чоловік')) ||
             (gender === 'female' && b.textContent.includes('Жінка'))
         );
     });
 }
+
+// Reusable custom calendar datepicker (same visual pattern/`.idp-*` classes as
+// interns.js's schedule-row picker) — supports multiple independent instances
+// on one page, keyed by popupId, so several fields can each have their own.
+const DatePicker = {
+    _state: {},
+    _outsideFns: {},
+
+    toggle(hiddenId, dispId, popupId, e) {
+        e?.stopPropagation();
+        const popup = document.getElementById(popupId);
+        if (!popup) return;
+        popup.style.display === 'none' ? this.open(hiddenId, dispId, popupId) : this.close(popupId);
+    },
+
+    open(hiddenId, dispId, popupId) {
+        const val = document.getElementById(hiddenId)?.value || '';
+        const d = val ? new Date(val + 'T00:00:00') : new Date();
+        this._state[popupId] = { year: d.getFullYear(), month: d.getMonth(), sel: val || null, hiddenId, dispId };
+        this._render(popupId);
+        const popup = document.getElementById(popupId);
+        if (popup) popup.style.display = 'block';
+        const fn = (e) => {
+            if (!e.target.closest(`#${popupId}`) && e.target.id !== dispId) this.close(popupId);
+        };
+        this._outsideFns[popupId] = fn;
+        setTimeout(() => document.addEventListener('click', fn), 0);
+    },
+
+    close(popupId) {
+        const popup = document.getElementById(popupId);
+        if (popup) popup.style.display = 'none';
+        const fn = this._outsideFns[popupId];
+        if (fn) { document.removeEventListener('click', fn); delete this._outsideFns[popupId]; }
+    },
+
+    nav(popupId, dir) {
+        const st = this._state[popupId];
+        if (!st) return;
+        st.month += dir;
+        if (st.month > 11) { st.month = 0; st.year++; }
+        if (st.month < 0)  { st.month = 11; st.year--; }
+        this._render(popupId);
+    },
+
+    pick(popupId, ds) {
+        const st = this._state[popupId];
+        if (!st) return;
+        const hidden = document.getElementById(st.hiddenId);
+        const disp   = document.getElementById(st.dispId);
+        if (hidden) hidden.value = ds;
+        if (disp) disp.value = ds ? ds.split('-').reverse().join('.') : '';
+        st.sel = ds || null;
+        this.close(popupId);
+        hidden?.dispatchEvent(new Event('input', { bubbles: true }));
+    },
+
+    _render(popupId) {
+        const st = this._state[popupId];
+        const popup = document.getElementById(popupId);
+        if (!st || !popup) return;
+        const MN = ['Січень','Лютий','Березень','Квітень','Травень','Червень',
+                    'Липень','Серпень','Вересень','Жовтень','Листопад','Грудень'];
+        const DN = ['Пн','Вт','Ср','Чт','Пт','Сб','Нд'];
+        const y = st.year, m = st.month;
+        const pad = n => String(n).padStart(2,'0');
+        const td = new Date(); td.setHours(0,0,0,0);
+        const todayStr = `${td.getFullYear()}-${pad(td.getMonth()+1)}-${pad(td.getDate())}`;
+        let dow = new Date(y, m, 1).getDay(); dow = dow === 0 ? 6 : dow - 1;
+        const dim = new Date(y, m+1, 0).getDate();
+        const prevDim = new Date(y, m, 0).getDate();
+        let cells = '';
+        for (let i = dow-1; i >= 0; i--) cells += `<div class="idp-cell idp-other">${prevDim-i}</div>`;
+        for (let d = 1; d <= dim; d++) {
+            const ds = `${y}-${pad(m+1)}-${pad(d)}`;
+            cells += `<div class="idp-cell${ds===todayStr?' idp-today':''}${ds===st.sel?' idp-sel':''}" onclick="DatePicker.pick('${popupId}','${ds}')">${d}</div>`;
+        }
+        const rem = (dow + dim) % 7; if (rem) for (let d=1; d<=7-rem; d++) cells += `<div class="idp-cell idp-other">${d}</div>`;
+        popup.innerHTML = `
+            <div class="idp-header">
+                <button class="idp-nav" onclick="DatePicker.nav('${popupId}',-1);event.stopPropagation()">‹</button>
+                <span class="idp-month-lbl">${MN[m]} ${y}</span>
+                <button class="idp-nav" onclick="DatePicker.nav('${popupId}',1);event.stopPropagation()">›</button>
+            </div>
+            <div class="idp-grid-head">${DN.map(d=>`<div class="idp-dow">${d}</div>`).join('')}</div>
+            <div class="idp-grid">${cells}</div>
+            <div class="idp-footer">
+                <button class="idp-fb" onclick="DatePicker.pick('${popupId}','')">Очистити</button>
+                <button class="idp-fb idp-fb-today" onclick="DatePicker.pick('${popupId}','${todayStr}')">Сьогодні</button>
+            </div>`;
+    }
+};
 
 const Dom = {
     qs(sel, p = document)  { return p.querySelector(sel); },

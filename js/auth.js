@@ -187,16 +187,39 @@ const Auth = {
         document.getElementById('login-form')?.classList.add('hidden');
         const input = document.getElementById('forgot-login');
         if (input) { input.value = ''; input.focus(); }
+        this._renderTurnstile();
     },
 
     showLoginFromForgot() {
         this.showLogin();
     },
 
+    // ── Cloudflare Turnstile (антиспам для форми відновлення пароля) ──
+    _turnstileWidgetId: null,
+    _turnstileToken:    null,
+
+    _renderTurnstile() {
+        const container = document.getElementById('forgot-turnstile');
+        if (!container || typeof turnstile === 'undefined') return;
+        if (this._turnstileWidgetId !== null) {
+            turnstile.reset(this._turnstileWidgetId);
+            this._turnstileToken = null;
+            return;
+        }
+        this._turnstileWidgetId = turnstile.render(container, {
+            sitekey:  TURNSTILE_SITE_KEY,
+            theme:    'dark',
+            callback: (token) => { this._turnstileToken = token; },
+            'expired-callback': () => { this._turnstileToken = null; },
+            'error-callback':   () => { this._turnstileToken = null; }
+        });
+    },
+
     async sendPasswordReset() {
         const input = Dom.val('forgot-login').trim();
         const btn   = document.getElementById('forgot-btn');
         if (!input) { Toast.error('Помилка', 'Введіть логін'); return; }
+        if (!this._turnstileToken) { Toast.error('Помилка', 'Підтвердіть, що ви не робот'); return; }
 
         btn.disabled = true;
         const original = btn.innerHTML;
@@ -210,7 +233,10 @@ const Auth = {
             }
             if (email) {
                 const redirectTo = window.location.origin + window.location.pathname;
-                const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+                const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                    redirectTo,
+                    captchaToken: this._turnstileToken
+                });
                 if (error) throw error;
             }
             // Однакове повідомлення незалежно від того, чи знайдено логін —
@@ -222,6 +248,10 @@ const Auth = {
         } finally {
             btn.disabled = false;
             btn.innerHTML = original;
+            if (this._turnstileWidgetId !== null) {
+                turnstile.reset(this._turnstileWidgetId);
+                this._turnstileToken = null;
+            }
         }
     },
 

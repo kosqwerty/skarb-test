@@ -9,6 +9,12 @@
 const SUPABASE_URL      = 'https://kxiglbdnxbusivnxqhob.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt4aWdsYmRueGJ1c2l2bnhxaG9iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyMjcxNDgsImV4cCI6MjA5MTgwMzE0OH0.3EFB6WuE5TUgGaTvdDRIxKOQ0OsHGEA2fWRmEg2RzSE';
 
+// Cloudflare Turnstile site key — https://dash.cloudflare.com/?to=/:account/turnstile
+// Створіть віджет (тип "Managed"), домен: skarb.online (+ localhost для розробки),
+// і вставте сюди Site Key. Secret Key вставляється окремо в Supabase Dashboard →
+// Authentication → Settings → Bot and Abuse Protection → CAPTCHA (провайдер Turnstile).
+const TURNSTILE_SITE_KEY = '0x4AAAAAAD5ygE43ptVRS8pN';
+
 // CDN declares `var supabase` globally (the module object with createClient).
 // We overwrite window.supabase with the actual client instance so all scripts
 // can reference it as just `supabase` without redeclaration conflicts.

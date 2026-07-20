@@ -8,6 +8,7 @@
     <meta name="description" content="Система управління навчанням">
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.2/dist/umd/supabase.js"></script>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
@@ -101,6 +102,7 @@
                             <input type="text" id="forgot-login" placeholder="Введіть логін" autocomplete="off" spellcheck="false" onkeydown="if(event.key==='Enter')Auth.sendPasswordReset()">
                         </div>
                     </div>
+                    <div id="forgot-turnstile" style="margin:0 0 1.1rem;display:flex;justify-content:center"></div>
                     <button id="forgot-btn" class="btn-login" onclick="Auth.sendPasswordReset()">
                         <span>Надіслати лист</span>
                     </button>

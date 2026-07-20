@@ -77,6 +77,12 @@ const Auth = {
         const btn      = document.getElementById('login-btn');
 
         if (!username || !password) { Toast.error('Помилка', 'Введіть логін та пароль'); return; }
+        // Turnstile на вході — лише клієнтський бар'єр після кількох невдалих
+        // спроб (Supabase-captcha тут вимкнена навмисно, див. showForgot() /
+        // request-password-reset для реального серверного захисту скидання пароля)
+        if (this._loginFailCount() >= 2 && !this._turnstileToken('login-turnstile')) {
+            Toast.error('Помилка', 'Підтвердіть, що ви не робот'); return;
+        }
 
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner" style="width:18px;height:18px;border-width:2px;display:inline-block;margin:0 auto"></span>';
@@ -93,6 +99,7 @@ const Auth = {
             if (error) throw error;
             AppState.session = data.session;
             AppState.user    = data.user;
+            this._resetLoginFailCount();
             await this._loadProfile();
             // Свіжий інтерактивний вхід завжди скидає режим "тестувати як"
             try {
@@ -106,6 +113,8 @@ const Auth = {
         } catch(e) {
             Toast.error('Помилка входу', e.message === 'Invalid login credentials'
                 ? 'Невірний логін або пароль' : e.message);
+            this._registerLoginFail();
+            this._resetTurnstile('login-turnstile');
         } finally {
             btn.disabled = false;
             btn.innerHTML = '<span>Увійти</span>';
@@ -175,6 +184,10 @@ const Auth = {
         document.getElementById('register-form')?.classList.add('hidden');
         document.getElementById('forgot-form')?.classList.add('hidden');
         document.getElementById('reset-password-form')?.classList.add('hidden');
+        if (this._loginFailCount() >= 2) {
+            document.getElementById('login-turnstile')?.classList.remove('hidden');
+            this._renderTurnstile('login-turnstile');
+        }
     },
 
     showRegister() {
@@ -187,60 +200,94 @@ const Auth = {
         document.getElementById('login-form')?.classList.add('hidden');
         const input = document.getElementById('forgot-login');
         if (input) { input.value = ''; input.focus(); }
-        this._renderTurnstile();
+        this._renderTurnstile('forgot-turnstile');
     },
 
     showLoginFromForgot() {
         this.showLogin();
     },
 
-    // ── Cloudflare Turnstile (антиспам для форми відновлення пароля) ──
-    _turnstileWidgetId: null,
-    _turnstileToken:    null,
+    // ── Лічильник невдалих спроб входу (лише клієнтський UX-бар'єр —
+    // Turnstile на вході з'являється тільки після 2 помилок поспіль) ──
+    _LOGIN_FAIL_KEY: 'lms_login_fails',
 
-    _renderTurnstile() {
-        const container = document.getElementById('forgot-turnstile');
+    _loginFailCount() {
+        return parseInt(localStorage.getItem(this._LOGIN_FAIL_KEY) || '0', 10);
+    },
+
+    _registerLoginFail() {
+        const count = this._loginFailCount() + 1;
+        localStorage.setItem(this._LOGIN_FAIL_KEY, String(count));
+        if (count >= 2) {
+            document.getElementById('login-turnstile')?.classList.remove('hidden');
+            this._renderTurnstile('login-turnstile');
+        }
+    },
+
+    _resetLoginFailCount() {
+        localStorage.removeItem(this._LOGIN_FAIL_KEY);
+    },
+
+    // ── Cloudflare Turnstile (антиспам для входу після повторних помилок
+    // і для відновлення пароля) ──
+    _turnstileWidgets: {}, // containerId -> { widgetId, token }
+
+    _renderTurnstile(containerId) {
+        const container = document.getElementById(containerId);
         if (!container || typeof turnstile === 'undefined') return;
-        if (this._turnstileWidgetId !== null) {
-            turnstile.reset(this._turnstileWidgetId);
-            this._turnstileToken = null;
+        const existing = this._turnstileWidgets[containerId];
+        if (existing) {
+            turnstile.reset(existing.widgetId);
+            existing.token = null;
             return;
         }
-        this._turnstileWidgetId = turnstile.render(container, {
+        const widgetId = turnstile.render(container, {
             sitekey:  TURNSTILE_SITE_KEY,
             theme:    'dark',
-            callback: (token) => { this._turnstileToken = token; },
-            'expired-callback': () => { this._turnstileToken = null; },
-            'error-callback':   () => { this._turnstileToken = null; }
+            callback: (token) => { this._turnstileWidgets[containerId].token = token; },
+            'expired-callback': () => { this._turnstileWidgets[containerId].token = null; },
+            'error-callback':   () => { this._turnstileWidgets[containerId].token = null; }
         });
+        this._turnstileWidgets[containerId] = { widgetId, token: null };
+    },
+
+    _turnstileToken(containerId) {
+        return this._turnstileWidgets[containerId]?.token || null;
+    },
+
+    _resetTurnstile(containerId) {
+        const w = this._turnstileWidgets[containerId];
+        if (w) { turnstile.reset(w.widgetId); w.token = null; }
     },
 
     async sendPasswordReset() {
         const input = Dom.val('forgot-login').trim();
         const btn   = document.getElementById('forgot-btn');
         if (!input) { Toast.error('Помилка', 'Введіть логін'); return; }
-        if (!this._turnstileToken) { Toast.error('Помилка', 'Підтвердіть, що ви не робот'); return; }
+        if (!this._turnstileToken('forgot-turnstile')) { Toast.error('Помилка', 'Підтвердіть, що ви не робот'); return; }
 
         btn.disabled = true;
         const original = btn.innerHTML;
         btn.innerHTML = '<span class="spinner" style="width:18px;height:18px;border-width:2px;display:inline-block;margin:0 auto"></span>';
 
         try {
-            let email = input.includes('@') ? input.toLowerCase() : null;
-            if (!email) {
-                const { data: found } = await supabase.rpc('get_email_by_login', { p_login: input.toLowerCase() });
-                email = found || null;
-            }
-            if (email) {
-                const redirectTo = window.location.origin + window.location.pathname;
-                const { error } = await supabase.auth.resetPasswordForEmail(email, {
-                    redirectTo,
-                    captchaToken: this._turnstileToken
-                });
-                if (error) throw error;
-            }
-            // Однакове повідомлення незалежно від того, чи знайдено логін —
-            // щоб не давати змогу перебором дізнаватись, які логіни існують
+            // Відправка листа йде через edge function request-password-reset —
+            // вона сама перевіряє captcha-токен на сервері (Cloudflare siteverify),
+            // бо серверний тумблер "Enable Captcha protection" в Supabase вимкнено
+            // (він єдиний на всі auth-ендпоінти, а captcha нам треба тільки тут)
+            const redirectTo = window.location.origin + window.location.pathname;
+            const res = await fetch(`${APP_CONFIG.supabaseUrl}/functions/v1/request-password-reset`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${APP_CONFIG.anonKey}`,
+                    'apikey': APP_CONFIG.anonKey
+                },
+                body: JSON.stringify({ login: input, captchaToken: this._turnstileToken('forgot-turnstile'), redirectTo })
+            });
+            const json = await res.json();
+            if (!res.ok || !json.ok) throw new Error(json.error || 'Не вдалося надіслати лист');
+
             Toast.success('Перевірте пошту', 'Якщо такий обліковий запис існує — на пов’язану пошту надіслано лист із інструкціями');
             this.showLoginFromForgot();
         } catch(e) {
@@ -248,10 +295,7 @@ const Auth = {
         } finally {
             btn.disabled = false;
             btn.innerHTML = original;
-            if (this._turnstileWidgetId !== null) {
-                turnstile.reset(this._turnstileWidgetId);
-                this._turnstileToken = null;
-            }
+            this._resetTurnstile('forgot-turnstile');
         }
     },
 

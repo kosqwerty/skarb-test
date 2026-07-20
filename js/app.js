@@ -33,6 +33,7 @@ const App = {
         } else {
             // Show auth screen
             document.getElementById('auth-screen').classList.remove('hidden');
+            Auth.showLogin();
         }
 
         Auth.listen();

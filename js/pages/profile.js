@@ -366,7 +366,7 @@ const ProfilePage = {
             // блокує 'superadmin' тут — для передачі прав є окрема кнопка 👑)
             if (canRole) {
                 const newRole = Dom.val('pe-role');
-                if (newRole && newRole !== user.role) {
+                if (newRole && newRole !== updated.role) {
                     const { error: roleErr } = await supabase.rpc('admin_set_user_role', { p_user_id: userId, p_role: newRole });
                     if (roleErr) throw new Error('Роль: ' + roleErr.message);
                     updated.role = newRole;

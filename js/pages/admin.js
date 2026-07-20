@@ -2799,9 +2799,10 @@ const AdminPage = {
         if (terminatedAt === false) return;
         const terminationDate = (terminatedAt && typeof terminatedAt === 'string') ? terminatedAt : today;
 
-        Loader.show();
+        this._bulkDeleteProgressOpen(toDelete.length);
         let done = 0, failed = 0;
         for (const u of toDelete) {
+            this._bulkDeleteProgressUpdate(done, toDelete.length, u.full_name || u.email);
             try {
                 // Save terminated_at in employment_info before profile deletion
                 // (profile_snapshot is saved automatically by DB trigger on SET NULL)
@@ -2818,8 +2819,9 @@ const AdminPage = {
                 failed++;
                 console.warn('Delete failed for', u.email, e.message);
             }
+            this._bulkDeleteProgressUpdate(done + failed, toDelete.length, null);
         }
-        Loader.hide();
+        Modal.close();
 
         if (done) {
             AuditLog.write('user_delete', 'users', toDelete.map(u => u.full_name).join(', '), { count: done });
@@ -2828,6 +2830,50 @@ const AdminPage = {
         }
         if (failed) Toast.error('Помилки', `${failed} не вдалося видалити`);
         this._renderUsersList(document.getElementById('admin-content'));
+    },
+
+    _bulkDeleteProgressOpen(total) {
+        Modal.open({
+            title: '<i class="fa-solid fa-trash"></i> Видалення користувачів',
+            size: 'sm',
+            body: `
+                <style>
+                    .bdp-wrap { padding: .25rem 0 .5rem; }
+                    .bdp-track { height: 10px; border-radius: 999px; background: var(--bg-hover); overflow: hidden; }
+                    .bdp-fill { height: 100%; width: 0%; background: var(--danger); border-radius: 999px; transition: width .25s ease; }
+                    .bdp-status { margin-top: .7rem; font-size: .85rem; color: var(--text-secondary); text-align: center; }
+                    .bdp-count { font-weight: 700; color: var(--text-primary); }
+                </style>
+                <div class="bdp-wrap">
+                    <div class="bdp-track"><div id="bdp-bar" class="bdp-fill"></div></div>
+                    <div id="bdp-status" class="bdp-status">Підготовка…</div>
+                </div>`,
+            footer: ''
+        });
+        // Заблокувати закриття модалки поки триває видалення
+        const backdrop = document.getElementById('modal-backdrop');
+        if (backdrop) backdrop.onclick = null;
+        document.removeEventListener('keydown', Modal._escHandler);
+    },
+
+    _bulkDeleteProgressUpdate(done, total, currentName) {
+        const bar = document.getElementById('bdp-bar');
+        const status = document.getElementById('bdp-status');
+        const pct = total ? Math.round((done / total) * 100) : 100;
+        if (bar) bar.style.width = pct + '%';
+        if (status) {
+            status.innerHTML = '';
+            const countEl = document.createElement('span');
+            countEl.className = 'bdp-count';
+            countEl.textContent = `${done} з ${total}`;
+            status.appendChild(countEl);
+            if (done < total && currentName) {
+                status.appendChild(document.createTextNode(' — видаляється: '));
+                const nameEl = document.createElement('span');
+                nameEl.textContent = currentName;
+                status.appendChild(nameEl);
+            }
+        }
     },
 
     _bulkSendMessage() {

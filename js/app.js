@@ -22,7 +22,11 @@ const App = {
         // Hide loading overlay
         document.getElementById('loading-overlay').style.display = 'none';
 
-        if (loggedIn) {
+        if (window._passwordRecoveryPending && loggedIn) {
+            // Прийшли за посиланням відновлення пароля з листа — показуємо
+            // форму нового пароля замість того, щоб одразу заходити в портал
+            Auth._showResetPassword();
+        } else if (loggedIn) {
             InactivityWatcher.start();
             await Heartbeat.start();
             this.start();

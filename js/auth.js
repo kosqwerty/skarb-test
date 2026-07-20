@@ -173,11 +173,92 @@ const Auth = {
     showLogin() {
         document.getElementById('login-form')?.classList.remove('hidden');
         document.getElementById('register-form')?.classList.add('hidden');
+        document.getElementById('forgot-form')?.classList.add('hidden');
+        document.getElementById('reset-password-form')?.classList.add('hidden');
     },
 
     showRegister() {
         document.getElementById('register-form')?.classList.remove('hidden');
         document.getElementById('login-form')?.classList.add('hidden');
+    },
+
+    showForgot() {
+        document.getElementById('forgot-form')?.classList.remove('hidden');
+        document.getElementById('login-form')?.classList.add('hidden');
+        const input = document.getElementById('forgot-login');
+        if (input) { input.value = ''; input.focus(); }
+    },
+
+    showLoginFromForgot() {
+        this.showLogin();
+    },
+
+    async sendPasswordReset() {
+        const input = Dom.val('forgot-login').trim();
+        const btn   = document.getElementById('forgot-btn');
+        if (!input) { Toast.error('Помилка', 'Введіть логін'); return; }
+
+        btn.disabled = true;
+        const original = btn.innerHTML;
+        btn.innerHTML = '<span class="spinner" style="width:18px;height:18px;border-width:2px;display:inline-block;margin:0 auto"></span>';
+
+        try {
+            let email = input.includes('@') ? input.toLowerCase() : null;
+            if (!email) {
+                const { data: found } = await supabase.rpc('get_email_by_login', { p_login: input.toLowerCase() });
+                email = found || null;
+            }
+            if (email) {
+                const redirectTo = window.location.origin + window.location.pathname;
+                const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+                if (error) throw error;
+            }
+            // Однакове повідомлення незалежно від того, чи знайдено логін —
+            // щоб не давати змогу перебором дізнаватись, які логіни існують
+            Toast.success('Перевірте пошту', 'Якщо такий обліковий запис існує — на пов’язану пошту надіслано лист із інструкціями');
+            this.showLoginFromForgot();
+        } catch(e) {
+            Toast.error('Помилка', e.message || 'Не вдалося надіслати лист. Спробуйте пізніше');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    },
+
+    _showResetPassword() {
+        UI.closeUserPopup();
+        document.getElementById('app-shell').classList.add('hidden');
+        document.getElementById('auth-screen').classList.remove('hidden');
+        document.getElementById('login-form')?.classList.add('hidden');
+        document.getElementById('forgot-form')?.classList.add('hidden');
+        document.getElementById('reset-password-form')?.classList.remove('hidden');
+    },
+
+    async updatePassword() {
+        const p1  = Dom.val('reset-password1');
+        const p2  = Dom.val('reset-password2');
+        const btn = document.getElementById('reset-password-btn');
+
+        if (!p1 || p1.length < 6) { Toast.error('Помилка', 'Пароль має бути не менше 6 символів'); return; }
+        if (p1 !== p2) { Toast.error('Помилка', 'Паролі не співпадають'); return; }
+
+        btn.disabled = true;
+        const original = btn.innerHTML;
+        btn.innerHTML = '<span class="spinner" style="width:18px;height:18px;border-width:2px;display:inline-block;margin:0 auto"></span>';
+
+        try {
+            const { error } = await supabase.auth.updateUser({ password: p1 });
+            if (error) throw error;
+            Toast.success('Пароль змінено', 'Тепер увійдіть із новим паролем');
+            try { await supabase.auth.signOut(); } catch(_) {}
+            AppState.user = null; AppState.profile = null; AppState.session = null;
+            location.hash = '';
+            this._showAuth();
+        } catch(e) {
+            Toast.error('Помилка', e.message);
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
     },
 
     _showAuth() {

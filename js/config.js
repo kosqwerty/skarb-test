@@ -20,6 +20,15 @@ window.supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, 
     }
 });
 
+// Ловимо подію відновлення пароля (клік по лінку з листа) якнайраніше —
+// SDK асинхронно парсить токен з URL-хеша і сам його прибирає, тож якщо
+// підписатись пізніше (наприклад, у App.boot() після Auth.init()), подія
+// може вже пролетіти повз. Прапорець перевіряється в App.boot().
+window._passwordRecoveryPending = false;
+window.supabase.auth.onAuthStateChange((event) => {
+    if (event === 'PASSWORD_RECOVERY') window._passwordRecoveryPending = true;
+});
+
 // ── App Configuration ──────────────────────────────────────────────
 const APP_CONFIG = {
     name: 'LMS Скарбниця',

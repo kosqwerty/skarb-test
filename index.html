@@ -72,6 +72,10 @@
                         </div>
                     </div>
 
+                    <div style="display:flex;justify-content:flex-end;margin:-.5rem 0 1rem">
+                        <a href="javascript:void(0)" class="auth-forgot" onclick="Auth.showForgot()">Забули пароль?</a>
+                    </div>
+
                     <button id="login-btn" class="btn-login" onclick="Auth.login()">
                         <span>Увійти в систему</span>
                         <span class="btn-login-arrow">→</span>
@@ -84,6 +88,50 @@
                             <div class="auth-security-desc">Ми використовуємо сучасне шифрування та дотримуємося стандартів безпеки</div>
                         </div>
                     </div>
+                </div>
+
+                <div id="forgot-form" class="hidden">
+                    <p style="color:rgba(255,255,255,.55);font-size:.85rem;line-height:1.5;margin:0 0 1.25rem">
+                        Введіть логін вашого облікового запису — ми надішлемо лист із посиланням для відновлення пароля на пов'язану пошту.
+                    </p>
+                    <div class="form-group">
+                        <label>Логін</label>
+                        <div class="auth-input-wrap">
+                            <span class="auth-input-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
+                            <input type="text" id="forgot-login" placeholder="Введіть логін" autocomplete="off" spellcheck="false" onkeydown="if(event.key==='Enter')Auth.sendPasswordReset()">
+                        </div>
+                    </div>
+                    <button id="forgot-btn" class="btn-login" onclick="Auth.sendPasswordReset()">
+                        <span>Надіслати лист</span>
+                    </button>
+                    <div class="auth-switch">
+                        <a href="javascript:void(0)" class="auth-forgot" onclick="Auth.showLoginFromForgot()">← Повернутися до входу</a>
+                    </div>
+                </div>
+
+                <div id="reset-password-form" class="hidden">
+                    <p style="color:rgba(255,255,255,.55);font-size:.85rem;line-height:1.5;margin:0 0 1.25rem">
+                        Встановіть новий пароль для вашого облікового запису.
+                    </p>
+                    <div class="form-group">
+                        <label>Новий пароль</label>
+                        <div class="auth-input-wrap">
+                            <span class="auth-input-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+                            <input type="password" id="reset-password1" placeholder="Мінімум 6 символів" autocomplete="new-password">
+                            <button type="button" class="toggle-pwd" onclick="togglePassword('reset-password1',this)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Повторіть пароль</label>
+                        <div class="auth-input-wrap">
+                            <span class="auth-input-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+                            <input type="password" id="reset-password2" placeholder="Повторіть новий пароль" autocomplete="new-password" onkeydown="if(event.key==='Enter')Auth.updatePassword()">
+                            <button type="button" class="toggle-pwd" onclick="togglePassword('reset-password2',this)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+                        </div>
+                    </div>
+                    <button id="reset-password-btn" class="btn-login" onclick="Auth.updatePassword()">
+                        <span>Зберегти новий пароль</span>
+                    </button>
                 </div>
             </div>
         </div>

@@ -203,9 +203,9 @@ const ResourcesPage = {
 .kb-search-wrap input::placeholder{color:#94a3b8;font-weight:400}
 .kb-search-wrap input:focus{border-color:var(--primary);
     box-shadow:0 0 0 4px rgba(99,102,241,.12),0 20px 45px rgba(99,102,241,.1)}
-body.dark-theme .kb-search-wrap input{background:var(--bg-surface);backdrop-filter:none;-webkit-backdrop-filter:none;border-color:var(--border);color:var(--text-primary)}
+body:not(.light-theme) .kb-search-wrap input{background:var(--bg-surface);backdrop-filter:none;-webkit-backdrop-filter:none;border-color:var(--border);color:var(--text-primary)}
 .kb-search-icon{position:absolute;left:18px;top:50%;transform:translateY(-50%);color:#94a3b8;pointer-events:none;font-size:1rem;z-index:2}
-body.dark-theme .kb-search-icon{color:var(--text-muted)}
+body:not(.light-theme) .kb-search-icon{color:var(--text-muted)}
 
 /* ── KB Toolbar ── */
 .kb-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:20px}
@@ -216,9 +216,9 @@ body.dark-theme .kb-search-icon{color:var(--text-muted)}
     cursor:pointer;transition:all .2s;white-space:nowrap;box-shadow:0 6px 20px rgba(15,23,42,.05)}
 .kb-type-chip:hover{transform:translateY(-2px);box-shadow:0 10px 28px rgba(15,23,42,.08);border-color:var(--primary);color:var(--primary)}
 .kb-type-chip.active{background:linear-gradient(135deg,var(--primary),#4338ca);border-color:transparent;color:#fff;box-shadow:0 8px 24px rgba(99,102,241,.3)}
-body.dark-theme .kb-type-chip{background:var(--bg-raised);backdrop-filter:none;-webkit-backdrop-filter:none;border-color:var(--border);color:var(--text-secondary)}
-body.dark-theme .kb-type-chip:hover{border-color:var(--primary);color:var(--primary)}
-body.dark-theme .kb-type-chip.active{background:var(--primary);border-color:var(--primary);color:#fff;box-shadow:none}
+body:not(.light-theme) .kb-type-chip{background:var(--bg-raised);backdrop-filter:none;-webkit-backdrop-filter:none;border-color:var(--border);color:var(--text-secondary)}
+body:not(.light-theme) .kb-type-chip:hover{border-color:var(--primary);color:var(--primary)}
+body:not(.light-theme) .kb-type-chip.active{background:var(--primary);border-color:var(--primary);color:#fff;box-shadow:none}
 .kb-type-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
 
 .kb-toolbar-right{display:flex;align-items:center;gap:8px}
@@ -242,8 +242,8 @@ body.dark-theme .kb-type-chip.active{background:var(--primary);border-color:var(
     transition:box-shadow .25s,transform .25s,border-color .25s;cursor:pointer;position:relative;
     box-shadow:0 8px 28px rgba(15,23,42,.07)}
 .kb-card:hover{box-shadow:0 28px 60px rgba(37,99,235,.14);transform:translateY(-8px);border-color:rgba(255,255,255,1)}
-body.dark-theme .kb-card{background:var(--bg-surface);backdrop-filter:none;-webkit-backdrop-filter:none;border-color:var(--border);box-shadow:0 4px 20px rgba(0,0,0,.2)}
-body.dark-theme .kb-card:hover{box-shadow:0 16px 40px rgba(0,0,0,.3);border-color:var(--border-light)}
+body:not(.light-theme) .kb-card{background:var(--bg-surface);backdrop-filter:none;-webkit-backdrop-filter:none;border-color:var(--border);box-shadow:0 4px 20px rgba(0,0,0,.2)}
+body:not(.light-theme) .kb-card:hover{box-shadow:0 16px 40px rgba(0,0,0,.3);border-color:var(--border-light)}
 .kb-card-accent{height:4px;width:100%;flex-shrink:0}
 .kb-card-body{padding:22px 22px 14px;flex:1;display:flex;flex-direction:column;gap:12px}
 .kb-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
@@ -258,7 +258,7 @@ body.dark-theme .kb-card:hover{box-shadow:0 16px 40px rgba(0,0,0,.3);border-colo
 .kb-badge-course{background:rgba(99,102,241,.1);color:#6366f1;border:1px solid rgba(99,102,241,.2)}
 .kb-badge-type{font-weight:700;font-size:.65rem;letter-spacing:.04em}
 .kb-card-footer{padding:12px 22px 18px;display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:1px solid rgba(148,163,184,.13);margin-top:auto}
-body.dark-theme .kb-card-footer{border-top-color:var(--border)}
+body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
 .kb-card-actions{display:flex;gap:6px;align-items:center}
 .kb-btn-open{display:inline-flex;align-items:center;gap:5px;height:38px;padding:0 18px;border-radius:12px;
     border:none;background:linear-gradient(135deg,var(--primary),#4338ca);color:#fff;

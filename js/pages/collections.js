@@ -339,9 +339,9 @@ const CollectionsPage = {
                             .col-search-wrap input::placeholder{color:#94a3b8;font-weight:400}
                             .col-search-wrap input:focus{border-color:var(--primary);
                                 box-shadow:0 0 0 4px var(--primary-glow),0 20px 45px rgba(15,23,42,.08)}
-                            body.dark-theme .col-search-wrap input{background:var(--bg-surface);backdrop-filter:none;-webkit-backdrop-filter:none;border-color:var(--border);color:var(--text-primary)}
+                            body:not(.light-theme) .col-search-wrap input{background:var(--bg-surface);backdrop-filter:none;-webkit-backdrop-filter:none;border-color:var(--border);color:var(--text-primary)}
                             .col-search-icon{position:absolute;left:18px;top:50%;transform:translateY(-50%);color:#94a3b8;pointer-events:none;font-size:1rem;z-index:2}
-                            body.dark-theme .col-search-icon{color:var(--text-muted)}
+                            body:not(.light-theme) .col-search-icon{color:var(--text-muted)}
                             .col-search-wrap input:-webkit-autofill,
                             .col-search-wrap input:-webkit-autofill:hover,
                             .col-search-wrap input:-webkit-autofill:focus {

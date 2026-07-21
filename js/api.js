@@ -1922,6 +1922,25 @@ const API = {
             const { data, error } = await supabase.rpc('get_today_birthdays');
             if (error) throw error;
             return data || [];
+        },
+        // Кому поточний користувач вже надіслав привітання цього року —
+        // для позначення кнопок "Привітати" як вже відправлених при завантаженні
+        async getSentThisYear() {
+            const year = new Date().getFullYear();
+            const { data, error } = await supabase
+                .from('birthday_wishes')
+                .select('recipient_id')
+                .eq('sender_id', AppState.user.id)
+                .eq('year', year);
+            if (error) throw error;
+            return (data || []).map(r => r.recipient_id);
+        },
+        async sendWish(recipientId, message) {
+            const year = new Date().getFullYear();
+            const { error } = await supabase
+                .from('birthday_wishes')
+                .insert({ sender_id: AppState.user.id, recipient_id: recipientId, year, message });
+            if (error) throw error;
         }
     },
 

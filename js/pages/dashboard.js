@@ -1293,18 +1293,18 @@ const DashboardPage = {
                 background:linear-gradient(100deg,#fffbeb,#fef3c7 60%,#fff7ed);
                 border:1.5px solid rgba(245,158,11,.45);
                 box-shadow:0 2px 16px rgba(245,158,11,.12),0 1px 4px rgba(0,0,0,.04)}
-            body.dark-theme .db-imp-bar{background:linear-gradient(100deg,rgba(120,70,0,.35),rgba(100,50,0,.25) 60%,rgba(130,60,0,.2));border-color:rgba(245,158,11,.4)}
+            body:not(.light-theme) .db-imp-bar{background:linear-gradient(100deg,rgba(120,70,0,.35),rgba(100,50,0,.25) 60%,rgba(130,60,0,.2));border-color:rgba(245,158,11,.4)}
             .db-imp-stripe{position:absolute;left:0;top:0;bottom:0;width:4px;background:linear-gradient(to bottom,#f59e0b,#d97706)}
             .db-imp-inner{display:flex;align-items:center;gap:1.1rem;padding:.85rem 1.1rem .85rem 1.4rem}
             .db-imp-icon{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,#f59e0b,#d97706);
                 display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:1.1rem;
                 box-shadow:0 3px 10px rgba(245,158,11,.35)}
             .db-imp-label{font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:#b45309;margin-bottom:.18rem}
-            body.dark-theme .db-imp-label{color:#fbbf24}
+            body:not(.light-theme) .db-imp-label{color:#fbbf24}
             .db-imp-title{font-weight:700;font-size:.95rem;color:#1c1917;line-height:1.3}
-            body.dark-theme .db-imp-title{color:#fef3c7}
+            body:not(.light-theme) .db-imp-title{color:#fef3c7}
             .db-imp-time{display:inline-flex;align-items:center;gap:.3rem;font-size:.73rem;color:#92400e;margin-top:.2rem;font-weight:500}
-            body.dark-theme .db-imp-time{color:#fcd34d}
+            body:not(.light-theme) .db-imp-time{color:#fcd34d}
             .db-imp-ack{margin-left:auto;flex-shrink:0;display:inline-flex;align-items:center;gap:.45rem;
                 padding:.5rem 1.1rem;border-radius:var(--radius-lg);border:none;cursor:pointer;
                 font-size:.82rem;font-weight:700;font-family:inherit;
@@ -1682,11 +1682,14 @@ const DashboardPage = {
         this._hideNotifWidget();
     },
 
-    _renderBirthdays(people) {
+    async _renderBirthdays(people) {
         const el = document.getElementById('db-birthdays');
         if (!el || !people.length) return;
 
         this._bdayPeople = people;
+        let sentIds = [];
+        try { sentIds = await API.birthdays.getSentThisYear(); } catch(_) {}
+        this._bdaySentIds = new Set(sentIds);
 
         const cards = people.map((p, i) => {
             const initials = Fmt.initials(p.full_name || '?');
@@ -1704,12 +1707,15 @@ const DashboardPage = {
                         <div class="db-bday-name">${Fmt.esc(p.full_name || '—')}</div>
                         ${p.job_position ? `<div class="db-bday-pos">${Fmt.esc(p.job_position)}</div>` : ''}
                     </div>
-                    ${p.id !== AppState.user?.id ? `
-                    <button class="db-bday-wish-btn"
-                        data-bday-btn="${p.id}"
-                        onclick="DashboardPage._openWishModal('${p.id}')">
-                        💌 Привітати
-                    </button>` : `<span class="db-bday-self-badge">🎂 Це ви!</span>`}
+                    ${p.id !== AppState.user?.id
+                        ? (this._bdaySentIds.has(p.id)
+                            ? `<button class="db-bday-wish-btn" data-bday-btn="${p.id}" disabled style="opacity:.5">✅ Надіслано</button>`
+                            : `<button class="db-bday-wish-btn"
+                                data-bday-btn="${p.id}"
+                                onclick="DashboardPage._openWishModal('${p.id}')">
+                                💌 Привітати
+                            </button>`)
+                        : `<span class="db-bday-self-badge">🎂 Це ви!</span>`}
                 </div>`;
         }).join('');
 
@@ -1724,7 +1730,7 @@ const DashboardPage = {
                     background:linear-gradient(100deg,#fffbeb 0%,#fef3c7 45%,#fff7ed 100%);
                     border:1.5px solid rgba(245,158,11,.45);
                     box-shadow:0 2px 20px rgba(245,158,11,.1),0 1px 4px rgba(0,0,0,.04)}
-                body.dark-theme .db-bday-wrap{background:linear-gradient(100deg,rgba(120,80,0,.4) 0%,rgba(160,100,0,.28) 50%,rgba(120,70,0,.32) 100%);border-color:rgba(245,158,11,.4)}
+                body:not(.light-theme) .db-bday-wrap{background:linear-gradient(100deg,rgba(120,80,0,.4) 0%,rgba(160,100,0,.28) 50%,rgba(120,70,0,.32) 100%);border-color:rgba(245,158,11,.4)}
                 .db-bday-confetti{position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;overflow:hidden}
                 .db-bday-conf-dot{position:absolute;border-radius:2px;animation:db-confetti-fall linear infinite}
                 .db-bday-left{display:flex;align-items:center;gap:.9rem;flex-shrink:0}
@@ -1733,9 +1739,9 @@ const DashboardPage = {
                     display:flex;align-items:center;justify-content:center;font-size:1.55rem;
                     box-shadow:0 4px 14px rgba(245,158,11,.45);flex-shrink:0}
                 .db-bday-headline{font-size:.95rem;font-weight:800;color:#92400e;letter-spacing:-.01em;line-height:1.2}
-                body.dark-theme .db-bday-headline{color:#fcd34d}
+                body:not(.light-theme) .db-bday-headline{color:#fcd34d}
                 .db-bday-sub{font-size:.72rem;color:#b45309;opacity:.8;margin-top:.15rem}
-                body.dark-theme .db-bday-sub{color:#fbbf24}
+                body:not(.light-theme) .db-bday-sub{color:#fbbf24}
                 .db-bday-divider{width:1px;height:48px;background:rgba(245,158,11,.35);flex-shrink:0}
                 .db-bday-scroll{display:flex;gap:.75rem;overflow-x:auto;flex:1;align-items:center;scrollbar-width:none;padding:.1rem 0}
                 .db-bday-scroll::-webkit-scrollbar{display:none}
@@ -1743,7 +1749,7 @@ const DashboardPage = {
                     padding:.5rem .85rem .5rem .55rem;border-radius:var(--radius-lg);
                     background:rgba(255,255,255,.7);border:1px solid rgba(245,158,11,.25);
                     animation:db-bday-pop .4s ease both;transition:box-shadow .15s,border-color .15s}
-                body.dark-theme .db-bday-card{background:rgba(255,255,255,.06);border-color:rgba(245,158,11,.2)}
+                body:not(.light-theme) .db-bday-card{background:rgba(255,255,255,.06);border-color:rgba(245,158,11,.2)}
                 .db-bday-card:hover{box-shadow:0 4px 16px rgba(245,158,11,.18);border-color:rgba(245,158,11,.5)}
                 .db-bday-avatar-ring{width:46px;height:46px;border-radius:50%;padding:2px;
                     background:linear-gradient(135deg,#f59e0b,#ef4444,#ec4899);
@@ -1753,9 +1759,9 @@ const DashboardPage = {
                     display:flex;align-items:center;justify-content:center;overflow:hidden;border:2px solid #fff}
                 .db-bday-info{min-width:0}
                 .db-bday-name{font-size:.82rem;font-weight:700;color:#1c1917;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
-                body.dark-theme .db-bday-name{color:#fef3c7}
+                body:not(.light-theme) .db-bday-name{color:#fef3c7}
                 .db-bday-pos{font-size:.68rem;color:#78350f;opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px;margin-top:.1rem}
-                body.dark-theme .db-bday-pos{color:#fcd34d;opacity:.65}
+                body:not(.light-theme) .db-bday-pos{color:#fcd34d;opacity:.65}
                 .db-bday-wish-btn{display:inline-flex;align-items:center;gap:.35rem;
                     background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border:none;
                     border-radius:var(--radius-md);padding:.38rem .85rem;font-size:.76rem;font-weight:700;
@@ -1767,7 +1773,7 @@ const DashboardPage = {
                 .db-bday-self-badge{display:inline-flex;align-items:center;gap:.3rem;font-size:.72rem;font-weight:700;
                     background:rgba(245,158,11,.18);border:1px solid rgba(245,158,11,.35);border-radius:999px;
                     padding:.25rem .7rem;color:#92400e;white-space:nowrap;flex-shrink:0}
-                body.dark-theme .db-bday-self-badge{color:#fcd34d;background:rgba(245,158,11,.12)}
+                body:not(.light-theme) .db-bday-self-badge{color:#fcd34d;background:rgba(245,158,11,.12)}
             </style>
             <div class="db-bday-wrap">
                 <div class="db-bday-confetti" id="db-bday-conf"></div>
@@ -1829,6 +1835,10 @@ const DashboardPage = {
         const from = AppState.profile?.full_name || 'Колега';
         const p = (this._bdayPeople || []).find(x => x.id === personId);
         try {
+            // Спочатку фіксуємо в birthday_wishes — UNIQUE(sender_id, recipient_id, year)
+            // реально блокує повторну відправку (навіть з іншої вкладки/пристрою),
+            // на відміну від попереднього суто клієнтського disabled-стану кнопки
+            await API.birthdays.sendWish(personId, text);
             await API.notifications.create({
                 user_id: personId,
                 title: `🎂 Привітання від ${from}`,
@@ -1836,14 +1846,23 @@ const DashboardPage = {
                 type: 'birthday_wish',
                 link: null
             });
+            this._bdaySentIds?.add(personId);
             Modal.close();
-            const btn = document.querySelector(`[data-bday-btn="${personId}"]`);
-            if (btn) { btn.textContent = '✅ Надіслано'; btn.disabled = true; btn.style.opacity = '.5'; }
+            const cardBtn = document.querySelector(`[data-bday-btn="${personId}"]`);
+            if (cardBtn) { cardBtn.textContent = '✅ Надіслано'; cardBtn.disabled = true; cardBtn.style.opacity = '.5'; }
             Toast.success('Надіслано! 🎉', `Привітання для ${Fmt.esc(p?.full_name || '')} відправлено`);
         } catch(e) {
             btn.disabled = false;
             btn.textContent = '🎊 Надіслати';
-            Toast.error('Помилка', e.message);
+            if (e.code === '23505') {
+                this._bdaySentIds?.add(personId);
+                const cardBtn = document.querySelector(`[data-bday-btn="${personId}"]`);
+                if (cardBtn) { cardBtn.textContent = '✅ Надіслано'; cardBtn.disabled = true; cardBtn.style.opacity = '.5'; }
+                Modal.close();
+                Toast.info('Вже надіслано', `Ви вже привітали ${Fmt.esc(p?.full_name || '')} цього року`);
+            } else {
+                Toast.error('Помилка', e.message);
+            }
         }
     },
 

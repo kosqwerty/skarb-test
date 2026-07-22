@@ -2664,7 +2664,7 @@ const API = {
                 title: '🔐 Запит на довірений IP',
                 message: `${name} запитує доступ з IP: ${ip}`,
                 type: 'info',
-                link: 'admin?tab=trusted-ips',
+                link: `admin?tab=trusted-ips&ip=${encodeURIComponent(ip)}`,
                 created_by: AppState.user.id,
                 is_read: false,
             }));

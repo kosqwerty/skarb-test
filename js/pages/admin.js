@@ -90,6 +90,7 @@ const AdminPage = {
         const initGroup = initTab ? (this._groups.find(g => g.tabs.some(t => t.id === initTab))?.id || this._groups[0]?.id) : null;
         this._tab   = initTab;
         this._group = initGroup;
+        this._pendingIp = params.ip || null;
 
         const groupsHtml = this._groups.map(g => {
             const isActive     = g.id === initGroup;
@@ -434,7 +435,7 @@ const AdminPage = {
                 case 'nav-stats':     await this._renderNavStats(el);               break;
                 case 'task-report':   await this._renderTaskReport(el);             break;
                 case 'feedback':      await this._renderFeedback(el);               break;
-                case 'trusted-ips':   await this._renderTrustedIps(el);             break;
+                case 'trusted-ips':   await this._renderTrustedIps(el, this._pendingIp);  break;
                 case 'ai-assistant':  await this._renderAiAssistant(el);            break;
                 case 'pleso':         this._renderPleso(el);                        break;
                 case 'admin-permissions': await this._renderAdminPermissions(el);   break;
@@ -6079,7 +6080,7 @@ ${item?.is_deleted ? `
     },
 
     // ── Довірені IP ───────────────────────────────────────────────
-    async _renderTrustedIps(el) {
+    async _renderTrustedIps(el, prefillIp) {
         if (!AppState.isAdmin()) { el.innerHTML = ''; return; }
 
         const render = async () => {
@@ -6240,6 +6241,20 @@ ${item?.is_deleted ? `
 
         await render();
         AdminPage._tipRerender = render;
+
+        // Прийшли за посиланням із сповіщення "Запит на довірений IP" — авто-заповнюємо
+        // або, якщо цей IP вже в списку, просто підсвічуємо рядок
+        if (prefillIp) {
+            this._pendingIp = null; // одноразово — не переповнювати при повторному відкритті вкладки
+            const existing = document.querySelector(`.tip-row[data-ip="${CSS.escape(prefillIp)}"]`);
+            if (existing) {
+                this._highlightTipRows(prefillIp);
+            } else {
+                const ipInput = document.getElementById('tip-ip');
+                if (ipInput) { ipInput.value = prefillIp; }
+                document.getElementById('tip-label')?.focus();
+            }
+        }
     },
 
     _highlightTipRows(ips) {

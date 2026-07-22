@@ -201,14 +201,7 @@ const NotificationsPage = {
     </div>
 
 
-    <div class="ntf-filters" id="ntf-filters">
-        ${['all','general','gold','tech','system'].map(tp => `
-            <button class="ntf-filter-btn${tp==='all'?' active':''}" data-type="${tp}"
-                onclick="NotificationsPage._filter(this,'${tp}')">
-                ${{ all:'Всі', general:'Загальне', gold:'ЗОЛ', tech:'ТЕХ', system:'Системні' }[tp]}
-            </button>`).join('')}
-        ${AppState.isAdmin() ? `<button class="ntf-filter-btn" data-type="ip" onclick="NotificationsPage._filter(this,'ip')"><i class="fa-solid fa-shield-halved" style="margin-right:.3rem"></i>IP-запити</button>` : ''}
-    </div>
+    <div class="ntf-filters" id="ntf-filters">${this._renderFilters(sorted)}</div>
 
     <div id="ntf-list" class="ntf-list">
         ${sorted.length ? sorted.map(n => this._renderItem(n)).join('') : this._emptyHtml()}
@@ -237,10 +230,18 @@ const NotificationsPage = {
 .ntf-item.hidden { display:none; }
 .ntf-dot { position:absolute;top:16px;right:16px;width:8px;height:8px;border-radius:50%;background:var(--primary); }
 .ntf-icon { width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0; }
-.ntf-icon-general { background:rgba(99,102,241,.12); }
-.ntf-icon-gold    { background:rgba(245,158,11,.12); }
-.ntf-icon-tech    { background:rgba(16,185,129,.12); }
-.ntf-icon-system  { background:rgba(156,163,175,.12); }
+.ntf-icon-general  { background:rgba(99,102,241,.12); }
+.ntf-icon-gold     { background:rgba(245,158,11,.12); }
+.ntf-icon-tech     { background:rgba(16,185,129,.12); }
+.ntf-icon-system   { background:rgba(156,163,175,.12); }
+.ntf-icon-test     { background:rgba(59,130,246,.12); }
+.ntf-icon-survey   { background:rgba(168,85,247,.12); }
+.ntf-icon-course   { background:rgba(6,182,212,.12); }
+.ntf-icon-doc      { background:rgba(16,185,129,.12); }
+.ntf-icon-birthday { background:rgba(236,72,153,.14); }
+.ntf-icon-info     { background:rgba(249,115,22,.14); }
+.ntf-icon-news     { background:rgba(245,158,11,.14); }
+.ntf-icon-schedule { background:rgba(20,184,166,.12); }
 .ntf-body { flex:1;min-width:0; }
 .ntf-item-title { font-weight:600;color:var(--text-primary);margin-bottom:4px;font-size:.95rem; }
 .ntf-item-msg { color:var(--text-secondary);font-size:.875rem;line-height:1.5;margin-bottom:6px;white-space:pre-wrap; }
@@ -253,18 +254,74 @@ const NotificationsPage = {
 </style>`;
     },
 
+    // Мапа теми сповіщення → {іконка, CSS-клас кольору, підпис}. Спочатку дивимось
+    // на конкретний n.type (найточніше), потім, якщо це generic 'general'/'system' —
+    // добираємо тему по посиланню/тексту повідомлення (як вже робилось для IP-запитів).
+    _TOPIC_MAP: {
+        test_assigned:    { icon: '📝', cls: 'test',     label: 'Тест' },
+        survey_assigned:  { icon: '📊', cls: 'survey',   label: 'Опитування' },
+        course_enrolled:  { icon: '🎓', cls: 'course',   label: 'Курс' },
+        doc_reminder:     { icon: '📄', cls: 'doc',      label: 'Документ' },
+        birthday_wish:    { icon: '🎂', cls: 'birthday', label: 'ДН' },
+        info:             { icon: '🌐', cls: 'info',     label: 'IP' },
+        gold:             { icon: '🏆', cls: 'gold',     label: 'ЗОЛ' },
+        tech:             { icon: '🔧', cls: 'tech',     label: 'ТЕХ' },
+        system:           { icon: '⚙️', cls: 'system',   label: 'Система' },
+        general:          { icon: '🔔', cls: 'general',  label: 'Загальне' },
+    },
+
+    _topicFor(n) {
+        if (n.message?.includes('з IP:')) return this._TOPIC_MAP.info;
+        const known = this._TOPIC_MAP[n.type];
+        if (known && n.type !== 'general') return known;
+        // 'general'/невідомий тип — добираємо тему по посиланню
+        const link = n.link || '';
+        if (link.startsWith('resource/') || link.startsWith('documents')) return { icon: '📄', cls: 'doc', label: 'Документ' };
+        if (link.startsWith('tests/') || link.includes('tab=tests'))      return { icon: '📝', cls: 'test', label: 'Тест' };
+        if (link.includes('tab=surveys'))                                 return { icon: '📊', cls: 'survey', label: 'Опитування' };
+        if (link.startsWith('courses') || link.startsWith('lessons/'))    return { icon: '🎓', cls: 'course', label: 'Курс' };
+        if (link.startsWith('news'))                                      return { icon: '📰', cls: 'news', label: 'Новини' };
+        if (link.startsWith('scheduler') || link.startsWith('schedule-') || link.startsWith('my-calendar')) return { icon: '📅', cls: 'schedule', label: 'Графік' };
+        return known || this._TOPIC_MAP.general;
+    },
+
+    // Фільтри будуються з реальних тем поточних сповіщень, а не зі статичного
+    // списку — тож зʼявляються тільки ті, що справді є (тест/опитування/курс/...)
+    _FILTER_ORDER: ['general','test','survey','course','doc','birthday','news','schedule','gold','tech','system'],
+
+    _renderFilters(list) {
+        const seen = new Map();
+        list.forEach(n => {
+            const t = this._topicFor(n);
+            if (t.cls !== 'info' && !seen.has(t.cls)) seen.set(t.cls, t);
+        });
+        const hasIp = list.some(n => n.message?.includes('з IP:'));
+
+        const chips = [`<button class="ntf-filter-btn active" data-topic="all" onclick="NotificationsPage._filter(this,'all')">Всі</button>`];
+        this._FILTER_ORDER.forEach(cls => {
+            if (!seen.has(cls)) return;
+            const t = seen.get(cls);
+            chips.push(`<button class="ntf-filter-btn" data-topic="${cls}" onclick="NotificationsPage._filter(this,'${cls}')">${t.icon} ${Fmt.esc(t.label)}</button>`);
+        });
+        if (AppState.isAdmin() && hasIp) {
+            chips.push(`<button class="ntf-filter-btn" data-topic="ip" onclick="NotificationsPage._filter(this,'ip')"><i class="fa-solid fa-shield-halved" style="margin-right:.3rem"></i>IP-запити</button>`);
+        }
+        return chips.join('');
+    },
+
     _renderItem(n) {
-        const typeIcon  = { general:'🔔', gold:'🏆', tech:'🔧', system:'⚙️' }[n.type] || '🔔';
-        const typeLabel = { general:'Загальне', gold:'ЗОЛ', tech:'ТЕХ', system:'Система' }[n.type] || '';
-        const typeCls   = `ntf-type-chip sch-type-${n.type === 'system' ? 'general' : n.type}`;
+        const topic     = this._topicFor(n);
+        const typeIcon  = topic.icon;
+        const typeLabel = topic.label;
+        const typeCls   = `ntf-type-chip sch-type-${['gold','tech'].includes(topic.cls) ? topic.cls : 'general'}`;
         const timeAgo   = this._timeAgo(n.created_at);
         const sender    = n.sender?.full_name || 'Система';
 
         const clickHandler = `NotificationsPage._openItem('${n.id}',${n.link ? JSON.stringify(n.link).replace(/"/g,'&quot;') : 'null'},this)`;
         const isIpReq = !!(n.message?.includes('з IP:'));
-        return `<div class="ntf-item ntf-item-clickable${!n.is_read ? ' unread' : ''}" data-id="${n.id}" data-type="${n.type}" data-is-ip="${isIpReq}" onclick="${clickHandler}">
+        return `<div class="ntf-item ntf-item-clickable${!n.is_read ? ' unread' : ''}" data-id="${n.id}" data-type="${n.type}" data-topic="${topic.cls}" data-is-ip="${isIpReq}" onclick="${clickHandler}">
             ${!n.is_read ? '<span class="ntf-unread-badge" id="ntf-badge-' + n.id + '"></span>' : ''}
-            <div class="ntf-icon ntf-icon-${n.type}">${typeIcon}</div>
+            <div class="ntf-icon ntf-icon-${topic.cls}">${typeIcon}</div>
             <div class="ntf-body">
                 <div class="ntf-item-title">${Fmt.esc(n.title)}</div>
                 <div class="ntf-item-msg">${(() => {
@@ -362,7 +419,7 @@ const NotificationsPage = {
         document.querySelectorAll('.ntf-item').forEach(el => {
             if (type === 'all') el.classList.remove('hidden');
             else if (type === 'ip') el.classList.toggle('hidden', el.dataset.isIp !== 'true');
-            else el.classList.toggle('hidden', el.dataset.type !== type);
+            else el.classList.toggle('hidden', el.dataset.topic !== type);
         });
     },
 

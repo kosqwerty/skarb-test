@@ -43,18 +43,22 @@
         this._container = container;
         this._tab = 'list';
         this._interns = [];
-        this._canManage = AppState.isAdmin(); // superadmin + admin
+        this._isSuperAdmin = AppState.isSuperAdmin();
         this._isManager = AppState.isManager();
         this._loadFilters();
 
         UI.setBreadcrumb([{ label: 'Стажери' }]);
         this._injectStyles();
 
-        // access check for non-superadmin/non-admin/non-manager
-        if (!this._canManage && !this._isManager) {
+        // Розділ за замовчуванням доступний лише superadmin. Звичайний admin
+        // потрапляє сюди тільки якщо його додано через кнопку "Доступ" (internViewers) —
+        // тоді він отримує повний функціонал (_canManage), але кнопки хедера
+        // в _renderManageView() для нього все одно обмежені лише "Додати стажера".
+        if (!this._isSuperAdmin && !this._isManager) {
             this._isViewer = await API.internViewers.isViewer(AppState.profile.id);
             if (!this._isViewer) { Router.go('dashboard'); return; }
         }
+        this._canManage = this._isSuperAdmin || (AppState.isAdmin() && this._isViewer);
 
         container.innerHTML = `<div style="text-align:center;padding:3rem;color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin fa-lg"></i></div>`;
 
@@ -95,13 +99,14 @@
             <div class="in-header">
                 <div class="in-title"><i class="fa-solid fa-user-graduate"></i> ${this._isManager ? 'Мої стажери' : 'Стажери'}</div>
                 <div class="in-header-actions">
-                    ${AppState.isAdmin() ? `<button class="in-btn in-btn-access" onclick="InternsPage._recalcAllDates()" title="Перерахувати планові дати для всіх стажерів з порожньою датою"><i class="fa-solid fa-rotate"></i> Дати</button>
-<button class="in-btn in-btn-access" onclick="InternsPage._openJobSettingsModal()"><i class="fa-solid fa-sliders"></i> Налаштування</button>
+                    ${this._isSuperAdmin ? `<button class="in-btn in-btn-access" onclick="InternsPage._recalcAllDates()" title="Перерахувати планові дати для всіх стажерів з порожньою датою"><i class="fa-solid fa-rotate"></i> Дати</button>
+                    <button class="in-btn in-btn-access" onclick="InternsPage._openJobSettingsModal()"><i class="fa-solid fa-sliders"></i> Налаштування</button>
                     <button class="in-btn in-btn-access" onclick="InternsPage._archiveAllDropped()" title="Зберегти дані і видалити акаунти всіх відсіяних стажерів"><i class="fa-solid fa-box-archive"></i> Архів відсіяних</button>
-                    <button class="in-btn in-btn-access" onclick="InternsPage._openBulkEditModal()" title="Масове редагування відфільтрованих стажерів"><i class="fa-solid fa-pen-to-square"></i> Масове редагування</button>` : ''}
-                    ${this._canManage ? `<button class="in-btn in-btn-access" onclick="InternsPage._openAccessModal()"><i class="fa-solid fa-shield-halved"></i> Доступ</button>
-                    <button class="in-btn in-btn-access" onclick="InternsPage._openImportModal()"><i class="fa-solid fa-file-import"></i> Імпорт</button>
-                    <button class="in-btn in-btn-primary" onclick="InternsPage._openAddModal()"><i class="fa-solid fa-plus"></i> Додати стажера</button>` : ''}
+                    <button class="in-btn in-btn-access" onclick="InternsPage._openBulkEditModal()" title="Масове редагування відфільтрованих стажерів"><i class="fa-solid fa-pen-to-square"></i> Масове редагування</button>
+                    <button class="in-btn in-btn-access" style="color:var(--danger);border-color:rgba(239,68,68,.3)" onclick="InternsPage._openArchiveDeleteModal()" title="Остаточно видалити архівні записи стажерів (без акаунту)"><i class="fa-solid fa-dumpster-fire"></i> Видалити архівні</button>
+                    <button class="in-btn in-btn-access" onclick="InternsPage._openAccessModal()"><i class="fa-solid fa-shield-halved"></i> Доступ</button>
+                    <button class="in-btn in-btn-access" onclick="InternsPage._openImportModal()"><i class="fa-solid fa-file-import"></i> Імпорт</button>` : ''}
+                    ${this._canManage ? `<button class="in-btn in-btn-primary" onclick="InternsPage._openAddModal()"><i class="fa-solid fa-plus"></i> Додати стажера</button>` : ''}
                 </div>
             </div>
             <div class="in-tabs">
@@ -1350,7 +1355,7 @@
         if (!dc) return;
         const chr = intern.characteristic || {};
         const criteria = chr.criteria || {};
-        const canEdit = AppState.isAdmin();
+        const canEdit = this._canManage;
         const p = intern.profile || intern.profile_snapshot || {};
         const jobPos = (p.job_position || '').toLowerCase();
         const hasDrag = jobPos.includes('універсал') || jobPos.includes('универсал');
@@ -2032,7 +2037,7 @@
                         ${hasChr
                             ? this._renderCharReadOnly(chr, intern)
                             : `<div class="irp-empty">Характеристику ще не заповнено</div>`}
-                        ${AppState.isAdmin() ? `<button class="in-btn in-btn-access" style="margin-top:.75rem" onclick="InternsPage._switchDetailTabById('characteristic','${intern.id}')"><i class="fa-solid fa-pen"></i> Заповнити характеристику</button>` : ''}
+                        ${this._canManage ? `<button class="in-btn in-btn-access" style="margin-top:.75rem" onclick="InternsPage._switchDetailTabById('characteristic','${intern.id}')"><i class="fa-solid fa-pen"></i> Заповнити характеристику</button>` : ''}
                     </div>
 
                     <div class="irp-panel irp-panel-hidden" data-irp-panel="tabel">
@@ -2980,6 +2985,158 @@ select.ia-input{cursor:pointer}
             await this._reload();
         } catch (e) { Toast.error('Помилка', e.message); }
         finally { Loader.hide(); }
+    },
+
+    // ── Видалення архівних записів (superadmin) — записи стажерів без акаунту
+    // (profile_id IS NULL, залишились тільки для історії/profile_snapshot) ──
+    _openArchiveDeleteModal() {
+        this._archAll = (this._interns || []).filter(i => !i.profile_id);
+        if (!this._archAll.length) { Toast.info('Немає архівних записів'); return; }
+        this._archSearch = '';
+
+        // Modal тут — це бокова панель на всю висоту (.modal-container/.modal-box
+        // в main.css), а не центроване вікно. .modal-body вже flex:1 + overflow-y:auto,
+        // тож список має просто заповнювати цей простір — без власного max-height,
+        // інакше лишається порожній "хвіст" між списком і футером.
+        Modal.open({
+            title: `<i class="fa-solid fa-dumpster-fire" style="color:#ef4444"></i> Видалити архівні записи`,
+            size: 'lg',
+            body: `
+                <style>
+                    #modal-body{display:flex;flex-direction:column;height:100%}
+                    .in-arch-hint{font-size:.82rem;color:var(--text-muted);margin-bottom:.85rem;flex-shrink:0}
+                    .in-arch-toolbar{display:flex;align-items:center;gap:.75rem;margin-bottom:.75rem;flex-shrink:0}
+                    .in-arch-search{flex:1;position:relative}
+                    .in-arch-search input{width:100%;height:38px;padding:0 12px 0 36px;border-radius:var(--radius-md);border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.85rem;outline:none;transition:border-color .15s}
+                    .in-arch-search input:focus{border-color:var(--primary)}
+                    .in-arch-search i{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:.8rem}
+                    .in-arch-count{font-size:.8rem;color:var(--text-muted);white-space:nowrap;font-weight:600}
+                    .in-arch-links{display:flex;gap:.4rem;white-space:nowrap}
+                    .in-arch-links a{display:inline-flex;align-items:center;height:38px;padding:0 .85rem;
+                        border-radius:var(--radius-md);border:1.5px solid var(--border);background:var(--bg-surface);
+                        color:var(--text-secondary);font-size:.8rem;font-weight:600;cursor:pointer;
+                        transition:border-color .15s,color .15s,background .15s}
+                    .in-arch-links a:hover{border-color:var(--primary);color:var(--primary);background:var(--bg-hover)}
+                    .in-arch-list{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:.15rem;border:1px solid var(--border);border-radius:var(--radius-md);padding:.4rem}
+                    .in-arch-row{display:grid;grid-template-columns:20px 1fr auto auto;align-items:center;gap:.7rem;padding:.5rem .6rem;border-radius:var(--radius-sm);cursor:pointer;font-size:.85rem}
+                    .in-arch-row:hover{background:var(--bg-hover)}
+                    .in-arch-name{font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+                    .in-arch-job{color:var(--text-muted);font-size:.78rem;white-space:nowrap}
+                    .in-arch-date{color:var(--text-muted);font-size:.78rem;white-space:nowrap;min-width:70px;text-align:right}
+                    .in-arch-empty{padding:2rem;text-align:center;color:var(--text-muted);font-size:.85rem}
+                </style>
+                <div class="in-arch-hint">Ці записи вже без активного акаунту — залишились лише для історії. Видалення остаточне.</div>
+                <div class="in-arch-toolbar">
+                    <div class="in-arch-search">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input type="text" id="in-arch-search-input" placeholder="Пошук за ім'ям…" oninput="InternsPage._archFilter(this.value)">
+                    </div>
+                    <span class="in-arch-count" id="in-arch-count"></span>
+                    <span class="in-arch-links"><a onclick="InternsPage._archToggleAll(true)">Всі</a><a onclick="InternsPage._archToggleAll(false)">Жодного</a></span>
+                </div>
+                <div class="in-arch-list" id="in-arch-list"></div>`,
+            footer: `
+                <button class="btn btn-ghost btn-sm" onclick="Modal.close()">Скасувати</button>
+                <button class="btn btn-danger btn-sm" onclick="InternsPage._deleteArchivedSelected()"><i class="fa-solid fa-trash"></i> Видалити вибрані</button>`
+        });
+
+        this._archChecked = new Set(this._archAll.map(i => i.id));
+        this._archRenderList();
+    },
+
+    _archRenderList() {
+        const list = document.getElementById('in-arch-list');
+        if (!list) return;
+        const q = (this._archSearch || '').toLowerCase();
+        const items = this._archAll.filter(i => {
+            const name = (i.profile_snapshot?.full_name || '').toLowerCase();
+            return !q || name.includes(q);
+        });
+        list.innerHTML = items.length ? items.map(i => {
+            const snap = i.profile_snapshot || {};
+            const endDate = i.actual_end_date || i.planned_end_date;
+            return `<label class="in-arch-row">
+                <input type="checkbox" class="in-arch-chk" data-id="${i.id}" ${this._archChecked.has(i.id) ? 'checked' : ''} onchange="InternsPage._archToggle('${i.id}',this.checked)">
+                <span class="in-arch-name">${Fmt.esc(snap.full_name || '—')}</span>
+                <span class="in-arch-job">${Fmt.esc(snap.job_position || '—')}</span>
+                <span class="in-arch-date">${endDate ? Fmt.dateShort(endDate) : '—'}</span>
+            </label>`;
+        }).join('') : `<div class="in-arch-empty">Нічого не знайдено</div>`;
+        this._archUpdateCount();
+    },
+
+    _archFilter(val) {
+        this._archSearch = val;
+        this._archRenderList();
+    },
+
+    _archToggle(id, checked) {
+        if (checked) this._archChecked.add(id); else this._archChecked.delete(id);
+        this._archUpdateCount();
+    },
+
+    _archToggleAll(checked) {
+        const q = (this._archSearch || '').toLowerCase();
+        const items = this._archAll.filter(i => {
+            const name = (i.profile_snapshot?.full_name || '').toLowerCase();
+            return !q || name.includes(q);
+        });
+        items.forEach(i => { if (checked) this._archChecked.add(i.id); else this._archChecked.delete(i.id); });
+        this._archRenderList();
+    },
+
+    _archUpdateCount() {
+        const el = document.getElementById('in-arch-count');
+        if (el) el.textContent = `${this._archChecked.size} з ${this._archAll.length} вибрано`;
+    },
+
+    async _deleteArchivedSelected() {
+        const ids = [...(this._archChecked || [])];
+        if (!ids.length) { Toast.warning('Нічого не вибрано'); return; }
+        const ok = await Modal.confirm({
+            message: `Остаточно видалити ${ids.length} архівних записів? Дію неможливо скасувати.`,
+            confirmText: 'Видалити', danger: true
+        });
+        if (!ok) return;
+
+        Modal.open({
+            title: '<i class="fa-solid fa-trash"></i> Видалення архівних записів',
+            size: 'sm',
+            body: `
+                <div style="height:100%;display:flex;flex-direction:column;justify-content:center">
+                    <div style="height:10px;border-radius:999px;background:var(--bg-hover);overflow:hidden">
+                        <div id="in-arch-bar" style="height:100%;width:0%;background:var(--danger);border-radius:999px;transition:width .25s ease"></div>
+                    </div>
+                    <div id="in-arch-status" style="margin-top:.7rem;font-size:.85rem;color:var(--text-secondary);text-align:center">Підготовка…</div>
+                </div>`,
+            footer: ''
+        });
+        const backdrop = document.getElementById('modal-backdrop');
+        if (backdrop) backdrop.onclick = null;
+        document.removeEventListener('keydown', Modal._escHandler);
+
+        let done = 0, failed = 0;
+        for (const id of ids) {
+            const bar = document.getElementById('in-arch-bar');
+            const status = document.getElementById('in-arch-status');
+            const pct = Math.round((done + failed) / ids.length * 100);
+            if (bar) bar.style.width = pct + '%';
+            if (status) status.textContent = `${done + failed} з ${ids.length}`;
+            try {
+                await API.interns.remove(id);
+                done++;
+            } catch (e) {
+                failed++;
+                console.warn('Archive delete failed for', id, e.message);
+            }
+        }
+        const bar = document.getElementById('in-arch-bar');
+        if (bar) bar.style.width = '100%';
+        Modal.close();
+
+        if (done) Toast.success('Видалено', `${done} архівних записів видалено`);
+        if (failed) Toast.error('Помилки', `${failed} не вдалося видалити`);
+        await this._reload();
     },
 
     async _editEmployedSince(internId) {

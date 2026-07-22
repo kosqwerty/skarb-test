@@ -105,27 +105,32 @@ const ResourcesPage = {
                 </div>
                 </div>
                 <style>
-                .dtab-bar{display:flex;align-items:center;gap:.3rem;border-bottom:1px solid var(--border);margin-bottom:1.25rem;padding-bottom:.6rem;overflow-x:auto;scrollbar-width:none;flex-wrap:wrap}
+                .dtab-bar{display:flex;align-items:center;gap:.3rem;background:var(--bg-surface);border:1px solid var(--border);
+                    border-radius:var(--radius-xl);padding:.4rem;margin-bottom:1.25rem;overflow-x:auto;scrollbar-width:none;
+                    flex-wrap:wrap;box-shadow:0 2px 12px rgba(15,23,42,.05)}
+                body:not(.light-theme) .dtab-bar{box-shadow:0 2px 16px rgba(0,0,0,.22)}
                 .dtab-bar::-webkit-scrollbar{display:none}
-                .dtab-sep{width:1px;height:24px;background:var(--text-muted);opacity:.35;margin:0 .2rem;flex-shrink:0}
-                .dtab{display:inline-flex;align-items:center;gap:.45rem;padding:.45rem .9rem;font-size:.85rem;font-weight:600;font-family:inherit;color:var(--text-muted);background:none;border:none;border-radius:var(--radius-md);cursor:pointer;white-space:nowrap;transition:all .15s;flex-shrink:0}
-                .dtab:hover{color:var(--text-primary);background:var(--bg-raised)}
-                .dtab.active{color:var(--primary);background:rgba(99,102,241,.12);font-weight:700}
-                .dtab.active .dtab-ic{background:rgba(99,102,241,.18);color:var(--primary)}
-                .dtab-ic{width:30px;height:30px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:1rem;background:var(--bg-base);transition:all .15s;flex-shrink:0}
-                .dtab-ic-registry{background:rgba(99,102,241,.12);color:#6366f1}
-                .dtab-ic-branch{background:rgba(16,185,129,.12);color:#10b981}
-                .dtab-ic-npa{background:rgba(245,158,11,.12);color:#f59e0b}
-                .dtab-ic-nakaz{background:rgba(59,130,246,.12);color:#3b82f6}
-                .dtab-ic-rozp{background:rgba(168,85,247,.12);color:#a855f7}
-                .dtab-ic-all{background:rgba(107,114,128,.12);color:#6b7280}
-                .dtab-ic-status{background:rgba(20,184,166,.12);color:#14b8a6}
-                .dtab-red{color:#ef4444!important}
-                .dtab-red .dtab-ic{background:rgba(239,68,68,.12);color:#ef4444}
-                .dtab-red:hover{background:rgba(239,68,68,.07)!important}
-                .dtab-red.active{color:#ef4444!important;background:rgba(239,68,68,.13)!important;font-weight:700}
-                .dtab-red.active .dtab-ic{background:rgba(239,68,68,.22)!important;color:#ef4444!important}
-                .dtab-status{margin-left:auto}
+                .dtab-sep{width:1px;height:22px;background:var(--border);margin:0 .15rem;flex-shrink:0}
+                .dtab{display:inline-flex;align-items:center;gap:.5rem;padding:.42rem .95rem .42rem .42rem;font-size:.85rem;
+                    font-weight:600;font-family:inherit;color:var(--text-muted);background:none;border:none;
+                    border-radius:var(--radius-lg);cursor:pointer;white-space:nowrap;
+                    transition:background .18s ease,color .18s ease,transform .12s ease;flex-shrink:0}
+                .dtab:hover{color:var(--text-primary);background:var(--bg-hover);transform:translateY(-1px)}
+                .dtab:active{transform:translateY(0)}
+                .dtab.active{color:var(--tab-accent,var(--primary));
+                    background:color-mix(in srgb,var(--tab-accent,var(--primary)) 14%,var(--bg-surface));font-weight:700}
+                .dtab.active .dtab-ic{background:color-mix(in srgb,var(--tab-accent,var(--primary)) 22%,transparent);
+                    color:var(--tab-accent,var(--primary))}
+                .dtab-ic{width:28px;height:28px;border-radius:9px;display:flex;align-items:center;justify-content:center;
+                    font-size:.92rem;background:var(--bg-hover);color:var(--text-muted);transition:all .18s ease;flex-shrink:0}
+                .dtab-ic-registry{background:color-mix(in srgb,#6366f1 14%,transparent);color:#6366f1}
+                .dtab-ic-branch{background:color-mix(in srgb,#10b981 14%,transparent);color:#10b981}
+                .dtab-ic-npa{background:color-mix(in srgb,#f59e0b 14%,transparent);color:#f59e0b}
+                .dtab-ic-nakaz{background:color-mix(in srgb,#3b82f6 14%,transparent);color:#3b82f6}
+                .dtab-ic-rozp{background:color-mix(in srgb,#a855f7 14%,transparent);color:#a855f7}
+                .dtab-ic-all{background:color-mix(in srgb,#6b7280 14%,transparent);color:#6b7280}
+                .dtab-ic-status{background:color-mix(in srgb,#14b8a6 14%,transparent);color:#14b8a6}
+                .dtab-ic-red{background:color-mix(in srgb,#ef4444 14%,transparent);color:#ef4444}
                 .res-ic-wrap{position:relative;flex-shrink:0}
                 .res-ack-dot{position:absolute;top:6px;left:6px;width:9px;height:9px;border-radius:50%;border:2px solid var(--bg-surface);z-index:1}
                 .res-ack-dot.res-unread{background:#ef4444;box-shadow:0 0 0 0 rgba(239,68,68,.6);animation:res-pulse 1.4s ease-in-out infinite}
@@ -133,15 +138,15 @@ const ResourcesPage = {
                 @keyframes res-pulse{0%{box-shadow:0 0 0 0 rgba(239,68,68,.6)}70%{box-shadow:0 0 0 5px rgba(239,68,68,0)}100%{box-shadow:0 0 0 0 rgba(239,68,68,0)}}
                 </style>
                 <div id="docs-tabs-bar" class="dtab-bar">
-                    <button id="docs-tab-registry" class="dtab active" onclick="ResourcesPage.switchTab('registry',this)"><span class="dtab-ic dtab-ic-registry"><i class="fa-solid fa-table-list"></i></span>Реєстри</button>
+                    <button id="docs-tab-registry" class="dtab active" style="--tab-accent:#6366f1" onclick="ResourcesPage.switchTab('registry',this)"><span class="dtab-ic dtab-ic-registry"><i class="fa-solid fa-table-list"></i></span>Реєстри</button>
                     <div class="dtab-sep"></div>
-                    <button id="docs-tab-red-folder" class="dtab dtab-red" onclick="ResourcesPage.switchTab('red-folder',this)"><span class="dtab-ic"><i class="fa-solid fa-folder"></i></span>Червона папка</button>
+                    <button id="docs-tab-red-folder" class="dtab" style="--tab-accent:#ef4444" onclick="ResourcesPage.switchTab('red-folder',this)"><span class="dtab-ic dtab-ic-red"><i class="fa-solid fa-folder"></i></span>Червона папка</button>
                     <div class="dtab-sep"></div>
-                    <button id="docs-tab-branch" class="dtab" onclick="ResourcesPage.switchTab('branch',this)"><span class="dtab-ic dtab-ic-branch"><i class="fa-solid fa-scale-balanced"></i></span>Куточок споживача</button>
+                    <button id="docs-tab-branch" class="dtab" style="--tab-accent:#10b981" onclick="ResourcesPage.switchTab('branch',this)"><span class="dtab-ic dtab-ic-branch"><i class="fa-solid fa-scale-balanced"></i></span>Куточок споживача</button>
                     <div class="dtab-sep"></div>
-                    <button id="docs-tab-list" class="dtab" onclick="ResourcesPage.switchTabList(this)"><span class="dtab-ic dtab-ic-all"><i class="fa-solid fa-layer-group"></i></span>Всі документи</button>
+                    <button id="docs-tab-list" class="dtab" style="--tab-accent:#6b7280" onclick="ResourcesPage.switchTabList(this)"><span class="dtab-ic dtab-ic-all"><i class="fa-solid fa-layer-group"></i></span>Всі документи</button>
+                    ${isManager ? '<div class="dtab-sep"></div><button id="docs-tab-status" class="dtab" style="--tab-accent:#14b8a6" onclick="ResourcesPage.switchTab(\'status\',this)"><span class="dtab-ic dtab-ic-status"><i class="fa-solid fa-chart-bar"></i></span>Статус</button>' : ''}
                     <div id="docs-cat-chips" style="display:none"></div>
-                    ${isManager ? '<button id="docs-tab-status" class="dtab dtab-status" onclick="ResourcesPage.switchTab(\'status\',this)"><span class="dtab-ic dtab-ic-status"><i class="fa-solid fa-chart-bar"></i></span>Статус</button>' : ''}
                 </div>
                 <div id="docs-tab-content">
                     <div id="resource-list" class="resource-list-docs"></div>
@@ -173,24 +178,20 @@ const ResourcesPage = {
 
         container.innerHTML = `
 <style>
-/* ── KB Hero ── */
-.kb-hero{position:relative;overflow:hidden;border-radius:32px;padding:36px 44px 34px;margin-bottom:14px;
-    background:linear-gradient(135deg,#2563eb 0%,#4338ca 45%,#7c3aed 100%);
-    box-shadow:0 20px 60px rgba(37,99,235,.18),inset 0 1px 0 rgba(255,255,255,.25)}
-.kb-hero::before{content:'';position:absolute;width:480px;height:480px;background:radial-gradient(circle,rgba(255,255,255,.16),transparent 70%);top:-200px;right:-140px;pointer-events:none}
-.kb-hero::after{content:'';position:absolute;width:320px;height:320px;background:radial-gradient(circle,rgba(255,255,255,.1),transparent 70%);bottom:-140px;left:-80px;pointer-events:none}
-.kb-hero-glow{position:absolute;inset:0;background:radial-gradient(ellipse 70% 80% at 10% 40%,rgba(255,255,255,.1),transparent);pointer-events:none}
-.kb-hero-inner{position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between;gap:24px}
-.kb-hero-left{display:flex;flex-direction:column;gap:0;max-width:600px}
-.kb-hero-badge{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:999px;background:rgba(255,255,255,.14);backdrop-filter:blur(14px);color:#fff;font-size:.75rem;font-weight:700;margin-bottom:14px;border:1px solid rgba(255,255,255,.22);width:fit-content;letter-spacing:.04em;text-transform:uppercase}
-.kb-hero-icon-row{display:flex;align-items:center;gap:18px}
-.kb-hero-icon{width:64px;height:64px;border-radius:22px;background:rgba(255,255,255,.18);backdrop-filter:blur(10px);border:1.5px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;font-size:2rem;flex-shrink:0}
-.kb-hero-title{margin:0;font-size:2rem;font-weight:800;color:#fff;letter-spacing:-.03em;line-height:1.1}
-.kb-hero-sub{margin:7px 0 0;color:rgba(255,255,255,.75);font-size:.95rem;line-height:1.5}
-.kb-hero-stats{position:relative;z-index:1;display:grid;grid-template-columns:repeat(2,1fr);gap:14px;min-width:320px}
-.kb-hero-stat{background:rgba(255,255,255,.12);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.18);border-radius:22px;padding:18px 20px;color:#fff}
-.kb-hero-stat-val{font-size:2rem;font-weight:800;line-height:1;margin-bottom:6px}
-.kb-hero-stat-label{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;opacity:.7;font-weight:600}
+/* ── KB Hero (компактна версія) ── */
+.kb-hero{position:relative;overflow:hidden;border-radius:16px;padding:14px 22px;margin-bottom:14px;
+    background:linear-gradient(120deg,#2563eb 0%,#4338ca 55%,#7c3aed 100%);
+    box-shadow:0 6px 20px rgba(37,99,235,.14)}
+.kb-hero-inner{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap}
+.kb-hero-left{display:flex;align-items:center;gap:12px;min-width:0}
+.kb-hero-icon{width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.25);display:flex;align-items:center;justify-content:center;font-size:1rem;color:#fff;flex-shrink:0}
+.kb-hero-title{margin:0;font-size:1.2rem;font-weight:800;color:#fff;letter-spacing:-.02em;line-height:1.2}
+.kb-hero-sub{margin:0;color:rgba(255,255,255,.68);font-size:.76rem;line-height:1.3}
+.kb-hero-stats{display:flex;align-items:center;gap:16px;flex-shrink:0}
+.kb-hero-stat{display:flex;flex-direction:column;align-items:flex-end;line-height:1.15}
+.kb-hero-stat-val{font-size:1.1rem;font-weight:800;color:#fff}
+.kb-hero-stat-label{font-size:.6rem;text-transform:uppercase;letter-spacing:.05em;color:rgba(255,255,255,.6);font-weight:600;margin-top:1px;white-space:nowrap}
+.kb-hero-sep{width:1px;height:24px;background:rgba(255,255,255,.22);flex-shrink:0}
 @media(max-width:900px){.kb-hero-stats{display:none}}
 .kb-search-bar{margin-bottom:22px;display:flex;align-items:center;gap:.75rem}
 .kb-search-wrap{position:relative;flex:1;max-width:640px}
@@ -315,35 +316,32 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
 .kb-empty-txt{font-size:.875rem;color:var(--text-muted);max-width:360px;line-height:1.6}
 
 @media(max-width:640px){
-  .kb-hero{padding:22px 20px 20px}.kb-hero-title{font-size:1.4rem}
-  .kb-hero-icon{width:48px;height:48px;font-size:1.5rem}
+  .kb-hero{padding:12px 16px}.kb-hero-title{font-size:1.05rem}
+  .kb-hero-icon{width:32px;height:32px;font-size:.9rem}
   .kb-grid{grid-template-columns:1fr}
 }
 </style>
 
 <div class="kb-hero">
-    <div class="kb-hero-glow"></div>
     <div class="kb-hero-inner">
         <div class="kb-hero-left">
-            <div class="kb-hero-badge">✨ Knowledge Hub</div>
-            <div class="kb-hero-icon-row">
-                <div class="kb-hero-icon"><i class="fa-solid fa-book-open" style="color:#fff;font-size:1.7rem"></i></div>
-                <div>
-                    <h1 class="kb-hero-title">База знань</h1>
-                    <p class="kb-hero-sub">Навчальні матеріали та довідкові ресурси</p>
-                </div>
+            <div class="kb-hero-icon"><i class="fa-solid fa-book-open"></i></div>
+            <div>
+                <h1 class="kb-hero-title">База знань</h1>
+                <p class="kb-hero-sub">Навчальні матеріали та довідкові ресурси</p>
             </div>
         </div>
         <div class="kb-hero-stats">
             <div class="kb-hero-stat">
-                <div class="kb-hero-stat-val" id="kb-stat-total">—</div>
-                <div class="kb-hero-stat-label">Матеріалів</div>
+                <span class="kb-hero-stat-val" id="kb-stat-total">—</span>
+                <span class="kb-hero-stat-label">Матеріалів</span>
             </div>
+            <div class="kb-hero-sep"></div>
             <div class="kb-hero-stat">
-                <div class="kb-hero-stat-val" id="kb-stat-new">—</div>
-                <div class="kb-hero-stat-label">Нових за тиждень</div>
+                <span class="kb-hero-stat-val" id="kb-stat-new">—</span>
+                <span class="kb-hero-stat-label">Нових за тиждень</span>
             </div>
-            ${AppState.isAdmin() ? '<div id="kb-db-size" style="grid-column:1/3"></div>' : ''}
+            ${AppState.isAdmin() ? '<div class="kb-hero-sep"></div><div id="kb-db-size"></div>' : ''}
         </div>
     </div>
 </div>
@@ -414,18 +412,15 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
             const bar = (bytes, max, color) => {
                 const pct = Math.min(100, (bytes / (max * 1073741824)) * 100);
                 const c = pct > 85 ? '#ef4444' : pct > 60 ? '#f59e0b' : color;
-                return `
-  <div style="display:flex;justify-content:space-between;align-items:center;font-size:.75rem;opacity:.85;white-space:nowrap;margin-bottom:2px">
-    <span>${pct > 85 ? '🔴' : pct > 60 ? '🟡' : '🟢'} &nbsp;${fmt(bytes)} / ${maxGb} ГБ</span>
-  </div>
-  <div style="height:4px;border-radius:4px;background:rgba(255,255,255,.12);overflow:hidden">
+                return `<div style="height:3px;width:70px;border-radius:4px;background:rgba(255,255,255,.18);overflow:hidden;margin-top:3px">
     <div style="height:100%;width:${pct.toFixed(1)}%;background:${c};border-radius:4px"></div>
   </div>`;
             };
 
             el.innerHTML = `
-<div style="background:rgba(0,0,0,.18);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:.55rem 1rem;min-width:180px;color:#fff">
-  <div style="font-size:.7rem;font-weight:600;opacity:.6;letter-spacing:.04em;text-transform:uppercase;margin-bottom:.2rem">Файли (Storage)</div>
+<div style="display:flex;flex-direction:column;align-items:flex-end;color:#fff">
+  <span class="kb-hero-stat-val" style="font-size:.85rem">${fmt(data.storage_bytes)}</span>
+  <span class="kb-hero-stat-label">Storage / ${maxGb} ГБ</span>
   ${bar(data.storage_bytes, maxGb, '#60a5fa')}
 </div>`;
         } catch (_) {}

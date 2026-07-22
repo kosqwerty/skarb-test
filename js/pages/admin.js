@@ -2839,7 +2839,7 @@ const AdminPage = {
             size: 'sm',
             body: `
                 <style>
-                    .bdp-wrap { padding: .25rem 0 .5rem; }
+                    .bdp-wrap { height: 100%; display: flex; flex-direction: column; justify-content: center; }
                     .bdp-track { height: 10px; border-radius: 999px; background: var(--bg-hover); overflow: hidden; }
                     .bdp-fill { height: 100%; width: 0%; background: var(--danger); border-radius: 999px; transition: width .25s ease; }
                     .bdp-status { margin-top: .7rem; font-size: .85rem; color: var(--text-secondary); text-align: center; }

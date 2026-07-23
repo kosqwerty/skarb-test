@@ -552,18 +552,18 @@ const AdminPage = {
                 .uf-avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--secondary));display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden}
                 .uf-act-col{display:flex;gap:.2rem;align-items:center;justify-content:center}
 
-                /* Toolbar buttons — same gold treasury style as "Створити користувача" */
+                /* Toolbar buttons — синій акцент, той самий, що й кнопка "Додати ресурс" (var(--primary)) */
                 .uf-toolbar {
-                    --uf-gold: #e8c76a;
-                    --uf-gold-grad: linear-gradient(135deg,#fff3cc,#e8c76a 55%,#d4af37);
-                    --uf-gold-glow: rgba(232,199,106,.4);
-                    --uf-gold-ink: #241a04;
+                    --uf-gold: #2A5EE8;
+                    --uf-gold-grad: linear-gradient(135deg,#4d7bf0,#2A5EE8 60%,#1E4BB8);
+                    --uf-gold-glow: rgba(42,94,232,.35);
+                    --uf-gold-ink: #ffffff;
                 }
                 body.light-theme .uf-toolbar {
-                    --uf-gold: #c9962a;
-                    --uf-gold-grad: linear-gradient(135deg,#f2ce7c,#c9962a 55%,#a3720a);
-                    --uf-gold-glow: rgba(201,150,42,.25);
-                    --uf-gold-ink: #2c2005;
+                    --uf-gold: #2A5EE8;
+                    --uf-gold-grad: linear-gradient(135deg,#4d7bf0,#2A5EE8 60%,#1E4BB8);
+                    --uf-gold-glow: rgba(42,94,232,.25);
+                    --uf-gold-ink: #ffffff;
                 }
                 .uf-btn-gold {
                     display: inline-flex; align-items: center; gap: 8px; padding: 9px 20px; border-radius: 12px;
@@ -1988,20 +1988,20 @@ const AdminPage = {
         }
 
         body.light-theme .cuf-container {
-            /* Light theme — bronze-gold on ivory */
-            --cuf-card-bg: linear-gradient(160deg,#fffaf0 0%,#fff6e2 100%);
-            --cuf-card-border: rgba(201,150,42,.3);
-            --cuf-card-border-focus: rgba(201,150,42,.55);
-            --cuf-gold: #c9962a;
-            --cuf-gold-soft: rgba(201,150,42,.12);
-            --cuf-gold-glow: rgba(201,150,42,.25);
-            --cuf-gold-grad: linear-gradient(135deg,#f2ce7c,#c9962a 55%,#a3720a);
-            --cuf-gold-ink: #2c2005;
-            --cuf-input-bg: #ffffff;
-            --cuf-input-border: #e7dcc0;
-            --cuf-text: #2c2410;
-            --cuf-text-soft: #6b5d3a;
-            --cuf-text-mute: #9c8c62;
+            /* Light theme — blue accent, той самий синій, що й кнопка "Додати ресурс" (var(--primary)) */
+            --cuf-card-bg: linear-gradient(160deg,#eef4ff 0%,#e3edfe 100%);
+            --cuf-card-border: rgba(42,94,232,.22);
+            --cuf-card-border-focus: rgba(42,94,232,.55);
+            --cuf-gold: #2A5EE8;
+            --cuf-gold-soft: rgba(42,94,232,.1);
+            --cuf-gold-glow: rgba(42,94,232,.28);
+            --cuf-gold-grad: linear-gradient(135deg,#4d7bf0,#2A5EE8 60%,#1E4BB8);
+            --cuf-gold-ink: #ffffff;
+            --cuf-input-bg: #fbfdff;
+            --cuf-input-border: #cfe0fb;
+            --cuf-text: #0f1b33;
+            --cuf-text-soft: #45557a;
+            --cuf-text-mute: #8a97b8;
             --cuf-danger: #dc2626;
         }
 

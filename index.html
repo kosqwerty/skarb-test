@@ -34,7 +34,6 @@
      ЕКРАН АВТОРИЗАЦІЇ
 ================================================ -->
 <div id="auth-screen" class="auth-screen hidden">
-    <button class="theme-toggle-btn auth-theme-btn" onclick="Theme.toggle()" title="Світла тема">☀️</button>
     <div class="auth-bg"></div>
 
     <div class="auth-layout">
@@ -289,11 +288,11 @@
         <i class="fa-solid fa-house"></i>
         <span>Головна</span>
     </button>
-    <button class="mob-nav-btn" onclick="Router.go('expert-path')" data-route="expert-path">
+    <button class="mob-nav-btn" id="mob-learn-btn" onclick="Router.go('expert-path')" data-route="expert-path">
         <i class="fa-solid fa-book-open"></i>
         <span>Навчання</span>
     </button>
-    <button class="mob-nav-btn" onclick="Router.go('news')" data-route="news">
+    <button class="mob-nav-btn" id="mob-news-btn" onclick="Router.go('news')" data-route="news">
         <i class="fa-solid fa-newspaper"></i>
         <span>Новини</span>
     </button>

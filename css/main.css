@@ -1376,13 +1376,24 @@ input#uf-select-all {
     .auth-layout { gap: 6rem; }
 }
 @media (max-width: 900px) {
-    .auth-layout { flex-direction: column; gap: 2rem; padding: 1.5rem; justify-content: center; align-items: center; }
+    /* Контент (картка + промо-блок) часто вищий за 100vh — auth-screen мав
+       overflow:hidden і вертикальне центрування, тому нижня частина промо-блоку
+       обрізалась без можливості проскролити. Дозволяємо скрол і рівняємо зверху. */
+    .auth-screen { overflow-y: auto; align-items: flex-start; }
+    .auth-layout { flex-direction: column; gap: 2rem; padding: 1.5rem; padding-bottom: 2.5rem; justify-content: flex-start; align-items: center; min-height: 100vh; box-sizing: border-box; }
     .auth-left { flex: none; width: 100%; max-width: 440px; }
     .auth-right { width: 100%; max-width: 440px; transform: none; margin-left: 0; align-self: auto; padding-right: 0; padding-top: 0; }
 }
 @media (max-width: 500px) {
     .auth-layout { gap: 1.5rem; }
     .auth-left, .auth-right { max-width: 100%; }
+}
+@media (max-width: 640px) {
+    /* Телефони: показуємо тільки форму входу по центру, промо-блок ховаємо повністю */
+    .auth-right { display: none; }
+    .auth-screen { align-items: flex-start; }
+    .auth-layout { justify-content: flex-start; padding-top: 2rem; padding-bottom: 1.5rem; min-height: 100vh; }
+    .auth-screen::before { background-position: calc(50% - 300px) center; }
 }
 
 @keyframes slideUp {
@@ -2130,22 +2141,6 @@ body.light-theme .logo-icon .logo-dark  { display: none; }
     transition: color var(--transition);
 }
 .sidebar-theme-btn:hover::after { color: var(--text-primary); }
-
-/* На екрані входу — плаваюча кнопка у верхньому куті */
-.auth-theme-btn {
-    position: absolute;
-    top: 1.25rem;
-    right: 1.25rem;
-    z-index: 10;
-    width: 2.5rem;
-    height: 2.5rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--radius-full);
-    backdrop-filter: blur(8px);
-    background: rgba(255,255,255,0.08);
-}
 
 /* ── Main Wrapper ───────────────────────────────────────────────── */
 .main-wrapper {
@@ -3335,7 +3330,15 @@ select {
 .mob-nav {
     display: none;
 }
+/* Приховуємо мобільний nav поки видно екран логіну (auth-screen) — mob-nav є
+   сусіднім елементом #app-shell, а не всередині нього, тож class="hidden" на
+   app-shell сам по собі його не ховає */
+#app-shell.hidden ~ .mob-nav { display: none !important; }
+
 @media (max-width: 768px) {
+    /* Плаваюча кнопка помічника заважає мобільному nav знизу — ховаємо на мобільних */
+    .sidebar-assistant { display: none !important; }
+
     .mob-nav {
         display: flex;
         position: fixed;
@@ -3440,7 +3443,7 @@ select {
 
 @media (max-width: 480px) {
     .stats-grid { grid-template-columns: 1fr; }
-    .auth-card { padding: 1.5rem; margin: 1rem; }
+    .auth-card { padding: 1.5rem; }
 }
 
 /* ── Quill Editor override ──────────────────────────────────────── */
@@ -3579,8 +3582,9 @@ select {
     .tb-user-info { display: none; }
     .tb-user { padding: .25rem; border: none; background: none !important; }
 
-    /* Контент */
-    .page-content { padding: .6rem .65rem; }
+    /* Контент — padding-bottom компенсує висоту фіксованого .mob-nav (60px),
+       інакше нижня частина будь-якої сторінки ховається під ним */
+    .page-content { padding: .6rem .65rem; padding-bottom: 72px; }
 
     /* Page headers */
     .page-header { flex-direction: column; align-items: flex-start; gap: .75rem; }

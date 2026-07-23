@@ -650,6 +650,34 @@ const UI = {
         ];
     },
     applyMobNavRestrictions() {
+        // Для адмінів/суперадмінів — замінюємо "Навчання" на "Оповіщення"
+        const learnBtn = document.getElementById('mob-learn-btn');
+        if (learnBtn) {
+            if (AppState.isAdmin()) {
+                learnBtn.onclick = () => Router.go('notifications');
+                learnBtn.dataset.route = 'notifications';
+                learnBtn.innerHTML = '<i class="fa-solid fa-bell"></i><span>Сповіщення</span>';
+            } else {
+                learnBtn.onclick = () => Router.go('expert-path');
+                learnBtn.dataset.route = 'expert-path';
+                learnBtn.innerHTML = '<i class="fa-solid fa-book-open"></i><span>Навчання</span>';
+            }
+        }
+
+        // Для адмінів/суперадмінів — замінюємо "Новини" на "Адмінка"
+        const newsBtn = document.getElementById('mob-news-btn');
+        if (newsBtn) {
+            if (AppState.isAdmin()) {
+                newsBtn.onclick = () => Router.go('admin');
+                newsBtn.dataset.route = 'admin';
+                newsBtn.innerHTML = '<i class="fa-solid fa-gear"></i><span>Адмінка</span>';
+            } else {
+                newsBtn.onclick = () => Router.go('news');
+                newsBtn.dataset.route = 'news';
+                newsBtn.innerHTML = '<i class="fa-solid fa-newspaper"></i><span>Новини</span>';
+            }
+        }
+
         // Для адмінів — замінюємо кнопку "Закладки" на "Pleso"
         const bmBtn = document.getElementById('mob-bookmarks-btn');
         if (bmBtn) {

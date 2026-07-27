@@ -8,6 +8,7 @@ const App = {
         SearchSelect.init();
         CreatableSelect.init();
         UaDateTime.init();
+        UI.initScrollTopBtn();
 
         // Restore sidebar collapsed state
         const collapsed = localStorage.getItem('sidebar_collapsed') === 'true';

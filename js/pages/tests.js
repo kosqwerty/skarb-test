@@ -16,7 +16,8 @@ const TestsPage = {
 
     async init(container, params) {
         const testId = params.id;
-        this._from   = params.from || null;
+        this._from    = params.from || null;
+        this._fromTab = params.fromTab || null;
         UI.setBreadcrumb([{ label: 'Тест' }]);
         container.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
 
@@ -52,6 +53,13 @@ const TestsPage = {
         }
     },
 
+    // Куди веде кнопка "Назад" — якщо прийшли з "Моє навчання" з конкретної
+    // вкладки (напр. "Завершені"), повертаємось саме туди, а не на generic intro
+    _backRoute(test) {
+        if (this._from === 'expert-path') return this._fromTab ? `expert-path?tab=${this._fromTab}` : 'expert-path';
+        return test?.course_id ? 'courses/' + test.course_id : 'dashboard';
+    },
+
     // Детермінований градієнт + іконка для тестів без власної обкладинки —
     // щоб кожен тест мав охайний вигляд навіть якщо адмін не завантажив картинку.
     _testAvatarHtml(test, size = 64, fullWidth = false) {
@@ -78,12 +86,20 @@ const TestsPage = {
         const completedAttempts = attempts.filter(a => a.completed_at);
         const saved             = this._loadSavedProgress();
 
-        const stats = [
-            { icon:'fa-question',     label:'Запитань',          value: test.questions?.length || 0,                                             accent:'#3b82f6' },
-            { icon:'fa-bullseye',     label:'Прохідний бал',     value: test.passing_score + '%',                                                accent:'#14b8a6' },
-            { icon:'fa-rotate-right', label:'Спроб залишилось',  value: attemptsLeft === null ? '∞' : attemptsLeft,                              accent: canAttempt ? '#10b981' : '#ef4444' },
-            { icon:'fa-clock',       label:'Час',               value: test.time_limit_minutes ? test.time_limit_minutes + ' хв' : 'Без ліміту', accent:'#C9A227' }
-        ];
+        const resultStat = best
+            ? { icon:'fa-trophy', label:'Ваш результат', value: Math.round(best.percentage || 0) + '%', accent: best.passed ? '#10b981' : '#ef4444' }
+            : { icon:'fa-bullseye', label:'Прохідний бал', value: test.passing_score + '%', accent:'#14b8a6' };
+        const attemptsStat = { icon:'fa-rotate-right', label:'Спроб залишилось', value: attemptsLeft === null ? '∞' : attemptsLeft, accent: canAttempt ? '#10b981' : '#ef4444' };
+
+        // Тест пройдено і спроб більше немає — ховаємо "Запитань"/"Час" до появи нової спроби
+        const stats = (best && !canAttempt)
+            ? [resultStat, attemptsStat]
+            : [
+                { icon:'fa-question', label:'Запитань', value: test.questions?.length || 0, accent:'#3b82f6' },
+                resultStat,
+                attemptsStat,
+                { icon:'fa-clock', label:'Час', value: test.time_limit_minutes ? test.time_limit_minutes + ' хв' : 'Без ліміту', accent:'#C9A227' }
+            ];
 
         let barIcon, barClass, barHtml;
         if (!canAttempt) {
@@ -231,7 +247,7 @@ const TestsPage = {
                 @media(max-width:560px){.th-row{flex-wrap:wrap}.th-info{order:3;flex-basis:100%}}
             </style>
             <div class="ti-wrap">
-                <button class="btn-back" style="margin-bottom:16px" onclick="Router.go('${this._from==='expert-path'?'expert-path':test.course_id?'courses/'+test.course_id:'dashboard'}')">
+                <button class="btn-back" style="margin-bottom:16px" onclick="Router.go('${this._backRoute(test)}')">
                     <i class="fa-solid fa-arrow-left"></i> Назад
                 </button>
 
@@ -446,7 +462,7 @@ const TestsPage = {
                     // Збережена сесія, де всі питання вже підтверджені (напр. розпочата
                     // до додавання авто-завершення) — довершуємо тест замість того, щоб
                     // знову показувати останнє питання.
-                    if (this._questions.length && this._lockedSet.size >= this._questions.length) {
+                    if (this._questions.length && this._questions.every(qq => this._lockedSet.has(qq.id))) {
                         this.submitTest();
                         return;
                     }
@@ -853,8 +869,11 @@ const TestsPage = {
         this._saveProgress();
 
         // Це була остання непідтверджена відповідь — завершуємо тест автоматично,
-        // не чекаючи ручного натискання «Завершити тест».
-        if (this._lockedSet.size >= this._questions.length) {
+        // не чекаючи ручного натискання «Завершити тест». Порівнюємо через every(),
+        // а не lockedSet.size >= questions.length — якщо в тесті трапляється
+        // дублікат питання (той самий id двічі), Set рахує його один раз, і size
+        // ніколи не наздоганяє questions.length, тож автозавершення просто зависає.
+        if (this._questions.every(qq => this._lockedSet.has(qq.id))) {
             this._showQuestion(this._curQIdx);
             if (this._test.show_answer_feedback) setTimeout(() => this.submitTest(), 1500);
             else                                 this.submitTest();
@@ -935,6 +954,7 @@ const TestsPage = {
             });
             this._clearProgress();
             ActivityTracker.track('test_complete', { entity_type: 'test', entity_id: this._test.id, entity_title: this._test.title, page: `tests/${this._test.id}`, details: { score: Math.round(result.percentage), passed: result.passed, needsReview: result.needsReview } });
+            UI.loadLearnBadge();
             this._renderResult(result, timeSpent);
         } catch(e) { Toast.error('Помилка', e.message); }
         finally { Loader.hide(); }
@@ -1069,7 +1089,7 @@ const TestsPage = {
                         </div>
                     </div>
                     <div class="tr-top-actions">
-                        <button class="btn btn-ghost btn-sm" onclick="Router.go('${this._from==='expert-path'?'expert-path':this._test.course_id?'courses/'+this._test.course_id:'dashboard'}')">
+                        <button class="btn btn-ghost btn-sm" onclick="Router.go('${this._backRoute(this._test)}')">
                             <i class="fa-solid fa-house"></i> На головну
                         </button>
                     </div>

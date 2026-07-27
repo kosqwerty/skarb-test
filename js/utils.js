@@ -94,6 +94,19 @@ const Loader = {
 };
 
 const UI = {
+    // Кнопка "нагору" — з'являється після прокрутки на SCROLL_TOP_THRESHOLD px.
+    // Слухач на window/document, бо сторінка скролиться самим документом
+    // (.top-bar position:fixed, внутрішнього overflow-контейнера немає).
+    _SCROLL_TOP_THRESHOLD: 400,
+    initScrollTopBtn() {
+        const btn = document.getElementById('scroll-top-btn');
+        if (!btn || this._scrollTopInited) return;
+        this._scrollTopInited = true;
+        window.addEventListener('scroll', () => {
+            btn.classList.toggle('visible', window.scrollY > this._SCROLL_TOP_THRESHOLD);
+        }, { passive: true });
+    },
+
     toggleSidebar() {
         if (window.innerWidth <= 1024) {
             const sidebar = document.getElementById('sidebar');

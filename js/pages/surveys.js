@@ -90,8 +90,8 @@ const SurveysPage = {
 .sv-meta-item i{font-size:.66rem;color:var(--primary)}
 .sv-card-footer{padding:12px 18px 16px;border-top:1px solid var(--border);display:flex;gap:8px;background:color-mix(in srgb,var(--bg-raised) 45%,transparent)}
 .sv-btn{flex:1;padding:8px 12px;border-radius:12px;border:none;font-size:.8rem;font-weight:700;cursor:pointer;transition:all .18s;display:flex;align-items:center;justify-content:center;gap:6px}
-.sv-btn-primary{background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:#fff;box-shadow:0 3px 10px var(--primary-glow)}
-.sv-btn-primary:hover{box-shadow:0 5px 16px var(--primary-glow);transform:translateY(-1px)}
+.sv-btn-primary{background:linear-gradient(135deg,#10b981,#059669);color:#fff;box-shadow:0 3px 10px rgba(16,185,129,.4)}
+.sv-btn-primary:hover{box-shadow:0 5px 16px rgba(16,185,129,.55);transform:translateY(-1px)}
 .sv-btn-ghost{background:var(--bg-raised);color:var(--text-secondary);border:1.5px solid var(--border)}
 .sv-btn-ghost:hover{border-color:var(--primary);color:var(--primary)}
 .sv-btn-danger{background:rgba(239,68,68,.1);color:var(--danger);border:1.5px solid rgba(239,68,68,.25)}
@@ -386,7 +386,7 @@ const SurveysPage = {
     </div>
     <div class="sv-card-footer">
         ${done || expired
-            ? `<button onclick="SurveysPage.openResults('${s.id}')" style="display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:12px;border:none;cursor:pointer;font-size:.8rem;font-weight:700;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;box-shadow:0 4px 14px rgba(22,163,74,.35);transition:all .2s" onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform=''"><i class="fa-solid fa-chart-bar"></i> ${isStaff ? 'Результати' : 'Переглянути'}</button>`
+            ? `<button onclick="SurveysPage.openResults('${s.id}')" style="display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:12px;border:none;cursor:pointer;font-size:.8rem;font-weight:700;background:linear-gradient(135deg,#0ea5e9,#10b981);color:#fff;box-shadow:0 4px 14px rgba(14,165,233,.35);transition:all .2s" onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform=''"><i class="fa-solid fa-chart-bar"></i> ${isStaff ? 'Результати' : 'Переглянути'}</button>`
             : s.is_published
                 ? `<button class="sv-btn sv-btn-primary" onclick="SurveysPage.goTake('${s.id}')"><i class="fa-solid fa-pen-to-square"></i> Пройти</button>`
                 : ''}
@@ -742,6 +742,7 @@ const SurveysPage = {
         try {
             await API.surveys.submitResponse(surveyId, answers);
             this._myDone.add(surveyId);
+            UI.loadLearnBadge();
             this._showSuccess();
         } catch(e) { Toast.error('Помилка', e.message); if (btn) btn.disabled = false; }
         finally { Loader.hide(); }

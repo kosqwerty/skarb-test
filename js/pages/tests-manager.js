@@ -120,7 +120,7 @@ const TestsManagerAPI = {
     async getMyAssignments() {
         const { data, error } = await supabase.from('test_assignments')
             .select(`*, test:tests(id,title,description,time_limit_minutes,max_attempts,randomize_questions,
-                questions(id)), group:test_groups(id,title,description,cover_image,is_sequential)`)
+                passing_score,cover_image,stretch_cover_image,questions(id)), group:test_groups(id,title,description,cover_image,stretch_cover_image,is_sequential)`)
             .eq('user_id', AppState.user.id)
             .order('created_at', { ascending: false });
         if (error) throw error;
@@ -277,7 +277,10 @@ const TestsManagerAPI = {
 
     async uploadGroupCover(groupId, file) {
         const ext  = file.name.split('.').pop().toLowerCase();
-        const path = `covers/groups/${groupId}/cover.${ext}`;
+        // Той самий патерн шляху, що й для окремих тестів (covers/{uuid}/...) —
+        // RLS-політика бакета test-images очікує UUID одразу після "covers/",
+        // додатковий сегмент "groups/" ламав перевірку (400 RLS violation)
+        const path = `covers/${groupId}/cover.${ext}`;
         const opts = { upsert: true };
         if (file.type) opts.contentType = file.type;
         const { error } = await supabase.storage.from(APP_CONFIG.buckets.testImages).upload(path, file, opts);
@@ -369,9 +372,8 @@ const TestsManagerPage = {
             this._tests = await TestsManagerAPI.getAllStandalone();
         } catch(e) { this._tests = []; }
 
-        // Aggregates: assigned / passed per test + hero stats
+        // Aggregates: assigned / passed per test (per-row counts in the table below)
         this._listStats = {};
-        let totalAssigned = 0, avgPct = null;
         try {
             const { asg, att } = await TestsManagerAPI.getListStats(this._tests.map(t => t.id));
             const st = this._listStats;
@@ -384,29 +386,15 @@ const TestsManagerPage = {
                 if (!a.passed || !assignedUsers[a.test_id]?.has(a.user_id)) return;
                 st[a.test_id].passed.add(a.user_id);
             });
-            totalAssigned = asg.length;
-            if (att.length) avgPct = Math.round(att.reduce((s, a) => s + (a.percentage || 0), 0) / att.length);
         } catch(e) { console.error('[tests-manager] list stats:', e); }
 
         container.innerHTML = `
 <style>
 
-.tm-hero{border-radius:22px;padding:32px 36px;margin-bottom:24px;background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 60%,#1e40af 100%);position:relative;overflow:hidden}
-.tm-hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 60% 80% at 80% 20%,rgba(201,162,39,.18),transparent);pointer-events:none}
-.tm-hero-inner{position:relative;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
-.tm-hero-left{display:flex;align-items:center;gap:18px}
-.tm-hero-icon{width:60px;height:60px;border-radius:18px;background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:1.9rem;flex-shrink:0;color:#fff}
-.tm-hero-title{margin:0;font-size:1.7rem;font-weight:800;color:#fff;letter-spacing:-.03em}
-.tm-hero-sub{margin:4px 0 0;color:rgba(255,255,255,.65);font-size:.88rem}
-.tm-btn-new{display:inline-flex;align-items:center;gap:8px;padding:10px 22px;border-radius:12px;background:#C9A227;border:none;color:#fff;font-size:.9rem;font-weight:700;cursor:pointer;transition:background .15s;flex-shrink:0}
-.tm-btn-new:hover{background:#b8911f}
-.tm-hero-stats{display:flex;gap:24px;position:relative}
-.tm-hero-stat{text-align:right}
-.tm-hero-stat b{display:block;font-size:1.35rem;font-weight:800;color:#fff}
-.tm-hero-stat span{font-size:.66rem;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.06em}
-@media(max-width:768px){.tm-hero-stats{display:none}}
+.tm-btn-new{display:inline-flex;align-items:center;gap:8px;padding:10px 22px;border-radius:12px;background:var(--primary);border:none;color:#fff;font-size:.9rem;font-weight:700;cursor:pointer;transition:background .15s;flex-shrink:0}
+.tm-btn-new:hover{background:var(--primary-dark)}
 
-.tm-search-wrap{display:flex;align-items:center;gap:8px;flex:1;padding:0 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);transition:border-color .15s}
+.tm-search-wrap{display:flex;align-items:center;gap:8px;width:100%;max-width:500px;padding:0 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);transition:border-color .15s}
 .tm-search-wrap:focus-within{border-color:var(--primary)}
 .tm-search-wrap i{color:var(--text-muted);font-size:.85rem;flex-shrink:0}
 .tm-search-inp{flex:1;min-width:0;border:none!important;background:transparent!important;color:var(--text-primary)!important;font-size:.85rem;outline:none!important;padding:9px 0!important;box-shadow:none!important;width:auto}
@@ -416,7 +404,7 @@ const TestsManagerPage = {
 .tm-fchip:hover{border-color:var(--border-light);color:var(--text-primary)}
 .tm-fchip.on{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 12%,var(--bg-surface));color:var(--primary)}
 .tm-fchip b{font-weight:800;opacity:.65;margin-left:3px;font-size:.72rem}
-.tm-sort-sel{padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);font-size:.8rem;font-weight:600;cursor:pointer;outline:none;font-family:inherit}
+.tm-sort-sel{width:auto;flex-shrink:0;padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);font-size:.8rem;font-weight:600;cursor:pointer;outline:none;font-family:inherit}
 
 .tm-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 10px;border-radius:20px;font-size:.72rem;font-weight:600}
 .tm-chip-q{background:rgba(99,102,241,.12);color:#6366f1}
@@ -464,15 +452,18 @@ const TestsManagerPage = {
 .tm-act-btn:hover{border-color:var(--primary);color:var(--primary);background:color-mix(in srgb,var(--primary) 8%,transparent)}
 .tm-act-danger:hover{border-color:var(--danger)!important;color:var(--danger)!important;background:rgba(239,68,68,.08)!important}
 
-.tm-sec-tabs{display:flex;gap:8px;margin-bottom:18px}
-.tm-sec-tab{padding:8px 18px;border-radius:9999px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-muted);font-size:.82rem;font-weight:600;cursor:pointer;transition:all .18s;display:inline-flex;align-items:center;gap:7px}
-.tm-sec-tab:hover:not(.on){border-color:var(--primary);color:var(--primary)}
-.tm-sec-tab.on{background:var(--primary);color:#fff;border-color:var(--primary)}
+.tm-sec-tabs{display:inline-flex;gap:4px;margin-bottom:18px;padding:5px;background:var(--bg-surface);border:1px solid var(--border);border-radius:16px;box-shadow:0 2px 10px rgba(15,23,42,.05)}
+body:not(.light-theme) .tm-sec-tabs{box-shadow:0 2px 14px rgba(0,0,0,.2)}
+.tm-sec-tab{padding:9px 18px 9px 10px;border-radius:12px;border:none;background:transparent;color:var(--text-muted);font-size:.85rem;font-weight:600;cursor:pointer;transition:background .18s ease,color .18s ease,transform .12s ease;display:inline-flex;align-items:center;gap:9px}
+.tm-sec-tab:hover:not(.on){color:var(--text-primary);background:var(--bg-hover);transform:translateY(-1px)}
+.tm-sec-tab i{width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.85rem;background:var(--bg-hover);color:var(--text-muted);transition:all .18s ease}
+.tm-sec-tab.on{background:color-mix(in srgb,var(--primary) 12%,var(--bg-surface));color:var(--primary)}
+.tm-sec-tab.on i{background:var(--primary);color:#fff}
 
-.tmg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+.tmg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:16px}
 .tmg-card{background:var(--bg-surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;transition:box-shadow .15s,transform .15s;animation:tm-in .3s ease}
 .tmg-card:hover{box-shadow:0 8px 24px rgba(0,0,0,.1);transform:translateY(-2px)}
-.tmg-cover{height:110px;background:linear-gradient(135deg,#0f172a 0%,#1e40af 55%,#C9A227 100%);background-size:cover;background-position:center;position:relative;display:flex;align-items:flex-end;padding:10px}
+.tmg-cover{height:180px;background:linear-gradient(135deg,#0f172a 0%,#1e40af 55%,#C9A227 100%);background-size:cover;background-position:center;position:relative;display:flex;align-items:flex-end;padding:10px}
 .tmg-cover-ph{display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.85);font-size:1.8rem}
 .tmg-seq-badge{position:absolute;top:8px;right:8px;font-size:.64rem;font-weight:700;padding:3px 9px;border-radius:20px;background:rgba(0,0,0,.4);color:#fff;backdrop-filter:blur(4px)}
 .tmg-body{padding:14px 16px}
@@ -489,24 +480,6 @@ const TestsManagerPage = {
 </style>
 
 <div class="tm-page">
-    <div class="tm-hero">
-        <div class="tm-hero-inner">
-            <div class="tm-hero-left">
-                <div class="tm-hero-icon"><i class="fa-solid fa-file-pen"></i></div>
-                <div>
-                    <h1 class="tm-hero-title">Управління тестами</h1>
-                    <p class="tm-hero-sub">Створюйте тести та призначайте співробітникам</p>
-                </div>
-            </div>
-            <div class="tm-hero-stats">
-                <div class="tm-hero-stat"><b>${this._tests.length}</b><span>тестів</span></div>
-                <div class="tm-hero-stat"><b>${Fmt.num(totalAssigned)}</b><span>призначень</span></div>
-                ${avgPct !== null ? `<div class="tm-hero-stat"><b>${avgPct}%</b><span>сер. бал</span></div>` : ''}
-            </div>
-            ${AppState.canMutate() ? `<button class="tm-btn-new" onclick="TestsManagerPage.openCreateModal()"><i class="fa-solid fa-plus"></i> Новий тест</button>` : ''}
-        </div>
-    </div>
-
     <div class="tm-sec-tabs">
         <button class="tm-sec-tab on" onclick="TestsManagerPage._renderList(TestsManagerPage._container)"><i class="fa-solid fa-file-pen"></i> Тести</button>
         <button class="tm-sec-tab" onclick="TestsManagerPage._renderGroupsList(TestsManagerPage._container)"><i class="fa-solid fa-layer-group"></i> Групи тестів</button>
@@ -527,6 +500,7 @@ const TestsManagerPage = {
             <option value="title">За назвою</option>
             <option value="progress">За % проходження</option>
         </select>
+        ${AppState.canMutate() ? `<button class="tm-btn-new" style="margin-left:auto" onclick="TestsManagerPage.openCreateModal()"><i class="fa-solid fa-plus"></i> Новий тест</button>` : ''}
     </div>
 
     ${this._tests.length ? `
@@ -569,28 +543,19 @@ const TestsManagerPage = {
 
         container.innerHTML = `
 <style>
-.tm-hero{border-radius:22px;padding:32px 36px;margin-bottom:24px;background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 60%,#1e40af 100%);position:relative;overflow:hidden}
-.tm-hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 60% 80% at 80% 20%,rgba(201,162,39,.18),transparent);pointer-events:none}
-.tm-hero-inner{position:relative;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
-.tm-hero-left{display:flex;align-items:center;gap:18px}
-.tm-hero-icon{width:60px;height:60px;border-radius:18px;background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:1.9rem;flex-shrink:0;color:#fff}
-.tm-hero-title{margin:0;font-size:1.7rem;font-weight:800;color:#fff;letter-spacing:-.03em}
-.tm-hero-sub{margin:4px 0 0;color:rgba(255,255,255,.65);font-size:.88rem}
-.tm-hero-stats{display:flex;gap:24px;position:relative}
-.tm-hero-stat{text-align:right}
-.tm-hero-stat b{display:block;font-size:1.35rem;font-weight:800;color:#fff}
-.tm-hero-stat span{font-size:.66rem;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.06em}
-@media(max-width:768px){.tm-hero-stats{display:none}}
 
-.tm-sec-tabs{display:flex;gap:8px;margin-bottom:18px}
-.tm-sec-tab{padding:8px 18px;border-radius:9999px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-muted);font-size:.82rem;font-weight:600;cursor:pointer;transition:all .18s;display:inline-flex;align-items:center;gap:7px}
-.tm-sec-tab:hover:not(.on){border-color:var(--primary);color:var(--primary)}
-.tm-sec-tab.on{background:var(--primary);color:#fff;border-color:var(--primary)}
+.tm-sec-tabs{display:inline-flex;gap:4px;margin-bottom:18px;padding:5px;background:var(--bg-surface);border:1px solid var(--border);border-radius:16px;box-shadow:0 2px 10px rgba(15,23,42,.05)}
+body:not(.light-theme) .tm-sec-tabs{box-shadow:0 2px 14px rgba(0,0,0,.2)}
+.tm-sec-tab{padding:9px 18px 9px 10px;border-radius:12px;border:none;background:transparent;color:var(--text-muted);font-size:.85rem;font-weight:600;cursor:pointer;transition:background .18s ease,color .18s ease,transform .12s ease;display:inline-flex;align-items:center;gap:9px}
+.tm-sec-tab:hover:not(.on){color:var(--text-primary);background:var(--bg-hover);transform:translateY(-1px)}
+.tm-sec-tab i{width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.85rem;background:var(--bg-hover);color:var(--text-muted);transition:all .18s ease}
+.tm-sec-tab.on{background:color-mix(in srgb,var(--primary) 12%,var(--bg-surface));color:var(--primary)}
+.tm-sec-tab.on i{background:var(--primary);color:#fff}
 
-.tmg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+.tmg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:16px}
 .tmg-card{background:var(--bg-surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;transition:box-shadow .15s,transform .15s;animation:tm-in .3s ease}
 .tmg-card:hover{box-shadow:0 8px 24px rgba(0,0,0,.1);transform:translateY(-2px)}
-.tmg-cover{height:110px;background:linear-gradient(135deg,#0f172a 0%,#1e40af 55%,#C9A227 100%);background-size:cover;background-position:center;position:relative;display:flex;align-items:flex-end;padding:10px}
+.tmg-cover{height:180px;background:linear-gradient(135deg,#0f172a 0%,#1e40af 55%,#C9A227 100%);background-size:cover;background-position:center;position:relative;display:flex;align-items:flex-end;padding:10px}
 .tmg-cover-ph{display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.85);font-size:1.8rem}
 .tmg-seq-badge{position:absolute;top:8px;right:8px;font-size:.64rem;font-weight:700;padding:3px 9px;border-radius:20px;background:rgba(0,0,0,.4);color:#fff;backdrop-filter:blur(4px)}
 .tmg-body{padding:14px 16px}
@@ -607,21 +572,6 @@ const TestsManagerPage = {
 @keyframes tm-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 </style>
 <div class="tm-page">
-    <div class="tm-hero">
-        <div class="tm-hero-inner">
-            <div class="tm-hero-left">
-                <div class="tm-hero-icon"><i class="fa-solid fa-layer-group"></i></div>
-                <div>
-                    <h1 class="tm-hero-title">Групи тестів</h1>
-                    <p class="tm-hero-sub">Об'єднуйте тести у послідовність для проходження</p>
-                </div>
-            </div>
-            <div class="tm-hero-stats">
-                <div class="tm-hero-stat"><b>${this._groups.length}</b><span>груп</span></div>
-            </div>
-        </div>
-    </div>
-
     <div class="tm-sec-tabs">
         <button class="tm-sec-tab" onclick="TestsManagerPage._renderList(TestsManagerPage._container)"><i class="fa-solid fa-file-pen"></i> Тести</button>
         <button class="tm-sec-tab on" onclick="TestsManagerPage._renderGroupsList(TestsManagerPage._container)"><i class="fa-solid fa-layer-group"></i> Групи тестів</button>
@@ -696,9 +646,12 @@ const TestsManagerPage = {
             body: `
 <style>
 .tmge-cover-wrap{margin-bottom:16px}
-.tmge-cover-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;height:120px;border:2px dashed var(--border);border-radius:12px;cursor:pointer;color:var(--text-muted);text-align:center}
+.tmge-stretch-row{display:flex;align-items:flex-start;gap:10px;font-size:.83rem;color:var(--text-primary);margin:-4px 0 16px;cursor:pointer}
+.tmge-stretch-row input{margin-top:2px;accent-color:var(--primary);flex-shrink:0}
+.tmge-stretch-hint{display:block;font-size:.75rem;color:var(--text-muted);font-weight:400;margin-top:2px}
+.tmge-cover-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;height:200px;border:2px dashed var(--border);border-radius:12px;cursor:pointer;color:var(--text-muted);text-align:center}
 .tmge-cover-empty:hover{border-color:var(--primary);color:var(--primary)}
-.tmge-cover-preview{position:relative;height:120px;border-radius:12px;overflow:hidden}
+.tmge-cover-preview{position:relative;height:200px;border-radius:12px;overflow:hidden}
 .tmge-cover-preview img{width:100%;height:100%;object-fit:cover}
 .tmge-cover-actions{position:absolute;top:8px;right:8px;display:flex;gap:6px}
 .tmge-cover-btn{width:30px;height:30px;border-radius:8px;border:none;background:rgba(0,0,0,.55);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center}
@@ -725,6 +678,10 @@ const TestsManagerPage = {
 .tmge-check-row span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-primary)}
 </style>
 <div class="tmge-cover-wrap" id="tmge-cover-wrap">${this._groupCoverPreviewHtml()}</div>
+<label class="tmge-stretch-row">
+    <input type="checkbox" id="tmge-stretch-cover" ${group?.stretch_cover_image ? 'checked' : ''}>
+    <span><b>Розтягнути обкладинку</b><span class="tmge-stretch-hint">Картинка групи заповнює всю ширину блока (без збереження пропорцій)</span></span>
+</label>
 <div class="tmge-field">
     <label class="tmge-label">Назва групи</label>
     <input class="tmge-inp" id="tmge-title" type="text" value="${Fmt.esc(group?.title || '')}" placeholder="Напр. Вступний курс продавця">
@@ -845,7 +802,8 @@ const TestsManagerPage = {
         const payload = {
             title,
             description: Dom.val('tmge-desc').trim() || null,
-            is_sequential: !!document.getElementById('tmge-seq')?.checked
+            is_sequential: !!document.getElementById('tmge-seq')?.checked,
+            stretch_cover_image: !!document.getElementById('tmge-stretch-cover')?.checked
         };
         Loader.show();
         try {
@@ -1630,6 +1588,12 @@ button.te-save-btn-ghost:hover{background:color-mix(in srgb,var(--zc-color,var(-
 .ql-toolbar.ql-snow .ql-picker.ql-expanded .ql-picker-label{
     background:color-mix(in srgb,var(--primary) 14%,var(--bg-surface));
 }
+/* Збільшені іконки тулбару — за замовчуванням Quill дає 28px кнопку/18px svg,
+   на щільній тест-панелі це занадто дрібно */
+.ql-toolbar.ql-snow button{width:34px;height:34px}
+.ql-toolbar.ql-snow button svg{width:22px;height:22px}
+.ql-toolbar.ql-snow .ql-picker-label{display:flex;align-items:center;height:34px}
+.ql-toolbar.ql-snow .ql-picker-label svg{width:22px;height:22px}
 
 /* Options */
 .te-options{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
@@ -1777,7 +1741,9 @@ button.te-save-btn-ghost:hover{background:color-mix(in srgb,var(--zc-color,var(-
 .te-ans-card{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border:1.5px solid var(--border);border-radius:12px;background:var(--bg-surface);transition:border-color .15s,box-shadow .15s}
 .te-ans-card:focus-within{border-color:var(--border-light)}
 .te-ans-card.correct{border-color:#10b981;box-shadow:0 0 0 1px rgba(16,185,129,.25)}
-.te-ans-card .te-opt-handle{margin-top:6px}
+.te-ans-card.drag-over{border-color:var(--primary)!important;background:rgba(99,102,241,.07)}
+.te-ans-card .te-opt-handle{margin-top:6px;cursor:grab}
+.te-ans-card .te-opt-handle:active{cursor:grabbing}
 .te-opt-marker-btn{width:22px;height:22px;margin-top:4px;flex-shrink:0;border:none;background:none;padding:0;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .te-opt-marker-btn .te-opt-marker{width:20px;height:20px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:.65rem;color:#fff;transition:all .15s}
 .te-opt-marker-btn .te-opt-marker.sq{border-radius:5px}
@@ -2101,8 +2067,11 @@ ${this._opts.map((it,i) => `
         return `
 <div class="te-ans-cards" id="te-opts-list">
 ${this._opts.map((o,i) => `
-<div class="te-ans-card${o.correct?' correct':''}" id="te-ans-card-${i}">
-    <span class="te-opt-handle"><i class="fa-solid fa-grip-vertical"></i></span>
+<div class="te-ans-card${o.correct?' correct':''}" id="te-ans-card-${i}"
+    ondragover="TestsManagerPage._handleAnsDragOver(event,${i})"
+    ondragleave="TestsManagerPage._handleAnsDragLeave(event)"
+    ondrop="TestsManagerPage._handleAnsDrop(event,${i})">
+    <span class="te-opt-handle" draggable="true" ondragstart="TestsManagerPage._handleAnsDragStart(event,${i})"><i class="fa-solid fa-grip-vertical"></i></span>
     <button type="button" class="te-opt-marker-btn${o.correct?' correct':''}" onclick="TestsManagerPage.toggleCorrect(${i})" title="${o.correct?'Правильна відповідь':'Позначити правильною'}">
         <span class="te-opt-marker${isMulti?' sq':''}">${o.correct?'<i class="fa-solid fa-check"></i>':''}</span>
     </button>
@@ -2241,9 +2210,12 @@ ${this._opts.map((o,i) => `
         try { text = await file.text(); } catch { Toast.error('Імпорт', 'Не вдалося прочитати файл'); return; }
         const parsed = this._parseImportText(text);
         if (!parsed.length) { Toast.error('Імпорт', 'Питань не знайдено'); return; }
-        Loader.show();
-        try {
-            for (const item of parsed) {
+
+        this._importProgressOpen(parsed.length);
+        let done = 0, failed = 0;
+        for (const item of parsed) {
+            this._importProgressUpdate(done, parsed.length, item.question_text);
+            try {
                 const q = await API.questions.create({
                     test_id:       this._curTest.id,
                     question_text: item.question_text,
@@ -2255,13 +2227,62 @@ ${this._opts.map((o,i) => `
                     ? await API.questions.upsertAnswers(q.id, item.answers.map(a => ({ text: a.text, is_correct: a.is_correct, image_url: null })))
                     : [];
                 this._questions.push(q);
+                done++;
+            } catch(e) {
+                failed++;
+                console.warn('Import question failed:', e.message);
             }
-            document.getElementById('te-qlist').innerHTML    = this._renderQList();
-            document.getElementById('te-qcount').textContent = this._questions.length;
-            this._selectQuestion(this._questions.length - 1);
-            Toast.success('Імпорт', `Додано ${parsed.length} питань`);
-        } catch(e) { Toast.error('Помилка', e.message); }
-        finally { Loader.hide(); }
+            this._importProgressUpdate(done + failed, parsed.length, null);
+        }
+        Modal.close();
+
+        document.getElementById('te-qlist').innerHTML    = this._renderQList();
+        document.getElementById('te-qcount').textContent = this._questions.length;
+        if (this._questions.length) this._selectQuestion(this._questions.length - 1);
+
+        if (done)   Toast.success('Імпорт', `Додано ${done} питань`);
+        if (failed) Toast.error('Імпорт', `Не вдалося додати ${failed} питань`);
+    },
+
+    _importProgressOpen(total) {
+        Modal.open({
+            title: '<i class="fa-solid fa-file-import"></i> Імпорт питань',
+            size: 'sm',
+            body: `
+                <style>
+                    .te-imp-wrap { height: 100%; display: flex; flex-direction: column; justify-content: center; }
+                    .te-imp-track { height: 10px; border-radius: 999px; background: var(--bg-hover); overflow: hidden; }
+                    .te-imp-fill { height: 100%; width: 0%; background: var(--primary); border-radius: 999px; transition: width .25s ease; }
+                    .te-imp-status { margin-top: .7rem; font-size: .85rem; color: var(--text-secondary); text-align: center; }
+                    .te-imp-count { font-weight: 700; color: var(--text-primary); }
+                </style>
+                <div class="te-imp-wrap">
+                    <div class="te-imp-track"><div id="te-imp-bar" class="te-imp-fill"></div></div>
+                    <div id="te-imp-status" class="te-imp-status">Підготовка…</div>
+                </div>`,
+            footer: ''
+        });
+        const backdrop = document.getElementById('modal-backdrop');
+        if (backdrop) backdrop.onclick = null;
+        document.removeEventListener('keydown', Modal._escHandler);
+    },
+
+    _importProgressUpdate(done, total, currentText) {
+        const bar    = document.getElementById('te-imp-bar');
+        const status = document.getElementById('te-imp-status');
+        const pct = total ? Math.round((done / total) * 100) : 100;
+        if (bar) bar.style.width = pct + '%';
+        if (status) {
+            status.innerHTML = '';
+            const countEl = document.createElement('span');
+            countEl.className = 'te-imp-count';
+            countEl.textContent = `${done} з ${total}`;
+            status.appendChild(countEl);
+            if (done < total && currentText) {
+                const plain = currentText.replace(/<[^>]*>/g, '').trim().slice(0, 40);
+                status.appendChild(document.createTextNode(' — ' + plain + (plain.length >= 40 ? '…' : '')));
+            }
+        }
     },
 
     async deleteQuestion(id) {
@@ -3349,6 +3370,44 @@ body.light-theme .tm-src-ta{background:#f6f8fa;color:#24292f;border-color:#d0d7d
         } catch(e) { Toast.error('Помилка збереження порядку', e.message); }
     },
 
+    // ── Answer options reordering (drag тільки за te-opt-handle, щоб не
+    // конфліктувати з Quill-редактором тексту відповіді в тій самій картці) ──
+    _handleAnsDragStart(e, idx) {
+        this._ansDragSrcIdx = idx;
+        e.dataTransfer.effectAllowed = 'move';
+    },
+
+    _handleAnsDragOver(e, idx) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        document.querySelectorAll('.te-ans-card').forEach((el, i) =>
+            el.classList.toggle('drag-over', i === idx && i !== this._ansDragSrcIdx));
+    },
+
+    _handleAnsDragLeave(e) {
+        if (!e.currentTarget.contains(e.relatedTarget)) {
+            e.currentTarget.classList.remove('drag-over');
+        }
+    },
+
+    _handleAnsDrop(e, toIdx) {
+        e.preventDefault();
+        document.querySelectorAll('.te-ans-card').forEach(el => el.classList.remove('drag-over'));
+        const fromIdx = this._ansDragSrcIdx;
+        this._ansDragSrcIdx = null;
+        if (fromIdx == null || fromIdx === toIdx) return;
+
+        // Live-вміст Quill-редакторів у _opts синхронізується лише при збереженні —
+        // перед перестановкою масиву треба зафіксувати те, що користувач вже набрав
+        this._syncAnswerQuillsToOpts();
+
+        const moved = this._opts.splice(fromIdx, 1)[0];
+        this._opts.splice(toIdx, 0, moved);
+        this._markDirty();
+
+        document.getElementById('te-options-area').innerHTML = this._optionsHtml();
+    },
+
     // ── Test list features ────────────────────────────────────────
 
     _filterTests(query) {
@@ -4353,6 +4412,10 @@ const MyTestsPage = {
 .mt-card-bar.overdue{background:linear-gradient(90deg,#ef4444,#dc2626)}
 .mt-card-bar.done{background:linear-gradient(90deg,#10b981,#059669)}
 .mt-card-body{position:relative;z-index:2;padding:16px 18px;flex:1;display:flex;flex-direction:column;gap:14px}
+.mt-card-banner-wrap{position:relative;margin:-16px -18px 0;height:190px;overflow:hidden;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.mt-card-banner-glow{position:absolute;inset:0;background-size:cover;background-position:center;filter:blur(26px) saturate(150%) brightness(.85);transform:scale(1.2)}
+.mt-card-banner{position:relative;z-index:1;width:calc(100% - 32px);height:158px;object-fit:cover;border-radius:14px;box-shadow:0 12px 30px rgba(0,0,0,.35);display:block}
+.mt-card-banner.stretch{object-fit:fill}
 .mt-card-info{flex:1;min-width:0}
 .mt-card-title{font-weight:700;font-size:.95rem;color:var(--text-primary);margin-bottom:5px}
 .mt-card-meta{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
@@ -4364,18 +4427,16 @@ const MyTestsPage = {
 .mt-badge-info{background:color-mix(in srgb,var(--primary) 16%,transparent);color:var(--primary);border:1px solid color-mix(in srgb,var(--primary) 40%,transparent)}
 .mt-btn-start{
     padding:.55rem .8rem;border-radius:8px;border:1px solid transparent;
-    background:linear-gradient(135deg,#C9A227,#e0b62f);color:#241c02;
+    background:linear-gradient(135deg,#10b981,#059669);color:#fff;
     font-size:.8rem;font-weight:600;cursor:pointer;transition:box-shadow .15s,transform .15s;
     white-space:nowrap;flex-shrink:0;display:inline-flex;align-items:center;gap:6px;
-    box-shadow:0 4px 12px -2px rgba(201,162,39,.5)
+    box-shadow:0 4px 12px -2px rgba(16,185,129,.5)
 }
-.mt-btn-start:hover{box-shadow:0 6px 16px -2px rgba(201,162,39,.65);transform:translateY(-1px)}
+.mt-btn-start:hover{box-shadow:0 6px 16px -2px rgba(16,185,129,.65);transform:translateY(-1px)}
 .mt-btn-locked{background:var(--bg-hover);color:var(--primary);border:1px solid var(--border);box-shadow:none}
 .mt-btn-locked:hover{background:var(--bg-raised);box-shadow:none;transform:none}
-.mt-btn-result-pass{background:linear-gradient(135deg,#10b981,#059669);color:#fff;box-shadow:0 4px 12px -2px rgba(16,185,129,.5)}
-.mt-btn-result-pass:hover{box-shadow:0 6px 16px -2px rgba(16,185,129,.65)}
-.mt-btn-result-fail{background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;box-shadow:0 4px 12px -2px rgba(239,68,68,.5)}
-.mt-btn-result-fail:hover{box-shadow:0 6px 16px -2px rgba(239,68,68,.65)}
+.mt-btn-result-pass,.mt-btn-result-fail{background:linear-gradient(135deg,#0ea5e9,#10b981);color:#fff;box-shadow:0 4px 12px -2px rgba(14,165,233,.5)}
+.mt-btn-result-pass:hover,.mt-btn-result-fail:hover{box-shadow:0 6px 16px -2px rgba(14,165,233,.65)}
 .mt-gem-ico{color:#60a5fa;-webkit-text-stroke:1px #6b7280;text-stroke:1px #6b7280}
 .mt-btn-view{padding:8px 16px;border-radius:12px;border:1.5px solid var(--border);background:transparent;color:var(--text-secondary);font-size:.83rem;font-weight:500;cursor:pointer;transition:all .15s;white-space:nowrap;flex-shrink:0;display:inline-flex;align-items:center;gap:6px}
 .mt-btn-view:hover{border-color:var(--primary);color:var(--primary)}
@@ -4402,12 +4463,12 @@ const MyTestsPage = {
     -webkit-backdrop-filter:blur(24px) saturate(220%)
 }
 .mtg-head{
-    position:relative;z-index:2;padding:20px 22px;
+    position:relative;z-index:2;
     background-image:linear-gradient(180deg,rgba(15,23,42,.55) 0%,rgba(15,23,42,.15) 100%);
-    background-size:cover;background-position:center;
     border-bottom:1px solid rgba(255,255,255,.14);
-    display:flex;align-items:flex-start;justify-content:space-between;gap:14px
 }
+.mtg-head .mt-card-banner-wrap{margin:0}
+.mtg-head-row{padding:20px 22px;display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
 .mtg-head-main{min-width:0}
 .mtg-head-title{font-size:1.1rem;font-weight:800;color:#fff}
 .mtg-head-desc{font-size:.82rem;color:rgba(255,255,255,.85);margin-top:4px;max-width:640px}
@@ -4565,6 +4626,10 @@ const MyTestsPage = {
     <div class="mt-card-frost"></div>
     <div class="mt-card-bar ${isOverdue ? 'overdue' : 'pending'}"></div>
     <div class="mt-card-body">
+        ${test.cover_image ? `<div class="mt-card-banner-wrap">
+            <div class="mt-card-banner-glow" style="background-image:url('${Fmt.esc(test.cover_image)}')"></div>
+            <img class="mt-card-banner${test.stretch_cover_image ? ' stretch' : ''}" src="${Fmt.esc(test.cover_image)}" alt="">
+        </div>` : ''}
         <div class="mt-card-info">
             <div class="mt-card-title">${Fmt.esc(test.title)}</div>
             <div class="mt-card-meta">
@@ -4591,17 +4656,23 @@ const MyTestsPage = {
         return `
 <div class="mtg-card">
     <div class="mtg-frost"></div>
-    <div class="mtg-head" onclick="MyTestsPage._toggleGroupCard('${group.id}')" style="cursor:pointer;${group.cover_image ? `background-image:linear-gradient(180deg,rgba(15,23,42,.15),rgba(15,23,42,.75)),url('${Fmt.esc(group.cover_image)}')` : ''}">
-        <div class="mtg-head-main">
-            <div class="mtg-head-title">${Fmt.esc(group.title)}</div>
-            ${group.description ? `<div class="mtg-head-desc">${Fmt.esc(group.description)}</div>` : ''}
-            <span class="mtg-head-badge"><i class="fa-solid ${group.is_sequential ? 'fa-arrow-down-1-9' : 'fa-shuffle'}"></i> ${group.is_sequential ? 'Послідовне проходження' : 'У будь-якому порядку'}</span>
-        </div>
-        <div class="mtg-head-side">
-            <span class="mtg-head-progress">${passedN}/${items.length}</span>
-            <button type="button" class="mtg-toggle-btn" aria-label="Згорнути/розгорнути" onclick="event.stopPropagation(); MyTestsPage._toggleGroupCard('${group.id}')">
-                <i class="fa-solid fa-chevron-${collapsed ? 'down' : 'up'}" id="mtg-chev-${group.id}"></i>
-            </button>
+    <div class="mtg-head" onclick="MyTestsPage._toggleGroupCard('${group.id}')" style="cursor:pointer">
+        ${group.cover_image ? `<div class="mt-card-banner-wrap">
+            <div class="mt-card-banner-glow" style="background-image:url('${Fmt.esc(group.cover_image)}')"></div>
+            <img class="mt-card-banner${group.stretch_cover_image ? ' stretch' : ''}" src="${Fmt.esc(group.cover_image)}" alt="">
+        </div>` : ''}
+        <div class="mtg-head-row">
+            <div class="mtg-head-main">
+                <div class="mtg-head-title">${Fmt.esc(group.title)}</div>
+                ${group.description ? `<div class="mtg-head-desc">${Fmt.esc(group.description)}</div>` : ''}
+                <span class="mtg-head-badge"><i class="fa-solid ${group.is_sequential ? 'fa-arrow-down-1-9' : 'fa-shuffle'}"></i> ${group.is_sequential ? 'Послідовне проходження' : 'У будь-якому порядку'}</span>
+            </div>
+            <div class="mtg-head-side">
+                <span class="mtg-head-progress">${passedN}/${items.length}</span>
+                <button type="button" class="mtg-toggle-btn" aria-label="Згорнути/розгорнути" onclick="event.stopPropagation(); MyTestsPage._toggleGroupCard('${group.id}')">
+                    <i class="fa-solid fa-chevron-${collapsed ? 'down' : 'up'}" id="mtg-chev-${group.id}"></i>
+                </button>
+            </div>
         </div>
     </div>
     <div class="mtg-rows" id="mtg-rows-${group.id}" style="${collapsed ? 'display:none' : ''}">

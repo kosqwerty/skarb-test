@@ -373,6 +373,7 @@ const FeedbackFab = {
             await API.feedback.submit({ type, priority: 'medium', title, message: msg, screenshotUrls: paths, context: this._fbCtx || {} });
             this._fbFiles = [];
             this._fbDraft = null;
+            try { const audio = new Audio('/sound/support.mp3'); audio.volume = 0.6; audio.play().catch(() => {}); } catch(e) {}
             Toast.success('Дякуємо!', 'Звернення надіслано адміністратору');
             this._fbItems = await API.feedback.getMine().catch(() => []);
             const inner = document.getElementById('sgfb-inner');
@@ -392,6 +393,7 @@ const FeedbackFab = {
         if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>'; }
         try {
             await API.feedback.sendMessage(feedbackId, body);
+            try { const audio = new Audio('/sound/send_sms.mp3'); audio.volume = 0.6; audio.play().catch(() => {}); } catch(e) {}
             await this._fbGoChat(idx);
         } catch(e) {
             Toast.error('Помилка', e.message);

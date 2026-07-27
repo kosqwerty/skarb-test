@@ -650,10 +650,20 @@ body.light-theme .ep-hero-deco i{color:#b4870f;filter:drop-shadow(0 4px 10px rgb
 
     // ── Завершені курси ───────────────────────────────────────────────
     _toggleCompletedFilter(type, el) {
-        const wasActive = el.classList.contains('active');
         document.querySelectorAll('.ep-done-stat').forEach(s => s.classList.remove('active'));
+
+        if (type === 'all') {
+            document.querySelectorAll('.ep-done-sec').forEach(s => s.style.display = '');
+            el.classList.add('active');
+            return;
+        }
+
+        const wasActive = el.classList.contains('active');
         document.querySelectorAll('.ep-done-sec').forEach(s => s.style.display = '');
-        if (wasActive) return;
+        if (wasActive) {
+            document.querySelector('.ep-done-stat[data-filter="all"]')?.classList.add('active');
+            return;
+        }
         el.classList.add('active');
         document.querySelectorAll('.ep-done-sec').forEach(s => {
             s.style.display = s.dataset.sec === type ? '' : 'none';
@@ -721,12 +731,14 @@ body.light-theme .ep-hero-deco i{color:#b4870f;filter:drop-shadow(0 4px 10px rgb
         .ep-done-section{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin:1rem 0 .5rem;display:flex;align-items:center;gap:.4rem}
         .ep-done-avatars{display:flex;flex-wrap:wrap;gap:.25rem}
         .ep-done-avatar{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:700;overflow:hidden;flex-shrink:0;border:2px solid var(--bg-surface)}
-        .ep-done-stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:1.2rem}
-        .ep-done-stat{display:flex;align-items:center;gap:8px;padding:10px 16px;border-radius:14px;background:var(--bg-surface);border:1.5px solid var(--border);font-size:.82rem;color:var(--text-secondary);cursor:pointer;transition:all .15s;user-select:none}
-        .ep-done-stat:hover{border-color:var(--primary);color:var(--primary)}
-        .ep-done-stat.active{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 10%,var(--bg-surface));color:var(--primary)}
-        .ep-done-stat i{font-size:.9rem;color:var(--primary)}
-        .ep-done-stat b{font-size:1rem;font-weight:800;color:var(--text-primary)}
+        .ep-done-stats{display:inline-flex;gap:4px;flex-wrap:wrap;margin-bottom:1.2rem;padding:5px;background:var(--bg-surface);border:1px solid var(--border);border-radius:16px;box-shadow:0 2px 10px rgba(15,23,42,.05)}
+        body:not(.light-theme) .ep-done-stats{box-shadow:0 2px 14px rgba(0,0,0,.2)}
+        .ep-done-stat{display:inline-flex;align-items:center;gap:9px;padding:9px 16px 9px 10px;border-radius:12px;background:transparent;border:none;font-size:.85rem;font-weight:600;color:var(--text-muted);cursor:pointer;transition:background .18s ease,color .18s ease,transform .12s ease;user-select:none}
+        .ep-done-stat:hover:not(.active){color:var(--text-primary);background:var(--bg-hover);transform:translateY(-1px)}
+        .ep-done-stat i{width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.85rem;background:var(--bg-hover);color:var(--text-muted);transition:all .18s ease}
+        .ep-done-stat b{font-size:1rem;font-weight:800;color:inherit}
+        .ep-done-stat.active{background:color-mix(in srgb,var(--primary) 12%,var(--bg-surface));color:var(--primary)}
+        .ep-done-stat.active i{background:var(--primary);color:#fff}
         </style>`;
 
         // ── Courses ──────────────────────────────────────────────────
@@ -796,7 +808,7 @@ body.light-theme .ep-hero-deco i{color:#b4870f;filter:drop-shadow(0 4px 10px rgb
                         </span>
                         <span style="font-size:1rem;font-weight:800;color:${passed ? '#10b981' : '#ef4444'}">${pct}%</span>
                     </div>
-                    <button class="btn-primary-modern btn-sm" style="width:100%;justify-content:center" onclick="Router.go('tests/${a.test_id}')">
+                    <button class="btn-primary-modern btn-sm" style="width:100%;justify-content:center" onclick="Router.go('tests/${a.test_id}?from=expert-path&fromTab=completed')">
                         <i class="fa-solid fa-rotate"></i> Пройти ще раз
                     </button>
                 </div>
@@ -827,6 +839,7 @@ body.light-theme .ep-hero-deco i{color:#b4870f;filter:drop-shadow(0 4px 10px rgb
 
         const statsHtml = `
         <div class="ep-done-stats">
+            <div class="ep-done-stat active" data-filter="all" onclick="ExpertPathPage._toggleCompletedFilter('all',this)"><i class="fa-solid fa-layer-group"></i> <b>${total}</b> всього</div>
             <div class="ep-done-stat" data-filter="courses" onclick="ExpertPathPage._toggleCompletedFilter('courses',this)"><i class="fa-solid fa-graduation-cap"></i> <b>${completedCourses.length}</b> курсів</div>
             <div class="ep-done-stat" data-filter="tests" onclick="ExpertPathPage._toggleCompletedFilter('tests',this)"><i class="fa-solid fa-clipboard-list"></i> <b>${attempts.length}</b> тестів</div>
             <div class="ep-done-stat" data-filter="surveys" onclick="ExpertPathPage._toggleCompletedFilter('surveys',this)"><i class="fa-solid fa-square-poll-horizontal"></i> <b>${responses.length}</b> опитувань</div>

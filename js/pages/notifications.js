@@ -98,7 +98,7 @@ const NotificationsPage = {
 
     playMessageSound() {
         try {
-            const audio = new Audio('/sound/monkey.mp3');
+            const audio = new Audio('/sound/notification.mp3');
             audio.volume = 0.6;
             audio.play().catch(() => {});
         } catch(e) {}

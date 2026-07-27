@@ -1177,7 +1177,7 @@ const AdminPage = {
             size: 'lg',
             body: `
             <style>
-                .up-wrap{margin:-1.25rem -1.5rem -1rem;display:flex;flex-direction:column;border-radius:var(--radius-xl);max-height:80vh;overflow:hidden}
+                .up-wrap{margin:-1.25rem -1.5rem -1rem;display:flex;flex-direction:column;border-radius:var(--radius-xl);height:calc(100% + 2.25rem);overflow:hidden}
                 .up-hero{padding:1.75rem 1.75rem 1.25rem;display:flex;align-items:flex-end;gap:1.25rem;position:relative;overflow:hidden}
                 .up-hero::before{content:'';position:absolute;inset:0;background:url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")}
                 .up-ava{width:80px;height:80px;border-radius:50%;border:3px solid rgba(255,255,255,.5);background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:1.8rem;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.2)}
@@ -1227,6 +1227,7 @@ const AdminPage = {
                         ${chip('Місто', Fmt.esc(u.city))}
                         ${chip('Посада', Fmt.esc(u.job_position))}
                         ${chip('Підрозділ', Fmt.esc(u.subdivision))}
+                        ${chip('Керівник', Fmt.esc((this._usersAll.find(x => x.id === u.manager_id) || {}).full_name))}
                         ${u.hired_at ? chip('В компанії з', `${Fmt.date(u.hired_at)} <span style="font-size:.75rem;color:var(--text-muted)">${this._tenureStr(u.hired_at)}</span>`) : ''}
                         ${u.position_since ? chip('На посаді з', `${Fmt.date(u.position_since)} <span style="font-size:.75rem;color:var(--text-muted)">${this._tenureStr(u.position_since)}</span>`) : ''}
                         ${chip('Реєстрація', Fmt.datetime(u.created_at))}
@@ -1924,8 +1925,10 @@ const AdminPage = {
                             <div class="cuf-field idp-wrap">
                                 <i class="fa-regular fa-calendar cuf-ico"></i>
                                 <input type="hidden" id="cu-hired-at" value="">
-                                <input id="cu-hired-at-disp" class="cuf-has-ico idp-disp" readonly placeholder="ДД.ММ.РРРР"
-                                       onclick="DatePicker.toggle('cu-hired-at','cu-hired-at-disp','cu-hired-at-popup',event)">
+                                <input id="cu-hired-at-disp" class="cuf-has-ico idp-disp" placeholder="ДД.ММ.РРРР"
+                                       oninput="DatePicker.onType('cu-hired-at','cu-hired-at-disp',event)"
+                                       onpaste="DatePicker.onPaste('cu-hired-at','cu-hired-at-disp',event)"
+                                       onclick="DatePicker.open('cu-hired-at','cu-hired-at-disp','cu-hired-at-popup')">
                                 <div id="cu-hired-at-popup" class="idp-popup" style="display:none"></div>
                             </div>
                         </label>
@@ -1934,8 +1937,10 @@ const AdminPage = {
                             <div class="cuf-field idp-wrap">
                                 <i class="fa-regular fa-calendar cuf-ico"></i>
                                 <input type="hidden" id="cu-position-since" value="">
-                                <input id="cu-position-since-disp" class="cuf-has-ico idp-disp" readonly placeholder="ДД.ММ.РРРР"
-                                       onclick="DatePicker.toggle('cu-position-since','cu-position-since-disp','cu-position-since-popup',event)">
+                                <input id="cu-position-since-disp" class="cuf-has-ico idp-disp" placeholder="ДД.ММ.РРРР"
+                                       oninput="DatePicker.onType('cu-position-since','cu-position-since-disp',event)"
+                                       onpaste="DatePicker.onPaste('cu-position-since','cu-position-since-disp',event)"
+                                       onclick="DatePicker.open('cu-position-since','cu-position-since-disp','cu-position-since-popup')">
                                 <div id="cu-position-since-popup" class="idp-popup" style="display:none"></div>
                             </div>
                         </label>
@@ -2121,7 +2126,7 @@ const AdminPage = {
 
         /* Custom calendar datepicker (shared .idp-* pattern, see interns.js) */
         .idp-wrap { position: relative; }
-        .idp-disp { cursor: pointer !important; }
+        .idp-disp { cursor: text !important; }
         .idp-popup { position: absolute; top: calc(100% + 4px); left: 0; z-index: 1100; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); width: 256px; padding: .5rem; }
         .idp-header { display: flex; align-items: center; justify-content: space-between; padding: .2rem .1rem .45rem; }
         .idp-nav { background: none; border: none; cursor: pointer; font-size: 1.3rem; line-height: 1; color: var(--text-secondary); padding: .1rem .35rem; border-radius: 6px; transition: background .12s; }

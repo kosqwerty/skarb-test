@@ -210,17 +210,16 @@ body:not(.light-theme) .kb-search-icon{color:var(--text-muted)}
 
 /* ── KB Toolbar ── */
 .kb-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:20px}
-.kb-type-chips{display:flex;gap:10px;flex-wrap:wrap}
-.kb-type-chip{display:inline-flex;align-items:center;gap:8px;height:44px;padding:0 20px;border-radius:999px;
-    background:rgba(255,255,255,.78);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
-    border:1.5px solid rgba(255,255,255,.9);color:#475569;font-size:.84rem;font-weight:600;
-    cursor:pointer;transition:all .2s;white-space:nowrap;box-shadow:0 6px 20px rgba(15,23,42,.05)}
-.kb-type-chip:hover{transform:translateY(-2px);box-shadow:0 10px 28px rgba(15,23,42,.08);border-color:var(--primary);color:var(--primary)}
-.kb-type-chip.active{background:linear-gradient(135deg,var(--primary),#4338ca);border-color:transparent;color:#fff;box-shadow:0 8px 24px rgba(99,102,241,.3)}
-body:not(.light-theme) .kb-type-chip{background:var(--bg-raised);backdrop-filter:none;-webkit-backdrop-filter:none;border-color:var(--border);color:var(--text-secondary)}
-body:not(.light-theme) .kb-type-chip:hover{border-color:var(--primary);color:var(--primary)}
-body:not(.light-theme) .kb-type-chip.active{background:var(--primary);border-color:var(--primary);color:#fff;box-shadow:none}
-.kb-type-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.kb-type-chips{display:inline-flex;gap:4px;flex-wrap:wrap;padding:5px;background:var(--bg-surface);border:1px solid var(--border);border-radius:16px;box-shadow:0 2px 10px rgba(15,23,42,.05)}
+body:not(.light-theme) .kb-type-chips{box-shadow:0 2px 14px rgba(0,0,0,.2)}
+.kb-type-chip{display:inline-flex;align-items:center;gap:9px;padding:9px 16px 9px 10px;border-radius:12px;
+    background:transparent;border:none;color:var(--text-muted);font-size:.85rem;font-weight:600;
+    cursor:pointer;transition:background .18s ease,color .18s ease,transform .12s ease;white-space:nowrap}
+.kb-type-chip:hover:not(.active){color:var(--text-primary);background:var(--bg-hover);transform:translateY(-1px)}
+.kb-type-chip.active{color:var(--tab-accent,var(--primary));background:color-mix(in srgb,var(--tab-accent,var(--primary)) 12%,var(--bg-surface))}
+.kb-type-chip.active .kb-type-ic{background:var(--tab-accent,var(--primary));color:#fff}
+.kb-type-ic{width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;
+    font-size:.85rem;background:var(--bg-hover);color:var(--text-muted);transition:all .18s ease}
 
 .kb-toolbar-right{display:flex;align-items:center;gap:8px}
 .kb-sort-select{height:44px;padding:0 14px;border-radius:14px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);font-size:.82rem;cursor:pointer;outline:none}
@@ -1122,9 +1121,9 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
         return types.map(t => {
             const active = this._kbTypeFilter === t.key;
             return `
-            <button class="kb-type-chip${active?' active':''}"
+            <button class="kb-type-chip${active?' active':''}" style="--tab-accent:${t.color}"
                 onclick="ResourcesPage._kbSetType('${t.key}',this)">
-                <i class="${t.icon}" style="font-size:.85rem;${active ? 'color:#fff' : `color:${t.color}`}"></i>${t.label}
+                <span class="kb-type-ic"><i class="${t.icon}"></i></span>${t.label}
             </button>`;
         }).join('');
     },

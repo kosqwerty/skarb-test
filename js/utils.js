@@ -1107,6 +1107,43 @@ const DatePicker = {
         this._render(popupId);
     },
 
+    onPaste(hiddenId, dispId, e) {
+        const text = (e.clipboardData || window.clipboardData).getData('text').trim();
+        const m = text.match(/^(\d{1,2})[.\-\/](\d{1,2})[.\-\/](\d{4})$/);
+        if (!m) return;
+        e.preventDefault();
+        const day = +m[1], month = +m[2], year = +m[3];
+        const d = new Date(year, month - 1, day);
+        if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return;
+        const pad = n => String(n).padStart(2, '0');
+        const disp = document.getElementById(dispId);
+        const hidden = document.getElementById(hiddenId);
+        if (disp) disp.value = `${pad(day)}.${pad(month)}.${year}`;
+        if (hidden) hidden.value = `${year}-${pad(month)}-${pad(day)}`;
+        hidden?.dispatchEvent(new Event('input', { bubbles: true }));
+    },
+
+    onType(hiddenId, dispId, e) {
+        const input = e.target;
+        let digits = input.value.replace(/\D/g, '').slice(0, 8);
+        let out = digits.slice(0, 2);
+        if (digits.length > 2) out += '.' + digits.slice(2, 4);
+        if (digits.length > 4) out += '.' + digits.slice(4, 8);
+        input.value = out;
+        const hidden = document.getElementById(hiddenId);
+        if (digits.length === 8) {
+            const day = +digits.slice(0, 2), month = +digits.slice(2, 4), year = +digits.slice(4, 8);
+            const d = new Date(year, month - 1, day);
+            if (d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day) {
+                const pad = n => String(n).padStart(2, '0');
+                if (hidden) hidden.value = `${year}-${pad(month)}-${pad(day)}`;
+                hidden?.dispatchEvent(new Event('input', { bubbles: true }));
+                return;
+            }
+        }
+        if (hidden) hidden.value = '';
+    },
+
     pick(popupId, ds) {
         const st = this._state[popupId];
         if (!st) return;

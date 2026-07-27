@@ -520,10 +520,8 @@ const ScheduleGraphPage = {
     _render(container) {
         container.innerHTML = `
 <div class="sg-page">
-    ${this._hero()}
     <div class="sg-body">
         ${this._locSidebar()}
-        <div class="sg-sidebar-resizer" onmousedown="ScheduleGraphPage._startSidebarResize(event)"></div>
         <div class="sg-content">
             ${this._locId || this._deletedLocations.length ? `
             <div class="sg-controls">
@@ -547,6 +545,10 @@ const ScheduleGraphPage = {
                 </div>
                 ` : ''}
                 ${this._tab==='trash' ? `<button class="sg-tab sg-trash-tab" onclick="ScheduleGraphPage._switchTab('schedule')"><i class="fa-solid fa-arrow-left"></i> Назад</button>` : ''}
+                ${this._isAssignedAsEmployee ? `
+                <button class="sg-my-sched-btn" style="margin-left:auto" onclick="ScheduleGraphPage._switchToEmployee()">
+                    👤 Мій графік
+                </button>` : ''}
             </div>
             ${this._tab === 'trash'
                 ? this._trashSection()
@@ -573,28 +575,6 @@ const ScheduleGraphPage = {
 </div>
 ${this._styles()}`;
         this._initStickyScroll();
-        const savedW = localStorage.getItem('sg_sidebar_w');
-        if (savedW) {
-            const sidebar = container.querySelector('.sg-loc-sidebar');
-            if (sidebar) sidebar.style.width = savedW + 'px';
-        }
-    },
-
-    _hero() {
-        return `
-<div class="sg-hero">
-    <div class="sg-hero-inner">
-        <div class="sg-hero-ico">📅</div>
-        <div style="flex:1">
-            <h1 class="sg-hero-title">Графік роботи ломбарду</h1>
-            <p class="sg-hero-sub">Керуйте розкладом співробітників по локаціях</p>
-        </div>
-        ${this._isAssignedAsEmployee ? `
-        <button class="sg-my-sched-btn" onclick="ScheduleGraphPage._switchToEmployee()">
-            👤 Мій графік
-        </button>` : ''}
-    </div>
-</div>`;
     },
 
     _showManual() {
@@ -914,7 +894,7 @@ ${this._styles()}`;
         return `
 <aside class="sg-loc-sidebar">
     <div class="sg-loc-sidebar-head">
-        <span class="sg-loc-sidebar-title">Розділ локацій</span>
+        <span class="sg-loc-sidebar-title"><i class="fa-solid fa-map-location-dot"></i>Розділ локацій</span>
         <div style="display:flex;gap:4px;align-items:center">
             ${AppState.isSuperAdmin() ? `
             <button class="sg-loc-add-ico${this._locSortAlpha ? ' active' : ''}"
@@ -922,19 +902,25 @@ ${this._styles()}`;
                 title="${this._locSortAlpha ? 'Вимкнути сортування А→Я' : 'Сортувати А→Я'}">
                 <i class="fa-solid fa-arrow-down-a-z"></i>
             </button>` : ''}
-            <button class="sg-loc-add-ico" onclick="ScheduleGraphPage._addLocation()" title="Додати локацію">＋</button>
+            <span class="sg-loc-sidebar-sep"></span>
+            <button class="sg-add-emp-ghost" onclick="ScheduleGraphPage._addLocation()">
+                <i class="fa-solid fa-plus"></i> Додати філію
+            </button>
         </div>
     </div>
     <div class="sg-loc-sidebar-list"
         ondragend="ScheduleGraphPage._draggingLocId=null;document.querySelectorAll('.sg-loc-item-row.sg-loc-dragging,.sg-loc-item-row.sg-loc-drag-over').forEach(r=>r.classList.remove('sg-loc-dragging','sg-loc-drag-over'))">
         ${this._locations.length > 1 ? `
-        <button class="sg-loc-item ${this._locId === 'all' ? 'active' : ''}"
+        <button class="sg-loc-item sg-loc-item-all ${this._locId === 'all' ? 'active' : ''}"
             onclick="ScheduleGraphPage._selectLocation('all')">
-            <span class="sg-loc-item-ico">🗂</span>
+            <span class="sg-loc-item-ico"><i class="fa-solid fa-folder-open"></i></span>
             <span class="sg-loc-item-name">Всі локації</span>
         </button>` : ''}
-        ${(this._locSortAlpha ? [...this._locations].sort((a,b) => a.name.localeCompare(b.name, 'uk')) : this._locations).map(l => {
-            const hasHelp = this._helpLocIds.has(l.id);
+        ${(() => {
+            const p = n => String(n).padStart(2, '0');
+            const monthPrefix = `${this._year}-${p(this._month + 1)}`;
+            return (this._locSortAlpha ? [...this._locations].sort((a,b) => a.name.localeCompare(b.name, 'uk')) : this._locations).map(l => {
+            const hasHelp = [...(this._helpByLoc[l.id] || [])].some(d => d.startsWith(monthPrefix));
             const isActive = l.id === this._locId;
             const viewOnly = this._isViewOnlyLoc(l.id);
             return `
@@ -945,8 +931,9 @@ ${this._styles()}`;
             ondrop="${viewOnly ? '' : `ScheduleGraphPage._onLocDrop(event,'${l.id}')`}">
             ${viewOnly ? '' : `<span class="sg-loc-drag-handle" title="Перетягнути">⠿</span>`}
             <button class="sg-loc-item ${isActive ? 'active' : ''}${hasHelp ? ' has-help' : ''}"
+                data-node="${l.node_type || ''}"
                 onclick="ScheduleGraphPage._selectLocation('${l.id}')">
-                <span class="sg-loc-item-ico">${viewOnly ? '<i class="fa-solid fa-eye"></i>' : '🏪'}</span>
+                <span class="sg-loc-item-ico">${viewOnly ? '<i class="fa-solid fa-eye"></i>' : '<i class="fa-solid fa-shop"></i>'}</span>
                 <span class="sg-loc-item-name" title="${Fmt.esc(l.name)}">${Fmt.esc(l.name).slice(0,3)}</span>
                 <span class="sg-loc-item-meta">
                     ${hasHelp ? `<span class="sg-loc-item-helpdot"></span>` : ''}
@@ -954,13 +941,8 @@ ${this._styles()}`;
                 </span>
             </button>
         </div>`;
-        }).join('')}
-    </div>
-    <div class="sg-sidebar-add-loc">
-        <button class="sg-sidebar-add-loc-btn" onclick="ScheduleGraphPage._addLocation()">
-            <i class="fa-solid fa-plus"></i>
-            <span>Додати філію</span>
-        </button>
+            }).join('');
+        })()}
     </div>
 </aside>`;
     },
@@ -1066,7 +1048,7 @@ ${this._styles()}`;
             <div class="sg-v2-loc-row">
                 <i class="fa-solid fa-users" style="color:var(--text-muted)"></i>
                 <span>Співробітників</span>
-                <span class="sg-v2-loc-val">${this._assignments.filter(a => a.is_primary).length}</span>
+                <span class="sg-v2-loc-val">${visibleAssignments.length}</span>
             </div>
         </div>
 
@@ -1128,7 +1110,7 @@ ${this._styles()}`;
                 style="--lc:${v.color};--lb:${v.bg}${viewOnly ? ';cursor:default;opacity:.75' : ''}"
                 ${viewOnly ? 'disabled' : `onclick="ScheduleGraphPage._setQuickType('${k}')"`}
                 title="${viewOnly ? v.label : (this._quickType === k ? 'Клік щоб скасувати' : 'Клік щоб вибрати — потім тиснути комірки')}">
-                <span class="sg-leg-short" style="background:${v.bg};color:${v.color}">${v.short}</span>
+                <span class="sg-leg-short">${v.short}</span>
                 ${v.label}
                 ${!viewOnly && this._quickType === k ? '<span class="sg-leg-active-mark">✓ активно</span>' : ''}
             </button>`).join('')}
@@ -1136,7 +1118,7 @@ ${this._styles()}`;
             <button class="sg-types-mgr-btn" onclick="ScheduleGraphPage._showShiftTypesModal()" title="Налаштувати типи змін">⚙️ Налаштування</button>
             <button class="sg-lock-btn ${locked ? 'locked' : ''}" onclick="ScheduleGraphPage._toggleLock()"
                 title="${locked ? 'Розблокувати редагування графіка' : 'Заблокувати редагування графіка'}">
-                ${locked ? '🔒 Заблоковано' : '🔓 Редагування'}
+                ${locked ? '🔒 Заблоковано для правок' : '🔓 Можна редагувати'}
             </button>`}
         </div>
     </div>
@@ -1592,30 +1574,6 @@ ${this._styles()}`;
         this._locSortAlpha = !this._locSortAlpha;
         localStorage.setItem('sg_loc_sort_alpha', this._locSortAlpha ? '1' : '');
         this._render(this._container);
-    },
-
-    _startSidebarResize(e) {
-        e.preventDefault();
-        const sidebar = document.querySelector('.sg-loc-sidebar');
-        if (!sidebar) return;
-        const body = document.querySelector('.sg-body');
-        const startX = e.clientX;
-        const startW = sidebar.getBoundingClientRect().width;
-        body.classList.add('sg-sidebar-resizing');
-        const onMove = mv => {
-            const w = Math.min(340, Math.max(80, startW + mv.clientX - startX));
-            sidebar.style.width = w + 'px';
-            document.documentElement.style.setProperty('--sg-sidebar-w', w + 'px');
-        };
-        const onUp = () => {
-            body.classList.remove('sg-sidebar-resizing');
-            document.removeEventListener('mousemove', onMove);
-            document.removeEventListener('mouseup', onUp);
-            const w = parseInt(sidebar.style.width);
-            if (w) localStorage.setItem('sg_sidebar_w', w);
-        };
-        document.addEventListener('mousemove', onMove);
-        document.addEventListener('mouseup', onUp);
     },
 
     _goToSubst(focusLocId) {
@@ -3322,7 +3280,7 @@ ${this._styles()}`;
             <button class="sg-leg-btn ${this._quickType === k ? 'active' : ''}"
                 style="--lc:${v.color};--lb:${v.bg}"
                 onclick="ScheduleGraphPage._setQuickType('${k}')">
-                <span class="sg-leg-short" style="background:${v.bg};color:${v.color}">${v.short}</span>
+                <span class="sg-leg-short">${v.short}</span>
                 ${v.label}
                 ${this._quickType === k ? '<span class="sg-leg-active-mark">✓</span>' : ''}
             </button>`).join('');
@@ -4716,26 +4674,7 @@ ${this._styles()}`;
         return `<style>
 .sg-page { max-width:100%;overflow-x:hidden;animation:fadeSlideUp .3s cubic-bezier(.16,1,.3,1); }
 
-/* Hero */
-.sg-hero {
-    border-radius:24px;padding:32px 28px;margin-bottom:20px;
-    background:linear-gradient(135deg,#1d4ed8 0%,#2563eb 50%,#3b82f6 100%);
-    position:relative;overflow:hidden;
-}
-.sg-hero::before {
-    content:'';position:absolute;inset:0;
-    background:radial-gradient(ellipse 60% 80% at 85% 50%,rgba(56,189,248,.2),transparent);
-}
-.sg-hero-inner { position:relative;display:flex;align-items:center;gap:20px; }
-.sg-hero-ico {
-    width:60px;height:60px;border-radius:18px;flex-shrink:0;font-size:1.8rem;
-    background:rgba(255,255,255,.15);border:1.5px solid rgba(255,255,255,.25);
-    display:flex;align-items:center;justify-content:center;
-}
-.sg-hero-title { margin:0;font-size:1.6rem;font-weight:800;color:#fff;letter-spacing:-.02em; }
-.sg-hero-sub   { margin:4px 0 0;color:rgba(255,255,255,.65);font-size:.875rem; }
-
-/* Manager help request button in hero */
+/* Manager help request button */
 .sg-mgr-help-btn {
     padding:9px 18px;border-radius:12px;
     border:1.5px solid rgba(239,68,68,.35);
@@ -4798,42 +4737,26 @@ ${this._styles()}`;
 .sg-manual-btn:active { transform: scale(.97); }
 
 /* Body: sidebar + content */
-.sg-body { display:flex;gap:16px;align-items:flex-start; }
-.sg-content { flex:1;min-width:0;overflow-x:hidden; }
+.sg-body { display:flex;flex-direction:column;gap:16px; }
+.sg-content { min-width:0;overflow-x:hidden; }
 
-/* Location sidebar */
+/* Location sidebar (horizontal bar) */
 .sg-loc-sidebar {
-    width:var(--sg-sidebar-w,170px);flex-shrink:0;
+    width:100%;
     background:var(--bg-raised);border:1.5px solid var(--border);
     border-radius:16px;overflow:hidden;
-    position:sticky;top:16px;
-    min-width:80px;max-width:340px;
 }
-.sg-sidebar-resizer {
-    flex-shrink:0;width:10px;cursor:col-resize;
-    display:flex;align-items:flex-start;justify-content:center;
-    padding-top:24px;position:sticky;top:16px;align-self:flex-start;
-}
-.sg-sidebar-resizer::after {
-    content:'';display:block;width:4px;height:44px;border-radius:4px;
-    background:var(--border);transition:background .15s,height .15s;
-}
-.sg-sidebar-resizer:hover::after { background:var(--primary);height:60px; }
-.sg-sidebar-resizing { cursor:col-resize;user-select:none; }
-.sg-sidebar-resizing .sg-sidebar-resizer::after { background:var(--primary);height:60px; }
 .sg-loc-sidebar-head {
-    display:flex;align-items:center;justify-content:space-between;
-    padding:10px 14px;border-bottom:1px solid var(--border);
+    display:flex;align-items:center;gap:14px;
+    padding:10px 20px 10px 14px;border-bottom:1px solid var(--border);
 }
-.sg-loc-sidebar-head > div { opacity:0;transition:opacity .15s; }
-.sg-loc-sidebar-head:hover > div { opacity:1; }
 .sg-loc-sidebar-title {
-    font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
-    color:var(--text-muted);
+    display:inline-flex;align-items:center;gap:7px;
+    font-size:1rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;
+    color:var(--primary);
 }
-.sg-sidebar-add-loc { padding:8px 6px 4px;border-top:1px solid var(--border); }
-.sg-sidebar-add-loc-btn { width:100%;display:flex;align-items:center;justify-content:center;gap:6px;padding:7px;border-radius:10px;border:1.5px dashed var(--border);background:transparent;color:var(--text-muted);font-size:.78rem;cursor:pointer;transition:all .15s; }
-.sg-sidebar-add-loc-btn:hover { border-color:var(--primary);color:var(--primary);background:color-mix(in srgb,var(--primary) 6%,transparent); }
+.sg-loc-sidebar-title i { font-size:.8rem;opacity:.85; }
+.sg-loc-sidebar-sep { width:1px;height:22px;background:var(--border);flex-shrink:0; }
 .sg-loc-add-ico {
     width:24px;height:24px;border-radius:7px;border:1.5px solid var(--border);
     background:transparent;color:var(--primary);font-size:1rem;font-weight:700;
@@ -4843,28 +4766,44 @@ ${this._styles()}`;
 .sg-loc-add-ico:hover { background:var(--primary);color:#fff;border-color:var(--primary); }
 .sg-loc-add-ico.active { background:var(--primary);color:#fff;border-color:var(--primary); }
 .sg-loc-sidebar-list {
-    padding:6px;display:flex;flex-direction:column;gap:2px;
-    max-height:calc(100vh - 240px);overflow-y:auto;
+    padding:6px;display:flex;flex-direction:row;flex-wrap:wrap;gap:4px;
+    max-height:none;overflow-y:visible;
 }
 .sg-loc-item-row { display:flex;align-items:center;gap:2px; }
 .sg-loc-item {
-    flex:1;min-width:0;
-    display:flex;align-items:center;gap:7px;
-    padding:8px 10px;border-radius:10px;border:none;
-    background:transparent;color:var(--text-secondary);
-    font-size:.82rem;font-weight:500;cursor:pointer;text-align:left;
-    transition:all .15s;
+    min-width:0;
+    display:inline-flex;align-items:center;gap:8px;
+    padding:7px 14px 7px 7px;border-radius:12px;border:none;
+    background:transparent;color:var(--text-muted);
+    font-size:1rem;font-weight:600;cursor:pointer;text-align:left;white-space:nowrap;
+    transition:background .18s ease,color .18s ease;
 }
-.sg-loc-item:hover { background:var(--bg-hover,rgba(0,0,0,.05));color:var(--text-primary); }
+.sg-loc-item:hover:not(.active):not(.has-help) { background:var(--bg-hover);color:var(--text-primary); }
+.sg-loc-item[data-node="technical"] .sg-loc-item-ico,
+.sg-loc-item[data-node="technical_seller"] .sg-loc-item-ico { background:rgba(99,102,241,.16);color:#6366f1; }
+.sg-loc-item[data-node="gold"] .sg-loc-item-ico { background:rgba(245,158,11,.18);color:#d97706; }
+.sg-loc-item[data-node="universal"] .sg-loc-item-ico,
+.sg-loc-item[data-node="universal_seller"] .sg-loc-item-ico {
+    background:linear-gradient(135deg,#6366f1 0%,#6366f1 50%,#f59e0b 50%,#f59e0b 100%);color:#fff;
+}
+.sg-loc-item-all .sg-loc-item-ico { background:rgba(245,158,11,.18);color:#d97706; }
 .sg-loc-item.active {
-    background:var(--primary);color:#fff;font-weight:600;
+    background:color-mix(in srgb,var(--primary) 14%,var(--bg-surface));color:var(--primary);
+    font-size:.92rem;font-weight:800;
 }
+.sg-loc-item.active .sg-loc-item-ico { background:var(--primary);color:#fff; }
 .sg-loc-item.has-help {
-    color:#ef4444;
+    color:#ef4444;background:rgba(239,68,68,.08);
     animation:locHelpPulse 2.2s ease-in-out infinite;
 }
+.sg-loc-item.has-help .sg-loc-item-ico { background:rgba(239,68,68,.16);color:#ef4444; }
 .sg-loc-item.active.has-help { background:#ef4444;color:#fff; }
-.sg-loc-item-ico { font-size:.9rem;flex-shrink:0; }
+.sg-loc-item.active.has-help .sg-loc-item-ico { background:#fff;color:#ef4444; }
+.sg-loc-item-ico {
+    width:24px;height:24px;border-radius:7px;font-size:.75rem;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;
+    background:var(--bg-hover);color:var(--text-muted);transition:all .18s ease;
+}
 .sg-loc-item-name { flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
 .sg-loc-item-meta { display:flex;align-items:center;gap:4px;flex-shrink:0; }
 .sg-loc-item-helpdot {
@@ -5405,7 +5344,12 @@ ${this._styles()}`;
 .sg-tb-divider {
     width:1px;background:var(--border);align-self:stretch;margin:4px 0;flex-shrink:0;
 }
-.sg-legend { display:flex;flex-wrap:wrap;gap:5px;align-items:center; }
+.sg-legend { display:flex;flex-wrap:wrap;gap:4px;align-items:center; }
+.sg-v2-legend-section .sg-legend {
+    padding:5px;background:var(--bg-surface);border:1px solid var(--border);
+    border-radius:16px;box-shadow:0 2px 10px rgba(15,23,42,.05);
+}
+body:not(.light-theme) .sg-v2-legend-section .sg-legend { box-shadow:0 2px 14px rgba(0,0,0,.2); }
 .sg-node-badge { padding:2px 9px;border-radius:12px;font-size:.72rem;font-weight:700; }
 .sg-node-badge.sg-node-universal         { background:rgba(16,185,129,.14);color:#059669; }
 .sg-node-badge.sg-node-universal-seller  { background:rgba(16,185,129,.14);color:#059669; }
@@ -5414,31 +5358,30 @@ ${this._styles()}`;
 .sg-node-badge.sg-node-gold              { background:rgba(245,158,11,.14);color:#d97706; }
 .sg-tb-section .sg-legend { display:grid;grid-template-columns:repeat(3,auto);gap:5px 8px;align-items:center; }
 .sg-leg-btn {
-    display:inline-flex;align-items:center;gap:6px;
-    padding:5px 12px;border-radius:20px;font-size:.78rem;font-weight:600;white-space:nowrap;
-    border:2px solid transparent;background:var(--bg-raised);color:var(--text-secondary);
-    cursor:pointer;transition:all .18s;
+    display:inline-flex;align-items:center;gap:9px;
+    padding:9px 16px 9px 10px;border-radius:12px;font-size:.85rem;font-weight:600;white-space:nowrap;
+    border:none;background:transparent;color:var(--text-muted);
+    cursor:pointer;transition:background .18s ease,color .18s ease;
 }
-.sg-leg-btn:hover { border-color:var(--lc);color:var(--lc);background:var(--lb); }
 .sg-leg-btn.active {
-    border-color:var(--lc);color:var(--lc);background:var(--lb);
-    box-shadow:0 0 0 3px color-mix(in srgb, var(--lc) 20%, transparent);
-    font-weight:800;
+    color:var(--lc);background:color-mix(in srgb, var(--lc) 12%, var(--bg-surface));
+    font-weight:700;
 }
 .sg-leg-short {
-    width:22px;height:22px;border-radius:6px;font-size:.72rem;font-weight:800;
+    width:26px;height:26px;border-radius:8px;font-size:.72rem;font-weight:800;
     display:inline-flex;align-items:center;justify-content:center;
+    background:var(--lb);color:var(--lc);
 }
 .sg-leg-active-mark {
     font-size:.68rem;font-weight:700;opacity:.8;
     background:var(--lc);color:#fff;padding:1px 6px;border-radius:10px;margin-left:2px;
 }
 .sg-types-mgr-btn {
-    padding:5px 8px;border-radius:8px;font-size:1rem;cursor:pointer;line-height:1;
-    border:1.5px solid rgba(99,102,241,.3);background:rgba(99,102,241,.07);color:#6366f1;
-    transition:all .15s;white-space:nowrap;flex-shrink:0;
+    display:inline-flex;align-items:center;gap:6px;
+    padding:13px 16px;border-radius:12px;font-size:.85rem;font-weight:700;cursor:pointer;line-height:1;
+    border:none;background:color-mix(in srgb, #6366f1 12%, var(--bg-surface));color:#6366f1;
+    transition:background .18s ease,color .18s ease;white-space:nowrap;flex-shrink:0;
 }
-.sg-types-mgr-btn:hover { background:#6366f1;color:#fff;border-color:#6366f1; }
 .sg-types-modal-box { max-width:480px;padding:20px 20px 20px; }
 .sg-type-row {
     display:flex;align-items:center;gap:8px;padding:9px 12px;
@@ -6067,10 +6010,10 @@ tr:last-child td { border-bottom:none; }
 .sg-add-emp-ghost {
     display:inline-flex;align-items:center;gap:6px;
     padding:6px 14px;border-radius:8px;border:1.5px dashed color-mix(in srgb,var(--primary) 40%,transparent);
-    background:color-mix(in srgb,var(--primary) 8%,transparent);color:var(--primary);font-size:.8rem;cursor:pointer;
-    transition:all .15s;opacity:.75;
+    background:color-mix(in srgb,var(--primary) 8%,transparent);color:var(--primary);font-size:.8rem;font-weight:700;cursor:pointer;
+    transition:all .15s;
 }
-.sg-add-emp-ghost:hover { opacity:1;border-color:var(--primary);background:color-mix(in srgb,var(--primary) 14%,transparent); }
+.sg-add-emp-ghost:hover { border-color:var(--primary);background:color-mix(in srgb,var(--primary) 14%,transparent); }
 .sg-add-btn {
     display:inline-flex;align-items:center;gap:8px;
     padding:9px 20px;border-radius:12px;border:none;
@@ -6119,22 +6062,7 @@ tr:last-child td { border-bottom:none; }
 .sg-dow-header span {
     text-align:center;font-size:.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;
 }
-@media(max-width:900px){
-    .sg-body { flex-direction:column; }
-    .sg-loc-sidebar {
-        width:100%;position:static;
-        max-height:none;
-    }
-    .sg-loc-sidebar-list {
-        flex-direction:row;flex-wrap:wrap;max-height:none;
-        gap:4px;
-    }
-    .sg-loc-item-row { flex:none; }
-    .sg-loc-item { flex:none;padding:6px 10px; }
-    .sg-loc-item-name { max-width:120px; }
-}
 @media(max-width:700px){
-    .sg-hero { padding:22px 18px; }
     .sg-shift-grid { grid-template-columns:1fr; }
     .sg-emp-month-grid { gap:4px;padding:12px; }
 }
@@ -6459,7 +6387,6 @@ const ScheduleGraphEmployee = {
         if (!this._assignments.length) {
             container.innerHTML = `
 <div class="sg-page">
-    ${this._empHero('', null)}
     <div class="empty-state" style="margin-top:2rem">
         <div class="empty-icon">📋</div>
         <h3>Вас не додано до графіку</h3>
@@ -6538,13 +6465,16 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
 
         const hasAnyEntry = Object.keys(this._entries).length > 0;
 
+        const isManager = AppState.isManager?.() || AppState.isAdmin?.() || AppState.isSuperAdmin?.();
+
         container.innerHTML = `
 <div class="sg-page">
-    ${this._empHero(locName, this._locId)}
-
     ${locTabs}
 
     <div class="sg-controls" style="margin-bottom:16px">
+        ${isManager ? `
+        <button class="sg-my-sched-btn" onclick="ScheduleGraphPage.init(ScheduleGraphEmployee._container)"><i class="fa-solid fa-angle-left"></i> Керування графіком
+        </button>` : ''}
         <div class="sg-month-nav">
             <button class="sg-mnav" onclick="ScheduleGraphEmployee._prevMonth()"><i class="fa-solid fa-angle-left"></i></button>
             <span class="sg-mlabel">${MONTHS_UA[this._month]} ${this._year}</span>
@@ -6559,7 +6489,7 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
                     style="--lc:${v.color};--lb:${v.bg}"
                     onclick="ScheduleGraphEmployee._setQuickType('${k}')"
                     title="${active ? 'Клік щоб скасувати' : 'Клік щоб вибрати — потім тиснути на свої клітинки'}">
-                    <span class="sg-leg-short" style="background:${v.bg};color:${v.color}">${v.short}</span>
+                    <span class="sg-leg-short">${v.short}</span>
                     ${v.label}
                     ${active ? '<span class="sg-leg-active-mark">✓ активно</span>' : ''}
                 </button>`;
@@ -6686,25 +6616,6 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
     </div>
 </div>
 ${ScheduleGraphPage._styles()}${this._empStyles()}`;
-    },
-
-    _empHero(locName, locId) {
-        const isManager = AppState.isManager?.() || AppState.isAdmin?.() || AppState.isSuperAdmin?.();
-        const asgn = locId ? this._assignments.find(a => a.locId === locId) : null;
-        const whText = (asgn?.work_start && asgn?.work_end)
-            ? `${asgn.work_start.slice(0,5)} — ${asgn.work_end.slice(0,5)}` : '';
-        return `
-<div class="sg-hero" style="margin-bottom:20px">
-    <div class="sg-hero-inner">
-        <div class="sg-hero-ico"><i class="fa-solid fa-calendar-days" style="color:#fff"></i></div>
-        <div style="flex:1">
-            <h1 class="sg-hero-title">Мій графік роботи</h1>
-        </div>
-        ${isManager ? `
-        <button class="sg-my-sched-btn" onclick="ScheduleGraphPage.init(ScheduleGraphEmployee._container)"><i class="fa-solid fa-angle-left"></i> Керування графіком
-        </button>` : ''}
-    </div>
-</div>`;
     },
 
     _empStyles() {

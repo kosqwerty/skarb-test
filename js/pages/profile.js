@@ -65,202 +65,474 @@ const ProfilePage = {
 
         const avatarInner = user.avatar_url
             ? `<img id="pe-avatar-img" src="${user.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
-            : `<span id="pe-avatar-initials" style="font-size:2rem;font-weight:700;color:#fff">${Fmt.initials(user.full_name)}</span>`;
+            : `<span id="pe-avatar-initials" style="font-size:1.7rem;font-weight:700;color:#fff">${Fmt.initials(user.full_name)}</span>`;
 
-        const titleText = isAdminEdit
-            ? `<i class="fa-solid fa-pen"></i> Редагувати користувача`
-            : `<i class="fa-solid fa-pen"></i> Мій профіль`;
+        const titleText = isAdminEdit ? 'Редагувати користувача' : 'Мій профіль';
 
         container.innerHTML = `
-    <div class="user-create-container">
-        <div class="create-header">
+    <div class="cuf-container">
+        <div class="cuf-topbar">
             <button class="btn-back" onclick="ProfilePage._cancel()">
                 <i class="fa-solid fa-arrow-left"></i> Назад
             </button>
-            <h2 class="create-title"><span class="title-icon">👤</span> ${titleText}</h2>
+            <div class="cuf-heading">
+                <span class="cuf-heading-ico"><i class="fa-solid fa-user-pen"></i></span>
+                <h2>${titleText}</h2>
+            </div>
         </div>
 
-        <div class="create-form-grid">
+        <div class="cuf-grid">
 
-            <!-- Колонка 1: Аватар + Особисті дані -->
-            <div class="form-section glass-panel">
-                <div class="section-header">
-                    <span class="section-badge">1</span>
+            <!-- Секция 1: Аватар + ПІБ -->
+            <div class="cuf-card">
+                <div class="cuf-card-head">
+                    <span class="cuf-badge">1</span>
                     <h4>Особисті дані</h4>
+                    <span class="cuf-head-ico"><i class="fa-solid fa-user"></i></span>
                 </div>
-
-                <!-- Аватар -->
-                <div style="display:flex;flex-direction:column;align-items:center;gap:.75rem;margin-bottom:1.25rem">
-                    <div id="pe-avatar-wrap" style="width:96px;height:96px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--secondary));display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;position:relative;cursor:pointer" onclick="document.getElementById('pe-avatar-input').click()" title="Змінити аватар">
-                        ${avatarInner}
-                        <div style="position:absolute;inset:0;border-radius:50%;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;opacity:0;transition:.2s" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=0">
-                            <span style="font-size:1.4rem">📷</span>
+                <div class="cuf-fields">
+                    <div class="cuf-avatar-row">
+                        <div id="pe-avatar-wrap" class="cuf-avatar-wrap" onclick="document.getElementById('pe-avatar-input').click()" title="Змінити аватар">
+                            ${avatarInner}
+                            <div class="cuf-avatar-overlay"><i class="fa-solid fa-camera"></i></div>
+                        </div>
+                        <input id="pe-avatar-input" type="file" accept="image/*" style="display:none" onchange="ProfilePage._previewAvatar('${user.id}', this)">
+                        <div class="cuf-avatar-btns">
+                            <button type="button" class="cuf-btn-ghost cuf-btn-xs" onclick="document.getElementById('pe-avatar-input').click()"><i class="fa-solid fa-camera"></i> Змінити</button>
+                            ${user.avatar_url ? `<button id="pe-avatar-delete-btn" type="button" class="cuf-btn-ghost cuf-btn-xs" style="color:var(--cuf-danger)" onclick="ProfilePage._removeAvatarPreview('${user.id}')"><i class="fa-solid fa-trash"></i> Видалити</button>` : ''}
                         </div>
                     </div>
-                    <input id="pe-avatar-input" type="file" accept="image/*" style="display:none" onchange="ProfilePage._previewAvatar('${user.id}', this)">
-                    <div style="display:flex;gap:.5rem">
-                        <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('pe-avatar-input').click()">📷 Змінити</button>
-                        ${user.avatar_url ? `<button id="pe-avatar-delete-btn" type="button" class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="ProfilePage._removeAvatarPreview('${user.id}')">​<i class="fa-solid fa-trash"></i> Видалити</button>` : ''}
-                    </div>
-                </div>
-
-                <div class="input-group">
-                    <label class="input-label"><span>Прізвище</span><input id="pe-last-name" type="text" value="${user.last_name || ''}"></label>
-                    <label class="input-label"><span>Ім'я</span><input id="pe-first-name" type="text" value="${user.first_name || ''}"></label>
-                    <label class="input-label"><span>По батькові</span><input id="pe-patronymic" type="text" value="${user.patronymic || ''}" oninput="applyGenderFromPatronymic('pe-patronymic','pe-gender')"></label>
-                    <label class="input-label">
+                    <label class="cuf-label">
+                        <span>Прізвище</span>
+                        <div class="cuf-field"><input id="pe-last-name" type="text" value="${Fmt.esc(user.last_name || '')}"></div>
+                    </label>
+                    <label class="cuf-label">
+                        <span>Ім'я</span>
+                        <div class="cuf-field"><input id="pe-first-name" type="text" value="${Fmt.esc(user.first_name || '')}"></div>
+                    </label>
+                    <label class="cuf-label">
+                        <span>По батькові</span>
+                        <div class="cuf-field"><input id="pe-patronymic" type="text" value="${Fmt.esc(user.patronymic || '')}" oninput="applyGenderFromPatronymic('pe-patronymic','pe-gender')"></div>
+                    </label>
+                    <label class="cuf-label">
                         <span>Стать</span>
-                        <div class="gender-picker-modern">
+                        <div class="cuf-gender">
                             <input type="hidden" id="pe-gender" value="${user.gender || ''}">
-                            <button type="button" class="gender-chip${user.gender==='male'?' active':''}" onclick="this.closest('.gender-picker-modern').querySelector('input').value='male';this.closest('.gender-picker-modern').querySelectorAll('.gender-chip').forEach(b=>b.classList.remove('active'));this.classList.add('active')"><span>♂</span>Чоловік</button>
-                            <button type="button" class="gender-chip${user.gender==='female'?' active':''}" onclick="this.closest('.gender-picker-modern').querySelector('input').value='female';this.closest('.gender-picker-modern').querySelectorAll('.gender-chip').forEach(b=>b.classList.remove('active'));this.classList.add('active')"><span>♀</span>Жінка</button>
+                            <button type="button" class="cuf-gender-chip${user.gender==='male'?' active':''}" onclick="this.closest('.cuf-gender').querySelector('input').value='male';this.closest('.cuf-gender').querySelectorAll('.cuf-gender-chip').forEach(b=>b.classList.remove('active'));this.classList.add('active')"><span>♂</span> Чоловік</button>
+                            <button type="button" class="cuf-gender-chip${user.gender==='female'?' active':''}" onclick="this.closest('.cuf-gender').querySelector('input').value='female';this.closest('.cuf-gender').querySelectorAll('.cuf-gender-chip').forEach(b=>b.classList.remove('active'));this.classList.add('active')"><span>♀</span> Жінка</button>
                         </div>
                     </label>
-                    <div class="input-row-2col">
-                        <label class="input-label">
+                    <div class="cuf-row-2">
+                        <label class="cuf-label">
                             <span>Дата народження</span>
-                            <input id="pe-birthdate" type="date" value="${user.birth_date || ''}" onpaste="Fmt.parseDatePaste(event,this)">
-                            <select id="pe-bd-privacy" style="margin-top:.35rem;font-size:.78rem;padding:.3rem .5rem;border-radius:var(--radius-md);border:1px solid var(--border);background:var(--bg-raised);color:var(--text-secondary);cursor:pointer">
+                            <div class="cuf-field">
+                                <i class="fa-regular fa-calendar cuf-ico"></i>
+                                <input id="pe-birthdate" type="date" class="cuf-has-ico" value="${user.birth_date || ''}" onpaste="Fmt.parseDatePaste(event,this)">
+                            </div>
+                            <select id="pe-bd-privacy" class="cuf-bd-privacy">
                                 <option value="full"    ${(user.birth_date_privacy||'full')==='full'    ? 'selected' : ''}>👁 Показувати повністю</option>
                                 <option value="no_year" ${(user.birth_date_privacy||'full')==='no_year' ? 'selected' : ''}>🙈 Приховати рік</option>
                                 <option value="hidden"  ${(user.birth_date_privacy||'full')==='hidden'  ? 'selected' : ''}>🔒 Приховати повністю</option>
                             </select>
                         </label>
-                        <label class="input-label"><span>Телефон</span><input id="pe-phone" type="tel" value="${user.phone || ''}"></label>
+                        <label class="cuf-label">
+                            <span>Телефон</span>
+                            <div class="cuf-field"><input id="pe-phone" type="tel" value="${Fmt.esc(user.phone || '')}"></div>
+                        </label>
                     </div>
                 </div>
             </div>
 
-            <!-- Колонка 2: Дані для входу -->
-            <div class="form-section glass-panel">
-                <div class="section-header">
-                    <span class="section-badge">2</span>
+            <!-- Секция 2: Доступ -->
+            <div class="cuf-card">
+                <div class="cuf-card-head">
+                    <span class="cuf-badge">2</span>
                     <h4>Дані для входу</h4>
+                    <span class="cuf-head-ico"><i class="fa-solid fa-lock"></i></span>
                 </div>
-                <div class="input-group">
-                    ${canExtended ? `<label class="input-label"><span>Логін</span><input id="pe-login" type="text" value="${user.login || ''}" placeholder="ivan_ivanov"></label>` : ''}
-                    <label class="input-label">
+                <div class="cuf-fields">
+                    ${canExtended ? `
+                    <label class="cuf-label">
+                        <span>Логін</span>
+                        <div class="cuf-field"><i class="fa-solid fa-user cuf-ico"></i><input id="pe-login" type="text" class="cuf-has-ico" value="${Fmt.esc(user.login || '')}" placeholder="ivan_ivanov"></div>
+                    </label>` : ''}
+                    <label class="cuf-label">
                         <span>Email</span>
-                        <input id="pe-email" type="email" value="${user.email || ''}" placeholder="user@example.com">
+                        <div class="cuf-field"><i class="fa-solid fa-envelope cuf-ico"></i><input id="pe-email" type="email" class="cuf-has-ico" value="${Fmt.esc(user.email || '')}" placeholder="user@example.com"></div>
                     </label>
-                    <label class="input-label">
+                    <label class="cuf-label">
                         <span>Новий пароль</span>
-                        <div style="position:relative">
-                            <input id="pe-password" type="password" placeholder="Залиште порожнім щоб не змінювати" autocomplete="new-password" style="width:100%;box-sizing:border-box;padding-right:42px">
-                            <button type="button" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;display:flex;align-items:center"
+                        <div class="cuf-field">
+                            <i class="fa-solid fa-lock cuf-ico"></i>
+                            <input id="pe-password" type="password" class="cuf-has-ico" placeholder="Залиште порожнім щоб не змінювати" autocomplete="new-password" style="padding-right:42px">
+                            <button type="button" class="cuf-eye-btn"
                                 onclick="const i=document.getElementById('pe-password');i.type=i.type==='password'?'text':'password';this.innerHTML=i.type==='password'?'<i class=&quot;fa-solid fa-eye&quot;></i>':'<i class=&quot;fa-solid fa-eye-slash&quot;></i>'">
                                 <i class="fa-solid fa-eye"></i>
                             </button>
                         </div>
-                        <small class="field-hint">Мінімум 6 символів</small>
+                        <span class="cuf-hint">Мінімум 6 символів</span>
                     </label>
                     ${!isAdminEdit ? `
-                    <label class="input-label">
+                    <label class="cuf-label">
                         <span>Підтвердження пароля</span>
-                        <div style="position:relative">
-                            <input id="pe-password2" type="password" placeholder="Повторіть пароль" style="width:100%;box-sizing:border-box;padding-right:42px">
-                            <button type="button" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;display:flex;align-items:center"
+                        <div class="cuf-field">
+                            <i class="fa-solid fa-lock cuf-ico"></i>
+                            <input id="pe-password2" type="password" class="cuf-has-ico" placeholder="Повторіть пароль" style="padding-right:42px">
+                            <button type="button" class="cuf-eye-btn"
                                 onclick="const i=document.getElementById('pe-password2');i.type=i.type==='password'?'text':'password';this.innerHTML=i.type==='password'?'<i class=&quot;fa-solid fa-eye&quot;></i>':'<i class=&quot;fa-solid fa-eye-slash&quot;></i>'">
                                 <i class="fa-solid fa-eye"></i>
                             </button>
                         </div>
                     </label>` : ''}
                     ${canRole ? `
-                    <label class="input-label">
+                    <label class="cuf-label">
                         <span>Роль</span>
-                        <div class="custom-select-wrapper">
-                            <select id="pe-role" ${user.role === 'superadmin' ? 'disabled title="Змінюйте через передачу прав"' : ''}>
+                        <div class="cuf-field">
+                            <i class="fa-solid fa-shield-halved cuf-ico"></i>
+                            <select id="pe-role" class="cuf-select cuf-has-ico" ${user.role === 'superadmin' ? 'disabled title="Змінюйте через передачу прав"' : ''}>
                                 ${(AppState.isSuperAdmin() ? ['superadmin','ceo','admin','smm','manager','user','intern'] : ['ceo','admin','smm','manager','user','intern'])
                                     .map(r => `<option value="${r}" ${user.role===r?'selected':''}>${Fmt.role(r)}</option>`).join('')}
                             </select>
+                            <i class="fa-solid fa-chevron-down cuf-chev"></i>
                         </div>
                     </label>` : ''}
                 </div>
             </div>
 
-            <!-- Колонка 3: Робота -->
-            <div class="form-section glass-panel">
-                <div class="section-header">
-                    <span class="section-badge">3</span>
+            <!-- Секция 3: Работа -->
+            <div class="cuf-card">
+                <div class="cuf-card-head">
+                    <span class="cuf-badge">3</span>
                     <h4>Робоча інформація</h4>
+                    <span class="cuf-head-ico"><i class="fa-solid fa-briefcase"></i></span>
                 </div>
-                <div class="input-group">
-                    <label class="input-label"><span>Місто</span>${CreatableSelect.html('pe-city', 'cities', cities.map(i=>i.name), user.city||'')}</label>
+                <div class="cuf-fields">
+                    <label class="cuf-label">
+                        <span>Місто</span>
+                        <div class="cuf-field cuf-field-embed"><i class="fa-solid fa-location-dot cuf-ico"></i>${CreatableSelect.html('pe-city', 'cities', cities.map(i=>i.name), user.city||'')}</div>
+                    </label>
                     ${canExtended ? `
-                    <label class="input-label"><span>Підрозділ</span>${CreatableSelect.html('pe-subdivision', 'subdivisions', subdivisions.map(i=>i.name), user.subdivision||'')}</label>
-                    <label class="input-label"><span>Посада</span>${CreatableSelect.html('pe-job-position', 'positions', positions.map(i=>i.name), user.job_position||'')}</label>
-                    <label class="input-label"><span>Керівник</span>${SearchSelect.html('pe-manager', mgItems, user.manager_id||'')}</label>
-                    ${isAdminEdit ? `<label class="input-label"><span>Довіреність</span>${CreatableMultiSelect.html('pe-dovirenosti')}</label>` : ''}
-                    <div class="input-row-2col">
-                        <label class="input-label"><span>Дата оформлення</span><input id="pe-hired-at" type="date" value="${user.hired_at || ''}" onpaste="Fmt.parseDatePaste(event,this)"></label>
-                        <label class="input-label"><span>На посаді з</span><input id="pe-position-since" type="date" value="${user.position_since || ''}" onpaste="Fmt.parseDatePaste(event,this)"></label>
+                    <label class="cuf-label">
+                        <span>Підрозділ</span>
+                        <div class="cuf-field cuf-field-embed"><i class="fa-solid fa-building cuf-ico"></i>${CreatableSelect.html('pe-subdivision', 'subdivisions', subdivisions.map(i=>i.name), user.subdivision||'')}</div>
+                    </label>
+                    <label class="cuf-label">
+                        <span>Посада</span>
+                        <div class="cuf-field cuf-field-embed"><i class="fa-solid fa-briefcase cuf-ico"></i>${CreatableSelect.html('pe-job-position', 'positions', positions.map(i=>i.name), user.job_position||'')}</div>
+                    </label>
+                    <label class="cuf-label">
+                        <span>Керівник</span>
+                        <div class="cuf-field cuf-field-embed"><i class="fa-solid fa-user-tie cuf-ico"></i>${SearchSelect.html('pe-manager', mgItems, user.manager_id||'')}</div>
+                    </label>
+                    ${isAdminEdit ? `
+                    <label class="cuf-label">
+                        <span>Довіреність</span>
+                        <div class="cuf-field cuf-field-embed cuf-field-embed-cms"><i class="fa-solid fa-file-lines cuf-ico"></i>${CreatableMultiSelect.html('pe-dovirenosti')}</div>
+                    </label>` : ''}
+                    <div class="cuf-row-2">
+                        <label class="cuf-label">
+                            <span>Дата оформлення</span>
+                            <div class="cuf-field"><i class="fa-regular fa-calendar cuf-ico"></i><input id="pe-hired-at" type="date" class="cuf-has-ico" value="${user.hired_at || ''}" onpaste="Fmt.parseDatePaste(event,this)"></div>
+                        </label>
+                        <label class="cuf-label">
+                            <span>На посаді з</span>
+                            <div class="cuf-field"><i class="fa-regular fa-calendar cuf-ico"></i><input id="pe-position-since" type="date" class="cuf-has-ico" value="${user.position_since || ''}" onpaste="Fmt.parseDatePaste(event,this)"></div>
+                        </label>
                     </div>
                     ` : `
-                    <label class="input-label"><span>Підрозділ</span><input type="text" value="${user.subdivision || ''}" readonly style="opacity:.6;cursor:not-allowed"></label>
-                    <label class="input-label"><span>Посада</span><input type="text" value="${user.job_position || ''}" readonly style="opacity:.6;cursor:not-allowed"></label>
-                    ${(user.hired_at || user.position_since) ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-top:.25rem">
-                        ${user.hired_at ? `<div style="padding:.55rem .75rem;background:var(--bg-raised);border:1.5px solid var(--border);border-radius:16px">
-                            <div style="font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.2rem">В компанії з</div>
-                            <div style="font-size:.9rem;font-weight:500">${Fmt.date(user.hired_at)}</div>
-                            <div style="font-size:.75rem;color:var(--text-muted);margin-top:.1rem">${ProfilePage._tenureStr(user.hired_at)}</div>
+                    <label class="cuf-label"><span>Підрозділ</span><div class="cuf-field"><input type="text" value="${Fmt.esc(user.subdivision || '')}" readonly style="opacity:.6;cursor:not-allowed"></div></label>
+                    <label class="cuf-label"><span>Посада</span><div class="cuf-field"><input type="text" value="${Fmt.esc(user.job_position || '')}" readonly style="opacity:.6;cursor:not-allowed"></div></label>
+                    ${(user.hired_at || user.position_since) ? `<div class="cuf-row-2" style="margin-top:2px">
+                        ${user.hired_at ? `<div class="cuf-tenure-card">
+                            <div class="cuf-tenure-label">В компанії з</div>
+                            <div class="cuf-tenure-val">${Fmt.date(user.hired_at)}</div>
+                            <div class="cuf-tenure-sub">${ProfilePage._tenureStr(user.hired_at)}</div>
                         </div>` : '<div></div>'}
-                        ${user.position_since ? `<div style="padding:.55rem .75rem;background:var(--bg-raised);border:1.5px solid var(--border);border-radius:16px">
-                            <div style="font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.2rem">На посаді з</div>
-                            <div style="font-size:.9rem;font-weight:500">${Fmt.date(user.position_since)}</div>
-                            <div style="font-size:.75rem;color:var(--text-muted);margin-top:.1rem">${ProfilePage._tenureStr(user.position_since)}</div>
+                        ${user.position_since ? `<div class="cuf-tenure-card">
+                            <div class="cuf-tenure-label">На посаді з</div>
+                            <div class="cuf-tenure-val">${Fmt.date(user.position_since)}</div>
+                            <div class="cuf-tenure-sub">${ProfilePage._tenureStr(user.position_since)}</div>
                         </div>` : '<div></div>'}
                     </div>` : ''}
                     `}
-                    <label class="input-label"><span>Про себе</span><textarea id="pe-bio" style="padding:10px 14px;background:var(--bg-raised);border:1.5px solid var(--border);border-radius:16px;font-size:.95rem;color:var(--text-primary);font-family:inherit;outline:none;resize:vertical;min-height:80px">${user.bio || ''}</textarea></label>
+                    <label class="cuf-label">
+                        <span>Про себе</span>
+                        <textarea id="pe-bio" class="cuf-textarea">${user.bio || ''}</textarea>
+                    </label>
                 </div>
             </div>
 
         </div>
 
-        <div class="form-actions">
-            <button class="btn-secondary-modern" onclick="ProfilePage._cancel()">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 18L18 6M6 6l12 12"/></svg>
-                Скасувати
-            </button>
-            <button class="btn-primary-modern" onclick="ProfilePage._save('${user.id}', ${isAdminEdit})">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v14a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-                Зберегти
-            </button>
+        <!-- Футер с кнопками -->
+        <div class="cuf-footer">
+            <div class="cuf-footer-hint">
+                <span class="cuf-footer-ico"><i class="fa-solid fa-circle-info"></i></span>
+                <div>
+                    <div>Зміни набудуть чинності одразу після збереження</div>
+                    <div class="cuf-footer-sub">Перевірте правильність введених даних перед збереженням</div>
+                </div>
+            </div>
+            <div class="cuf-footer-actions">
+                <button class="cuf-btn-ghost" onclick="ProfilePage._cancel()">
+                    <i class="fa-solid fa-xmark"></i> Скасувати
+                </button>
+                <button class="cuf-btn-gold" onclick="ProfilePage._save('${user.id}', ${isAdminEdit})">
+                    <i class="fa-solid fa-floppy-disk"></i> Зберегти
+                </button>
+            </div>
         </div>
     </div>
 
     <style>
-        .user-create-container { max-width:1400px; padding:4px; animation:fadeSlideUp 0.4s cubic-bezier(0.16,1,0.3,1); }
-        @keyframes fadeSlideUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
-        .create-header { display:flex; align-items:center; gap:16px; margin-bottom:32px; }
-        .create-title { display:flex;align-items:center;gap:10px;margin:0;font-size:1.9rem;font-weight:600;letter-spacing:-.02em;color:var(--text-primary); }
-        .title-icon { font-size:1.8rem;line-height:1; }
-        .create-form-grid { display:grid;grid-template-columns:repeat(3,1fr);gap:10px; }
-        .glass-panel { background:var(--bg-surface);border-radius:24px;padding:24px;box-shadow:var(--shadow-sm);border:1px solid var(--border);transition:box-shadow .3s ease,border-color .3s ease; }
-        .glass-panel:focus-within { box-shadow:var(--shadow-md);border-color:var(--border-light); }
-        .section-header { display:flex;align-items:center;gap:12px;margin-bottom:24px;padding-bottom:12px;border-bottom:1px dashed var(--border); }
-        .section-badge { display:flex;align-items:center;justify-content:center;width:28px;height:28px;background:var(--primary-glow);color:var(--primary);border-radius:12px;font-weight:700;font-size:14px; }
-        .section-header h4 { margin:0;font-size:1.1rem;font-weight:600;color:var(--text-primary); }
-        .input-group { display:flex;flex-direction:column;gap:20px; }
-        .input-row-2col { display:grid;grid-template-columns:1fr 1fr;gap:16px; }
-        .input-label { display:flex;flex-direction:column;gap:6px;font-size:.9rem;font-weight:500;color:var(--text-secondary); }
-        .input-label input, .input-label select, .custom-select-wrapper select { padding:10px 14px;background:var(--bg-raised);border:1.5px solid var(--border);border-radius:16px;font-size:.95rem;color:var(--text-primary);transition:all .15s ease;font-family:inherit;outline:none; }
-        .input-label input:hover { border-color:var(--border-light); }
-        .input-label input:focus, .input-label select:focus { border-color:var(--primary);box-shadow:0 0 0 4px var(--primary-glow); }
-        .input-label input::placeholder { color:var(--text-muted);font-weight:400;opacity:.7; }
-        .field-hint { margin-top:4px;color:var(--text-muted);font-size:.8rem;font-weight:400; }
-        .gender-picker-modern { display:flex;gap:10px; }
-        .gender-chip { flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:10px 0;background:var(--bg-raised);border:1.5px solid var(--border);border-radius:40px;font-weight:500;color:var(--text-secondary);cursor:pointer;transition:all .15s; }
-        .gender-chip span { font-size:18px; }
-        .gender-chip.active { background:var(--primary-glow);border-color:var(--primary);color:var(--primary);font-weight:600; }
-        .form-actions { display:flex;justify-content:flex-end;gap:16px;margin-top:40px;padding-top:16px;border-top:1px solid var(--border); }
-        .btn-primary-modern, .btn-secondary-modern { display:flex;align-items:center;gap:8px;padding:12px 28px;border-radius:48px;font-weight:600;font-size:1rem;border:none;cursor:pointer;transition:all .2s;line-height:1; }
-        .btn-primary-modern { background:var(--primary);color:white;box-shadow:0 4px 12px var(--primary-glow); }
-        .btn-primary-modern:hover { background:var(--primary-dark);transform:scale(1.02);box-shadow:0 8px 18px var(--primary-glow); }
-        .btn-secondary-modern { background:transparent;color:var(--text-secondary);border:1.5px solid var(--border); }
-        .btn-secondary-modern:hover { background:var(--bg-hover);border-color:var(--border-light); }
-        @media(max-width:1000px) { .create-form-grid{grid-template-columns:1fr;gap:16px} .create-title{font-size:1.5rem} }
-        .input-label > div[class*="select"] { width:100%; }
+        .cuf-container {
+            /* Dark theme (default) — treasury gold-on-navy */
+            --cuf-card-bg: linear-gradient(160deg,#0e1226 0%,#131a35 55%,#1b2350 100%);
+            --cuf-card-border: rgba(232,199,106,.28);
+            --cuf-card-border-focus: rgba(232,199,106,.6);
+            --cuf-gold: #e8c76a;
+            --cuf-gold-soft: rgba(232,199,106,.16);
+            --cuf-gold-glow: rgba(232,199,106,.4);
+            --cuf-gold-grad: linear-gradient(135deg,#fff3cc,#e8c76a 55%,#d4af37);
+            --cuf-gold-ink: #241a04;
+            --cuf-input-bg: rgba(255,255,255,.04);
+            --cuf-input-border: rgba(255,255,255,.1);
+            --cuf-text: #f1e9d2;
+            --cuf-text-soft: rgba(241,233,210,.64);
+            --cuf-text-mute: rgba(241,233,210,.4);
+            --cuf-danger: #f87171;
+
+            max-width: 1400px;
+            padding: 4px;
+            animation: cufFadeUp .45s cubic-bezier(.16,1,.3,1);
+        }
+
+        body.light-theme .cuf-container {
+            /* Light theme — blue accent, той самий синій, що й кнопка "Додати ресурс" (var(--primary)) */
+            --cuf-card-bg: linear-gradient(160deg,#eef4ff 0%,#e3edfe 100%);
+            --cuf-card-border: rgba(42,94,232,.22);
+            --cuf-card-border-focus: rgba(42,94,232,.55);
+            --cuf-gold: #2A5EE8;
+            --cuf-gold-soft: rgba(42,94,232,.1);
+            --cuf-gold-glow: rgba(42,94,232,.28);
+            --cuf-gold-grad: linear-gradient(135deg,#4d7bf0,#2A5EE8 60%,#1E4BB8);
+            --cuf-gold-ink: #ffffff;
+            --cuf-input-bg: #fbfdff;
+            --cuf-input-border: #cfe0fb;
+            --cuf-text: #0f1b33;
+            --cuf-text-soft: #45557a;
+            --cuf-text-mute: #8a97b8;
+            --cuf-danger: #dc2626;
+        }
+
+        @keyframes cufFadeUp {
+            from { opacity: 0; transform: translateY(14px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .cuf-topbar { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; }
+
+        .cuf-heading { display: flex; align-items: center; gap: 12px; }
+        .cuf-heading-ico {
+            width: 34px; height: 34px; border-radius: 11px; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            background: var(--cuf-gold-grad); color: var(--cuf-gold-ink);
+            font-size: .92rem; box-shadow: 0 6px 18px var(--cuf-gold-glow);
+        }
+        .cuf-heading h2 {
+            margin: 0; font-size: 1.35rem; font-weight: 800;
+            letter-spacing: -0.02em; color: var(--text-primary);
+        }
+
+        .cuf-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+
+        .cuf-card {
+            background: var(--cuf-card-bg);
+            border: 1.5px solid var(--cuf-card-border);
+            border-radius: 22px;
+            padding: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,.22);
+            position: relative;
+            transition: border-color .25s ease, box-shadow .25s ease;
+        }
+        .cuf-card::before {
+            content: ''; position: absolute; inset: 0; pointer-events: none;
+            border-radius: inherit;
+            background: radial-gradient(circle at 92% -12%, var(--cuf-gold-soft), transparent 55%);
+        }
+        .cuf-card:focus-within {
+            border-color: var(--cuf-card-border-focus);
+            box-shadow: 0 14px 36px rgba(0,0,0,.28), 0 0 0 3px var(--cuf-gold-soft);
+        }
+
+        .cuf-card-head {
+            display: flex; align-items: center; gap: 12px;
+            margin-bottom: 12px; padding-bottom: 10px;
+            border-bottom: 1px dashed var(--cuf-card-border);
+            position: relative; z-index: 1;
+        }
+        .cuf-badge {
+            width: 30px; height: 30px; border-radius: 10px; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            background: var(--cuf-gold-grad); color: var(--cuf-gold-ink);
+            font-weight: 800; font-size: .85rem;
+            box-shadow: 0 4px 12px var(--cuf-gold-glow);
+        }
+        .cuf-card-head h4 {
+            flex: 1; margin: 0; font-size: 1.05rem; font-weight: 700;
+            color: var(--cuf-text); letter-spacing: -0.01em;
+        }
+        .cuf-head-ico {
+            width: 30px; height: 30px; border-radius: 10px; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            background: var(--cuf-gold-soft); color: var(--cuf-gold); font-size: .85rem;
+        }
+
+        .cuf-fields { display: flex; flex-direction: column; gap: 10px; position: relative; z-index: 1; }
+        .cuf-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+        .cuf-label {
+            display: flex; flex-direction: column; gap: 4px;
+            font-size: .78rem; font-weight: 600; color: var(--cuf-text-soft);
+        }
+        .cuf-req { color: var(--cuf-danger); margin-left: 2px; }
+
+        .cuf-field { position: relative; display: flex; align-items: center; }
+        .cuf-field input, .cuf-field select {
+            width: 100%; box-sizing: border-box;
+            padding: 8px 14px; border-radius: 12px;
+            background: var(--cuf-input-bg); border: 1.5px solid var(--cuf-input-border);
+            color: var(--cuf-text); font-size: .9rem; font-family: inherit; outline: none;
+            transition: all .15s ease;
+        }
+        .cuf-field textarea {
+            width: 100%; box-sizing: border-box;
+            padding: 8px 14px; border-radius: 12px;
+            background: var(--cuf-input-bg); border: 1.5px solid var(--cuf-input-border);
+            color: var(--cuf-text); font-size: .9rem; font-family: inherit; outline: none;
+            transition: all .15s ease; resize: vertical; min-height: 80px;
+        }
+        .cuf-textarea {
+            width: 100%; box-sizing: border-box;
+            padding: 8px 14px; border-radius: 12px;
+            background: var(--cuf-input-bg); border: 1.5px solid var(--cuf-input-border);
+            color: var(--cuf-text); font-size: .9rem; font-family: inherit; outline: none;
+            transition: all .15s ease; resize: vertical; min-height: 80px;
+        }
+        .cuf-field input::placeholder { color: var(--cuf-text-mute); font-weight: 400; }
+        .cuf-field input:hover, .cuf-field select:hover, .cuf-field textarea:hover, .cuf-textarea:hover { border-color: var(--cuf-gold-glow); }
+        .cuf-field input:focus, .cuf-field select:focus, .cuf-field textarea:focus, .cuf-textarea:focus {
+            border-color: var(--cuf-gold); box-shadow: 0 0 0 4px var(--cuf-gold-soft);
+        }
+        .cuf-ico {
+            position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+            color: var(--cuf-gold); font-size: .82rem; z-index: 2; pointer-events: none;
+        }
+        .cuf-field input.cuf-has-ico, .cuf-field select.cuf-has-ico { padding-left: 40px; }
+        .cuf-select { appearance: none; -webkit-appearance: none; cursor: pointer; padding-right: 34px; }
+        .cuf-chev {
+            position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+            color: var(--cuf-text-mute); font-size: .72rem; pointer-events: none;
+        }
+
+        /* Embedded CreatableSelect / SearchSelect / CreatableMultiSelect widgets */
+        .cuf-field-embed { width: 100%; }
+        .cuf-field-embed > div { width: 100%; }
+        .cuf-field-embed .cs-input,
+        .cuf-field-embed .ss-input { padding-left: 40px !important; }
+        .cuf-field-embed-cms .cms-field { padding-left: 34px; }
+
+        /* Gender picker */
+        .cuf-gender { display: flex; gap: 10px; }
+        .cuf-gender-chip {
+            flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px;
+            padding: 7px 0; background: var(--cuf-input-bg); border: 1.5px solid var(--cuf-input-border);
+            border-radius: 40px; font-weight: 600; color: var(--cuf-text-soft);
+            cursor: pointer; transition: all .15s; font-family: inherit;
+        }
+        .cuf-gender-chip span { font-size: 16px; }
+        .cuf-gender-chip.active { background: var(--cuf-gold-soft); border-color: var(--cuf-gold); color: var(--cuf-gold); }
+
+        /* Avatar */
+        .cuf-avatar-row { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 4px; }
+        .cuf-avatar-wrap {
+            width: 84px; height: 84px; border-radius: 50%; flex-shrink: 0;
+            background: var(--cuf-gold-grad); display: flex; align-items: center; justify-content: center;
+            overflow: hidden; position: relative; cursor: pointer;
+            border: 2px solid var(--cuf-card-border);
+        }
+        .cuf-avatar-overlay {
+            position: absolute; inset: 0; border-radius: 50%; background: rgba(0,0,0,.4);
+            display: flex; align-items: center; justify-content: center; color: #fff; font-size: 1.1rem;
+            opacity: 0; transition: opacity .2s;
+        }
+        .cuf-avatar-wrap:hover .cuf-avatar-overlay { opacity: 1; }
+        .cuf-avatar-btns { display: flex; gap: 8px; }
+        .cuf-btn-xs { padding: 5px 12px; font-size: .74rem; border-radius: 10px; }
+
+        /* Birth-date privacy select */
+        .cuf-bd-privacy {
+            margin-top: 2px; font-size: .76rem; padding: 6px 10px; border-radius: 10px;
+            background: var(--cuf-input-bg); border: 1.5px solid var(--cuf-input-border);
+            color: var(--cuf-text-soft); cursor: pointer; font-family: inherit; outline: none;
+        }
+        .cuf-bd-privacy:focus { border-color: var(--cuf-gold); }
+
+        /* Read-only tenure cards (self-edit, no company-field access) */
+        .cuf-tenure-card { padding: 8px 12px; background: var(--cuf-input-bg); border: 1.5px solid var(--cuf-input-border); border-radius: 14px; }
+        .cuf-tenure-label { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--cuf-text-mute); margin-bottom: 2px; }
+        .cuf-tenure-val { font-size: .88rem; font-weight: 600; color: var(--cuf-text); }
+        .cuf-tenure-sub { font-size: .72rem; color: var(--cuf-text-mute); margin-top: 1px; }
+
+        /* Password extras */
+        .cuf-eye-btn {
+            position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+            background: none; border: none; cursor: pointer; color: var(--cuf-text-mute);
+            padding: 4px; display: flex; align-items: center; z-index: 3;
+        }
+        .cuf-eye-btn:hover { color: var(--cuf-gold); }
+        .cuf-hint { font-size: .72rem; color: var(--cuf-text-mute); white-space: nowrap; font-weight: 400; }
+
+        /* Footer */
+        .cuf-footer {
+            display: flex; align-items: center; justify-content: space-between; gap: 20px;
+            margin-top: 14px; padding: 12px 18px; border-radius: 16px;
+            background: var(--cuf-gold-soft); border: 1px solid var(--cuf-card-border);
+            flex-wrap: wrap;
+        }
+        .cuf-footer-hint { display: flex; align-items: flex-start; gap: 12px; font-size: .82rem; color: var(--text-secondary); }
+        .cuf-footer-ico {
+            width: 30px; height: 30px; border-radius: 10px; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            background: var(--cuf-gold-grad); color: var(--cuf-gold-ink); font-size: .8rem;
+        }
+        .cuf-footer-sub { color: var(--text-muted); margin-top: 2px; }
+        .cuf-footer-actions { display: flex; gap: 12px; }
+
+        .cuf-btn-ghost {
+            display: inline-flex; align-items: center; gap: 8px; padding: 9px 20px; border-radius: 12px;
+            background: transparent; border: 1.5px solid var(--border); color: var(--text-secondary);
+            font-weight: 600; font-size: .88rem; cursor: pointer; transition: all .2s; font-family: inherit;
+        }
+        .cuf-btn-ghost:hover { background: var(--bg-hover); border-color: var(--border-light); }
+        .cuf-btn-gold {
+            display: inline-flex; align-items: center; gap: 8px; padding: 9px 24px; border-radius: 12px;
+            background: var(--cuf-gold-grad); border: none; color: var(--cuf-gold-ink);
+            font-weight: 700; font-size: .88rem; cursor: pointer; transition: all .2s;
+            box-shadow: 0 6px 18px var(--cuf-gold-glow);
+        }
+        .cuf-btn-gold:hover { transform: translateY(-1px); box-shadow: 0 10px 24px var(--cuf-gold-glow); }
+        .cuf-btn-gold:active, .cuf-btn-ghost:active { transform: scale(.97); }
+
+        /* Responsive */
+        @media (max-width: 1000px) {
+            .cuf-grid { grid-template-columns: 1fr; }
+            .cuf-heading h2 { font-size: 1.35rem; }
+            .cuf-footer { flex-direction: column; align-items: flex-start; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .cuf-container { animation: none; }
+        }
     </style>`;
 
         CreatableSelect.init();
@@ -289,7 +561,7 @@ const ProfilePage = {
         }
         if (!document.getElementById('pe-avatar-delete-btn')) {
             document.querySelector('[onclick*="pe-avatar-input"]')
-                ?.insertAdjacentHTML('afterend', `<button id="pe-avatar-delete-btn" type="button" class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="ProfilePage._removeAvatarPreview('${userId}')">​<i class="fa-solid fa-trash"></i> Видалити</button>`);
+                ?.insertAdjacentHTML('afterend', `<button id="pe-avatar-delete-btn" type="button" class="cuf-btn-ghost cuf-btn-xs" style="color:var(--cuf-danger)" onclick="ProfilePage._removeAvatarPreview('${userId}')"><i class="fa-solid fa-trash"></i> Видалити</button>`);
         }
     },
 
@@ -298,7 +570,7 @@ const ProfilePage = {
         const wrap = document.getElementById('pe-avatar-wrap');
         if (wrap) {
             wrap.querySelector('img,span[id]')?.remove();
-            wrap.insertAdjacentHTML('afterbegin', `<span id="pe-avatar-initials" style="font-size:2rem;font-weight:700;color:#fff">${Fmt.initials('')}</span>`);
+            wrap.insertAdjacentHTML('afterbegin', `<span id="pe-avatar-initials" style="font-size:1.7rem;font-weight:700;color:#fff">${Fmt.initials('')}</span>`);
         }
         document.getElementById('pe-avatar-delete-btn')?.remove();
     },

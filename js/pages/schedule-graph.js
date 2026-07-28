@@ -185,6 +185,7 @@ const ScheduleGraphPage = {
 
         await this._loadLocations();
         await this._autoLockForNewMonth();
+        await this._remindEmployeesNewMonth();
         const myLocIds = this._locations.map(l => l.id);
         const [empCheck] = await Promise.all([
             myLocIds.length
@@ -249,6 +250,40 @@ const ScheduleGraphPage = {
             }));
         }
         localStorage.setItem(storageKey, currentKey);
+    },
+
+    // Раз на місяць (при відкритті менеджером свого графіку) нагадуємо
+    // основним співробітникам заповнити зміни на новий місяць — поки
+    // керівник ще не заблокував його кнопкою 🔒.
+    async _remindEmployeesNewMonth() {
+        const now = new Date();
+        const currentKey = `${now.getFullYear()}-${now.getMonth()}`;
+        const storageKey = `sg_remind_${AppState.user.id}`;
+        if (localStorage.getItem(storageKey) === currentKey) return;
+        localStorage.setItem(storageKey, currentKey);
+
+        const locIds = this._locations.filter(l => l.created_by === AppState.user.id).map(l => l.id);
+        if (!locIds.length) return;
+
+        try {
+            const { data: assigns } = await supabase.from('schedule_assignments')
+                .select('user_id')
+                .in('location_id', locIds)
+                .eq('is_primary', true)
+                .not('user_id', 'is', null);
+            const userIds = [...new Set((assigns || []).map(a => a.user_id))];
+            if (!userIds.length) return;
+
+            const monthLabel = `${MONTHS_UA[now.getMonth()]} ${now.getFullYear()}`;
+            await supabase.from('notifications').insert(userIds.map(uid => ({
+                user_id: uid,
+                title: '📅 Заповніть графік на ' + monthLabel,
+                message: `Новий місяць розпочався — заповніть свою зміну.`,
+                type: 'general',
+                created_by: AppState.user.id,
+                link: 'schedule-graph?view=employee'
+            })));
+        } catch(e) { /* non-critical */ }
     },
 
     _isViewOnlyLoc(locId) {
@@ -398,7 +433,7 @@ const ScheduleGraphPage = {
 
         const [aRes, eRes] = await Promise.all([
             supabase.from('schedule_assignments')
-                .select('id, user_id, employee_name, original_user_id, is_primary')
+                .select('id, user_id, employee_name, original_user_id, is_primary, pinned_months')
                 .eq('location_id', this._locId),
             supabase.from('schedule_entries')
                 .select('*')
@@ -426,7 +461,7 @@ const ScheduleGraphPage = {
             const ids = assignRows.map(a => a.user_id).filter(Boolean);
             if (ids.length) {
                 const { data: pData } = await supabase.from('profiles')
-                    .select('id, full_name, avatar_url, role, label')
+                    .select('id, full_name, avatar_url, role, label, job_position, manager_id')
                     .in('id', ids);
                 profiles = pData || [];
             }
@@ -436,6 +471,7 @@ const ScheduleGraphPage = {
             original_user_id: a.original_user_id || null,
             employee_name: a.employee_name || null,
             is_primary: a.is_primary !== false,
+            pinned_months: a.pinned_months || [],
             profile: a.user_id ? (profiles.find(p => p.id === a.user_id) || null) : null
         }));
 
@@ -525,7 +561,7 @@ const ScheduleGraphPage = {
         <div class="sg-content">
             ${this._locId || this._deletedLocations.length ? `
             <div class="sg-controls">
-                ${this._tab !== 'trash' && this._locId ? `
+                ${this._tab !== 'trash' && this._tab !== 'subrep' && this._locId ? `
                 <div class="sg-month-nav">
                     <button class="sg-mnav" onclick="ScheduleGraphPage._prevMonth()"><i class="fa-solid fa-angle-left"></i></button>
                     <span class="sg-mlabel">
@@ -552,6 +588,8 @@ const ScheduleGraphPage = {
             </div>
             ${this._tab === 'trash'
                 ? this._trashSection()
+                : this._tab === 'subrep'
+                ? this._substReportSection()
                 : !this._locId ? '' :
                   this._locId === 'all'   ? this._allLocsSection()
                 : this._tab === 'schedule' ? this._tableWithServicePanel()
@@ -575,13 +613,39 @@ const ScheduleGraphPage = {
 </div>
 ${this._styles()}`;
         this._initStickyScroll();
+        this._restoreNameColWidth();
     },
 
-    _showManual() {
-        Modal.open({
-            title: '',
-            size: 'xl',
-            body: `
+    _restoreNameColWidth() {
+        const saved = localStorage.getItem('sg_namecol_w');
+        if (saved) document.documentElement.style.setProperty('--sg-name-w', saved + 'px');
+    },
+
+    _startNameColResize(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        const th = e.target.closest('.sg-th-name');
+        if (!th) return;
+        const startX = e.clientX;
+        const startW = th.getBoundingClientRect().width;
+        document.body.classList.add('sg-namecol-resizing');
+        const onMove = mv => {
+            const w = Math.min(480, Math.max(140, startW + mv.clientX - startX));
+            document.documentElement.style.setProperty('--sg-name-w', w + 'px');
+        };
+        const onUp = () => {
+            document.body.classList.remove('sg-namecol-resizing');
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            const w = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sg-name-w'));
+            if (w) localStorage.setItem('sg_namecol_w', w);
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    },
+
+    _manCss() {
+        return `
 <style>
 .sg-man { font-family: 'Golos Text', system-ui, sans-serif; line-height: 1.65; font-size: 15px; color: #0e1117; }
 .sg-man *,
@@ -659,13 +723,37 @@ ${this._styles()}`;
 .sg-man .mock-table td { padding:4px 5px;text-align:center;border-bottom:1px solid rgba(255,255,255,.05); }
 .sg-man .mock-table td.name { text-align:left;color:rgba(255,255,255,.85);font-weight:600;padding-left:9px;min-width:100px; }
 .sg-man .mock-badge { display:inline-block;padding:2px 6px;border-radius:4px;font-size:.66rem;font-weight:700; }
+.sg-man .form-mock { background:var(--bg-surface,#fff);border:1.5px solid var(--border,#e2e8f0);border-radius:14px;overflow:hidden;margin:14px 0;box-shadow:0 2px 8px rgba(0,0,0,.05); }
+.sg-man .form-mock-hero { display:flex;align-items:center;gap:12px;padding:16px 18px;background:linear-gradient(135deg,rgba(37,99,235,.14),rgba(37,99,235,.03));border-bottom:1px solid var(--border,#e2e8f0); }
+.sg-man .form-mock-hero-icon { width:38px;height:38px;border-radius:11px;font-size:1.15rem;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:rgba(37,99,235,.16);border:1.5px solid rgba(37,99,235,.3); }
+.sg-man .form-mock-hero-title { font-weight:700;font-size:.92rem;color:var(--text,#0e1117); }
+.sg-man .form-mock-hero-sub { font-size:.72rem;color:#878b99;margin-top:1px; }
+.sg-man .form-mock-close { margin-left:auto;width:26px;height:26px;border-radius:7px;border:1px solid var(--border,#e2e8f0);display:flex;align-items:center;justify-content:center;color:#878b99;font-size:.7rem;flex-shrink:0; }
+.sg-man .form-mock-body { padding:16px 18px;display:flex;flex-direction:column;gap:12px; }
+.sg-man .form-mock-field { display:flex;flex-direction:column;gap:5px; }
+.sg-man .form-mock-row2 { display:grid;grid-template-columns:1fr 1fr;gap:10px; }
+.sg-man .form-mock-label { font-size:.66rem;font-weight:700;color:#878b99;text-transform:uppercase;letter-spacing:.04em;display:flex;align-items:center;gap:5px; }
+.sg-man .form-mock-label i { color:#2563eb;font-size:.65rem; }
+.sg-man .form-mock-val { padding:9px 12px;border-radius:9px;border:1.5px solid var(--border,#e2e8f0);background:#f8fafc;color:var(--text,#2a2d36);font-size:.82rem;font-weight:500; }
+.sg-man .form-mock-val.placeholder { color:#a8adba;font-weight:400; }
+.sg-man .form-mock-footer { display:flex;gap:8px;padding:12px 18px;border-top:1px solid var(--border,#e2e8f0);background:#fafbfc; }
+.sg-man .form-mock-btn-save { flex:1;text-align:center;padding:9px;border-radius:9px;background:#2563eb;color:#fff;font-size:.82rem;font-weight:700; }
+.sg-man .form-mock-btn-cancel { padding:9px 16px;border-radius:9px;border:1.5px solid var(--border,#e2e8f0);color:#4a4e5c;font-size:.82rem;font-weight:600; }
 .sg-man hr { border:none;border-top:1.5px solid var(--border,#e2e8f0);margin:28px 0; }
 .sg-man .cheatsheet-card { background:var(--bg-surface,#fff);border:2px solid #1e3a5f;border-radius:12px;padding:20px 24px;background:linear-gradient(135deg,rgba(30,58,95,.04),rgba(37,99,235,.04)); }
 .sg-man .cheatsheet-title { font-size:1rem;font-weight:800;margin-bottom:14px;color:var(--text,#0e1117); }
 .sg-man .cheat-list { list-style:none;padding:0;font-size:.86rem;color:#4a4e5c; }
 .sg-man .cheat-list li { padding:4px 0;border-bottom:1px solid var(--border,#e2e8f0); }
 .sg-man .cheat-list li:last-child { border-bottom:none; }
-</style>
+</style>`;
+    },
+
+    _showManual() {
+        Modal.open({
+            title: '',
+            size: 'xl',
+            body: `
+${this._manCss()}
 <div class="sg-man">
   <div class="cover">
     <div class="cover-tag">📋 Інструкція для керівника</div>
@@ -696,12 +784,68 @@ ${this._styles()}`;
     <div class="section-header"><div class="section-num">1</div><div><div class="section-title">🏪 Локації та структура</div></div></div>
     <div class="card"><div class="card-title">🗺️ Що таке локація?</div><p>Локація — це окремий підрозділ або точка роботи (магазин, відділення ломбарду). Для кожної локації ведеться окремий графік зі своїм переліком співробітників.</p></div>
     <div class="steps">
-      <div class="step"><div class="step-icon">➕</div><div class="step-body"><strong>Додати нову локацію</strong><p>У лівій бічній панелі натисніть кнопку <strong>«+»</strong> поряд із заголовком «Локації». Введіть назву і натисніть <em>Зберегти</em>.</p></div></div>
-      <div class="step"><div class="step-icon">✏️</div><div class="step-body"><strong>Перейменувати локацію</strong><p>Поряд з назвою локації натисніть кнопку олівця ✏. Змініть назву та збережіть.</p></div></div>
-      <div class="step"><div class="step-icon">↕️</div><div class="step-body"><strong>Змінити порядок</strong><p>Перетягніть локацію за маркер <strong>⠿</strong> у сайдбарі. Порядок зберігається автоматично.</p></div></div>
-      <div class="step"><div class="step-icon">📊</div><div class="step-body"><strong>Всі локації</strong><p>Оберіть <strong>«Всі локації»</strong> у сайдбарі — зведений вигляд усіх точок і співробітників. Можна згортати/розгортати групи.</p></div></div>
+      <div class="step"><div class="step-icon">➕</div><div class="step-body"><strong>Додати нову локацію</strong><p>У рядку «Розділ локацій» над списком натисніть <strong>«+ Додати філію»</strong> — відкриється форма нижче.</p></div></div>
+      <div class="step"><div class="step-icon">✏️</div><div class="step-body"><strong>Редагувати локацію</strong><p>Поряд з назвою локації натисніть кнопку олівця ✏ — відкриється та сама форма, уже заповнена поточними даними. Можна змінити будь-яке поле, включно з типом вузла.</p></div></div>
+      <div class="step"><div class="step-icon">↕️</div><div class="step-body"><strong>Змінити порядок</strong><p>Перетягніть локацію за маркер <strong>⠿</strong> у списку локацій. Порядок зберігається автоматично.</p></div></div>
+      <div class="step"><div class="step-icon">📊</div><div class="step-body"><strong>Всі локації</strong><p>Оберіть <strong>«Всі локації»</strong> у списку — зведений вигляд усіх точок і співробітників. Можна згортати/розгортати групи.</p></div></div>
     </div>
-    <div class="callout info"><div class="callout-icon">ℹ️</div><div class="callout-body"><strong>Час роботи.</strong> Для кожної локації можна вказати робочі години — клікніть олівець поряд із 🕐, задайте початок і кінець, збережіть.</div></div>
+
+    <div class="form-mock">
+      <div class="form-mock-hero">
+        <div class="form-mock-hero-icon">🏪</div>
+        <div>
+          <div class="form-mock-hero-title">Нова локація</div>
+          <div class="form-mock-hero-sub">Налаштування філії</div>
+        </div>
+        <div class="form-mock-close"><i class="fa-solid fa-xmark"></i></div>
+      </div>
+      <div class="form-mock-body">
+        <div class="form-mock-field">
+          <span class="form-mock-label"><i class="fa-solid fa-store"></i>Назва філії</span>
+          <div class="form-mock-val placeholder">Назва філії…</div>
+        </div>
+        <div class="form-mock-field">
+          <span class="form-mock-label"><i class="fa-solid fa-sitemap"></i>Тип вузла</span>
+          <div class="form-mock-val">Універсальний <i class="fa-solid fa-chevron-down" style="float:right;opacity:.5;font-size:.7rem;margin-top:3px"></i></div>
+        </div>
+        <div class="form-mock-row2">
+          <div class="form-mock-field">
+            <span class="form-mock-label"><i class="fa-solid fa-location-dot"></i>Адреса</span>
+            <div class="form-mock-val placeholder">вул. Хрещатик, 1</div>
+          </div>
+          <div class="form-mock-field">
+            <span class="form-mock-label"><i class="fa-solid fa-phone"></i>Телефон</span>
+            <div class="form-mock-val placeholder">+38 (050) 000-00-00</div>
+          </div>
+        </div>
+        <div class="form-mock-field">
+          <span class="form-mock-label"><i class="fa-regular fa-clock"></i>Час роботи</span>
+          <div class="form-mock-row2">
+            <div class="form-mock-val">🕐 09:00</div>
+            <div class="form-mock-val">🕐 18:00</div>
+          </div>
+        </div>
+      </div>
+      <div class="form-mock-footer">
+        <div class="form-mock-btn-save"><i class="fa-solid fa-check"></i> Зберегти</div>
+        <div class="form-mock-btn-cancel">Скасувати</div>
+      </div>
+    </div>
+
+    <div class="callout info"><div class="callout-icon">ℹ️</div><div class="callout-body"><strong>Час роботи.</strong> Поле «Час роботи» задається одразу у формі створення/редагування локації (не окремо) — початок і кінець зміни для точки.</div></div>
+
+    <div class="card" style="margin-top:14px">
+      <div class="card-title">🧭 Тип вузла та кольорова індикація</div>
+      <p style="color:#4a4e5c;margin-bottom:12px;font-size:.88rem">У формі локації є поле «Тип вузла» — визначає спеціалізацію точки. Після збереження тип позначається кольором в іконці локації у списку зліва та бейджем у картці локації:</p>
+      <div class="legend-grid">
+        <div class="legend-item"><div class="legend-short" style="background:rgba(99,102,241,.16);color:#6366f1"><i class="fa-solid fa-shop"></i></div><div class="legend-info"><strong>Технічний</strong><span>Синя іконка</span></div></div>
+        <div class="legend-item"><div class="legend-short" style="background:rgba(99,102,241,.16);color:#6366f1"><i class="fa-solid fa-shop"></i></div><div class="legend-info"><strong>Технічний + магазин</strong><span>Синя іконка</span></div></div>
+        <div class="legend-item"><div class="legend-short" style="background:rgba(245,158,11,.18);color:#d97706"><i class="fa-solid fa-shop"></i></div><div class="legend-info"><strong>Золотник</strong><span>Жовто-золота іконка</span></div></div>
+        <div class="legend-item"><div class="legend-short" style="background:linear-gradient(135deg,#6366f1 50%,#f59e0b 50%);color:#fff"><i class="fa-solid fa-shop"></i></div><div class="legend-info"><strong>Універсальний</strong><span>Половина синя / половина золота</span></div></div>
+        <div class="legend-item"><div class="legend-short" style="background:linear-gradient(135deg,#6366f1 50%,#f59e0b 50%);color:#fff"><i class="fa-solid fa-shop"></i></div><div class="legend-info"><strong>Універсальний + магазин</strong><span>Половина синя / половина золота</span></div></div>
+      </div>
+      <div class="callout info" style="margin-top:12px"><div class="callout-icon">🗂</div><div class="callout-body">Пункт <strong>«— Вузол не вказано —»</strong> лишає іконку локації нейтральною (без кольору) — тип не обов'язковий.</div></div>
+    </div>
   </section>
 
   <hr>
@@ -714,6 +858,13 @@ ${this._styles()}`;
       <div class="step"><div class="step-icon">🗑️</div><div class="step-body"><strong>Видалити співробітника</strong><p>Натисніть <span class="badge badge-red">🗑 Видалити</span> у рядку праворуч.</p></div></div>
     </div>
     <div class="callout danger"><div class="callout-icon">⚠️</div><div class="callout-body"><strong>Обов'язково!</strong> Додати співробітника можна <strong>лише якщо він зареєстрований на порталі</strong>.</div></div>
+    <div class="callout warn"><div class="callout-icon">📆</div><div class="callout-body"><strong>Співробітник прив'язується до локації, а не до місяця.</strong> Додавання не є діяльністю "на цей місяць" — запис створюється один раз для локації і після цього:
+        <ul style="margin:6px 0 0 18px;padding:0">
+            <li><strong>⭐ Основний</strong> (постійний) — показується у графіку <strong>кожного</strong> місяця, минулих і майбутніх, поки його не видалять зі списку.</li>
+            <li><strong>☆ Тимчасовий</strong> (підміна) — показується у поточному й минулих місяцях завжди, а у майбутніх місяцях <strong>лише якщо</strong> йому там уже проставлено зміну.</li>
+        </ul>
+        Перемкнути статус можна кліком на зірку <strong>⭐/☆</strong> ліворуч від імені в рядку графіка. Якщо співробітник не мав бути доданий назавжди — заберіть з нього ⭐ (зробіть тимчасовим) або видаліть повністю кнопкою 🗑.
+    </div></div>
     <div class="callout tip"><div class="callout-icon">💡</div><div class="callout-body"><strong>Мій графік.</strong> Якщо ви самі призначені як співробітник — у заголовку з'явиться кнопка <strong>«👤 Мій графік»</strong> для переключення на вигляд звичайного співробітника.</div></div>
   </section>
 
@@ -960,10 +1111,12 @@ ${this._styles()}`;
         const isCurrentOrPastMonth = this._year < now.getFullYear() ||
             (this._year === now.getFullYear() && this._month <= now.getMonth());
 
+        const monthKey = this._monthKey(this._year, this._month);
         const visibleAssignments = this._assignments.filter(a => {
             if (!a.user_id) return _hasEntries(a);          // уволенный — только если есть записи
             if (a.is_primary) return true;                   // постоянный — всегда
             if (isCurrentOrPastMonth) return true;           // тимчасовий в текущем/прошлом — показывать
+            if ((a.pinned_months || []).includes(monthKey)) return true; // закріплено вручну для цього місяця
             return _hasEntries(a);                           // тимчасовий в будущем — только если есть записи
         });
 
@@ -1001,14 +1154,19 @@ ${this._styles()}`;
                     <div class="sg-v2-svc-body"><div class="sg-v2-svc-title">Журнал змін</div><div class="sg-v2-svc-sub">Історія всіх змін в графіку</div></div>
                     <i class="fa-solid fa-angle-right sg-v2-svc-arr"></i>
                 </div>
-                <div class="sg-v2-svc-item" onclick="ScheduleGraphPage._switchTab('trash')">
-                    <div class="sg-v2-svc-icon" style="background:rgba(239,68,68,.12);color:#ef4444"><i class="fa-solid fa-trash"></i></div>
-                    <div class="sg-v2-svc-body"><div class="sg-v2-svc-title">Кошик${trashCount ? ` <span class="sg-trash-badge">${trashCount}</span>` : ''}</div><div class="sg-v2-svc-sub">Видалені записи та співробітники</div></div>
+                <div class="sg-v2-svc-item" onclick="ScheduleGraphPage._switchToSubstReport()">
+                    <div class="sg-v2-svc-icon" style="background:rgba(245,158,11,.12);color:#f59e0b"><i class="fa-solid fa-file-lines"></i></div>
+                    <div class="sg-v2-svc-body"><div class="sg-v2-svc-title">Звіт з підмін</div><div class="sg-v2-svc-sub">Всі підміни за місяць</div></div>
                     <i class="fa-solid fa-angle-right sg-v2-svc-arr"></i>
                 </div>
                 <div class="sg-v2-svc-item" onclick="ScheduleGraphPage._goToSubst('${this._locId}')">
                     <div class="sg-v2-svc-icon" style="background:rgba(16,185,129,.12);color:#10b981"><i class="fa-solid fa-arrow-right-arrow-left"></i></div>
                     <div class="sg-v2-svc-body"><div class="sg-v2-svc-title">Пошук підміни</div><div class="sg-v2-svc-sub">Активні та заплановані підміни</div></div>
+                    <i class="fa-solid fa-angle-right sg-v2-svc-arr"></i>
+                </div>
+                <div class="sg-v2-svc-item" onclick="ScheduleGraphPage._switchTab('trash')">
+                    <div class="sg-v2-svc-icon" style="background:rgba(239,68,68,.12);color:#ef4444"><i class="fa-solid fa-trash"></i></div>
+                    <div class="sg-v2-svc-body"><div class="sg-v2-svc-title">Кошик${trashCount ? ` <span class="sg-trash-badge">${trashCount}</span>` : ''}</div><div class="sg-v2-svc-sub">Видалені записи та співробітники</div></div>
                     <i class="fa-solid fa-angle-right sg-v2-svc-arr"></i>
                 </div>
                 <div class="sg-v2-svc-item" onclick="ScheduleGraphPage._showManual()">
@@ -1079,7 +1237,7 @@ ${this._styles()}`;
                     </div>
                     <i class="fa-solid fa-chevron-right sg-svc-arr"></i>
                 </button>
-                <button class="sg-svc-btn" onclick="ScheduleGraphPage._showSubstReportModal()">
+                <button class="sg-svc-btn" onclick="ScheduleGraphPage._switchToSubstReport()">
                     <div class="sg-svc-ico" style="background:rgba(245,158,11,.12);color:#f59e0b"><i class="fa-solid fa-file-lines"></i></div>
                     <div class="sg-svc-body">
                         <div class="sg-svc-title">Звіт по підмінам</div>
@@ -1150,7 +1308,7 @@ ${this._styles()}`;
         <table class="sg-table">
             <thead>
                 <tr>
-                    <th class="sg-th-name">Співробітник</th>
+                    <th class="sg-th-name">Співробітник<span class="sg-th-name-resizer" onmousedown="ScheduleGraphPage._startNameColResize(event)"></span></th>
                     ${nums.map(d => {
                         const dow  = new Date(this._year, this._month, d).getDay();
                         const we   = dow === 0 || dow === 6;
@@ -1622,7 +1780,7 @@ ${this._styles()}`;
         if (!locIds.length) { this._allAssignments = []; this._allEntries = {}; return; }
 
         const [aRes, eRes] = await Promise.all([
-            supabase.from('schedule_assignments').select('id, user_id, location_id, employee_name, original_user_id, is_primary').in('location_id', locIds),
+            supabase.from('schedule_assignments').select('id, user_id, location_id, employee_name, original_user_id, is_primary, pinned_months').in('location_id', locIds),
             supabase.from('schedule_entries').select('*').in('location_id', locIds).gte('date', dateFrom).lte('date', dateTo)
         ]);
 
@@ -1673,6 +1831,7 @@ ${this._styles()}`;
             original_user_id: a.original_user_id || null,
             employee_name:    a.employee_name || null,
             is_primary:       a.is_primary !== false,
+            pinned_months:    a.pinned_months || [],
             profile:          a.user_id ? (profiles.find(p => p.id === a.user_id) || null) : null
         }));
 
@@ -2927,9 +3086,25 @@ ${this._styles()}`;
         rows.forEach(r => { r.style.display = (!s || r.dataset.name.includes(s)) ? '' : 'none'; });
     },
 
-    async _showSubstReportModal() {
-        document.getElementById('sg-subrep-modal')?.remove();
+    async _switchToSubstReport() {
+        this._tab = 'subrep';
+        this._substDate = null;
+        this._filteredUserId = null;
+        await this._loadSubstReport();
+        this._render(this._container);
+    },
 
+    _substReportPrevMonth() {
+        if (this._month === 0) { this._month = 11; this._year--; } else this._month--;
+        this._loadSubstReport().then(() => this._render(this._container));
+    },
+
+    _substReportNextMonth() {
+        if (this._month === 11) { this._month = 0; this._year++; } else this._month++;
+        this._loadSubstReport().then(() => this._render(this._container));
+    },
+
+    async _loadSubstReport() {
         // Фільтр по поточному місяцю
         const _p = n => String(n).padStart(2, '0');
         const monthFrom = `${this._year}-${_p(this._month + 1)}-01`;
@@ -2938,7 +3113,7 @@ ${this._styles()}`;
 
         // Підміни = __sub_confirmed__ АБО робочі зміни is_primary=false співробітників
         const myLocIds = (this._locations || []).map(l => l.id);
-        if (!myLocIds.length) { Toast.info('Звіт по підмінам', 'Немає локацій.'); return; }
+        if (!myLocIds.length) { this._substReport = { rows: [], byUser: {}, profMap: {}, mgrMap: {}, locMap: {} }; return; }
 
         // Знайти всіх підмінних (is_primary=false) по локаціях менеджера
         const { data: subAssigns } = await supabase.from('schedule_assignments')
@@ -2985,15 +3160,22 @@ ${this._styles()}`;
         confRows.sort((a, b) => a.date.localeCompare(b.date));
 
         if (!confRows?.length) {
-            Toast.info('Звіт по підмінам', 'Підтверджених підмін ще немає.');
+            this._substReport = { rows: [], byUser: {}, profMap: {}, mgrMap: {}, locMap: {} };
             return;
         }
 
         const userIds = [...new Set(confRows.map(r => r.user_id).filter(Boolean))];
         const { data: profs } = await supabase.from('profiles')
-            .select('id, full_name, job_position, city, subdivision').in('id', userIds);
+            .select('id, full_name, job_position, city, subdivision, manager_id').in('id', userIds);
         const profMap = {};
         (profs || []).forEach(p => { profMap[p.id] = p; });
+
+        const mgrIds = [...new Set((profs || []).map(p => p.manager_id).filter(Boolean))];
+        let mgrMap = {};
+        if (mgrIds.length) {
+            const { data: mgrs } = await supabase.from('profiles').select('id, full_name').in('id', mgrIds);
+            mgrMap = Object.fromEntries((mgrs || []).map(m => [m.id, m.full_name]));
+        }
 
         const allLocs = [...(this._locations || []), ...(this._partnerLocations || [])];
         const knownLocIds = new Set(allLocs.map(l => l.id));
@@ -3014,84 +3196,165 @@ ${this._styles()}`;
             byUser[r.user_id].push(r);
         }
 
-        const _fmtDate = d => new Date(d + 'T00:00:00').toLocaleDateString('uk-UA', { day: 'numeric', month: 'short', year: 'numeric' });
+        this._substReport = { rows: confRows, byUser, profMap, mgrMap, locMap };
+    },
 
-        const monthLabel = new Date(this._year, this._month).toLocaleDateString('uk-UA', { month: 'long', year: 'numeric' });
+    // Будує <tr> для заданого підмножини записів (перегруповує по співробітнику
+    // й перераховує rowspan) — використовується і для початкового рендеру,
+    // і для перебудови таблиці при зміні фільтрів.
+    _highlightMatch(text, query) {
+        if (!query) return Fmt.esc(text);
+        const idx = text.toLowerCase().indexOf(query.toLowerCase());
+        if (idx === -1) return Fmt.esc(text);
+        const before = Fmt.esc(text.slice(0, idx));
+        const match  = Fmt.esc(text.slice(idx, idx + query.length));
+        const after  = Fmt.esc(text.slice(idx + query.length));
+        return `${before}<mark class="sg-srep-hl">${match}</mark>${after}`;
+    },
 
-        // Плоска таблиця — всі рядки підряд, згруповані по співробітнику
-        const tableRows = Object.entries(byUser).map(([uid, entries]) => {
+    _buildSubstReportRows(entries, query = '') {
+        const { profMap = {}, mgrMap = {}, locMap = {} } = this._substReport || {};
+        const byUser = {};
+        entries.forEach(r => { (byUser[r.user_id] ||= []).push(r); });
+
+        return Object.entries(byUser).map(([uid, uEntries]) => {
             const prof  = profMap[uid];
             const name  = prof?.full_name || '—';
             const pos   = prof?.job_position || '';
             const city  = prof?.city || '';
+            const mgrId   = prof?.manager_id || '';
+            const mgrName = mgrId ? (mgrMap[mgrId] || null) : null;
             const color = this._avatarColor(uid);
             const ini   = name !== '—' ? name.split(' ').filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase() : '?';
             const meta  = [pos, city].filter(Boolean).map(Fmt.esc).join(', ');
 
-            return entries.map((r, i) => {
+            return uEntries.map((r, i) => {
                 const loc     = locMap[r.location_id];
                 const locName = loc?.name || '—';
                 const addr    = loc?.address || '';
                 const dateStr = new Date(r.date + 'T00:00:00').toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' });
                 const isFirst = i === 0;
                 const empCell = isFirst
-                    ? `<td class="sg-srep-td sg-srep-td-emp sg-srep-td-first" rowspan="${entries.length}">
+                    ? `<td class="sg-srep-td sg-srep-td-emp sg-srep-td-first" rowspan="${uEntries.length}">
                            <div class="sg-srep-emp-inner">
                                <div class="sg-srep-av" style="background:${color}">${ini}</div>
                                <div class="sg-srep-pinfo">
-                                   <div class="sg-srep-name">${Fmt.esc(name)}</div>
+                                   <div class="sg-srep-name">${this._highlightMatch(name, query)}</div>
                                    ${meta ? `<div class="sg-srep-meta">${meta}</div>` : ''}
-                                   <div class="sg-srep-cnt-inline">${entries.length} підмін</div>
+                                   <div class="sg-srep-cnt-inline">Всього: <b>${uEntries.length}</b></div>
                                </div>
                            </div>
                        </td>`
                     : '';
-                return `<tr class="sg-srep-tr${isFirst ? ' sg-srep-tr-first' : ''}${i % 2 === 1 ? ' sg-srep-tr-odd' : ''}">${empCell}
+                const mgrCell = isFirst
+                    ? `<td class="sg-srep-td sg-srep-td-mgr" rowspan="${uEntries.length}">${mgrName ? Fmt.esc(mgrName) : '<span class="sg-srep-td-empty">—</span>'}</td>`
+                    : '';
+                return `<tr class="sg-srep-tr${isFirst ? ' sg-srep-tr-first' : ''}${i % 2 === 1 ? ' sg-srep-tr-odd' : ''}">${empCell}${mgrCell}
                     <td class="sg-srep-td sg-srep-td-date">${dateStr}</td>
                     <td class="sg-srep-td sg-srep-td-loc">${Fmt.esc(locName)}</td>
                     <td class="sg-srep-td sg-srep-td-addr">${Fmt.esc(addr)}</td>
                 </tr>`;
             }).join('');
         }).join('');
+    },
 
-        const totalSubs  = confRows.length;
+    _applySubstReportFilter() {
+        const q   = (document.getElementById('sg-srep-q')?.value || '').trim().toLowerCase();
+        const mgr = document.getElementById('sg-srep-mgr-filter')?.value || '';
+        const loc = document.getElementById('sg-srep-loc-filter')?.value || '';
+        const { profMap = {}, rows = [] } = this._substReport || {};
+
+        const filtered = rows.filter(r => {
+            const prof = profMap[r.user_id];
+            const matchQ   = !q || (prof?.full_name || '').toLowerCase().includes(q);
+            const matchMgr = !mgr || prof?.manager_id === mgr;
+            const matchLoc = !loc || r.location_id === loc;
+            return matchQ && matchMgr && matchLoc;
+        });
+
+        const tbody = document.getElementById('sg-srep-tbody');
+        if (tbody) tbody.innerHTML = this._buildSubstReportRows(filtered, q);
+
+        const visiblePeople = new Set(filtered.map(r => r.user_id)).size;
+        const pEl = document.getElementById('sg-srep-stat-people');
+        const sEl = document.getElementById('sg-srep-stat-subs');
+        if (pEl) pEl.textContent = visiblePeople;
+        if (sEl) sEl.textContent = filtered.length;
+        const emptyEl = document.getElementById('sg-srep-empty-filtered');
+        if (emptyEl) emptyEl.style.display = filtered.length === 0 ? '' : 'none';
+    },
+
+    _substReportSection() {
+        const { byUser = {}, profMap = {}, mgrMap = {}, locMap = {}, rows = [] } = this._substReport || {};
+        const monthLabel = new Date(this._year, this._month).toLocaleDateString('uk-UA', { month: 'long', year: 'numeric' });
+
+        const tableRows = this._buildSubstReportRows(rows);
+
+        const totalSubs   = rows.length;
         const totalPeople = Object.keys(byUser).length;
 
-        const el = document.createElement('div');
-        el.id = 'sg-subrep-modal';
-        el.className = 'sg-overlay';
-        el.innerHTML = `<div class="sg-modal sg-srep-modal">
-            <div class="sg-srep-head">
-                <div class="sg-srep-head-left">
-                    <span class="sg-srep-ico">📋</span>
-                    <div>
-                        <div class="sg-srep-title">Звіт по підмінам</div>
-                        <div class="sg-srep-subtitle">${monthLabel}</div>
-                    </div>
-                </div>
-                <div class="sg-srep-head-right">
-                    <div class="sg-srep-stat"><span class="sg-srep-stat-n">${totalPeople}</span><span class="sg-srep-stat-l">співробітників</span></div>
-                    <div class="sg-srep-stat-sep"></div>
-                    <div class="sg-srep-stat"><span class="sg-srep-stat-n">${totalSubs}</span><span class="sg-srep-stat-l">підмін</span></div>
-                    <button class="sg-modal-close" onclick="document.getElementById('sg-subrep-modal').remove()">✕</button>
-                </div>
+        const usedMgrIds = new Set(Object.values(profMap).map(p => p.manager_id).filter(Boolean));
+        const usedLocIds = new Set(rows.map(r => r.location_id).filter(Boolean));
+        const managers = [...usedMgrIds].map(id => ({ id, name: mgrMap[id] || '—' }))
+            .sort((a, b) => a.name.localeCompare(b.name, 'uk'));
+        const locations = [...usedLocIds].map(id => ({ id, name: locMap[id]?.name || '—' }))
+            .sort((a, b) => a.name.localeCompare(b.name, 'uk'));
+
+        return `
+<div class="sg-section sg-srep-section">
+    <div class="sg-srep-toolbar">
+        <button class="btn-back" onclick="ScheduleGraphPage._switchTab('schedule')"><i class="fa-solid fa-arrow-left"></i> Назад</button>
+        <div class="sg-month-nav">
+            <button class="sg-mnav" onclick="ScheduleGraphPage._substReportPrevMonth()"><i class="fa-solid fa-angle-left"></i></button>
+            <span class="sg-mlabel" style="text-transform:capitalize">${monthLabel}</span>
+            <button class="sg-mnav" onclick="ScheduleGraphPage._substReportNextMonth()">›</button>
+        </div>
+        ${totalSubs ? `
+        <div class="sg-srep-filters">
+            <div class="sg-srep-search-wrap">
+                <i class="fa-solid fa-magnifying-glass sg-srep-search-ico"></i>
+                <input class="sg-srep-search" placeholder="Пошук співробітника..." id="sg-srep-q"
+                    oninput="ScheduleGraphPage._applySubstReportFilter()" autocomplete="off">
             </div>
-            <div class="sg-srep-body">
-                <table class="sg-srep-table">
-                    <thead>
-                        <tr>
-                            <th class="sg-srep-th sg-srep-th-emp">Співробітник</th>
-                            <th class="sg-srep-th">Дата</th>
-                            <th class="sg-srep-th">Локація</th>
-                            <th class="sg-srep-th">Адреса</th>
-                        </tr>
-                    </thead>
-                    <tbody>${tableRows}</tbody>
-                </table>
-            </div>
-        </div>`;
-        document.body.appendChild(el);
-        el.addEventListener('click', e => { if (e.target === el) el.remove(); });
+            ${managers.length > 1 ? `
+            <select id="sg-srep-mgr-filter" class="sg-srep-select" onchange="ScheduleGraphPage._applySubstReportFilter()">
+                <option value="">Всі керівники</option>
+                ${managers.map(m => `<option value="${m.id}">${Fmt.esc(m.name)}</option>`).join('')}
+            </select>` : ''}
+            ${locations.length > 1 ? `
+            <select id="sg-srep-loc-filter" class="sg-srep-select" onchange="ScheduleGraphPage._applySubstReportFilter()">
+                <option value="">Всі локації</option>
+                ${locations.map(l => `<option value="${l.id}">${Fmt.esc(l.name)}</option>`).join('')}
+            </select>` : ''}
+        </div>
+        <div class="sg-srep-stats-inline">
+            <b id="sg-srep-stat-people">${totalPeople}</b> співробітників · <b id="sg-srep-stat-subs">${totalSubs}</b> підмін
+        </div>` : ''}
+    </div>
+    ${!totalSubs ? `
+    <div class="empty-state" style="margin:2rem 0">
+        <div class="empty-icon">📋</div>
+        <h3>Підмін ще немає</h3>
+        <p>За обраний місяць підтверджених підмін не зафіксовано</p>
+    </div>` : `
+    <div class="sg-srep-body-static">
+        <table class="sg-srep-table">
+            <thead>
+                <tr>
+                    <th class="sg-srep-th sg-srep-th-emp">Співробітник</th>
+                    <th class="sg-srep-th sg-srep-th-mgr">Керівник</th>
+                    <th class="sg-srep-th">Дата</th>
+                    <th class="sg-srep-th">Локація</th>
+                    <th class="sg-srep-th">Адреса</th>
+                </tr>
+            </thead>
+            <tbody id="sg-srep-tbody">${tableRows}</tbody>
+        </table>
+        <div class="sg-srep-empty-filtered" id="sg-srep-empty-filtered" style="display:none">
+            <i class="fa-solid fa-magnifying-glass"></i> Нічого не знайдено за фільтром
+        </div>
+    </div>`}
+</div>`;
     },
 
     async _showManagerHelpModal() {
@@ -3220,6 +3483,10 @@ ${this._styles()}`;
         };
         const _hasEntries    = a => nums.some(d => _getEntry(a, this._dateStr(d)));
         const _isPartnerLoc  = locId => this._partnerLocations?.some(l => l.id === locId);
+        const _now = new Date();
+        const _isCurrentOrPastMonth = this._year < _now.getFullYear() ||
+            (this._year === _now.getFullYear() && this._month <= _now.getMonth());
+        const _monthKey = this._monthKey(this._year, this._month);
 
         // Cross-location shift: uid_date → [{ locId, locName }, ...] — all real shifts per employee per date
         const shiftsByUidDate = {};
@@ -3239,8 +3506,12 @@ ${this._styles()}`;
 
         const byLoc = {};
         this._allAssignments.forEach(a => {
-            // Primary employees always show (active or fired); non-primary only if they have entries this month
-            const visible = a.isPartner ? _hasEntries(a) : ((a.is_primary && a.user_id) ? true : _hasEntries(a));
+            // Primary employees always show (active or fired); non-primary show in current/past
+            // months or if pinned for this month, otherwise only if they have entries
+            const visible = a.isPartner ? _hasEntries(a)
+                : (a.is_primary && a.user_id) ? true
+                : (a.user_id && (_isCurrentOrPastMonth || (a.pinned_months || []).includes(_monthKey))) ? true
+                : _hasEntries(a);
             if (!visible) return;
             // Employee filter: if active, only show rows matching the selected user
             if (this._filteredUserId) {
@@ -3289,20 +3560,18 @@ ${this._styles()}`;
 <div class="sg-section">
     <div class="sg-toolbar">
         <div class="sg-tb-section">
-            <span class="sg-tb-label">Легенда</span>
+            <span class="sg-tb-label"><i class="fa-solid fa-list-check"></i> Легенда</span>
             <div class="sg-legend">${legend}<button class="sg-types-mgr-btn" onclick="ScheduleGraphPage._showShiftTypesModal()" title="Налаштувати типи змін">⚙️</button></div>
         </div>
-        <div class="sg-tb-divider"></div>
         <div class="sg-tb-section">
-            <span class="sg-tb-label">Вигляд</span>
+            <span class="sg-tb-label"><i class="fa-solid fa-table-list"></i> Вигляд</span>
             <div style="display:flex;gap:6px">
-                <button class="sg-collapse-all-btn" title="Згорнути всі локації" onclick="ScheduleGraphPage._collapseAllLocs()">▼ Згорнути</button>
-                <button class="sg-collapse-all-btn" title="Розгорнути всі локації" onclick="ScheduleGraphPage._expandAllLocs()">▲ Розгорнути</button>
+                <button class="sg-collapse-all-btn" title="Згорнути всі локації" onclick="ScheduleGraphPage._collapseAllLocs()"><i class="fa-solid fa-angles-up"></i> Згорнути</button>
+                <button class="sg-collapse-all-btn" title="Розгорнути всі локації" onclick="ScheduleGraphPage._expandAllLocs()"><i class="fa-solid fa-angles-down"></i> Розгорнути</button>
             </div>
         </div>
-        <div class="sg-tb-divider"></div>
         <div class="sg-tb-section">
-            <span class="sg-tb-label">Підміни</span>
+            <span class="sg-tb-label"><i class="fa-solid fa-arrow-right-arrow-left"></i> Підміни</span>
             <div style="display:flex;gap:6px;flex-wrap:wrap">
                 <button class="sg-mgr-help-btn" onclick="ScheduleGraphPage._showManagerHelpModal()">
                     🆘 Потрібна${(() => {
@@ -3318,15 +3587,14 @@ ${this._styles()}`;
                         return cnt ? ` <span class="sg-cansub-badge">${cnt}</span>` : '';
                     })()}
                 </button>
-                <button class="sg-subrep-btn" onclick="ScheduleGraphPage._showSubstReportModal()">
-                    <i class="fa-solid fa-file-lines"></i> Звіт
+                <button class="sg-subrep-btn" onclick="ScheduleGraphPage._switchToSubstReport()">
+                    <i class="fa-solid fa-file-lines"></i> Звіт з підмін
                 </button>
             </div>
         </div>
-        <div class="sg-tb-divider"></div>
         <div class="sg-tb-section">
-            <span class="sg-tb-label">Доступ</span>
-            <div style="display:flex;flex-direction:column;gap:5px">
+            <span class="sg-tb-label"><i class="fa-solid fa-lock"></i> Доступ</span>
+            <div style="display:flex;gap:6px">
                 <button class="sg-viewers-btn" onclick="ScheduleGraphPage._showViewersModal()">
                     <i class="fa-solid fa-eye"></i> Доступ
                 </button>
@@ -3552,11 +3820,17 @@ ${this._styles()}`;
         if (!userId || userId === 'null') return;
         if (this._partnerLocations?.some(l => l.id === locId)) return;
         if (this._isLockedForLoc(locId)) { Toast.error('Графік заблоковано', 'Розблокуйте графік перед редагуванням'); return; }
-        const key    = `${locId}_${userId}_${date}`;
-        const oldEnt = this._allEntries[key];
+        const key     = `${locId}_${userId}_${date}`;
+        const oldEnt  = this._allEntries[key];
+        const empName = this._allAssignments.find(a => a.user_id === userId && a.locId === locId)?.profile?.full_name || '';
         if (oldEnt?.shift_type === type) {
             await supabase.from('schedule_entries').delete()
                 .eq('location_id', locId).eq('user_id', userId).eq('date', date);
+            await supabase.from('schedule_log').insert({
+                location_id: locId, user_id: userId, date, employee_name: empName,
+                old_value: { shift_type: oldEnt.shift_type }, new_value: null,
+                changed_by: AppState.user.id
+            });
             delete this._allEntries[key];
             if (this._entriesByLoc[locId]) delete this._entriesByLoc[locId][`${userId}_${date}`];
             document.querySelectorAll(`.sg-cell[data-uid="${userId}"][data-date="${date}"][data-locid="${locId}"]`)
@@ -3576,6 +3850,14 @@ ${this._styles()}`;
         const { data, error } = await supabase.from('schedule_entries')
             .upsert(payload, { onConflict: 'location_id,user_id,date' }).select().single();
         if (error) { Toast.error('Помилка', error.message); return; }
+
+        await supabase.from('schedule_log').insert({
+            location_id: locId, user_id: userId, date, employee_name: empName,
+            old_value: oldEnt ? { shift_type: oldEnt.shift_type } : null,
+            new_value: { shift_type: type },
+            changed_by: AppState.user.id
+        });
+
         this._allEntries[key] = data;
         if (!this._entriesByLoc[locId]) this._entriesByLoc[locId] = {};
         this._entriesByLoc[locId][`${userId}_${date}`] = data;
@@ -3827,13 +4109,36 @@ ${this._styles()}`;
     },
 
     async _addEmployee() {
-        const assignedIds = new Set(this._assignments.map(a => a.user_id));
-        const [profRes, dovRes] = await Promise.all([
-            supabase.from('profiles').select('id, full_name, role, label, job_position, manager_id').order('full_name'),
-            supabase.from('profile_dovirenosti').select('profile_id, dovirenosti(name)')
+        // Не просто "вже призначений до локації" — а "вже видимий у графіку цього
+        // місяця". Тимчасові співробітники, яких не видно в поточному місяці
+        // (немає pinned_months/записів), мають лишатись доступними для повторного
+        // "додавання" — насправді це лише закріпить їх видимість на цей місяць.
+        const now = new Date();
+        const isCurrentOrPastMonth = this._year < now.getFullYear() ||
+            (this._year === now.getFullYear() && this._month <= now.getMonth());
+        const monthKey = this._monthKey(this._year, this._month);
+        const _hasEntries = uid => Object.keys(this._entries).some(k => k.startsWith(`${uid}_`));
+        const hiddenAssignments = new Map(); // userId → assignment (потрібно лише "закріпити", не додавати заново)
+        const visibleUserIds = new Set();
+        this._assignments.forEach(a => {
+            if (!a.user_id) return;
+            const isVisible = a.is_primary || isCurrentOrPastMonth ||
+                (a.pinned_months || []).includes(monthKey) || _hasEntries(a.user_id);
+            if (isVisible) visibleUserIds.add(a.user_id);
+            else hiddenAssignments.set(a.user_id, a);
+        });
+
+        const [profRes, dovRes, positions] = await Promise.all([
+            supabase.from('profiles').select('id, full_name, role, label, job_position, manager_id').eq('role', 'user').order('full_name'),
+            supabase.from('profile_dovirenosti').select('profile_id, dovirenosti(name)'),
+            API.directories.getAll('positions').catch(() => [])
         ]);
-        const profiles = (profRes.data || []).filter(p => !assignedIds.has(p.id));
+        const profiles = (profRes.data || []).filter(p => !visibleUserIds.has(p.id));
         if (!profiles.length) { Toast.info('Всіх доступних вже додано'); return; }
+        profiles.forEach(p => {
+            const hiddenA = hiddenAssignments.get(p.id);
+            if (hiddenA) { p._pinAssignId = hiddenA.id; p._pinLabel = 'вже в списку, приховано цього місяця'; }
+        });
 
         // Build manager name map
         const mgrIds = [...new Set(profiles.map(p => p.manager_id).filter(Boolean))];
@@ -3855,13 +4160,50 @@ ${this._styles()}`;
             p._dovirenosti = dovMap[p.id] || [];
         });
 
-        this._showEmpPanel(profiles);
+        const managers = Object.entries(mgrMap)
+            .map(([id, name]) => ({ id, name }))
+            .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'uk'));
+
+        this._showEmpPanel(profiles, positions.map(p => p.name), managers);
     },
 
-    _showEmpPanel(profiles) {
+    // Груба евристика "посада → з чим може працювати", лише для попереджень
+    // при додаванні (не блокує) — визначається за ключовими словами в назві посади.
+    _capabilitiesFromPosition(pos) {
+        const s = (pos || '').toLowerCase();
+        const caps = new Set();
+        if (/дм\b|дорогоцінн|золот|діамант|брильянт|коштовн/.test(s)) caps.add('gold');
+        if (/технік/.test(s)) caps.add('tech');
+        if (/універсал/.test(s)) { caps.add('tech'); caps.add('gold'); }
+        return caps;
+    },
+
+    _nodeRequiredCapabilities(nodeType) {
+        if (nodeType === 'technical' || nodeType === 'technical_seller') return new Set(['tech']);
+        if (nodeType === 'gold') return new Set(['gold']);
+        if (nodeType === 'universal' || nodeType === 'universal_seller') return new Set(['tech', 'gold']);
+        return new Set();
+    },
+
+    // Повертає текст попередження, якщо посада співробітника не покриває
+    // всі можливості поточного вузла локації, або null якщо все ок / невідомо.
+    _empNodeMismatch(jobPosition, locId) {
+        const loc = this._locations.find(l => l.id === (locId || this._locId));
+        const required = this._nodeRequiredCapabilities(loc?.node_type);
+        if (!required.size) return null;
+        const caps = this._capabilitiesFromPosition(jobPosition);
+        if (!caps.size) return null;
+        const labels = { tech: 'технікою', gold: 'дорогоцінними металами/діамантами' };
+        const missing = [...required].filter(c => !caps.has(c)).map(c => labels[c]);
+        return missing.length ? missing.join(' та ') : null;
+    },
+
+    _showEmpPanel(profiles, positions = [], managers = []) {
         document.getElementById('sg-emp-backdrop')?.remove();
         document.getElementById('sg-emp-panel')?.remove();
         this._empPanelSelected = new Set();
+        this._empPanelPosFilter = new Set();
+        this._empPanelMgrFilter = new Set();
         this._empPanelProfiles = Object.fromEntries(profiles.map(p => [p.id, p]));
 
         const backdrop = document.createElement('div');
@@ -3875,22 +4217,56 @@ ${this._styles()}`;
         panel.className = 'sg-emp-panel';
         panel.innerHTML = `
 <div class="sg-emp-panel-header">
-    <div>
-        <div style="font-size:.95rem;font-weight:700">Додати співробітників</div>
-        <div style="font-size:.78rem;color:var(--text-muted);margin-top:2px">${profiles.length} доступних</div>
+    <div class="sg-emp-panel-header-ico"><i class="fa-solid fa-user-plus"></i></div>
+    <div style="flex:1;min-width:0">
+        <div style="font-size:1.05rem;font-weight:800">Додати співробітників</div>
+        <div style="font-size:.78rem;color:var(--text-muted);margin-top:2px" id="sg-emp-count">${profiles.length} доступних</div>
     </div>
     <button class="sg-mclose" onclick="ScheduleGraphPage._closeEmpPanel()">✕</button>
 </div>
-<div class="sg-emp-panel-search">
-    <input class="sg-msearch" style="margin:0" placeholder="🔍 Пошук за ім'ям..." id="sg-emp-q"
-        oninput="ScheduleGraphPage._filterEmp(this.value)" autocomplete="off">
+<div class="sg-emp-panel-toolbar">
+    <div class="sg-emp-panel-search">
+        <input class="sg-msearch" style="margin:0" placeholder="🔍 Пошук за ім'ям..." id="sg-emp-q"
+            oninput="ScheduleGraphPage._applyEmpFilter()" autocomplete="off">
+    </div>
+    ${positions.length ? `
+    <div class="sg-emp-pos-filter">
+        <button class="sg-emp-pos-dd-btn" id="sg-emp-pos-dd-btn" onclick="ScheduleGraphPage._toggleEmpPosDropdown(event)">
+            <i class="fa-solid fa-briefcase"></i>
+            <span id="sg-emp-pos-dd-label">Всі посади</span>
+            <i class="fa-solid fa-chevron-down sg-emp-pos-dd-chev"></i>
+        </button>
+        <div class="sg-emp-pos-dd-menu" id="sg-emp-pos-dd-menu" style="display:none">
+            ${positions.map(pos => `
+            <label class="sg-emp-pos-dd-item">
+                <input type="checkbox" value="${Fmt.esc(pos)}" onchange="ScheduleGraphPage._onEmpPosCheck()">
+                <span>${Fmt.esc(pos)}</span>
+            </label>`).join('')}
+        </div>
+    </div>` : ''}
+    ${managers.length ? `
+    <div class="sg-emp-pos-filter">
+        <button class="sg-emp-pos-dd-btn" id="sg-emp-mgr-dd-btn" onclick="ScheduleGraphPage._toggleEmpMgrDropdown(event)">
+            <i class="fa-solid fa-user-tie"></i>
+            <span id="sg-emp-mgr-dd-label">Всі керівники</span>
+            <i class="fa-solid fa-chevron-down sg-emp-pos-dd-chev"></i>
+        </button>
+        <div class="sg-emp-pos-dd-menu" id="sg-emp-mgr-dd-menu" style="display:none">
+            ${managers.map(m => `
+            <label class="sg-emp-pos-dd-item">
+                <input type="checkbox" value="${m.id}" data-name="${Fmt.esc(m.name || '')}" onchange="ScheduleGraphPage._onEmpMgrCheck()">
+                <span>${Fmt.esc(m.name || 'Без імені')}</span>
+            </label>`).join('')}
+        </div>
+    </div>` : ''}
 </div>
 <div class="sg-emp-panel-list" id="sg-emp-list">
     ${profiles.map(p => {
         const initials = (p.full_name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
         const color = ScheduleGraphPage._avatarColor(p.id);
+        const mismatch = ScheduleGraphPage._empNodeMismatch(p.job_position);
         return `
-    <div class="sg-emp-panel-row" data-id="${p.id}" data-name="${(p.full_name||'').toLowerCase()}"
+    <div class="sg-emp-panel-row" data-id="${p.id}" data-name="${(p.full_name||'').toLowerCase()}" data-pos="${(p.job_position||'').toLowerCase()}" data-mgr="${p.manager_id || ''}" data-pin-id="${p._pinAssignId || ''}"
         onclick="ScheduleGraphPage._toggleEmpSelection('${p.id}')">
         <div class="sg-emp-panel-check"><i class="fa-solid fa-check" style="font-size:.65rem"></i></div>
         <div class="sg-av sm" style="background:${color}">${initials}</div>
@@ -3899,9 +4275,12 @@ ${this._styles()}`;
             ${p.job_position ? `<div class="sg-emp-meta">${Fmt.esc(p.job_position)}</div>` : ''}
             ${p._managerName ? `<div class="sg-emp-meta sg-emp-mgr"><i class="fa-solid fa-user-tie"></i> ${Fmt.esc(p._managerName)}</div>` : ''}
             ${p._dovirenosti.length ? `<div class="sg-emp-dovs">${p._dovirenosti.map((d,i)=>`<span class="sg-emp-dov sg-emp-dov-${i%4}">${Fmt.esc(d)}</span>`).join('')}</div>` : ''}
+            ${mismatch ? `<div class="sg-emp-warn"><i class="fa-solid fa-triangle-exclamation"></i> Не зможе працювати з ${mismatch} на цьому вузлі</div>` : ''}
+            ${p._pinLabel ? `<div class="sg-emp-pin-hint"><i class="fa-solid fa-thumbtack"></i> ${Fmt.esc(p._pinLabel)}</div>` : ''}
         </div>
     </div>`;
     }).join('')}
+    <div class="sg-emp-panel-empty" id="sg-emp-empty" style="display:none">Нічого не знайдено</div>
 </div>
 <div class="sg-emp-panel-footer">
     <button class="sg-btn-save" id="sg-emp-add-btn" disabled
@@ -3919,6 +4298,8 @@ ${this._styles()}`;
     },
 
     _closeEmpPanel() {
+        this._closeEmpPosDropdown();
+        this._closeEmpMgrDropdown();
         const panel    = document.getElementById('sg-emp-panel');
         const backdrop = document.getElementById('sg-emp-backdrop');
         if (panel)    { panel.classList.remove('open');    panel.addEventListener('transitionend', () => panel.remove(),    { once: true }); }
@@ -3944,11 +4325,99 @@ ${this._styles()}`;
         }
     },
 
-    _filterEmp(q) {
-        const v = q.toLowerCase();
+    _toggleEmpPosDropdown(e) {
+        e?.stopPropagation();
+        this._closeEmpMgrDropdown();
+        const menu = document.getElementById('sg-emp-pos-dd-menu');
+        if (!menu) return;
+        const opening = menu.style.display === 'none';
+        menu.style.display = opening ? 'block' : 'none';
+        document.getElementById('sg-emp-pos-dd-btn')?.classList.toggle('open', opening);
+        if (opening) {
+            const fn = ev => {
+                if (!ev.target.closest('#sg-emp-pos-dd-btn') && !ev.target.closest('#sg-emp-pos-dd-menu')) ScheduleGraphPage._closeEmpPosDropdown();
+            };
+            this._empPosDdOutsideFn = fn;
+            setTimeout(() => document.addEventListener('click', fn), 0);
+        } else {
+            this._closeEmpPosDropdown();
+        }
+    },
+
+    _closeEmpPosDropdown() {
+        const menu = document.getElementById('sg-emp-pos-dd-menu');
+        if (menu) menu.style.display = 'none';
+        document.getElementById('sg-emp-pos-dd-btn')?.classList.remove('open');
+        if (this._empPosDdOutsideFn) { document.removeEventListener('click', this._empPosDdOutsideFn); this._empPosDdOutsideFn = null; }
+    },
+
+    _onEmpPosCheck() {
+        const checked = [...document.querySelectorAll('#sg-emp-pos-dd-menu input:checked')].map(i => i.value);
+        this._empPanelPosFilter = new Set(checked.map(v => v.toLowerCase()));
+        const label = document.getElementById('sg-emp-pos-dd-label');
+        if (label) {
+            label.textContent = checked.length === 0 ? 'Всі посади'
+                : checked.length === 1 ? checked[0]
+                : `Посад обрано: ${checked.length}`;
+        }
+        this._applyEmpFilter();
+    },
+
+    _toggleEmpMgrDropdown(e) {
+        e?.stopPropagation();
+        this._closeEmpPosDropdown();
+        const menu = document.getElementById('sg-emp-mgr-dd-menu');
+        if (!menu) return;
+        const opening = menu.style.display === 'none';
+        menu.style.display = opening ? 'block' : 'none';
+        document.getElementById('sg-emp-mgr-dd-btn')?.classList.toggle('open', opening);
+        if (opening) {
+            const fn = ev => {
+                if (!ev.target.closest('#sg-emp-mgr-dd-btn') && !ev.target.closest('#sg-emp-mgr-dd-menu')) ScheduleGraphPage._closeEmpMgrDropdown();
+            };
+            this._empMgrDdOutsideFn = fn;
+            setTimeout(() => document.addEventListener('click', fn), 0);
+        } else {
+            this._closeEmpMgrDropdown();
+        }
+    },
+
+    _closeEmpMgrDropdown() {
+        const menu = document.getElementById('sg-emp-mgr-dd-menu');
+        if (menu) menu.style.display = 'none';
+        document.getElementById('sg-emp-mgr-dd-btn')?.classList.remove('open');
+        if (this._empMgrDdOutsideFn) { document.removeEventListener('click', this._empMgrDdOutsideFn); this._empMgrDdOutsideFn = null; }
+    },
+
+    _onEmpMgrCheck() {
+        const checked = [...document.querySelectorAll('#sg-emp-mgr-dd-menu input:checked')];
+        this._empPanelMgrFilter = new Set(checked.map(i => i.value));
+        const label = document.getElementById('sg-emp-mgr-dd-label');
+        if (label) {
+            label.textContent = checked.length === 0 ? 'Всі керівники'
+                : checked.length === 1 ? (checked[0].dataset.name || 'Обрано 1')
+                : `Керівників обрано: ${checked.length}`;
+        }
+        this._applyEmpFilter();
+    },
+
+    _applyEmpFilter() {
+        const q = (document.getElementById('sg-emp-q')?.value || '').toLowerCase();
+        const posFilter = this._empPanelPosFilter || new Set();
+        const mgrFilter = this._empPanelMgrFilter || new Set();
+        let visible = 0;
         document.querySelectorAll('#sg-emp-list .sg-emp-panel-row').forEach(r => {
-            r.style.display = r.dataset.name.includes(v) ? '' : 'none';
+            const matchName = r.dataset.name.includes(q);
+            const matchPos  = posFilter.size === 0 || posFilter.has(r.dataset.pos);
+            const matchMgr  = mgrFilter.size === 0 || mgrFilter.has(r.dataset.mgr);
+            const show = matchName && matchPos && matchMgr;
+            r.style.display = show ? '' : 'none';
+            if (show) visible++;
         });
+        const empty = document.getElementById('sg-emp-empty');
+        if (empty) empty.style.display = visible === 0 ? '' : 'none';
+        const countEl = document.getElementById('sg-emp-count');
+        if (countEl) countEl.textContent = `${visible} доступних`;
     },
 
     async _confirmAddEmployees() {
@@ -3957,10 +4426,27 @@ ${this._styles()}`;
         this._closeEmpPanel();
         Loader.show();
         let added = 0;
+        let pinned = 0;
         try {
             const loc = this._locations.find(l => l.id === this._locId);
+            const monthKey = this._monthKey(this._year, this._month);
             for (const userId of ids) {
                 const prof = this._empPanelProfiles?.[userId];
+
+                // Вже призначений до локації, але прихований цього місяця (тимчасовий
+                // без записів) — не вставляємо новий рядок (порушить унікальність),
+                // просто закріплюємо видимість на цей місяць.
+                if (prof?._pinAssignId) {
+                    const existing = this._assignments.find(x => x.id === prof._pinAssignId);
+                    const monthsList = [...new Set([...(existing?.pinned_months || []), monthKey])];
+                    let { error } = await supabase.from('schedule_assignments')
+                        .update({ pinned_months: monthsList }).eq('id', prof._pinAssignId);
+                    if (error) { Toast.error('Помилка', error.message); continue; }
+                    if (existing) existing.pinned_months = monthsList;
+                    pinned++;
+                    continue;
+                }
+
                 const isForeign = prof?.manager_id && prof.manager_id !== AppState.user.id;
                 const isPrimary = !isForeign;
                 const { data, error } = await supabase.from('schedule_assignments')
@@ -3968,7 +4454,7 @@ ${this._styles()}`;
                     .select('id, user_id, original_user_id, employee_name, is_primary')
                     .single();
                 if (error) { Toast.error('Помилка', error.message); continue; }
-                this._assignments.push({ id: data.id, user_id: data.user_id, original_user_id: data.original_user_id, employee_name: data.employee_name, is_primary: isPrimary, profile: prof });
+                this._assignments.push({ id: data.id, user_id: data.user_id, original_user_id: data.original_user_id, employee_name: data.employee_name, is_primary: isPrimary, pinned_months: [], profile: prof });
                 added++;
                 if (isForeign) {
                     await supabase.from('notifications').insert({
@@ -3983,6 +4469,7 @@ ${this._styles()}`;
         }
         this._render(this._container);
         if (added > 0) Toast.success(added === 1 ? 'Додано до графіку' : `Додано ${added} співробітників`);
+        if (pinned > 0) Toast.success(pinned === 1 ? 'Показано в цьому місяці' : `Показано ${pinned} співробітників у цьому місяці`);
     },
 
     _removeEmployeeConfirm(assignId, userId, name) {
@@ -4039,13 +4526,24 @@ ${this._styles()}`;
         if (this._isLocked()) { Toast.error('Графік заблоковано', 'Розблокуйте графік перед редагуванням'); return; }
         const key    = `${userId}_${date}`;
         const oldEnt = this._entries[key];
+        const empName = this._assignments.find(a => a.user_id === userId)?.profile?.full_name || '';
 
-        // Toggle off if same type already set
+        // Toggle off if same type already set — surgical DOM update only,
+        // no full _render() so the active quick-fill legend/state isn't disturbed
+        // (was previously calling _deleteEntry(), which re-renders the whole page).
         if (oldEnt?.shift_type === type) {
-            await this._deleteEntry(userId, date, null);
+            await supabase.from('schedule_entries').delete()
+                .eq('location_id', this._locId).eq('user_id', userId).eq('date', date);
+            await supabase.from('schedule_log').insert({
+                location_id: this._locId, user_id: userId, date, employee_name: empName,
+                old_value: { shift_type: oldEnt.shift_type }, new_value: null,
+                changed_by: AppState.user.id
+            });
+            delete this._entries[key];
+            document.querySelectorAll(`.sg-cell[data-uid="${userId}"][data-date="${date}"]`).forEach(td => { td.innerHTML = ''; });
+            if (['work','day_off'].includes(oldEnt.shift_type)) this._updateNoWorkHighlight(date);
             return;
         }
-        const empName = this._assignments.find(a => a.user_id === userId)?.profile?.full_name || '';
 
         if (['work','day_off'].includes(type)) {
             const conflictLoc = await this._getWorkConflictLoc(userId, date, this._locId);
@@ -4515,16 +5013,56 @@ ${this._styles()}`;
             <i class="fa-solid fa-trash"></i>
         </button>` : '';
 
+        const mismatch = !fired ? this._empNodeMismatch(p?.job_position) : null;
+        const mismatchBtn = mismatch ? `<button class="sg-mismatch-btn" title="Показати попередження"
+                data-msg="${Fmt.esc(`Не зможе працювати з ${mismatch} на цьому вузлі`)}"
+                onclick="event.stopPropagation();ScheduleGraphPage._toggleMismatchTip(this)">
+                <i class="fa-solid fa-circle-info"></i>
+            </button>` : '';
+
         return `
 <td class="sg-td-name" title="${Fmt.esc(name)}${fired ? ' (звільнений співробітник)' : a.is_primary ? ' — основний' : ' — тимчасовий'}">
     <span class="sg-drag-handle" title="Перетягнути">⠿</span>
     <div class="sg-name-full${fired ? ' sg-name-deleted' : ''}">
-        ${primaryBtn}${Fmt.esc(name)}${fired
+        ${primaryBtn}<span class="sg-name-text">${Fmt.esc(name)}</span>${mismatchBtn}${fired
         ? ` <span class="sg-deleted-badge">${firedBadge}</span>`
         : !a.is_primary ? ` <span class="sg-temp-badge">підміна</span>` : ''}
     </div>
     ${rmBtn}
 </td>`;
+    },
+
+    _toggleMismatchTip(btn) {
+        const existing = document.getElementById('sg-mismatch-tooltip');
+        const wasOpenForThis = existing && existing._forBtn === btn;
+        existing?.remove();
+        if (this._mismatchTipOutsideFn) { document.removeEventListener('click', this._mismatchTipOutsideFn); this._mismatchTipOutsideFn = null; }
+        if (wasOpenForThis) return;
+
+        const tip = document.createElement('div');
+        tip.id = 'sg-mismatch-tooltip';
+        tip.className = 'sg-mismatch-tip';
+        tip._forBtn = btn;
+        tip.textContent = btn.dataset.msg || '';
+        document.body.appendChild(tip);
+
+        const r = btn.getBoundingClientRect();
+        const tr = tip.getBoundingClientRect();
+        let left = r.left + r.width / 2 - tr.width / 2;
+        left = Math.max(8, Math.min(left, window.innerWidth - tr.width - 8));
+        tip.style.left = `${left}px`;
+        tip.style.top = `${r.bottom + 6}px`;
+        tip.classList.add('open');
+
+        const close = ev => {
+            if (!ev.target.closest('#sg-mismatch-tooltip') && ev.target !== btn && !btn.contains(ev.target)) {
+                tip.remove();
+                document.removeEventListener('click', close);
+                this._mismatchTipOutsideFn = null;
+            }
+        };
+        this._mismatchTipOutsideFn = close;
+        setTimeout(() => document.addEventListener('click', close), 0);
     },
 
     _filterByEmployee(userId) {
@@ -4547,12 +5085,18 @@ ${this._styles()}`;
         })();
 
         const uid = a.user_id || a.original_user_id;
+        const mismatch = !fired ? this._empNodeMismatch(p?.job_position, a.locId) : null;
+        const mismatchBtn = mismatch ? `<button class="sg-mismatch-btn" title="Показати попередження"
+                data-msg="${Fmt.esc(`Не зможе працювати з ${mismatch} на цьому вузлі`)}"
+                onclick="event.stopPropagation();ScheduleGraphPage._toggleMismatchTip(this)">
+                <i class="fa-solid fa-circle-info"></i>
+            </button>` : '';
         return `
 <td class="sg-td-name sg-td-name--clickable${isFiltered ? ' sg-td-name--active' : ''}"
     title="${isFiltered ? 'Натисніть щоб скинути фільтр' : 'Натисніть щоб показати тільки цього співробітника'}"
     onclick="ScheduleGraphPage._filterByEmployee('${uid}')">
     <div class="sg-name-full${fired ? ' sg-name-deleted' : ''}">
-        ${Fmt.esc(name)}${fired
+        <span class="sg-name-text">${Fmt.esc(name)}</span>${mismatchBtn}${fired
         ? ` <span class="sg-deleted-badge">${firedBadge}</span>`
         : !a.is_primary ? ` <span class="sg-temp-badge">підміна</span>` : ''}
         ${isFiltered ? ' <span class="sg-filter-active-badge">✓ фільтр</span>' : ''}
@@ -4594,14 +5138,37 @@ ${this._styles()}`;
 
     async _togglePrimary(assignId, newVal, e) {
         e.stopPropagation();
-        const { error } = await supabase.from('schedule_assignments')
-            .update({ is_primary: newVal }).eq('id', assignId);
+        const payload = { is_primary: newVal };
+
+        // Знімаючи "основний" — закріплюємо видимість співробітника саме в
+        // місяці, де це відбулось, інакше він одразу зникає з майбутнього
+        // місяця (тимчасові без записів там не показуються).
+        let newPinned = null;
+        if (!newVal) {
+            const inPage = this._assignments?.find(x => x.id === assignId);
+            const inAll  = this._allAssignments?.find(x => x.id === assignId);
+            const existing = inPage?.pinned_months || inAll?.pinned_months || [];
+            const monthKey = this._monthKey(this._year, this._month);
+            if (!existing.includes(monthKey)) {
+                newPinned = [...existing, monthKey];
+                payload.pinned_months = newPinned;
+            }
+        }
+
+        let { error } = await supabase.from('schedule_assignments')
+            .update(payload).eq('id', assignId);
+        if (error && payload.pinned_months) {
+            // pinned_months column not migrated yet — fall back to is_primary only
+            newPinned = null;
+            ({ error } = await supabase.from('schedule_assignments')
+                .update({ is_primary: newVal }).eq('id', assignId));
+        }
         if (error) { Toast.error('Помилка', error.message); return; }
         // Update both arrays so the change is visible regardless of current view
         const inPage = this._assignments?.find(x => x.id === assignId);
-        if (inPage) inPage.is_primary = newVal;
+        if (inPage) { inPage.is_primary = newVal; if (newPinned) inPage.pinned_months = newPinned; }
         const inAll = this._allAssignments?.find(x => x.id === assignId);
-        if (inAll) inAll.is_primary = newVal;
+        if (inAll) { inAll.is_primary = newVal; if (newPinned) inAll.pinned_months = newPinned; }
         this._render(this._container);
     },
 
@@ -4676,14 +5243,13 @@ ${this._styles()}`;
 
 /* Manager help request button */
 .sg-mgr-help-btn {
-    padding:9px 18px;border-radius:12px;
-    border:1.5px solid rgba(239,68,68,.35);
-    background:rgba(239,68,68,.08);color:#ef4444;
-    font-size:.85rem;font-weight:700;cursor:pointer;
-    white-space:nowrap;transition:all .18s;flex-shrink:0;
-    backdrop-filter:blur(4px);
+    display:inline-flex;align-items:center;gap:7px;
+    padding:9px 14px;border-radius:11px;border:none;
+    background:color-mix(in srgb,#ef4444 12%,var(--bg-raised));color:#ef4444;
+    font-size:.83rem;font-weight:700;cursor:pointer;
+    white-space:nowrap;transition:background .18s ease;flex-shrink:0;font-family:inherit;
 }
-.sg-mgr-help-btn:hover { background:rgba(239,68,68,.15);border-color:#ef4444; }
+.sg-mgr-help-btn:hover { background:color-mix(in srgb,#ef4444 20%,var(--bg-raised)); }
 
 /* Manager help request modal */
 .sg-mgr-help-box { max-width:420px; }
@@ -4791,7 +5357,8 @@ ${this._styles()}`;
     background:color-mix(in srgb,var(--primary) 14%,var(--bg-surface));color:var(--primary);
     font-size:.92rem;font-weight:800;
 }
-.sg-loc-item.active .sg-loc-item-ico { background:var(--primary);color:#fff; }
+.sg-loc-item.active:not([data-node]) .sg-loc-item-ico,
+.sg-loc-item.active[data-node=""] .sg-loc-item-ico { background:var(--primary);color:#fff; }
 .sg-loc-item.has-help {
     color:#ef4444;background:rgba(239,68,68,.08);
     animation:locHelpPulse 2.2s ease-in-out infinite;
@@ -4884,32 +5451,32 @@ ${this._styles()}`;
 }
 
 /* V2 layout */
-.sg-v2-service { flex:0 0 auto; }
+.sg-v2-service { flex:0 0 auto;max-width:800px; }
 .sg-section-v2 { padding:16px 20px 4px; }
 .sg-v2-top { display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap; }
 .sg-v2-card { background:var(--bg-raised);border:1px solid var(--border);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px; }
-.sg-v2-loc-card { min-width:240px;flex:0 0 auto;background:linear-gradient(135deg,color-mix(in srgb,var(--primary) 8%,var(--bg-raised)),var(--bg-raised));border-color:color-mix(in srgb,var(--primary) 20%,var(--border)); }
-.sg-v2-mgmt-card { flex:0 0 auto;min-width:300px; }
+.sg-v2-loc-card { min-width:260px;max-width:295px;flex:0 0 auto;background:linear-gradient(135deg,color-mix(in srgb,var(--primary) 8%,var(--bg-raised)),var(--bg-raised));border-color:color-mix(in srgb,var(--primary) 20%,var(--border)); }
+.sg-v2-mgmt-card { flex:1 1 280px;min-width:0; }
 .sg-v2-card-label { font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:2px; }
 .sg-v2-svc-grid { display:grid;grid-template-columns:1fr 1fr;gap:6px; }
-.sg-svc-btn { display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;border:none;background:transparent;cursor:pointer;text-align:left;transition:background .12s;width:100%; }
+.sg-svc-btn { display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;border:none;background:transparent;cursor:pointer;text-align:left;transition:background .12s;width:100%; }
 .sg-svc-btn:hover { background:var(--bg-raised); }
-.sg-svc-ico { width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.85rem;flex-shrink:0; }
+.sg-svc-ico { width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.9rem;flex-shrink:0; }
 .sg-svc-body { flex:1;min-width:0; }
-.sg-svc-title { font-size:.78rem;font-weight:600;color:var(--text-primary);display:flex;align-items:center;gap:5px;flex-wrap:wrap; }
-.sg-svc-desc { font-size:.67rem;color:var(--text-muted);margin-top:1px; }
-.sg-svc-arr { font-size:.6rem;color:var(--text-muted);flex-shrink:0;opacity:.5; }
+.sg-svc-title { font-size:.8rem;font-weight:600;color:var(--text-primary);display:flex;align-items:center;gap:5px;flex-wrap:wrap; }
+.sg-svc-desc { font-size:.68rem;color:var(--text-muted);margin-top:1px; }
+.sg-svc-arr { font-size:.65rem;color:var(--text-muted);flex-shrink:0; }
 .sg-svc-badge { font-size:.62rem;font-weight:700;background:rgba(239,68,68,.15);color:#ef4444;border-radius:8px;padding:1px 5px;line-height:1.4; }
 .sg-svc-badge-green { background:rgba(16,185,129,.15);color:#10b981; }
 .sg-v2-loc-name { display:flex;align-items:center;gap:6px;font-weight:600;font-size:.95rem; }
 .sg-v2-loc-row { display:flex;align-items:center;gap:8px;font-size:.8rem;color:var(--text-secondary); }
-.sg-v2-loc-val { font-weight:600;color:var(--text-primary);margin-left:auto; }
+.sg-v2-loc-val { font-weight:600;color:var(--text-primary); }
 .sg-v2-loc-actions { display:flex;gap:8px;align-items:center;margin-top:4px; }
 .sg-v2-mgmt-btns { display:flex;flex-wrap:wrap;gap:8px; }
 .sg-v2-mgmt-hint { font-size:.75rem;color:var(--text-muted);margin:4px 0 0; }
 .sg-v2-legend-section { margin-bottom:12px; }
 .sg-v2-hint { font-size:.72rem;color:var(--text-muted);display:flex;align-items:center;gap:6px;margin:8px 0 4px;padding:0 2px; }
-.sg-v2-svc-list { display:grid;grid-template-columns:1fr 1fr;gap:6px; }
+.sg-v2-svc-list { display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px; }
 .sg-v2-svc-item { display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;cursor:pointer;transition:background .12s;border:1px solid transparent; }
 .sg-v2-svc-item:hover { background:var(--bg-raised);border-color:var(--border); }
 .sg-v2-svc-icon { width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.9rem;flex-shrink:0; }
@@ -5082,19 +5649,21 @@ ${this._styles()}`;
 
 /* Viewers button */
 .sg-viewers-btn {
-    padding:8px 14px;border-radius:10px;font-size:.82rem;font-weight:700;cursor:pointer;
-    border:2px solid rgba(99,102,241,.3);background:rgba(99,102,241,.07);color:#6366f1;
-    transition:all .15s;
+    display:inline-flex;align-items:center;gap:7px;
+    padding:9px 14px;border-radius:11px;font-size:.83rem;font-weight:700;cursor:pointer;
+    border:none;background:color-mix(in srgb,#6366f1 12%,var(--bg-raised));color:#6366f1;
+    transition:background .18s ease;font-family:inherit;
 }
-.sg-viewers-btn:hover { background:#6366f1;color:#fff;border-color:#6366f1; }
+.sg-viewers-btn:hover { background:color-mix(in srgb,#6366f1 20%,var(--bg-raised)); }
 
 /* Partners button */
 .sg-partners-btn {
-    padding:8px 14px;border-radius:10px;font-size:.82rem;font-weight:700;cursor:pointer;
-    border:2px solid rgba(16,185,129,.3);background:rgba(16,185,129,.07);color:#10b981;
-    transition:all .15s;display:flex;align-items:center;gap:5px;
+    display:inline-flex;align-items:center;gap:7px;
+    padding:9px 14px;border-radius:11px;font-size:.83rem;font-weight:700;cursor:pointer;
+    border:none;background:color-mix(in srgb,#10b981 12%,var(--bg-raised));color:#10b981;
+    transition:background .18s ease;font-family:inherit;
 }
-.sg-partners-btn:hover { background:#10b981;color:#fff;border-color:#10b981; }
+.sg-partners-btn:hover { background:color-mix(in srgb,#10b981 20%,var(--bg-raised)); }
 .sg-partners-badge {
     display:inline-flex;align-items:center;justify-content:center;
     min-width:16px;height:16px;border-radius:8px;font-size:.65rem;font-weight:700;
@@ -5330,20 +5899,21 @@ ${this._styles()}`;
 
 /* Toolbar */
 .sg-toolbar {
-    display:flex;align-items:center;gap:0;
-    padding:10px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap;
+    display:flex;align-items:stretch;gap:12px;
+    padding:14px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap;
 }
 .sg-tb-section {
-    display:flex;flex-direction:column;gap:5px;padding:4px 14px;
+    display:flex;flex-direction:column;gap:8px;padding:10px 14px;
+    background:var(--bg-surface);border:1px solid var(--border);border-radius:16px;
+    box-shadow:0 2px 10px rgba(15,23,42,.05);
 }
-.sg-tb-section:first-child { padding-left:4px; }
+body:not(.light-theme) .sg-tb-section { box-shadow:0 2px 14px rgba(0,0,0,.2); }
 .sg-tb-label {
+    display:flex;align-items:center;gap:6px;
     font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;
     color:var(--text-muted);white-space:nowrap;
 }
-.sg-tb-divider {
-    width:1px;background:var(--border);align-self:stretch;margin:4px 0;flex-shrink:0;
-}
+.sg-tb-label i { font-size:.68rem;opacity:.75; }
 .sg-legend { display:flex;flex-wrap:wrap;gap:4px;align-items:center; }
 .sg-v2-legend-section .sg-legend {
     padding:5px;background:var(--bg-surface);border:1px solid var(--border);
@@ -5366,6 +5936,10 @@ body:not(.light-theme) .sg-v2-legend-section .sg-legend { box-shadow:0 2px 14px 
 .sg-leg-btn.active {
     color:var(--lc);background:color-mix(in srgb, var(--lc) 12%, var(--bg-surface));
     font-weight:700;
+}
+.sg-leg-static {
+    cursor:pointer;color:var(--lc);background:color-mix(in srgb, var(--lc) 8%, var(--bg-surface));
+    opacity:.85;
 }
 .sg-leg-short {
     width:26px;height:26px;border-radius:8px;font-size:.72rem;font-weight:800;
@@ -5430,9 +6004,29 @@ body:not(.light-theme) .sg-v2-legend-section .sg-legend { box-shadow:0 2px 14px 
     text-align:left;padding:10px 16px;font-size:.75rem;font-weight:700;
     text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);
     border-bottom:1px solid var(--border);border-right:1px solid var(--border);background:var(--bg-raised);
-    position:relative;z-index:10;width:300px;min-width:300px;max-width:300px;white-space:nowrap;overflow:hidden;
+    position:relative;z-index:10;
+    width:var(--sg-name-w,300px);min-width:var(--sg-name-w,300px);max-width:var(--sg-name-w,300px);
+    white-space:nowrap;overflow:hidden;
     box-shadow:2px 0 8px rgba(0,0,0,.12);
 }
+.sg-th-name-resizer {
+    position:absolute;top:0;right:-1px;bottom:0;width:10px;cursor:col-resize;z-index:11;
+    display:flex;align-items:center;justify-content:center;
+}
+.sg-th-name-resizer::before {
+    content:'';position:absolute;top:0;bottom:0;right:4px;width:3px;border-radius:2px;
+    background:color-mix(in srgb,var(--primary) 35%,transparent);transition:background .15s,width .15s;
+}
+.sg-th-name-resizer::after {
+    content:'⋮';position:relative;font-size:.8rem;font-weight:900;line-height:1;
+    color:var(--primary);opacity:.55;letter-spacing:-1px;transition:opacity .15s;
+    pointer-events:none;
+}
+.sg-th-name-resizer:hover::before,
+body.sg-namecol-resizing .sg-th-name-resizer::before { background:var(--primary);width:4px; }
+.sg-th-name-resizer:hover::after,
+body.sg-namecol-resizing .sg-th-name-resizer::after { opacity:1; }
+body.sg-namecol-resizing { cursor:col-resize !important;user-select:none; }
 .sg-th-day {
     padding:4px 2px;text-align:center;min-width:30px;
     border-bottom:1px solid var(--border);border-left:1px solid var(--border-light,rgba(255,255,255,.05));
@@ -5460,16 +6054,21 @@ body:not(.light-theme) .sg-v2-legend-section .sg-legend { box-shadow:0 2px 14px 
 .sg-td-name {
     padding:4px 12px;border-bottom:1px solid var(--border);border-right:1px solid var(--border);
     background:var(--bg-raised);position:relative;z-index:9;
-    width:300px;min-width:300px;max-width:300px;overflow:hidden;
+    width:var(--sg-name-w,300px);min-width:var(--sg-name-w,300px);max-width:var(--sg-name-w,300px);
     display:flex;align-items:center;gap:4px;
     box-shadow:2px 0 8px rgba(0,0,0,.12);
 }
 .sg-emp-chip { display:flex;align-items:center;gap:8px;min-width:0; }
 .sg-name-info { min-width:0;flex:1;overflow:hidden; }
 .sg-name-full {
-    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
     font-size:.78rem;font-weight:500;color:var(--text-primary);
-    line-height:1;display:flex;align-items:center;gap:5px;
+    line-height:1.4;display:flex;align-items:center;gap:5px;
+    min-width:0;flex:1;
+}
+.sg-name-full > *:not(.sg-name-text) { flex-shrink:0; }
+.sg-name-text {
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    min-width:20px;flex-shrink:1;
 }
 .sg-name-deleted { color:var(--text-muted);font-style:italic; }
 .sg-cell-fired { background:repeating-linear-gradient(45deg,transparent,transparent 4px,rgba(0,0,0,.03) 4px,rgba(0,0,0,.03) 8px) !important;cursor:default; }
@@ -5499,6 +6098,21 @@ tr.sg-row-drag-over td { background:rgba(99,102,241,.12) !important;border-top:2
 }
 .sg-primary-btn:hover { opacity:1; }
 .sg-primary-btn.active { color:#f59e0b;opacity:1; }
+.sg-mismatch-btn {
+    background:none;border:none;cursor:pointer;padding:0 3px;font-size:.8rem;
+    color:#f59e0b;line-height:1;flex-shrink:0;opacity:.75;transition:opacity .15s;vertical-align:middle;
+}
+.sg-mismatch-btn:hover { opacity:1; }
+.sg-mismatch-tip {
+    position:fixed;width:220px;padding:9px 12px;border-radius:10px;
+    background:var(--bg-surface);border:1.5px solid rgba(245,158,11,.35);
+    box-shadow:0 8px 24px rgba(0,0,0,.25);
+    font-size:.75rem;font-weight:600;color:#b45309;line-height:1.4;
+    text-align:left;white-space:normal;z-index:2000;
+    opacity:0;transform:translateY(-4px);transition:opacity .15s ease,transform .15s ease;
+}
+body:not(.light-theme) .sg-mismatch-tip { color:#f59e0b; }
+.sg-mismatch-tip.open { opacity:1;transform:translateY(0); }
 .sg-name-sub {
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
     font-size:.68rem;color:var(--text-muted);margin-top:1px;
@@ -5606,35 +6220,72 @@ tr:last-child td { border-bottom:none; }
 }
 .sg-emp-backdrop.open { opacity:1;pointer-events:auto; }
 .sg-emp-panel {
-    position:fixed;top:0;right:0;bottom:0;width:400px;max-width:100vw;
+    position:fixed;top:0;right:0;bottom:0;width:800px;max-width:100vw;
     background:var(--bg-surface);z-index:1001;display:flex;flex-direction:column;
     box-shadow:-6px 0 32px rgba(0,0,0,.18);border-left:1px solid var(--border);
     transform:translateX(100%);transition:transform .25s ease;
 }
 .sg-emp-panel.open { transform:translateX(0); }
 .sg-emp-panel-header {
-    display:flex;align-items:center;justify-content:space-between;
-    padding:16px 20px;border-bottom:1px solid var(--border);flex-shrink:0;
+    display:flex;align-items:center;gap:14px;
+    padding:18px 24px;border-bottom:1px solid var(--border);flex-shrink:0;
 }
-.sg-emp-panel-search { padding:10px 14px;border-bottom:1px solid var(--border);flex-shrink:0; }
-.sg-emp-panel-list { flex:1;overflow-y:auto; }
+.sg-emp-panel-header-ico {
+    width:38px;height:38px;border-radius:12px;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;font-size:1rem;
+    background:color-mix(in srgb,var(--primary) 14%,var(--bg-surface));color:var(--primary);
+}
+.sg-emp-panel-toolbar {
+    display:flex;gap:10px;align-items:flex-start;
+    padding:14px 24px;border-bottom:1px solid var(--border);flex-shrink:0;
+}
+.sg-emp-panel-search { flex:1;min-width:0; }
+.sg-emp-panel-search .sg-msearch { height:44px;box-sizing:border-box; }
+.sg-emp-pos-filter { position:relative;flex:0 0 260px; }
+.sg-emp-pos-dd-btn {
+    width:100%;display:flex;align-items:center;gap:8px;height:44px;box-sizing:border-box;
+    padding:0 14px;border-radius:12px;border:1.5px solid var(--border);
+    background:var(--bg-raised);color:var(--text-secondary);font-size:.85rem;font-weight:600;
+    cursor:pointer;transition:all .15s;font-family:inherit;
+}
+.sg-emp-pos-dd-btn:hover, .sg-emp-pos-dd-btn.open { border-color:var(--primary);color:var(--primary); }
+.sg-emp-pos-dd-btn i:first-child { font-size:.78rem;opacity:.8; }
+#sg-emp-pos-dd-label { flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.sg-emp-pos-dd-chev { font-size:.65rem;transition:transform .15s; }
+.sg-emp-pos-dd-btn.open .sg-emp-pos-dd-chev { transform:rotate(180deg); }
+.sg-emp-pos-dd-menu {
+    position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:10;
+    background:var(--bg-surface);border:1.5px solid var(--border);border-radius:12px;
+    box-shadow:0 12px 32px rgba(0,0,0,.18);padding:6px;max-height:260px;overflow-y:auto;
+}
+.sg-emp-pos-dd-item {
+    display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:8px;
+    cursor:pointer;font-size:.84rem;color:var(--text-primary);transition:background .12s;
+}
+.sg-emp-pos-dd-item:hover { background:var(--bg-hover); }
+.sg-emp-pos-dd-item input { width:16px;height:16px;flex-shrink:0;accent-color:var(--primary);cursor:pointer; }
+.sg-emp-panel-list {
+    flex:1;overflow-y:auto;padding:14px 20px;
+    display:grid;grid-template-columns:1fr 1fr;gap:10px;align-content:start;
+}
+.sg-emp-panel-empty { grid-column:1/-1;padding:2rem 1rem;text-align:center;color:var(--text-muted);font-size:.85rem; }
 .sg-emp-panel-row {
-    display:flex;align-items:center;gap:10px;padding:9px 14px;
-    cursor:pointer;transition:background .12s;border-bottom:1px solid color-mix(in srgb,var(--border) 40%,transparent);
-    user-select:none;
+    display:flex;align-items:flex-start;gap:10px;padding:12px 14px;
+    cursor:pointer;transition:all .12s;border:1.5px solid var(--border);border-radius:14px;
+    background:var(--bg-raised);user-select:none;
 }
-.sg-emp-panel-row:hover { background:var(--bg-raised); }
-.sg-emp-panel-row.selected { background:color-mix(in srgb,var(--primary) 9%,var(--bg-surface)); }
+.sg-emp-panel-row:hover { border-color:color-mix(in srgb,var(--primary) 40%,var(--border)); }
+.sg-emp-panel-row.selected { background:color-mix(in srgb,var(--primary) 9%,var(--bg-surface));border-color:var(--primary); }
 .sg-emp-panel-check {
     width:18px;height:18px;border-radius:5px;border:2px solid var(--border);
-    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;
     transition:background .15s,border-color .15s;color:transparent;
 }
 .sg-emp-panel-row.selected .sg-emp-panel-check {
     background:var(--primary);border-color:var(--primary);color:#fff;
 }
 .sg-emp-panel-footer {
-    padding:12px 14px;border-top:1px solid var(--border);display:flex;gap:8px;flex-shrink:0;
+    padding:16px 24px;border-top:1px solid var(--border);display:flex;gap:10px;flex-shrink:0;
 }
 .sg-emp-fn { font-weight:600;font-size:.9rem; }
 .sg-emp-meta { font-size:.75rem;color:var(--text-secondary);margin-top:2px; }
@@ -5645,6 +6296,22 @@ tr:last-child td { border-bottom:none; }
 .sg-emp-dov-1 { background:rgba(16,185,129,.1);color:#059669; }
 .sg-emp-dov-2 { background:rgba(245,158,11,.1);color:#d97706; }
 .sg-emp-dov-3 { background:rgba(139,92,246,.1);color:#7c3aed; }
+.sg-emp-warn {
+    display:flex;align-items:center;gap:5px;margin-top:5px;
+    font-size:.71rem;font-weight:600;color:#b45309;
+    background:rgba(245,158,11,.1);border-radius:8px;padding:4px 8px;
+}
+body:not(.light-theme) .sg-emp-warn { color:#f59e0b; }
+.sg-emp-pin-hint {
+    display:flex;align-items:center;gap:5px;margin-top:5px;
+    font-size:.71rem;font-weight:600;color:var(--primary);
+    background:color-mix(in srgb,var(--primary) 10%,transparent);border-radius:8px;padding:4px 8px;
+}
+@media(max-width:860px) {
+    .sg-emp-panel-list { grid-template-columns:1fr; }
+    .sg-emp-panel-toolbar { flex-wrap:wrap; }
+    .sg-emp-pos-filter { flex:1 1 100%; }
+}
 
 /* Shift modal */
 .sg-shift-grid {
@@ -5882,41 +6549,62 @@ tr:last-child td { border-bottom:none; }
 .sg-resolve-confirm-btn { background:linear-gradient(135deg,#10b981,#059669) !important; }
 /* Subst report button */
 .sg-subrep-btn {
-    display:flex;align-items:center;gap:6px;padding:7px 13px;border-radius:10px;
-    border:1.5px solid rgba(245,158,11,.35);background:rgba(245,158,11,.08);
-    color:var(--text-primary);font-size:.82rem;font-weight:600;cursor:pointer;transition:background .15s;
+    display:inline-flex;align-items:center;gap:7px;padding:9px 14px;border-radius:11px;
+    border:none;background:color-mix(in srgb,#f59e0b 14%,var(--bg-raised));
+    color:#b45309;font-size:.83rem;font-weight:700;cursor:pointer;transition:background .18s ease;font-family:inherit;
 }
-.sg-subrep-btn:hover { background:rgba(245,158,11,.15);border-color:#f59e0b; }
-/* Subst report modal */
-.sg-srep-modal { max-width:800px;width:96vw;padding:0;overflow:hidden;display:flex;flex-direction:column;max-height:min(88vh,780px); }
+body:not(.light-theme) .sg-subrep-btn { color:#f59e0b; }
+.sg-subrep-btn:hover { background:color-mix(in srgb,#f59e0b 22%,var(--bg-raised)); }
+/* Subst report — full section (not a modal, so it can't be closed accidentally) */
 .sg-modal-close { display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;border:none;background:transparent;color:var(--text-secondary);font-size:1.1rem;cursor:pointer;transition:background .15s,color .15s;flex-shrink:0; }
 .sg-modal-close:hover { background:rgba(239,68,68,.12);color:#ef4444; }
-.sg-srep-head { display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);flex-shrink:0;gap:16px; }
-.sg-srep-head-left { display:flex;align-items:center;gap:12px; }
-.sg-srep-ico { font-size:1.4rem;line-height:1; }
-.sg-srep-title { font-size:1rem;font-weight:700;color:var(--text-primary);line-height:1.2; }
-.sg-srep-subtitle { font-size:.75rem;color:var(--text-muted);margin-top:1px; }
-.sg-srep-head-right { display:flex;align-items:center;gap:12px;flex-shrink:0; }
-.sg-srep-stat { display:flex;flex-direction:column;align-items:center;gap:0; }
-.sg-srep-stat-n { font-size:1.1rem;font-weight:800;color:var(--text-primary);line-height:1; }
-.sg-srep-stat-l { font-size:.65rem;color:var(--text-muted);white-space:nowrap; }
-.sg-srep-stat-sep { width:1px;height:28px;background:var(--border); }
-.sg-srep-body { flex:1;overflow-y:auto; }
+.sg-srep-section { padding:14px 20px 20px; }
+.sg-srep-toolbar { display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:16px; }
+.sg-srep-filters { display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex:1;min-width:0; }
+.sg-srep-search-wrap { position:relative;min-width:200px; }
+.sg-srep-search-ico { position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:.78rem;pointer-events:none; }
+.sg-srep-search {
+    width:100%;height:38px;padding:0 12px 0 34px;border-radius:11px;
+    border:1.5px solid var(--border);background:var(--bg-raised);color:var(--text-primary);
+    font-size:.85rem;outline:none;box-sizing:border-box;transition:border-color .15s;font-family:inherit;
+}
+.sg-srep-search:focus { border-color:var(--primary); }
+.sg-srep-select {
+    height:38px;padding:0 30px 0 12px;border-radius:11px;width:auto;
+    border:1.5px solid var(--border);background:var(--bg-raised);color:var(--text-primary);
+    font-size:.83rem;font-weight:600;outline:none;cursor:pointer;font-family:inherit;
+}
+.sg-srep-select:focus { border-color:var(--primary); }
+.sg-srep-stats-inline { font-size:.82rem;color:var(--text-muted);white-space:nowrap;flex-shrink:0; }
+.sg-srep-stats-inline b { color:var(--text-primary);font-weight:800; }
+.sg-srep-body-static {
+    background:var(--bg-surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;
+}
+.sg-srep-empty-filtered {
+    padding:2rem 1rem;text-align:center;color:var(--text-muted);font-size:.85rem;
+    display:flex;align-items:center;justify-content:center;gap:8px;
+}
 .sg-srep-table { width:100%;border-collapse:collapse;table-layout:fixed; }
 .sg-srep-th { position:sticky;top:0;z-index:1;padding:8px 14px;font-size:.68rem;font-weight:700;color:var(--text-muted);text-align:left;text-transform:uppercase;letter-spacing:.05em;background:var(--bg-raised);border-bottom:2px solid var(--border); }
-.sg-srep-th-emp { width:38%; }
+.sg-srep-th-emp { width:33%; }
+.sg-srep-th-mgr { width:20%; }
 .sg-srep-tr-first td { border-top:3px solid var(--primary); }
 .sg-srep-tr-first:first-child td { border-top:none; }
-.sg-srep-tr-odd td:not(.sg-srep-td-emp) { background:var(--bg-raised); }
+.sg-srep-tr-odd td:not(.sg-srep-td-emp):not(.sg-srep-td-mgr) { background:var(--bg-raised); }
 .sg-srep-td { padding:7px 14px;font-size:.8rem;color:var(--text-primary);border-bottom:1px solid var(--border);vertical-align:top; }
 .sg-srep-td-emp { background:var(--bg-raised);vertical-align:top;border-right:1px solid var(--border); }
+.sg-srep-td-mgr { background:var(--bg-raised);vertical-align:middle;border-right:1px solid var(--border);font-weight:600;color:var(--text-secondary); }
+.sg-srep-td-empty { color:var(--text-muted);font-weight:400; }
 .sg-srep-td-first { padding:10px 14px; }
 .sg-srep-emp-inner { display:flex;align-items:flex-start;gap:8px; }
 .sg-srep-av { width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:700;color:#fff;flex-shrink:0;margin-top:1px; }
 .sg-srep-pinfo { flex:1;min-width:0; }
 .sg-srep-name { font-size:.85rem;font-weight:700;color:var(--text-primary);word-break:break-word; }
+.sg-srep-hl { background:color-mix(in srgb,var(--primary) 30%,transparent);color:var(--primary);border-radius:3px;padding:0 1px; }
 .sg-srep-meta { font-size:.7rem;color:var(--text-muted);margin-top:1px; }
-.sg-srep-cnt-inline { display:inline-block;margin-top:5px;font-size:.68rem;font-weight:700;padding:1px 7px;border-radius:20px;background:rgba(245,158,11,.13);color:#f59e0b; }
+.sg-srep-cnt-inline { display:inline-block;margin-top:5px;font-size:.7rem;font-weight:600;padding:2px 9px;border-radius:20px;background:rgba(245,158,11,.13);color:#b45309; }
+body:not(.light-theme) .sg-srep-cnt-inline { color:#f59e0b; }
+.sg-srep-cnt-inline b { font-weight:800; }
 .sg-srep-td-date { font-weight:600;white-space:nowrap;width:90px;color:var(--text-primary); }
 .sg-srep-td-loc { color:var(--text-secondary); }
 .sg-srep-td-addr { color:var(--text-muted);font-size:.75rem; }
@@ -5925,11 +6613,11 @@ tr:last-child td { border-bottom:none; }
 .sg-srep-status--vol  { background:rgba(99,102,241,.10);color:#6366f1; }
 /* Can-sub list button */
 .sg-cansub-list-btn {
-    display:flex;align-items:center;gap:6px;padding:7px 13px;border-radius:10px;
-    border:1.5px solid rgba(99,102,241,.35);background:rgba(99,102,241,.08);
-    color:var(--text-primary);font-size:.82rem;font-weight:600;cursor:pointer;transition:background .15s;
+    display:inline-flex;align-items:center;gap:7px;padding:9px 14px;border-radius:11px;
+    border:none;background:color-mix(in srgb,#6366f1 12%,var(--bg-raised));
+    color:#6366f1;font-size:.83rem;font-weight:700;cursor:pointer;transition:background .18s ease;font-family:inherit;
 }
-.sg-cansub-list-btn:hover { background:rgba(99,102,241,.15);border-color:#6366f1; }
+.sg-cansub-list-btn:hover { background:color-mix(in srgb,#6366f1 20%,var(--bg-raised)); }
 .sg-cansub-badge { display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#6366f1;color:#fff;font-size:.7rem;font-weight:700;line-height:1; }
 /* Can-sub list modal */
 .sg-csl-modal { max-width:500px;padding:0;overflow:hidden;display:flex;flex-direction:column;max-height:min(600px,90vh); }
@@ -6114,12 +6802,12 @@ tr:last-child td { border-bottom:none; }
 .sg-loc-header-row:nth-child(odd) td { background:rgba(100,130,155,.06); }
 .sg-loc-header-row:hover td { background:rgba(100,130,155,.12); }
 .sg-collapse-all-btn {
-    display:inline-flex;align-items:center;gap:5px;
-    font-size:.75rem;font-weight:500;padding:5px 12px;border-radius:20px;
-    border:1.5px solid var(--border);background:var(--bg-raised);
-    color:var(--text-muted);cursor:pointer;transition:all .15s;white-space:nowrap;
+    display:inline-flex;align-items:center;gap:6px;
+    font-size:.83rem;font-weight:700;padding:9px 14px;border-radius:11px;
+    border:none;background:var(--bg-raised);
+    color:var(--text-secondary);cursor:pointer;transition:background .18s ease,color .18s ease;white-space:nowrap;font-family:inherit;
 }
-.sg-collapse-all-btn:hover { background:rgba(100,130,155,.12);color:#7a93a8;border-color:rgba(100,130,155,.35); }
+.sg-collapse-all-btn:hover { background:var(--bg-hover);color:var(--text-primary); }
 
 /* Employee name filter (all-locations view) */
 .sg-td-name--clickable {
@@ -6141,9 +6829,9 @@ tr:last-child td { border-bottom:none; }
     vertical-align:middle;
 }
 
-/* Sticky bottom scrollbar */
+/* Scrollbar placed right below the table (not pinned to viewport bottom) */
 #sg-sticky-bar {
-    display:none;position:fixed;bottom:0;z-index:500;box-sizing:border-box;
+    display:none;position:static;box-sizing:border-box;
     background:var(--bg-surface);border-top:1px solid var(--border);padding:4px 0;
 }
 #sg-sticky-inner {
@@ -6164,7 +6852,6 @@ tr:last-child td { border-bottom:none; }
         const bar = document.createElement('div');
         bar.id = 'sg-sticky-bar';
         bar.innerHTML = '<div id="sg-sticky-inner"><div id="sg-sticky-spacer"></div></div>';
-        document.body.appendChild(bar);
 
         const inner = bar.querySelector('#sg-sticky-inner');
         const spacer = bar.querySelector('#sg-sticky-spacer');
@@ -6182,11 +6869,9 @@ tr:last-child td { border-bottom:none; }
         const update = () => {
             const wrap = getActiveWrap();
             if (!wrap) { bar.style.display = 'none'; return; }
-            const rect = wrap.getBoundingClientRect();
+            if (wrap.nextElementSibling !== bar) wrap.insertAdjacentElement('afterend', bar);
             const hasOverflow = wrap.scrollWidth > wrap.clientWidth + 2;
             bar.style.display = hasOverflow ? 'block' : 'none';
-            bar.style.left    = rect.left + 'px';
-            bar.style.width   = rect.width + 'px';
             spacer.style.width = wrap.scrollWidth + 'px';
             if (!syncing) inner.scrollLeft = wrap.scrollLeft;
         };
@@ -6260,7 +6945,7 @@ const ScheduleGraphEmployee = {
 
     async _loadData() {
         const { data: aData } = await supabase.from('schedule_assignments')
-            .select('location_id')
+            .select('location_id, is_primary')
             .eq('user_id', AppState.user.id);
 
         const assignRows = aData || [];
@@ -6277,6 +6962,7 @@ const ScheduleGraphEmployee = {
             return {
                 locId:         a.location_id,
                 locName:       loc.name || 'Локація',
+                is_primary:    a.is_primary !== false,
                 locked_months: loc.locked_months || [],
                 work_start:    loc.work_start || null,
                 work_end:      loc.work_end   || null,
@@ -6304,7 +6990,7 @@ const ScheduleGraphEmployee = {
                 .eq('location_id', this._locId)
                 .gte('date', dateFrom).lte('date', dateTo),
             supabase.from('schedule_assignments')
-                .select('id, user_id, employee_name, original_user_id, is_primary')
+                .select('id, user_id, employee_name, original_user_id, is_primary, pinned_months')
                 .eq('location_id', this._locId)
         ]);
 
@@ -6322,7 +7008,26 @@ const ScheduleGraphEmployee = {
             const { data: pData } = await supabase.from('profiles').select('id, full_name, job_position').in('id', pIds);
             profiles = Object.fromEntries((pData || []).map(p => [p.id, p]));
         }
-        this._locAssignments = assigns.map(a => ({ ...a, profile: profiles[a.user_id] || null }));
+        const withProfile = assigns.map(a => ({ ...a, profile: profiles[a.user_id] || null }));
+
+        // Same visibility rule as the manager's table: primary always shows,
+        // temporary/fired only show in current/past months, or if they actually
+        // have entries this month — otherwise stale/removed rows leak into the view.
+        const now = new Date();
+        const isCurrentOrPastMonth = this._year < now.getFullYear() ||
+            (this._year === now.getFullYear() && this._month <= now.getMonth());
+        const _hasEntries = a => {
+            const lid = a.user_id;
+            return lid && Object.keys(this._locEntries).some(k => k.startsWith(`${lid}_`));
+        };
+        const monthKey = this._monthKey ? this._monthKey(this._year, this._month) : `${this._year}-${String(this._month + 1).padStart(2, '0')}`;
+        this._locAssignments = withProfile.filter(a => {
+            if (!a.user_id) return _hasEntries(a);
+            if (a.is_primary) return true;
+            if (isCurrentOrPastMonth) return true;
+            if ((a.pinned_months || []).includes(monthKey)) return true;
+            return _hasEntries(a);
+        });
 
         this._managerHelpDates = {};
         const myLocIds = this._assignments.map(a => a.locId).filter(Boolean);
@@ -6398,6 +7103,7 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
         }
 
         const locName = this._assignments.find(a => a.locId === this._locId)?.locName || '';
+        const myIsPrimary = this._assignments.find(a => a.locId === this._locId)?.is_primary !== false;
         const days    = new Date(this._year, this._month + 1, 0).getDate();
         const offset  = (new Date(this._year, this._month, 1).getDay() + 6) % 7; // Mon=0
         const today   = new Date();
@@ -6418,7 +7124,8 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
             const dow     = (new Date(this._year, this._month, d).getDay() + 6) % 7;
             const we      = dow >= 5;
             const entry   = this._entries[dateStr];
-            const shift   = entry ? getShiftTypes()[entry.shift_type] : null;
+            const dispType = entry && !myIsPrimary && entry.shift_type === 'work' ? 'day_off' : entry?.shift_type;
+            const shift   = entry ? getShiftTypes()[dispType] : null;
             const isToday = dateStr === todayStr;
             const canSub    = entry?.notes === '__sub__';
             const needSub   = entry?.notes === '__needsub__';
@@ -6449,16 +7156,21 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
 </div>`);
         }
 
-        const locTabs = this._assignments.length > 1 ? `
+        const locTabs = this._assignments.length >= 1 ? `
 <div class="sg-loc-bar" style="margin-bottom:16px">
     <div class="sg-loc-tabs">
         ${this._assignments.map(a => `
         <button class="sg-loc-tab ${a.locId === this._locId ? 'active' : ''}"
             onclick="ScheduleGraphEmployee._switchLoc('${a.locId}')">
-            <span class="sge-tab-name">🏪 ${Fmt.esc(a.locName)}</span>
-            ${a.address ? `<span class="sge-tab-addr"><i class="fa-solid fa-location-dot"></i> ${Fmt.esc(a.address)}</span>` : ''}
-            ${a.phone ? `<span class="sge-tab-addr"><i class="fa-solid fa-phone"></i> ${Fmt.esc(a.phone)}</span>` : ''}
-            ${a.work_start && a.work_end ? `<span class="sge-tab-addr"><i class="fa-regular fa-clock"></i> ${a.work_start.slice(0,5)}–${a.work_end.slice(0,5)}</span>` : ''}
+            <span class="sg-loc-tab-ico"><i class="fa-solid fa-shop"></i></span>
+            <span class="sge-tab-body">
+                <span class="sge-tab-name">${Fmt.esc(a.locName)} <span class="sge-tab-status${a.is_primary === false ? ' sge-tab-status-sub' : ''}">${a.is_primary === false ? 'підміна' : 'основний'}</span></span>
+                <span class="sge-tab-meta-row">
+                    ${a.address ? `<span class="sge-tab-addr"><i class="fa-solid fa-location-dot"></i> ${Fmt.esc(a.address)}</span>` : ''}
+                    ${a.phone ? `<span class="sge-tab-addr"><i class="fa-solid fa-phone"></i> ${Fmt.esc(a.phone)}</span>` : ''}
+                    ${a.work_start && a.work_end ? `<span class="sge-tab-addr"><i class="fa-regular fa-clock"></i> ${a.work_start.slice(0,5)}–${a.work_end.slice(0,5)}</span>` : ''}
+                </span>
+            </span>
         </button>`).join('')}
     </div>
 </div>` : '';
@@ -6480,21 +7192,37 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
             <span class="sg-mlabel">${MONTHS_UA[this._month]} ${this._year}</span>
             <button class="sg-mnav" onclick="ScheduleGraphEmployee._nextMonth()">›</button>
         </div>
-        <div class="sg-legend" style="flex:1">
-            ${['work','vacation'].map(k => {
-                const v = getShiftTypes()[k];
-                if (!v) return '';
-                const active = this._quickType === k;
-                return `<button class="sg-leg-btn${active?' active':''}"
-                    style="--lc:${v.color};--lb:${v.bg}"
-                    onclick="ScheduleGraphEmployee._setQuickType('${k}')"
-                    title="${active ? 'Клік щоб скасувати' : 'Клік щоб вибрати — потім тиснути на свої клітинки'}">
-                    <span class="sg-leg-short">${v.short}</span>
-                    ${v.label}
-                    ${active ? '<span class="sg-leg-active-mark">✓ активно</span>' : ''}
-                </button>`;
-            }).join('')}
-            <button class="sg-types-mgr-btn" onclick="ScheduleGraphPage._showShiftTypesModal(true)" title="Налаштувати скорочення">⚙️</button>
+        <div class="sg-v2-legend-section" style="flex:1;margin-bottom:0">
+            <div class="sg-legend">
+                ${['work','vacation'].map(k => {
+                    const v = getShiftTypes()[k];
+                    if (!v) return '';
+                    const active = this._quickType === k;
+                    return `<button class="sg-leg-btn${active?' active':''}"
+                        style="--lc:${v.color};--lb:${v.bg}"
+                        onclick="ScheduleGraphEmployee._setQuickType('${k}')"
+                        title="${active ? 'Клік щоб скасувати' : 'Клік щоб вибрати — потім тиснути на свої клітинки'}">
+                        <span class="sg-leg-short">${v.short}</span>
+                        ${v.label}
+                        ${active ? '<span class="sg-leg-active-mark">✓ активно</span>' : ''}
+                    </button>`;
+                }).join('')}
+                ${(() => {
+                    const v = getShiftTypes()['day_off'];
+                    if (!v) return '';
+                    return `<button class="sg-leg-btn sg-leg-static" style="--lc:${v.color};--lb:${v.bg}"
+                        data-msg="Зміни-підміни вам призначає керівник — самостійно обрати цей тип не можна"
+                        onclick="event.stopPropagation();ScheduleGraphPage._toggleMismatchTip(this)">
+                        <span class="sg-leg-short">${v.short}</span>
+                        ${v.label}
+                    </button>`;
+                })()}
+                <button class="sg-types-mgr-btn" onclick="ScheduleGraphPage._showShiftTypesModal(true)" title="Налаштувати скорочення">⚙️</button>
+                <button class="sge-sub-btn${this._subMode ? ' active' : ''}" onclick="ScheduleGraphEmployee._toggleSubMode()">
+                    🙋 Можу вийти на заміну
+                </button>
+                <button class="sg-types-mgr-btn" onclick="ScheduleGraphEmployee._showManual()" title="Довідка по графіку">📖 Довідка</button>
+            </div>
         </div>
         <div class="sge-stats">
             ${getShiftTypeEntries().map(([k, v]) => stats[k] ? `
@@ -6503,9 +7231,6 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
                 <span>${stats[k]} ${k==='work'?'роб.':k==='day_off'?'вих.':k==='vacation'?'відп.':'лік.'}</span>
             </div>` : '').join('')}
         </div>
-        <button class="sge-sub-btn" onclick="ScheduleGraphEmployee._toggleSubMode()">
-            🙋 Можу вийти на заміну
-        </button>
     </div>
     ${this._quickType ? `
     <div class="sg-quick-bar">
@@ -6581,7 +7306,8 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
                         const isNeedSub = entry?.notes === '__needsub__';
                         const crossLoc = this._crossLocEntries?.[`${uid}_${dateStr}`] || null;
                         const subConfOther = crossLoc?.notes === '__sub_confirmed__';
-                        const baseShift = (!isSub && !isNeedSub && entry) ? getShiftTypes()[entry.shift_type] : null;
+                        const dispType = entry && !a.is_primary && entry.shift_type === 'work' ? 'day_off' : entry?.shift_type;
+                        const baseShift = (!isSub && !isNeedSub && entry) ? getShiftTypes()[dispType] : null;
                         const dispShift = isSubConf ? SUB_CONFIRMED : (subConfOther ? null : baseShift);
                         const showCrossLoc = !dispShift && crossLoc && (!entry || isSub);
                         const cellTitle = isNeedSub ? 'Потрібна підміна'
@@ -6621,24 +7347,62 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
     _empStyles() {
         return `<style>
 /* Location switcher tabs (employee view) */
-.sg-loc-bar { display:inline-block; }
-.sg-loc-tabs { display:flex;gap:4px;background:var(--bg-raised);border:1.5px solid var(--border);border-radius:14px;padding:4px;flex-wrap:wrap; }
+.sg-loc-bar { display:block; }
+.sg-loc-tabs { display:flex;gap:10px;flex-wrap:wrap; }
 .sg-loc-tab {
-    padding:8px 16px;border-radius:10px;border:none;background:transparent;
-    color:var(--text-muted);font-size:.85rem;font-weight:600;cursor:pointer;
-    transition:all .18s;display:flex;flex-direction:column;align-items:flex-start;gap:3px;
+    display:flex;align-items:center;gap:11px;
+    padding:10px 18px 10px 10px;border-radius:16px;
+    border:1.5px solid var(--border);background:var(--bg-surface);
+    cursor:pointer;transition:all .18s ease;text-align:left;
+    box-shadow:0 2px 8px rgba(15,23,42,.04);
 }
-.sge-tab-name { font-size:.85rem;font-weight:600; }
-.sge-tab-addr { font-size:.8rem;font-weight:500;opacity:1;color:var(--text-secondary);display:flex;align-items:center;gap:4px; }
-.sg-loc-tab:hover { background:var(--bg-hover);color:var(--text-primary); }
-.sg-loc-tab.active { background:var(--primary);color:#fff; }
-.sg-loc-tab.active .sge-tab-addr { color:#fff;opacity:.8; }
-.sge-sub-btn { display:inline-flex;align-items:center;gap:6px;padding:7px 16px;border-radius:20px;border:1.5px solid rgba(16,185,129,.4);background:rgba(16,185,129,.08);color:#10b981;font-size:.82rem;font-weight:600;cursor:pointer;transition:all .15s; }
-.sge-sub-btn:hover { background:rgba(16,185,129,.15);border-color:#10b981; }
-.sge-sub-box { max-width:520px;height:auto !important; }
-.sge-sub-legend { display:flex;gap:12px;margin:8px 0 12px;font-size:.75rem;color:var(--text-muted); }
+body:not(.light-theme) .sg-loc-tab { box-shadow:0 2px 10px rgba(0,0,0,.15); }
+.sg-loc-tab-ico {
+    width:36px;height:36px;border-radius:11px;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;font-size:1rem;
+    background:var(--bg-hover);color:var(--text-muted);transition:all .18s ease;
+}
+.sge-tab-body { display:flex;flex-direction:column;gap:3px;min-width:0; }
+.sge-tab-name { font-size:.92rem;font-weight:700;color:var(--text-primary); }
+.sge-tab-status {
+    display:inline-flex;align-items:center;font-size:.65rem;font-weight:700;
+    text-transform:uppercase;letter-spacing:.03em;padding:2px 7px;border-radius:20px;
+    background:color-mix(in srgb,#10b981 14%,transparent);color:#10b981;vertical-align:middle;
+}
+.sge-tab-status-sub { background:color-mix(in srgb,#8b5cf6 16%,transparent);color:#8b5cf6; }
+.sge-tab-meta-row { display:flex;gap:11px;flex-wrap:wrap; }
+.sge-tab-addr { font-size:.74rem;font-weight:500;color:var(--text-muted);display:flex;align-items:center;gap:4px;white-space:nowrap; }
+.sg-loc-tab:hover:not(.active) { border-color:color-mix(in srgb,var(--primary) 40%,var(--border)); }
+.sg-loc-tab.active { border-color:var(--primary);background:color-mix(in srgb,var(--primary) 7%,var(--bg-surface)); }
+.sg-loc-tab.active .sg-loc-tab-ico { background:var(--primary);color:#fff; }
+.sge-sub-btn {
+    display:inline-flex;align-items:center;gap:6px;
+    padding:13px 16px;border-radius:12px;font-size:.85rem;font-weight:700;cursor:pointer;line-height:1;
+    border:none;background:color-mix(in srgb, #10b981 12%, var(--bg-surface));color:#10b981;
+    transition:background .18s ease,color .18s ease;white-space:nowrap;flex-shrink:0;
+}
+.sge-sub-btn:hover { background:color-mix(in srgb, #10b981 20%, var(--bg-surface)); }
+.sge-sub-btn.active { background:#10b981;color:#fff; }
+.sge-sub-backdrop {
+    position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:1000;
+    opacity:0;transition:opacity .25s ease;pointer-events:none;
+}
+.sge-sub-backdrop.open { opacity:1;pointer-events:auto; }
+.sge-sub-panel {
+    position:fixed;top:0;right:0;bottom:0;width:480px;max-width:100vw;
+    background:var(--bg-surface);z-index:1001;display:flex;flex-direction:column;
+    box-shadow:-6px 0 32px rgba(0,0,0,.18);border-left:1px solid var(--border);
+    transform:translateX(100%);transition:transform .25s ease;
+}
+.sge-sub-panel.open { transform:translateX(0); }
+.sge-sub-panel .sg-mhdr { padding:18px 22px;border-bottom:1px solid var(--border);flex-shrink:0;margin-bottom:0; }
+.sge-sub-body { flex:1;overflow-y:auto;padding:16px 22px; }
+.sge-sub-footer { padding:14px 22px;border-top:1px solid var(--border);margin-top:0 !important;flex-shrink:0; }
+.sge-sub-legend { display:flex;gap:12px;margin:0 0 12px;font-size:.75rem;color:var(--text-muted); }
 .sge-sub-legend-item { display:flex;align-items:center;gap:5px; }
-.sge-sub-grid { display:grid;grid-template-columns:repeat(7,1fr);gap:4px;max-height:300px;overflow-y:auto; }
+.sge-sub-month-label { font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin:14px 0 6px; }
+.sge-sub-month-label:first-of-type { margin-top:0; }
+.sge-sub-grid { display:grid;grid-template-columns:repeat(7,1fr);gap:4px; }
 .sge-sub-day { border:1.5px solid var(--border);border-radius:8px;padding:6px 4px;text-align:center;cursor:pointer;transition:all .15s;user-select:none;position:relative; }
 .sge-sub-day:hover:not(.sge-sub-day-busy):not(.sge-sub-day-past) { border-color:var(--primary);background:color-mix(in srgb,var(--primary) 8%,transparent); }
 .sge-sub-day-selected { border-color:#10b981 !important;background:rgba(16,185,129,.12) !important; }
@@ -6787,35 +7551,146 @@ td.sge-cansub { background:rgba(99,102,241,.06);border-left:2px solid rgba(99,10
 </style>`;
     },
 
+    _showManual() {
+        Modal.open({
+            title: '',
+            size: 'xl',
+            body: `
+${ScheduleGraphPage._manCss()}
+<div class="sg-man">
+  <div class="cover">
+    <div class="cover-tag">📋 Довідка для співробітника</div>
+    <div class="cover-icon">📅</div>
+    <h1>Мій графік роботи</h1>
+    <p>Як переглядати графік, швидко заповнювати зміни та пропонувати підміну</p>
+  </div>
+
+  <nav class="toc">
+    <div class="toc-title">Зміст</div>
+    <div class="toc-grid">
+      <button class="toc-item" onclick="document.getElementById('sge-man-s1').scrollIntoView({behavior:'smooth',block:'start'})"><div class="toc-num">1</div>🗓 Мій графік</button>
+      <button class="toc-item" onclick="document.getElementById('sge-man-s2').scrollIntoView({behavior:'smooth',block:'start'})"><div class="toc-num">2</div>📆 Типи змін</button>
+      <button class="toc-item" onclick="document.getElementById('sge-man-s3').scrollIntoView({behavior:'smooth',block:'start'})"><div class="toc-num">3</div>⚡ Швидке заповнення</button>
+      <button class="toc-item" onclick="document.getElementById('sge-man-s4').scrollIntoView({behavior:'smooth',block:'start'})"><div class="toc-num">4</div>🙋 Можу вийти на заміну</button>
+      <button class="toc-item" onclick="document.getElementById('sge-man-s5').scrollIntoView({behavior:'smooth',block:'start'})"><div class="toc-num">5</div>🆘 Прохання керівника</button>
+      <button class="toc-item" onclick="document.getElementById('sge-man-s6').scrollIntoView({behavior:'smooth',block:'start'})"><div class="toc-num">6</div>🔒 Минулі місяці</button>
+    </div>
+  </nav>
+
+  <section class="section" id="sge-man-s1">
+    <div class="section-header"><div class="section-num">1</div><div><div class="section-title">🗓 Мій графік</div></div></div>
+    <div class="card"><div class="card-title">👤 Що я тут бачу?</div><p>У таблиці — увесь графік вашої локації: ваш рядок підсвічено кольором і позначено <strong>«(я)»</strong>, рядки колег — трохи приглушені. Клік по <strong>своїй</strong> комірці відкриває редагування; чужі комірки лише для перегляду.</p></div>
+    <div class="steps">
+      <div class="step"><div class="step-icon">🏪</div><div class="step-body"><strong>Кілька локацій</strong><p>Якщо ви призначені до кількох точок — зверху з'являться картки локацій. Клікніть на потрібну, щоб перемкнути графік.</p></div></div>
+      <div class="step"><div class="step-icon">◀▶</div><div class="step-body"><strong>Навігація по місяцях</strong><p>Стрілки <strong>‹ ›</strong> біля назви місяця — перемикають перегляд. Минулі місяці доступні лише для перегляду.</p></div></div>
+    </div>
+  </section>
+
+  <hr>
+
+  <section class="section" id="sge-man-s2">
+    <div class="section-header"><div class="section-num">2</div><div><div class="section-title">📆 Типи змін — позначення</div></div></div>
+    <p style="color:#4a4e5c;margin-bottom:14px;font-size:.88rem;">Кожна комірка в графіку може містити один з типів позначень:</p>
+    <div class="legend-grid">
+      <div class="legend-item"><div class="legend-short" style="background:rgba(16,185,129,.14);color:#10b981">З</div><div class="legend-info"><strong>Зміна (робота)</strong><span>Звичайний робочий день</span></div></div>
+      <div class="legend-item"><div class="legend-short" style="background:rgba(139,92,246,.14);color:#8b5cf6">П</div><div class="legend-info"><strong>Підміна</strong><span>Запланована підміна</span></div></div>
+      <div class="legend-item"><div class="legend-short" style="background:rgba(249,115,22,.14);color:#f97316">Р</div><div class="legend-info"><strong>Підміна підтверджена</strong><span>Погоджена керівником</span></div></div>
+      <div class="legend-item"><div class="legend-short" style="background:rgba(245,158,11,.14);color:#f59e0b">ВД</div><div class="legend-info"><strong>Відпустка</strong><span>Планова відпустка</span></div></div>
+      <div class="legend-item"><div class="legend-short" style="background:rgba(239,68,68,.14);color:#ef4444">Л</div><div class="legend-info"><strong>Лікарняний</strong><span>Тимчасова непрацездатність</span></div></div>
+      <div class="legend-item"><div class="legend-short" style="background:rgba(99,102,241,.14);color:#6366f1">🙋</div><div class="legend-info"><strong>Може підмінити</strong><span>Ви позначили готовність</span></div></div>
+      <div class="legend-item"><div class="legend-short" style="background:rgba(239,68,68,.14);color:#ef4444">🆘</div><div class="legend-info"><strong>Потрібна підміна</strong><span>Керівник шукає заміну</span></div></div>
+    </div>
+  </section>
+
+  <hr>
+
+  <section class="section" id="sge-man-s3">
+    <div class="section-header"><div class="section-num">3</div><div><div class="section-title">⚡ Швидке заповнення</div></div></div>
+    <div class="card"><div class="card-title">⚡ Як це працює</div><p>Над таблицею є панель легенди — дозволяє миттєво проставляти тип зміни у власних комірках, без відкриття вікна щоразу.</p></div>
+    <div class="steps">
+      <div class="step"><div class="step-icon">1️⃣</div><div class="step-body"><strong>Активуйте тип</strong><p>У панелі легенди натисніть на потрібний тип — <span class="badge badge-green">З Зміна</span> або <span class="badge badge-amber">ВД Відпустка</span>. Кнопка підсвітиться.</p></div></div>
+      <div class="step"><div class="step-icon">2️⃣</div><div class="step-body"><strong>Клікайте на свої комірки</strong><p>Кожен клік на порожню комірку у вашому рядку — миттєво записує обраний тип.</p></div></div>
+      <div class="step"><div class="step-icon">↩️</div><div class="step-body"><strong>Скасувати запис</strong><p>Повторний клік на вже заповнену комірку (з тим самим типом) — видаляє запис.</p></div></div>
+      <div class="step"><div class="step-icon">✕</div><div class="step-body"><strong>Вийти з режиму</strong><p>Знову клікніть на активний тип у легенді, щоб вимкнути швидке заповнення.</p></div></div>
+    </div>
+  </section>
+
+  <hr>
+
+  <section class="section" id="sge-man-s4">
+    <div class="section-header"><div class="section-num">4</div><div><div class="section-title">🙋 Можу вийти на заміну</div></div></div>
+    <div class="card"><div class="card-title">📨 Запропонувати керівнику</div><p>Якщо у вільний день готові підмінити когось — позначте це, і керівник отримає сповіщення та зможе призначити вас.</p></div>
+    <div class="steps">
+      <div class="step"><div class="step-icon">🙋</div><div class="step-body"><strong>Відкрийте вікно</strong><p>Натисніть <strong>«🙋 Можу вийти на заміну»</strong> в панелі легенди.</p></div></div>
+      <div class="step"><div class="step-icon">📅</div><div class="step-body"><strong>Оберіть дні</strong><p>Вікно показує одразу <strong>поточний і наступний</strong> місяць — клікайте на вільні дні (зайняті — недоступні).</p></div></div>
+      <div class="step"><div class="step-icon">📨</div><div class="step-body"><strong>Надішліть керівнику</strong><p>Натисніть <strong>«Надіслати керівнику»</strong> — обрані дні позначаться 🙋 і керівник отримає сповіщення.</p></div></div>
+    </div>
+  </section>
+
+  <hr>
+
+  <section class="section" id="sge-man-s5">
+    <div class="section-header"><div class="section-num">5</div><div><div class="section-title">🆘 Прохання керівника про підміну</div></div></div>
+    <div class="card"><div class="card-title">🆘 Що робити?</div><p>Якщо керівник шукає підміну на конкретний день — така комірка у графіку позначається значком 🆘.</p></div>
+    <div class="steps">
+      <div class="step"><div class="step-icon">🖱️</div><div class="step-body"><strong>Клікніть на день з 🆘</strong><p>Відкриється вікно з описом — де саме потрібна підміна.</p></div></div>
+      <div class="step"><div class="step-icon">✓</div><div class="step-body"><strong>«Можу вийти»</strong><p>Підтверджує вашу згоду — запис одразу з'явиться у вашому графіку. Якщо в цей день у вас вже є робоча зміна в іншій локації — кнопка буде недоступна.</p></div></div>
+    </div>
+  </section>
+
+  <hr>
+
+  <section class="section" id="sge-man-s6">
+    <div class="section-header"><div class="section-num">6</div><div><div class="section-title">🔒 Минулі місяці</div></div></div>
+    <div class="callout warn"><div class="callout-icon">⚠️</div><div class="callout-body"><strong>Тільки перегляд.</strong> Минулі місяці заблоковані для редагування — вносити зміни в них може лише керівник.</div></div>
+    <div class="callout info"><div class="callout-icon">🔒</div><div class="callout-body"><strong>Заблокований графік.</strong> Якщо керівник заблокував поточний місяць — редагування також недоступне, побачите відповідне повідомлення.</div></div>
+  </section>
+</div>`
+        });
+    },
+
     _setQuickType(type) {
         this._quickType = this._quickType === type ? null : type;
         this._subMode = false;
         this._render(this._container);
     },
 
-    async _toggleSubMode() {
-        this._quickType = null;
-        this._showSubModal();
+    async _fetchMonthEntries(year, month) {
+        const p = n => String(n).padStart(2,'0');
+        const dateFrom = `${year}-${p(month+1)}-01`;
+        const dateTo   = `${year}-${p(month+1)}-${new Date(year, month+1, 0).getDate()}`;
+        const { data } = await supabase.from('schedule_entries').select('*')
+            .eq('location_id', this._locId).eq('user_id', AppState.user.id)
+            .gte('date', dateFrom).lte('date', dateTo);
+        const map = {};
+        (data || []).forEach(e => { map[e.date] = e; });
+        return map;
     },
 
-    _showSubModal() {
-        document.getElementById('sge-sub-modal')?.remove();
-        const p = n => String(n).padStart(2,'0');
-        const days = new Date(this._year, this._month + 1, 0).getDate();
-        const today = new Date();
-        const todayStr = `${today.getFullYear()}-${p(today.getMonth()+1)}-${p(today.getDate())}`;
+    async _toggleSubMode() {
+        this._quickType = null;
+        let nm = this._month + 1, ny = this._year;
+        if (nm > 11) { nm = 0; ny++; }
+        Loader.show();
+        let nextEntries = {};
+        try { nextEntries = await this._fetchMonthEntries(ny, nm); } finally { Loader.hide(); }
+        this._showSubModal(nextEntries, ny, nm);
+    },
 
-        const dayCells = [];
+    _buildSubDayCells(year, month, entries, todayStr) {
+        const p = n => String(n).padStart(2,'0');
+        const days = new Date(year, month + 1, 0).getDate();
+        const cells = [];
         for (let d = 1; d <= days; d++) {
-            const dateStr = `${this._year}-${p(this._month+1)}-${p(d)}`;
-            const dow = new Date(this._year, this._month, d).getDay();
+            const dateStr = `${year}-${p(month+1)}-${p(d)}`;
+            const dow = new Date(year, month, d).getDay();
             const we  = dow === 0 || dow === 6;
-            const entry = this._entries[dateStr];
+            const entry = entries[dateStr];
             const hasShift = entry && !['__sub__','__needsub__'].includes(entry.notes) && entry.shift_type === 'work';
             const isSubMarked = entry?.notes === '__sub__';
             const isPast = dateStr < todayStr;
 
-            dayCells.push(`
+            cells.push(`
             <div class="sge-sub-day${hasShift?' sge-sub-day-busy':''}${isPast?' sge-sub-day-past':''}${we?' sge-sub-day-we':''}${isSubMarked?' sge-sub-day-marked':''}"
                 data-date="${dateStr}" data-busy="${hasShift?'1':'0'}" data-past="${isPast?'1':'0'}"
                 onclick="ScheduleGraphEmployee._toggleSubDay(this)"
@@ -6825,33 +7700,66 @@ td.sge-cansub { background:rgba(99,102,241,.06);border-left:2px solid rgba(99,10
                 ${hasShift ? '<div class="sge-sub-day-ico">⛔</div>' : isSubMarked ? '<div class="sge-sub-day-ico">🙋</div>' : ''}
             </div>`);
         }
+        return cells.join('');
+    },
+
+    _showSubModal(nextEntries = {}, nextYear = null, nextMonth = null) {
+        document.getElementById('sge-sub-modal')?.remove();
+        document.getElementById('sge-sub-backdrop')?.remove();
+        const p = n => String(n).padStart(2,'0');
+        const today = new Date();
+        const todayStr = `${today.getFullYear()}-${p(today.getMonth()+1)}-${p(today.getDate())}`;
+
+        const curCells  = this._buildSubDayCells(this._year, this._month, this._entries, todayStr);
+        const nextCells = (nextYear !== null)
+            ? this._buildSubDayCells(nextYear, nextMonth, nextEntries, todayStr) : '';
+
+        const backdrop = document.createElement('div');
+        backdrop.id = 'sge-sub-backdrop';
+        backdrop.className = 'sge-sub-backdrop';
+        backdrop.onclick = () => ScheduleGraphEmployee._closeSubModal();
+        document.body.appendChild(backdrop);
 
         const el = document.createElement('div');
         el.id = 'sge-sub-modal';
-        el.className = 'sg-overlay';
+        el.className = 'sge-sub-panel';
         el.innerHTML = `
-<div class="sg-modal sge-sub-box">
     <div class="sg-mhdr">
         <div>
             <h3 style="margin:0;font-size:1.05rem">🙋 Можу вийти на заміну</h3>
-            <p style="margin:3px 0 0;color:var(--text-muted);font-size:.78rem">Оберіть дні коли готові вийти. Дні зі зміною недоступні.</p>
+            <p style="margin:3px 0 0;color:var(--text-muted);font-size:.78rem">Оберіть дні коли готові вийти — доступні поточний і наступний місяць. Дні зі зміною недоступні.</p>
         </div>
-        <button class="sg-mclose" onclick="document.getElementById('sge-sub-modal').remove()">✕</button>
+        <button class="sg-mclose" onclick="ScheduleGraphEmployee._closeSubModal()">✕</button>
     </div>
-    <div class="sge-sub-legend">
-        <span class="sge-sub-legend-item"><span style="background:rgba(16,185,129,.2);border:2px solid #10b981;width:14px;height:14px;border-radius:4px;display:inline-block"></span> Обрано</span>
-        <span class="sge-sub-legend-item"><span style="background:var(--bg-raised);border:1px solid var(--border);width:14px;height:14px;border-radius:4px;display:inline-block;opacity:.4"></span> Зайнято</span>
+    <div class="sge-sub-body">
+        <div class="sge-sub-legend">
+            <span class="sge-sub-legend-item"><span style="background:rgba(16,185,129,.2);border:2px solid #10b981;width:14px;height:14px;border-radius:4px;display:inline-block"></span> Обрано</span>
+            <span class="sge-sub-legend-item"><span style="background:var(--bg-raised);border:1px solid var(--border);width:14px;height:14px;border-radius:4px;display:inline-block;opacity:.4"></span> Зайнято</span>
+        </div>
+        <div class="sge-sub-month-label">${MONTHS_UA[this._month]} ${this._year}</div>
+        <div class="sge-sub-grid">${curCells}</div>
+        ${nextCells ? `
+        <div class="sge-sub-month-label">${MONTHS_UA[nextMonth]} ${nextYear}</div>
+        <div class="sge-sub-grid">${nextCells}</div>` : ''}
     </div>
-    <div class="sge-sub-grid">${dayCells.join('')}</div>
-    <div class="sg-modal-actions" style="margin-top:14px">
-        <button class="sg-btn-cancel" onclick="document.getElementById('sge-sub-modal').remove()">Скасувати</button>
+    <div class="sg-modal-actions sge-sub-footer">
+        <button class="sg-btn-cancel" onclick="ScheduleGraphEmployee._closeSubModal()">Скасувати</button>
         <button class="sg-btn-save" onclick="ScheduleGraphEmployee._saveSubDays()">
             <i class="fa-solid fa-paper-plane"></i> Надіслати керівнику
         </button>
-    </div>
-</div>`;
+    </div>`;
         document.body.appendChild(el);
-        el.addEventListener('click', e => { if (e.target === el) el.remove(); });
+        requestAnimationFrame(() => {
+            backdrop.classList.add('open');
+            el.classList.add('open');
+        });
+    },
+
+    _closeSubModal() {
+        const panel    = document.getElementById('sge-sub-modal');
+        const backdrop = document.getElementById('sge-sub-backdrop');
+        if (panel)    { panel.classList.remove('open');    panel.addEventListener('transitionend', () => panel.remove(),    { once: true }); }
+        if (backdrop) { backdrop.classList.remove('open'); backdrop.addEventListener('transitionend', () => backdrop.remove(), { once: true }); }
     },
 
     _toggleSubDay(el) {
@@ -6868,7 +7776,7 @@ td.sge-cansub { background:rgba(99,102,241,.06);border-left:2px solid rgba(99,10
     async _saveSubDays() {
         const selected = [...document.querySelectorAll('.sge-sub-day-selected')].map(el => el.dataset.date);
         if (!selected.length) { Toast.warning('Оберіть хоча б один день'); return; }
-        document.getElementById('sge-sub-modal')?.remove();
+        this._closeSubModal();
 
         await Promise.all(selected.map(date => {
             const entry = this._entries[date];
@@ -6950,6 +7858,61 @@ td.sge-cansub { background:rgba(99,102,241,.06);border-left:2px solid rgba(99,10
         this._render(this._container);
     },
 
+    async _quickSave(date, type) {
+        const oldEnt  = this._entries[date];
+        const empName = AppState.profile?.full_name || '';
+
+        // Toggle off if same type already set
+        if (oldEnt?.shift_type === type) {
+            await supabase.from('schedule_entries').delete()
+                .eq('location_id', this._locId).eq('user_id', AppState.user.id).eq('date', date);
+            await supabase.from('schedule_log').insert({
+                location_id: this._locId, user_id: AppState.user.id, date, employee_name: empName,
+                old_value: { shift_type: oldEnt.shift_type }, new_value: null,
+                changed_by: AppState.user.id
+            });
+            delete this._entries[date];
+            this._render(this._container);
+            return;
+        }
+
+        if (type === 'work') {
+            const conflictLoc = await ScheduleGraphPage._getWorkConflictLoc(AppState.user.id, date, this._locId);
+            if (conflictLoc) { Toast.error('Конфлікт змін', `Вже є робоча зміна у «${conflictLoc}»`); return; }
+        }
+
+        const payload = {
+            location_id: this._locId, user_id: AppState.user.id, date,
+            shift_type: type, shift_start: null, shift_end: null, notes: null,
+            updated_by: AppState.user.id, updated_at: new Date().toISOString()
+        };
+        const { data, error } = await supabase.from('schedule_entries')
+            .upsert(payload, { onConflict: 'location_id,user_id,date' }).select().single();
+        if (error) { Toast.error('Помилка', error.message); return; }
+
+        await supabase.from('schedule_log').insert({
+            location_id: this._locId, user_id: AppState.user.id, date, employee_name: empName,
+            old_value: oldEnt ? { shift_type: oldEnt.shift_type } : null,
+            new_value: { shift_type: type },
+            changed_by: AppState.user.id
+        });
+
+        this._entries[date] = data;
+
+        // If employee sets a work shift on a date with active manager help request — resolve it
+        const mgrInfo = this._managerHelpDates[date];
+        if (mgrInfo && type === 'work') {
+            await supabase.from('schedule_entries')
+                .update({ notes: '__sub_confirmed__', updated_by: AppState.user.id })
+                .eq('id', data.id);
+            data.notes = '__sub_confirmed__';
+            this._entries[date] = data;
+            await this._resolveManagerHelp(date, mgrInfo.entryId, mgrInfo.managerId, mgrInfo.locName);
+        }
+
+        this._render(this._container);
+    },
+
     async _openCell(date) {
         const now = new Date();
         if (this._year < now.getFullYear() || (this._year === now.getFullYear() && this._month < now.getMonth())) {
@@ -6966,7 +7929,7 @@ td.sge-cansub { background:rgba(99,102,241,.06);border-left:2px solid rgba(99,10
             return;
         }
         if (this._quickType) {
-            await ScheduleGraphPage._saveEntry(AppState.user.id, date, true, this._quickType);
+            await this._quickSave(date, this._quickType);
             return;
         }
         if (this._subMode) {

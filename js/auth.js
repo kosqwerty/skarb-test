@@ -475,6 +475,13 @@ const Auth = {
         AppState.session = null;
         location.hash    = '';
         try { Modal.close(); } catch(_) {}
+        // Графік роботи має власні (не через Modal) оверлеї — закриваємо і їх,
+        // інакше вони лишаються висіти поверх екрана логіну.
+        try {
+            document.querySelectorAll('.sg-overlay').forEach(el => el.remove());
+            document.getElementById('sg-emp-panel')?.remove();
+            document.getElementById('sg-emp-backdrop')?.remove();
+        } catch(_) {}
         this._showAuth();
         if (this._blockedByAdmin) {
             this._blockedByAdmin = false;

@@ -1505,6 +1505,7 @@ body:not(.light-theme) .tm-sec-tabs{box-shadow:0 2px 14px rgba(0,0,0,.2)}
             }
             await TestsManagerAPI.assign(testId, toAssign.map(e => e.id), null);
             Toast.success('Готово', `Призначено ${toAssign.length} співробітникам`);
+            if (toAssign.some(e => e.id === AppState.user.id)) UI.loadLearnBadge();
         } catch(e) { Toast.error('Помилка', e.message); }
         finally { Loader.hide(); }
     },
@@ -4000,6 +4001,7 @@ body.light-theme .tm-src-ta{background:#f6f8fa;color:#24292f;border-color:#d0d7d
                 }
             }
             Toast.success('Збережено');
+            if ([...toAssignNew, ...toUnassign].includes(AppState.user.id)) UI.loadLearnBadge();
             this._goBack(TestsManagerPage._container);
         } catch(e) { Toast.error('Помилка', e.message); }
         finally { Loader.hide(); }

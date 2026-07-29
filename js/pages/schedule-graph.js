@@ -117,6 +117,10 @@ const SHIFT_TYPES = {
 const SUB_CONFIRMED = { label: 'Підміна', short: 'Р', color: '#f97316', bg: 'rgba(249,115,22,.14)' };
 // Flag notes that indicate a request, not a confirmed work shift
 const _FLAG_NOTES = ['__sub__', '__needsub__'];
+// Усі службові значення notes — вільний текст керівника (подвійний клік по клітинці)
+// не повинен збігатися з жодним із них
+const _RESERVED_ENTRY_NOTES = ['__sub__', '__needsub__', '__sub_confirmed__', '__mgr_help__'];
+const _customCellNote = e => (e?.notes && !_RESERVED_ENTRY_NOTES.includes(e.notes)) ? e.notes : null;
 // Чи рахується тип зміни як "реальна" зміна (Σ днів, крос-локаційні бейджі,
 // конфлікт-перевірка "вже є зміна в іншій локації") — так само як Зміна/Підміна.
 // Вбудовані Відпустка/Лікарняний — ні. Кастомні типи — так, якщо явно не вимкнено (isWork:false).
@@ -1365,12 +1369,13 @@ ${this._manCss()}
                         const subConfAt = lookupId ? (this._otherLocSubConf?.[`${lookupId}_${date}`] || null) : null;
                         const otherLocName = (!subConfAt && (!entry || entry?.notes === '__sub__') && lookupId) ? (this._otherLocDayOff?.[`${lookupId}_${date}`] || null) : null;
                         const noWork = !datesWithWork.has(date);
-                        return `<td class="sg-cell${we?' we':''}${entry?.notes==='__needsub__'?' sg-needsub-cell':''}${noWork?' sg-cell-no-work':''}${viewOnly?' sg-cell-partner':''}${!a.is_primary && dispShift && !subConfAt?' sg-cell-sub':''}"
+                        const customNote = _customCellNote(entry);
+                        return `<td class="sg-cell${we?' we':''}${entry?.notes==='__needsub__'?' sg-needsub-cell':''}${noWork?' sg-cell-no-work':''}${viewOnly?' sg-cell-partner':''}${!a.is_primary && dispShift && !subConfAt?' sg-cell-sub':''}${customNote?' sg-cell-text':''}"
                             data-uid="${a.user_id}" data-date="${date}"
                             ${viewOnly ? '' : `onclick="ScheduleGraphPage._openCell('${a.user_id}','${date}')"`}
-                            title="${entry?.notes==='__needsub__' ? 'Потрібна підміна' : subConfAt ? `Підміна у «${subConfAt}»` : isSubConf ? 'Підтверджена підміна' : shift ? shift.label : otherLocName ? `Підміна у «${otherLocName}»` : viewOnly ? '' : 'Клік щоб додати'}">
-                            ${flagIco
-                                ? `<span class="sg-flag-cell">${flagIco}</span>`
+                            title="${customNote ? Fmt.esc(customNote) : entry?.notes==='__needsub__' ? 'Потрібна підміна' : subConfAt ? `Підміна у «${subConfAt}»` : isSubConf ? 'Підтверджена підміна' : shift ? shift.label : otherLocName ? `Підміна у «${otherLocName}»` : viewOnly ? '' : 'Клік щоб додати, подвійний клік щоб написати текст'}">
+                            ${customNote ? `<span class="sg-cell-text-val">${Fmt.esc(customNote)}</span>`
+                                : flagIco ? `<span class="sg-flag-cell">${flagIco}</span>`
                                 : subConfAt ? `<span class="sg-other-loc-badge">${subConfAt.slice(0,3)}</span>`
                                 : dispShift ? `<span class="sg-badge" style="background:${dispShift.bg};color:${dispShift.color}">${dispShift.short}</span>`
                                 : otherLocName ? `<span class="sg-other-loc-badge">${otherLocName.slice(0,3)}</span>` : ''}
@@ -4697,17 +4702,152 @@ ${this._manCss()}
         if (this._isViewOnlyLoc(this._locId)) return;
         if (this._isPastMonth()) { Toast.error('Місяць завершено', 'Редагування минулих місяців заблоковано'); return; }
         if (this._isLocked()) { Toast.error('Графік заблоковано', 'Розблокуйте графік перед редагуванням'); return; }
+
+        // Ручне розпізнавання подвійного кліку по одній і тій самій клітинці
+        const key = `${userId}_${date}`;
+        const now = Date.now();
+        const isDbl = this._lastCellClick?.key === key && (now - this._lastCellClick.time) < 350;
+        this._lastCellClick = isDbl ? null : { key, time: now };
+        if (isDbl) {
+            this._editCellText(null, userId, date);
+            return;
+        }
+
+        this._selectCell(userId, date);
+
         if (this._quickType) {
             this._quickSave(userId, date, this._quickType);
             return;
         }
+
+        // Без активного quick-fill типу одинарний клік нічого не робить (лише
+        // виділяє клітинку) — відкрити модалку типу зміни можна лише подвійним кліком.
+        // Виняток: активний запит на підміну — його завжди можна обробити одним кліком.
         const entry = this._entries[`${userId}_${date}`];
-        const profile = this._assignments.find(a => a.user_id === userId)?.profile;
         if (entry?.notes === '__sub__' || entry?.notes === '__needsub__') {
+            const profile = this._assignments.find(a => a.user_id === userId)?.profile;
             this._showSubstResolveModal(userId, date, entry, profile, this._locId);
+        }
+    },
+
+    _selectCell(userId, date) {
+        document.querySelectorAll('.sg-cell.sg-cell-selected').forEach(td => td.classList.remove('sg-cell-selected'));
+        const td = document.querySelector(`.sg-cell[data-uid="${userId}"][data-date="${date}"]`);
+        if (td) td.classList.add('sg-cell-selected');
+        this._selectedCell = { userId, date };
+        if (!this._kbListenerAttached) {
+            this._kbListenerAttached = true;
+            document.addEventListener('keydown', ev => this._onCellKeydown(ev));
+        }
+    },
+
+    // Друк на клавіатурі одразу заповнює виділену клітинку (як в Excel)
+    _onCellKeydown(ev) {
+        if (!this._selectedCell) return;
+        const active = document.activeElement;
+        if (active && ['INPUT','TEXTAREA'].includes(active.tagName)) return;
+        if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+        const { userId, date } = this._selectedCell;
+
+        if (ev.key === 'Delete' || ev.key === 'Backspace') {
+            ev.preventDefault();
+            this._deleteSelectedCell(userId, date);
             return;
         }
-        this._showShiftModal(userId, date, entry, profile, false);
+
+        if (ev.key.length !== 1) return;
+        ev.preventDefault();
+        this._editCellText(null, userId, date, ev.key);
+    },
+
+    // Delete/Backspace на виділеній клітинці — та сама дія, що й кнопка
+    // видалення в модалці зміни, але доступна без відкриття модалки
+    _deleteSelectedCell(userId, date) {
+        if (this._isViewOnlyLoc(this._locId)) return;
+        if (this._isPastMonth()) { Toast.error('Місяць завершено', 'Редагування минулих місяців заблоковано'); return; }
+        if (this._isLocked()) { Toast.error('Графік заблоковано', 'Розблокуйте графік перед редагуванням'); return; }
+        const entry = this._entries[`${userId}_${date}`];
+        if (!entry) return;
+        if (_RESERVED_ENTRY_NOTES.includes(entry.notes)) {
+            Toast.warning('Недоступно', 'У цієї клітинки спеціальний статус (підміна/запит) — спершу обробіть його');
+            return;
+        }
+        this._deleteEntry(userId, date, null);
+    },
+
+    // Подвійний клік (або друк на клавіатурі по виділеній клітинці) — довільний
+    // текст замість типу зміни (як в Excel: клітинка перетворюється на текстове
+    // поле, що само розширюється). initialValue — якщо задано, замінює поточний
+    // текст клітинки (друк "з нуля"), інакше редагується наявний текст.
+    _editCellText(e, userId, date, initialValue = null) {
+        e?.stopPropagation();
+        if (this._isViewOnlyLoc(this._locId)) return;
+        if (this._isPastMonth()) { Toast.error('Місяць завершено', 'Редагування минулих місяців заблоковано'); return; }
+        if (this._isLocked()) { Toast.error('Графік заблоковано', 'Розблокуйте графік перед редагуванням'); return; }
+        const entry = this._entries[`${userId}_${date}`];
+        if (entry?.notes && _RESERVED_ENTRY_NOTES.includes(entry.notes)) {
+            Toast.warning('Недоступно', 'У цієї клітинки спеціальний статус (підміна/запит) — спершу обробіть його');
+            return;
+        }
+        document.getElementById('sg-shift-modal')?.remove();
+        const td = document.querySelector(`.sg-cell[data-uid="${userId}"][data-date="${date}"]`);
+        if (!td) return;
+        const current = initialValue !== null ? initialValue : (_customCellNote(entry) || '');
+        td.classList.add('sg-cell-editing');
+        td.innerHTML = `<input type="text" class="sg-cell-edit-input" value="${Fmt.esc(current)}" style="width:${Math.max(current.length,3)}ch" maxlength="200">`;
+        const input = td.querySelector('input');
+        input.addEventListener('input', () => { input.style.width = Math.max(input.value.length, 3) + 'ch'; });
+        input.addEventListener('keydown', ev => {
+            if (ev.key === 'Enter') { ev.preventDefault(); input.blur(); }
+            else if (ev.key === 'Escape') { ev.preventDefault(); input.dataset.cancelled = '1'; input.blur(); }
+        });
+        input.addEventListener('blur', () => {
+            td.classList.remove('sg-cell-editing');
+            if (input.dataset.cancelled) { this._render(this._container); return; }
+            this._saveCellText(userId, date, input.value);
+        });
+        input.focus();
+        if (initialValue !== null) input.setSelectionRange(current.length, current.length);
+        else input.select();
+    },
+
+    async _saveCellText(userId, date, rawValue) {
+        const value  = rawValue.trim();
+        const key    = `${userId}_${date}`;
+        const oldEnt = this._entries[key];
+        const empName = this._assignments.find(a => a.user_id === userId)?.profile?.full_name || '';
+
+        if (!value) {
+            if (!oldEnt) { this._render(this._container); return; }
+            const { error } = await supabase.from('schedule_entries')
+                .update({ notes: null, updated_by: AppState.user.id, updated_at: new Date().toISOString() })
+                .eq('location_id', this._locId).eq('user_id', userId).eq('date', date);
+            if (error) { Toast.error('Помилка', error.message); return; }
+            oldEnt.notes = null;
+            this._render(this._container);
+            return;
+        }
+
+        const payload = {
+            location_id: this._locId, user_id: userId, date,
+            shift_type: oldEnt?.shift_type || 'work',
+            shift_start: oldEnt?.shift_start || null, shift_end: oldEnt?.shift_end || null,
+            notes: value, updated_by: AppState.user.id, updated_at: new Date().toISOString()
+        };
+        const { data, error } = await supabase.from('schedule_entries')
+            .upsert(payload, { onConflict: 'location_id,user_id,date' })
+            .select().single();
+        if (error) { Toast.error('Помилка', error.message); return; }
+
+        await supabase.from('schedule_log').insert({
+            location_id: this._locId, user_id: userId, date, employee_name: empName,
+            old_value: oldEnt ? { shift_type: oldEnt.shift_type, notes: oldEnt.notes } : null,
+            new_value: { shift_type: payload.shift_type, notes: value },
+            changed_by: AppState.user.id
+        });
+
+        this._entries[key] = data;
+        this._render(this._container);
     },
 
     async _quickSave(userId, date, type) {
@@ -6330,12 +6470,26 @@ body:not(.light-theme) .sg-mismatch-tip { color:#f59e0b; }
 }
 .sg-cell.we { background:rgba(139,92,246,.04); }
 .sg-cell:hover { background:var(--bg-hover); }
+.sg-cell-selected { outline:2px solid var(--primary);outline-offset:-2px;position:relative;z-index:2; }
 .sg-badge {
     display:inline-flex;align-items:center;justify-content:center;
     padding:2px 3px;border-radius:5px;font-size:.7rem;font-weight:700;
     width:100%;max-width:36px;line-height:1.2;box-sizing:border-box;
 }
 .sg-badge small { font-size:.6rem;font-weight:500;opacity:.85; }
+.sg-cell-text { overflow:visible; }
+.sg-cell-text-val {
+    display:inline-block;white-space:nowrap;padding:1px 5px;border-radius:5px;
+    font-size:.72rem;font-weight:600;color:var(--text-primary);
+    background:var(--bg-hover);border:1px solid var(--border);
+}
+.sg-cell-editing { overflow:visible;padding:0; }
+.sg-cell-edit-input {
+    min-width:3ch;max-width:none;padding:2px 5px;border-radius:5px;
+    border:1.5px solid var(--primary);background:var(--bg-surface);color:var(--text-primary);
+    font-size:.72rem;font-weight:600;font-family:inherit;outline:none;
+    box-shadow:0 0 0 3px var(--primary-glow);box-sizing:content-box;
+}
 .sg-td-sum {
     text-align:center;padding:3px 8px;border-bottom:1px solid var(--border);
     font-weight:800;color:var(--primary);font-size:.82rem;

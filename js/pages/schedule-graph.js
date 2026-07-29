@@ -546,25 +546,32 @@ const ScheduleGraphPage = {
 
         this._applyEmpOrder();
 
-        // Cross-location shift badges: load real shifts of these employees in other locations (own + partner)
+        // Cross-location shift badges: load real shifts of these employees в БУДЬ-ЯКІЙ
+        // локації системи (не лише своїх + партнерських) — керівник має бачити всі
+        // виходи співробітника, незалежно від того, у кого він доданий до графіку.
         this._otherLocDayOff = {};
         this._otherLocSubConf = {}; // __sub_confirmed__ entries at other locations (priority override)
-        const ownOtherLocIds   = this._locations.filter(l => l.id !== this._locId).map(l => l.id);
-        const partnerLocIds    = (this._partnerLocations || []).map(l => l.id);
-        const otherLocIds      = [...ownOtherLocIds, ...partnerLocIds];
         const empIds = [...new Set(this._assignments.map(a => a.user_id || a.original_user_id).filter(Boolean))];
-        if (otherLocIds.length && empIds.length) {
+        if (empIds.length) {
             const { data: otherE } = await supabase.from('schedule_entries')
                 .select('user_id, date, location_id, shift_type, notes')
                 .in('user_id', empIds)
-                .in('location_id', otherLocIds)
+                .neq('location_id', this._locId)
                 .gte('date', dateFrom)
                 .lte('date', dateTo);
+            const knownLocIds = new Set([...this._locations.map(l => l.id), ...(this._partnerLocations || []).map(l => l.id)]);
+            const foreignLocIds = [...new Set((otherE || []).map(e => e.location_id))].filter(id => id && !knownLocIds.has(id));
+            let foreignLocMap = {};
+            if (foreignLocIds.length) {
+                const { data: fLocs } = await supabase.from('schedule_locations').select('id, name').in('id', foreignLocIds);
+                foreignLocMap = Object.fromEntries((fLocs || []).map(l => [l.id, l.name]));
+            }
             (otherE || []).forEach(e => {
                 if (!_isRealShift(e)) return;
                 const key = `${e.user_id}_${e.date}`;
                 const locName = this._locations.find(l => l.id === e.location_id)?.name
-                    || (this._partnerLocations || []).find(l => l.id === e.location_id)?.name || '';
+                    || (this._partnerLocations || []).find(l => l.id === e.location_id)?.name
+                    || foreignLocMap[e.location_id] || '';
                 if (e.notes === '__sub_confirmed__') {
                     // Confirmed substitution always takes priority
                     this._otherLocSubConf[key] = locName;

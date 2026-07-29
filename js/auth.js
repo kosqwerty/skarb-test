@@ -109,7 +109,15 @@ const Auth = {
                     AppState.profile.role_switched_at = null;
                 }
             } catch(_) {}
-            this._showApp();
+            // Повне перезавантаження сторінки замість м'якого SPA-переходу —
+            // інакше стан сторінкових модулів (напр. ScheduleGraphPage._locations,
+            // _entries, _cachedShiftTypes — звичайні поля об'єкта, не прив'язані
+            // до конкретного користувача) лишається від попередньої сесії в цій
+            // вкладці й показує застарілі/чужі дані, поки користувач сам не
+            // оновить сторінку. Сесія вже збережена Supabase SDK в localStorage,
+            // тож після reload Auth.init() підхопить її одразу.
+            location.reload();
+            return;
         } catch(e) {
             Toast.error('Помилка входу', e.message === 'Invalid login credentials'
                 ? 'Невірний логін або пароль' : e.message);

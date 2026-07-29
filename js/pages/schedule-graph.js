@@ -198,6 +198,21 @@ const ScheduleGraphPage = {
         catch(e) { /* ignore (private mode / quota) */ }
     },
 
+    _locStorageKey() { return `sg_loc_${AppState.user?.id || ''}`; },
+
+    _restoreLoc() {
+        try {
+            const saved = localStorage.getItem(this._locStorageKey());
+            if (saved && this._locations.some(l => l.id === saved)) this._locId = saved;
+        } catch(e) { /* ignore corrupt value */ }
+    },
+
+    _saveLoc() {
+        try {
+            if (this._locId) localStorage.setItem(this._locStorageKey(), this._locId);
+        } catch(e) { /* ignore (private mode / quota) */ }
+    },
+
     async init(container) {
         this._container = container;
         this._locSortAlpha = !!localStorage.getItem('sg_loc_sort_alpha');
@@ -215,6 +230,7 @@ const ScheduleGraphPage = {
         container.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
 
         await this._loadLocations();
+        this._restoreLoc();
         await this._autoLockForNewMonth();
         await this._remindEmployeesNewMonth();
         const myLocIds = this._locations.map(l => l.id);
@@ -1595,6 +1611,7 @@ ${this._manCss()}
                 if (error) { Toast.error('Помилка', error.message); return; }
                 this._locations.push(data);
                 this._locId = data.id;
+                this._saveLoc();
                 this._assignments = [];
                 this._entries = {};
                 this._render(this._container);
@@ -1679,6 +1696,7 @@ ${this._manCss()}
         if (loc) { loc.deleted_at = now; this._deletedLocations.unshift(loc); }
         this._locations = this._locations.filter(l => l.id !== id);
         this._locId = this._locations[0]?.id || null;
+        this._saveLoc();
         this._tab = 'schedule';
         this._assignments = [];
         this._entries = {};
@@ -1697,6 +1715,7 @@ ${this._manCss()}
         this._deletedLocations = this._deletedLocations.filter(l => l.id !== id);
         this._applyLocOrder();
         this._locId = id;
+        this._saveLoc();
         this._tab = 'schedule';
         await this._loadPageData();
         this._render(this._container);
@@ -1714,6 +1733,7 @@ ${this._manCss()}
 
     _selectLocation(id) {
         this._locId     = id;
+        this._saveLoc();
         this._tab       = 'schedule';
         this._quickType = null;
         this._substDate = null;
@@ -2695,13 +2715,14 @@ ${this._manCss()}
             const dateLabel = this._substDate
                 ? new Date(this._substDate + 'T00:00:00').toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' })
                 : '';
-            await supabase.from('notifications').insert({
+            const { error: notifErr } = await supabase.from('notifications').insert({
                 user_id:    userId,
                 title:      '📅 Вас додано до графіку',
                 message:    `${AppState.profile?.full_name || 'Керівник'} додав вас як підміну до локації «${loc?.name || ''}»${dateLabel ? ` на ${dateLabel}` : ''}.`,
                 type:       'general',
                 created_by: AppState.user.id,
-            }).catch(e => console.error('[sg notify]', e));
+            });
+            if (notifErr) console.error('[sg notify]', notifErr);
         }
 
         Toast.success(`${Fmt.esc(prof?.full_name) || 'Співробітника'} додано до "${Fmt.esc(loc?.name) || 'локації'}"`);
@@ -4639,19 +4660,25 @@ ${this._manCss()}
 
                 const isForeign = prof?.manager_id && prof.manager_id !== AppState.user.id;
                 const isPrimary = !isForeign;
+                // Тимчасовий (не основний) співробітник у майбутньому місяці інакше
+                // одразу ховається (видимість без записів тримається на pinned_months) —
+                // закріплюємо поточний перегляданий місяць одразу, щоб не довелось
+                // "додавати" вдруге.
+                const initialPinned = isPrimary ? [] : [monthKey];
                 const { data, error } = await supabase.from('schedule_assignments')
-                    .insert({ location_id: this._locId, user_id: userId, original_user_id: userId, created_by: AppState.user.id, employee_name: prof?.full_name || null, is_primary: isPrimary })
-                    .select('id, user_id, original_user_id, employee_name, is_primary')
+                    .insert({ location_id: this._locId, user_id: userId, original_user_id: userId, created_by: AppState.user.id, employee_name: prof?.full_name || null, is_primary: isPrimary, pinned_months: initialPinned })
+                    .select('id, user_id, original_user_id, employee_name, is_primary, pinned_months')
                     .single();
                 if (error) { Toast.error('Помилка', error.message); continue; }
-                this._assignments.push({ id: data.id, user_id: data.user_id, original_user_id: data.original_user_id, employee_name: data.employee_name, is_primary: isPrimary, pinned_months: [], profile: prof });
+                this._assignments.push({ id: data.id, user_id: data.user_id, original_user_id: data.original_user_id, employee_name: data.employee_name, is_primary: isPrimary, pinned_months: data.pinned_months || [], profile: prof });
                 added++;
                 if (isForeign) {
-                    await supabase.from('notifications').insert({
+                    const { error: notifErr } = await supabase.from('notifications').insert({
                         user_id: userId, title: '📅 Вас додано до графіку',
                         message: `${AppState.profile?.full_name || 'Керівник'} додав вас до локації «${loc?.name || ''}».`,
                         type: 'general', created_by: AppState.user.id,
-                    }).catch(e => console.error('[sg notify]', e));
+                    });
+                    if (notifErr) console.error('[sg notify]', notifErr);
                 }
             }
             // Перезавантажуємо дані локації — інакше зміни доданих співробітників
@@ -6470,7 +6497,7 @@ body:not(.light-theme) .sg-mismatch-tip { color:#f59e0b; }
 }
 .sg-cell.we { background:rgba(139,92,246,.04); }
 .sg-cell:hover { background:var(--bg-hover); }
-.sg-cell-selected { outline:2px solid var(--primary);outline-offset:-2px;position:relative;z-index:2; }
+.sg-cell-selected { outline:2px solid color-mix(in srgb,var(--primary) 55%,transparent);outline-offset:-2px;position:relative;z-index:2; }
 .sg-badge {
     display:inline-flex;align-items:center;justify-content:center;
     padding:2px 3px;border-radius:5px;font-size:.7rem;font-weight:700;

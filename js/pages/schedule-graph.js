@@ -862,7 +862,7 @@ ${this._manCss()}
       <div class="legend-grid">
         <div class="legend-item"><div class="legend-short" style="background:rgba(99,102,241,.16);color:#6366f1"><i class="fa-solid fa-shop"></i></div><div class="legend-info"><strong>Технічний</strong><span>Синя іконка</span></div></div>
         <div class="legend-item"><div class="legend-short" style="background:rgba(99,102,241,.16);color:#6366f1"><i class="fa-solid fa-shop"></i></div><div class="legend-info"><strong>Технічний + магазин</strong><span>Синя іконка</span></div></div>
-        <div class="legend-item"><div class="legend-short" style="background:rgba(245,158,11,.18);color:#d97706"><i class="fa-solid fa-shop"></i></div><div class="legend-info"><strong>Золотник</strong><span>Жовто-золота іконка</span></div></div>
+        <div class="legend-item"><div class="legend-short" style="background:rgba(245,158,11,.18);color:#d97706"><i class="fa-solid fa-shop"></i></div><div class="legend-info"><strong>Золотий</strong><span>Жовто-золота іконка</span></div></div>
         <div class="legend-item"><div class="legend-short" style="background:linear-gradient(135deg,#6366f1 50%,#f59e0b 50%);color:#fff"><i class="fa-solid fa-shop"></i></div><div class="legend-info"><strong>Універсальний</strong><span>Половина синя / половина золота</span></div></div>
         <div class="legend-item"><div class="legend-short" style="background:linear-gradient(135deg,#6366f1 50%,#f59e0b 50%);color:#fff"><i class="fa-solid fa-shop"></i></div><div class="legend-info"><strong>Універсальний + магазин</strong><span>Половина синя / половина золота</span></div></div>
       </div>
@@ -1490,7 +1490,7 @@ ${this._manCss()}
 
     _showLocModal({ title, placeholder, value = '', address = '', phone = '', nodeType = '', workStart = '', workEnd = '', onSave }) {
         document.getElementById('sg-loc-modal')?.remove();
-        const NODE_LABELS = { universal:'Універсальний', universal_seller:'Універсальний + магазин', technical:'Технічний', technical_seller:'Технічний + магазин', gold:'Золотник' };
+        const NODE_LABELS = { universal:'Універсальний', universal_seller:'Універсальний + магазин', technical:'Технічний', technical_seller:'Технічний + магазин', gold:'Золотий' };
         const nodeOptions = [['','— Вузол не вказано —'], ...Object.entries(NODE_LABELS)]
             .map(([v, l]) => `<option value="${v}"${v === nodeType ? ' selected' : ''}>${l}</option>`).join('');
         const el = document.createElement('div');

@@ -656,10 +656,17 @@ const ProfilePage = {
                 if (isAdminEdit && AppState.isAdmin()) {
                     const { error: emailErr } = await supabase.rpc('admin_update_user_email', { p_user_id: userId, p_email: newEmail });
                     if (emailErr) throw new Error('Email: ' + emailErr.message);
+                    // RPC оновлює лише auth.users — синхронізуємо відображуваний email у profiles
+                    await API.profiles.update(userId, { email: newEmail });
+                    updated.email = newEmail;
                 } else {
                     const { error: emailErr } = await supabase.auth.updateUser({ email: newEmail });
                     if (emailErr) throw new Error('Email: ' + emailErr.message);
-                    Toast.info?.('Підтвердження', 'На новий email надіслано листа для підтвердження');
+                    // Реальний логін-email зміниться лише після переходу за посиланням з листа,
+                    // але відображуваний email оновлюємо одразу — інакше профіль виглядає незміненим
+                    await API.profiles.update(userId, { email: newEmail });
+                    updated.email = newEmail;
+                    Toast.info?.('Підтвердження', 'На новий email надіслано листа — підтвердіть перехід за посиланням, інакше вхід залишиться зі старою поштою');
                 }
             }
 

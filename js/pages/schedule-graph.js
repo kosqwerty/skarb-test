@@ -117,7 +117,17 @@ const SHIFT_TYPES = {
 const SUB_CONFIRMED = { label: 'Підміна', short: 'Р', color: '#f97316', bg: 'rgba(249,115,22,.14)' };
 // Flag notes that indicate a request, not a confirmed work shift
 const _FLAG_NOTES = ['__sub__', '__needsub__'];
-const _isRealShift = e => ['work','day_off'].includes(e?.shift_type) && !_FLAG_NOTES.includes(e?.notes);
+// Чи рахується тип зміни як "реальна" зміна (Σ днів, крос-локаційні бейджі,
+// конфлікт-перевірка "вже є зміна в іншій локації") — так само як Зміна/Підміна.
+// Вбудовані Відпустка/Лікарняний — ні. Кастомні типи — так, якщо явно не вимкнено (isWork:false).
+function _isRealShiftType(type) {
+    if (!type) return false;
+    if (type === 'work' || type === 'day_off') return true;
+    if (_BUILTIN_SHIFT_KEYS.includes(type)) return false;
+    const t = getShiftTypes()[type];
+    return !!t && t.isWork !== false;
+}
+const _isRealShift = e => e && _isRealShiftType(e.shift_type) && !_FLAG_NOTES.includes(e.notes);
 
 const _BUILTIN_SHIFT_KEYS = ['work','day_off','vacation','sick'];
 function getShiftTypeEntries() {
@@ -4011,9 +4021,9 @@ ${this._manCss()}
                 .forEach(td => { td.innerHTML = ''; });
             return;
         }
-        if (type === 'work') {
+        if (_isRealShiftType(type)) {
             const conflictLoc = await this._getWorkConflictLoc(userId, date, locId);
-            if (conflictLoc) { Toast.error('Конфлікт змін', `Вже є робоча зміна у «${conflictLoc}»`); return; }
+            if (conflictLoc) { Toast.error('Конфлікт змін', `Вже є зміна у «${conflictLoc}»`); return; }
         }
 
         const payload = {
@@ -4041,11 +4051,12 @@ ${this._manCss()}
     },
 
     async _getWorkConflictLoc(userId, date, locId) {
+        const realKeys = Object.keys(getShiftTypes()).filter(_isRealShiftType);
         const { data } = await supabase.from('schedule_entries')
             .select('location_id')
             .eq('user_id', userId)
             .eq('date', date)
-            .in('shift_type', ['work','day_off'])
+            .in('shift_type', realKeys)
             .not('notes', 'in', '("__sub__","__needsub__")')
             .neq('location_id', locId);
         if (!data?.length) return null;
@@ -4719,13 +4730,13 @@ ${this._manCss()}
             });
             delete this._entries[key];
             document.querySelectorAll(`.sg-cell[data-uid="${userId}"][data-date="${date}"]`).forEach(td => { td.innerHTML = ''; });
-            if (['work','day_off'].includes(oldEnt.shift_type)) this._updateNoWorkHighlight(date);
+            if (_isRealShiftType(oldEnt.shift_type)) this._updateNoWorkHighlight(date);
             return;
         }
 
-        if (['work','day_off'].includes(type)) {
+        if (_isRealShiftType(type)) {
             const conflictLoc = await this._getWorkConflictLoc(userId, date, this._locId);
-            if (conflictLoc) { Toast.error('Конфлікт змін', `Вже є робоча зміна у «${conflictLoc}»`); return; }
+            if (conflictLoc) { Toast.error('Конфлікт змін', `Вже є зміна у «${conflictLoc}»`); return; }
         }
 
         const payload = {
@@ -4752,7 +4763,7 @@ ${this._manCss()}
         document.querySelectorAll(`.sg-cell[data-uid="${userId}"][data-date="${date}"]`).forEach(td => {
             td.innerHTML = `<span class="sg-badge" style="background:${shift.bg};color:${shift.color}">${shift.short}</span>`;
         });
-        if (['work','day_off'].includes(type) || ['work','day_off'].includes(oldEnt?.shift_type)) this._updateNoWorkHighlight(date);
+        if (_isRealShiftType(type) || _isRealShiftType(oldEnt?.shift_type)) this._updateNoWorkHighlight(date);
     },
 
     _showShiftTypesModal(empMode = false) {
@@ -4764,7 +4775,7 @@ ${this._manCss()}
     <span class="sg-leg-short" style="background:${v.bg};color:${v.color};flex-shrink:0">${v.short}</span>
     <span class="sg-type-row-label">${v.label}</span>
     <span style="background:${v.color};width:12px;height:12px;border-radius:50%;display:inline-block;flex-shrink:0"></span>
-    <button class="sg-type-edit-btn" onclick="ScheduleGraphPage._editTypeRow('${key}')"><i class="fa-solid fa-pen"></i></button>
+    ${!empMode ? `<button class="sg-type-edit-btn" onclick="ScheduleGraphPage._editTypeRow('${key}')"><i class="fa-solid fa-pen"></i></button>` : ''}
     ${!isBuiltin && !empMode ? `<button class="sg-type-del-btn" onclick="ScheduleGraphPage._deleteShiftType('${key}')"><i class="fa-solid fa-trash"></i></button>` : ''}
 </div>`;
         };
@@ -4777,8 +4788,9 @@ ${this._manCss()}
         <h3 style="margin:0">⚙️ Типи змін</h3>
         <button class="sg-mclose" onclick="document.getElementById('sg-types-modal').remove()">✕</button>
     </div>
+    ${empMode ? `<div style="font-size:.72rem;color:var(--text-muted);padding:0 0 6px">Типи, налаштовані керівником вашої локації</div>` : ''}
     <div id="sg-typelist" style="display:flex;flex-direction:column;gap:6px;max-height:50vh;overflow-y:auto;padding:12px 0">
-        ${(empMode ? getShiftTypeEntries().filter(([k]) => ['work','vacation'].includes(k)) : getShiftTypeEntries()).map(([k, v]) => rowHtml(k, v)).join('')}
+        ${getShiftTypeEntries().map(([k, v]) => rowHtml(k, v)).join('')}
     </div>
     ${!empMode ? `<div style="padding-top:10px;border-top:1px solid var(--border)">
         <button class="sg-btn-add-type" id="sg-add-type-trigger" onclick="ScheduleGraphPage._showAddTypeForm()">＋ Додати тип</button>
@@ -4789,7 +4801,7 @@ ${this._manCss()}
         el.addEventListener('click', e => { if (e.target === el) el.remove(); });
     },
 
-    _typeFormHtml(submitFn, cancelFn, label, shortVal, color) {
+    _typeFormHtml(submitFn, cancelFn, label, shortVal, color, isWork = true, isBuiltin = false) {
         return `<div style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
     <div style="display:flex;gap:8px;align-items:flex-end">
         <div style="flex:1">
@@ -4805,6 +4817,11 @@ ${this._manCss()}
             <input id="sg-tf-color" type="color" value="${color || '#6366f1'}" style="width:44px;height:36px;border-radius:6px;border:1px solid var(--border);cursor:pointer;padding:2px">
         </div>
     </div>
+    ${!isBuiltin ? `
+    <label style="display:flex;align-items:center;gap:7px;font-size:.78rem;color:var(--text-primary);cursor:pointer">
+        <input id="sg-tf-iswork" type="checkbox" ${isWork !== false ? 'checked' : ''} style="width:16px;height:16px;accent-color:var(--primary);cursor:pointer">
+        Рахувати як робочу зміну (як «Зміна»/«Підміна»): враховується в Σ днів, блокує подвійний запис в іншій локації
+    </label>` : ''}
     <div style="display:flex;gap:8px">
         <button class="sg-btn-save" onclick="${submitFn}" style="flex:1"><i class="fa-regular fa-floppy-disk"></i> Зберегти</button>
         <button class="sg-btn-cancel" onclick="${cancelFn}">Скасувати</button>
@@ -4817,7 +4834,8 @@ ${this._manCss()}
         if (!v) return;
         const row = document.getElementById(`sg-typerow-${key}`);
         if (!row) return;
-        const formHtml = this._typeFormHtml(`ScheduleGraphPage._saveTypeEdit('${key}')`, `ScheduleGraphPage._cancelTypeEdit('${key}')`, v.label, v.short, v.color);
+        const isBuiltin = _BUILTIN_SHIFT_KEYS.includes(key);
+        const formHtml = this._typeFormHtml(`ScheduleGraphPage._saveTypeEdit('${key}')`, `ScheduleGraphPage._cancelTypeEdit('${key}')`, v.label, v.short, v.color, v.isWork, isBuiltin);
         row.innerHTML = `<div style="width:100%;display:flex;flex-direction:column;gap:4px">
     <div style="font-size:.75rem;color:var(--text-muted);font-weight:500">Редагування: <b style="color:var(--text-primary)">${v.label}</b></div>
     ${formHtml}
@@ -4843,8 +4861,9 @@ ${this._manCss()}
         const short = document.getElementById('sg-tf-short')?.value?.trim();
         const color = document.getElementById('sg-tf-color')?.value;
         if (!label || !short || !color) { Toast.error('Помилка', 'Заповніть всі поля'); return; }
+        const isWork = _BUILTIN_SHIFT_KEYS.includes(key) ? undefined : !!document.getElementById('sg-tf-iswork')?.checked;
         const types = getShiftTypes();
-        types[key] = { ...types[key], label, short, color, bg: _sgHexToRgba(color, 0.14) };
+        types[key] = { ...types[key], label, short, color, bg: _sgHexToRgba(color, 0.14), ...(isWork !== undefined ? { isWork } : {}) };
         _cachedShiftTypes = types;
         this._persistShiftConfig();
         this._refreshAfterTypesChange();
@@ -4881,9 +4900,10 @@ ${this._manCss()}
         const short = document.getElementById('sg-tf-short')?.value?.trim();
         const color = document.getElementById('sg-tf-color')?.value;
         if (!label || !short || !color) { Toast.error('Помилка', 'Заповніть всі поля'); return; }
+        const isWork = document.getElementById('sg-tf-iswork')?.checked !== false;
         const key = 'cst_' + Date.now();
         const types = getShiftTypes();
-        types[key] = { label, short, color, bg: _sgHexToRgba(color, 0.14) };
+        types[key] = { label, short, color, bg: _sgHexToRgba(color, 0.14), isWork };
         _cachedShiftTypes = types;
         this._persistShiftConfig();
         this._refreshAfterTypesChange();
@@ -5012,10 +5032,10 @@ ${this._manCss()}
                 ? this._allAssignments.find(a => a.user_id === userId)?.profile?.full_name
                 : this._assignments.find(a => a.user_id === userId)?.profile?.full_name)) || '';
 
-        if (type === 'work') {
+        if (_isRealShiftType(type)) {
             const conflictLoc = await this._getWorkConflictLoc(userId, date, locId);
             if (conflictLoc) {
-                this._showShiftModalError(`Вже є робоча зміна у локації «${conflictLoc}»`);
+                this._showShiftModalError(`Вже є зміна у локації «${conflictLoc}»`);
                 return;
             }
         }
@@ -5128,7 +5148,7 @@ ${this._manCss()}
             this._render(this._container);
         } else {
             delete this._entries[`${userId}_${date}`];
-            if (['work','day_off'].includes(oldEnt?.shift_type)) this._updateNoWorkHighlight(date);
+            if (_isRealShiftType(oldEnt?.shift_type)) this._updateNoWorkHighlight(date);
             this._render(this._container);
         }
         document.getElementById('sg-shift-modal')?.remove();
@@ -5139,7 +5159,7 @@ ${this._manCss()}
 
     _updateNoWorkHighlight(date) {
         const hasWork = Object.entries(this._entries).some(([key, e]) =>
-            key.endsWith(`_${date}`) && ['work','day_off'].includes(e.shift_type)
+            key.endsWith(`_${date}`) && _isRealShiftType(e.shift_type)
         );
         const day = parseInt(date.split('-')[2]);
         document.querySelectorAll('#sg-wrap-main .sg-th-day').forEach(th => {
@@ -7157,7 +7177,7 @@ const ScheduleGraphEmployee = {
 
         const locIds = assignRows.map(a => a.location_id);
         const { data: lData } = await supabase.from('schedule_locations')
-            .select('id, name, locked_months, work_start, work_end, address, phone')
+            .select('id, name, locked_months, work_start, work_end, address, phone, created_by')
             .in('id', locIds);
         const locs = lData || [];
 
@@ -7172,12 +7192,14 @@ const ScheduleGraphEmployee = {
                 work_end:      loc.work_end   || null,
                 address:       loc.address || null,
                 phone:         loc.phone || null,
+                created_by:    loc.created_by || null,
             };
         });
 
         if (!this._locId || !this._assignments.find(a => a.locId === this._locId))
             this._locId = this._assignments[0].locId;
         await this._loadEntries();
+        await this._loadMyShiftConfig();
     },
 
     async _loadEntries() {
@@ -7421,6 +7443,13 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
                         ${v.label}
                     </button>`;
                 })()}
+                ${getShiftTypeEntries().filter(([k]) => !_BUILTIN_SHIFT_KEYS.includes(k)).map(([k, v]) => `
+                    <button class="sg-leg-btn sg-leg-static" style="--lc:${v.color};--lb:${v.bg}"
+                        data-msg="Тип «${Fmt.esc(v.label)}» налаштований керівником — самостійно обрати його не можна"
+                        onclick="event.stopPropagation();ScheduleGraphPage._toggleMismatchTip(this)">
+                        <span class="sg-leg-short">${Fmt.esc(v.short)}</span>
+                        ${Fmt.esc(v.label)}
+                    </button>`).join('')}
                 <button class="sg-types-mgr-btn" onclick="ScheduleGraphPage._showShiftTypesModal(true)" title="Налаштувати скорочення">⚙️</button>
                 <button class="sge-sub-btn${this._subMode ? ' active' : ''}" onclick="ScheduleGraphEmployee._toggleSubMode()">
                     🙋 Можу вийти на заміну
@@ -7489,7 +7518,7 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
                 const totalDays = nums.filter(d => {
                     const dateStr = `${this._year}-${p(this._month+1)}-${p(d)}`;
                     const e = isMe ? this._entries[dateStr] : this._locEntries[`${a.user_id}_${dateStr}`];
-                    return e && e.shift_type === 'work' && !['__sub__','__needsub__'].includes(e.notes);
+                    return _isRealShift(e);
                 }).length;
                 return `<tr class="${isMe ? 'sge-my-row' : 'sge-peer-row'}">
                     <td class="sg-td-name">
@@ -8080,9 +8109,9 @@ ${ScheduleGraphPage._manCss()}
             return;
         }
 
-        if (type === 'work') {
+        if (_isRealShiftType(type)) {
             const conflictLoc = await ScheduleGraphPage._getWorkConflictLoc(AppState.user.id, date, this._locId);
-            if (conflictLoc) { Toast.error('Конфлікт змін', `Вже є робоча зміна у «${conflictLoc}»`); return; }
+            if (conflictLoc) { Toast.error('Конфлікт змін', `Вже є зміна у «${conflictLoc}»`); return; }
         }
 
         const payload = {
@@ -8328,7 +8357,17 @@ ${ScheduleGraphPage._manCss()}
 
     _switchLoc(locId) {
         this._locId = locId;
-        this._loadEntries().then(() => this._render(this._container));
+        Promise.all([this._loadEntries(), this._loadMyShiftConfig()]).then(() => this._render(this._container));
+    },
+
+    async _loadMyShiftConfig() {
+        const mgrId = this._assignments.find(a => a.locId === this._locId)?.created_by;
+        if (!mgrId) return;
+        try {
+            const { data } = await supabase.from('schedule_shift_config')
+                .select('config').eq('user_id', mgrId).maybeSingle();
+            if (data?.config && Object.keys(data.config).length) _cachedShiftTypes = data.config;
+        } catch(e) { /* config table not reachable — fall back to built-in types */ }
     },
 
     _prevMonth() {
@@ -8602,7 +8641,7 @@ ${ScheduleGraphPage._styles()}${this._styles()}`;
                         const shift = entry ? getShiftTypes()[entry.shift_type] : null;
                         const dow   = new Date(this._year, this._month, d).getDay();
                         const we    = dow === 0 || dow === 6;
-                        if (entry?.shift_type === 'work') workDays++;
+                        if (_isRealShift(entry)) workDays++;
                         return `<td class="sg-cell${we?' we':''}">
                             ${shift ? `<span class="sg-badge" style="background:${shift.bg};color:${shift.color}">${shift.short}</span>` : ''}
                         </td>`;

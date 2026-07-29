@@ -167,9 +167,27 @@ const ScheduleGraphPage = {
     _pastMonthUnlocked:   false,
     _locSortAlpha:        false,
 
+    _monthStorageKey() { return `sg_month_${AppState.user?.id || ''}`; },
+
+    _restoreMonth() {
+        try {
+            const saved = JSON.parse(localStorage.getItem(this._monthStorageKey()) || 'null');
+            if (saved && Number.isInteger(saved.year) && Number.isInteger(saved.month)) {
+                this._year = saved.year;
+                this._month = saved.month;
+            }
+        } catch(e) { /* ignore corrupt value */ }
+    },
+
+    _saveMonth() {
+        try { localStorage.setItem(this._monthStorageKey(), JSON.stringify({ year: this._year, month: this._month })); }
+        catch(e) { /* ignore (private mode / quota) */ }
+    },
+
     async init(container) {
         this._container = container;
         this._locSortAlpha = !!localStorage.getItem('sg_loc_sort_alpha');
+        this._restoreMonth();
 
         if (!AppState.isManager() && !AppState.isAdmin() && !AppState.isSuperAdmin()) {
             await ScheduleGraphEmployee.init(container);
@@ -1144,17 +1162,7 @@ ${this._manCss()}
             <div class="sg-v2-svc-list">
                 <div class="sg-v2-svc-item" onclick="ScheduleGraphPage._switchTab('log')">
                     <div class="sg-v2-svc-icon" style="background:rgba(99,102,241,.12);color:#6366f1"><i class="fa-regular fa-file-lines"></i></div>
-                    <div class="sg-v2-svc-body"><div class="sg-v2-svc-title">Журнал змін</div><div class="sg-v2-svc-sub">Історія всіх змін в графіку</div></div>
-                    <i class="fa-solid fa-angle-right sg-v2-svc-arr"></i>
-                </div>
-                <div class="sg-v2-svc-item" onclick="ScheduleGraphPage._switchToSubstReport()">
-                    <div class="sg-v2-svc-icon" style="background:rgba(245,158,11,.12);color:#f59e0b"><i class="fa-solid fa-file-lines"></i></div>
-                    <div class="sg-v2-svc-body"><div class="sg-v2-svc-title">Звіт з підмін</div><div class="sg-v2-svc-sub">Всі підміни за місяць</div></div>
-                    <i class="fa-solid fa-angle-right sg-v2-svc-arr"></i>
-                </div>
-                <div class="sg-v2-svc-item" onclick="ScheduleGraphPage._goToSubst('${this._locId}')">
-                    <div class="sg-v2-svc-icon" style="background:rgba(16,185,129,.12);color:#10b981"><i class="fa-solid fa-arrow-right-arrow-left"></i></div>
-                    <div class="sg-v2-svc-body"><div class="sg-v2-svc-title">Пошук підміни</div><div class="sg-v2-svc-sub">Активні та заплановані підміни</div></div>
+                    <div class="sg-v2-svc-body"><div class="sg-v2-svc-title">Журнал змін</div><div class="sg-v2-svc-sub">Історія внесення правок в графік</div></div>
                     <i class="fa-solid fa-angle-right sg-v2-svc-arr"></i>
                 </div>
                 <div class="sg-v2-svc-item" onclick="ScheduleGraphPage._switchTab('trash')">
@@ -1165,6 +1173,11 @@ ${this._manCss()}
                 <div class="sg-v2-svc-item" onclick="ScheduleGraphPage._showManual()">
                     <div class="sg-v2-svc-icon" style="background:rgba(245,158,11,.12);color:#f59e0b"><i class="fa-solid fa-circle-info"></i></div>
                     <div class="sg-v2-svc-body"><div class="sg-v2-svc-title">Довідка</div><div class="sg-v2-svc-sub">Інструкції та підтримка</div></div>
+                    <i class="fa-solid fa-angle-right sg-v2-svc-arr"></i>
+                </div>
+                <div class="sg-v2-svc-item" onclick="ScheduleGraphPage._showViewersModal()">
+                    <div class="sg-v2-svc-icon" style="background:rgba(99,102,241,.12);color:#6366f1"><i class="fa-solid fa-eye"></i></div>
+                    <div class="sg-v2-svc-body"><div class="sg-v2-svc-title">Доступ</div><div class="sg-v2-svc-sub">Хто може переглядати</div></div>
                     <i class="fa-solid fa-angle-right sg-v2-svc-arr"></i>
                 </div>
             </div>
@@ -1217,7 +1230,7 @@ ${this._manCss()}
                     <div class="sg-svc-ico" style="background:rgba(239,68,68,.12);color:#ef4444"><i class="fa-solid fa-triangle-exclamation"></i></div>
                     <div class="sg-svc-body">
                         <div class="sg-svc-title">Потрібна підміна${needsubCnt ? `<span class="sg-svc-badge">${needsubCnt}</span>` : ''}</div>
-                        <div class="sg-svc-desc">Запити на пошук замінника</div>
+                        <div class="sg-svc-desc">Запит на пошук підміни</div>
                     </div>
                     <i class="fa-solid fa-chevron-right sg-svc-arr"></i>
                 </button>
@@ -1229,6 +1242,14 @@ ${this._manCss()}
                     </div>
                     <i class="fa-solid fa-chevron-right sg-svc-arr"></i>
                 </button>
+                <button class="sg-svc-btn" onclick="ScheduleGraphPage._goToSubst('${this._locId}')">
+                    <div class="sg-svc-ico" style="background:rgba(16,185,129,.12);color:#10b981"><i class="fa-solid fa-arrow-right-arrow-left"></i></div>
+                    <div class="sg-svc-body">
+                        <div class="sg-svc-title">Пошук підміни</div>
+                        <div class="sg-svc-desc">Активні та заплановані підміни</div>
+                    </div>
+                    <i class="fa-solid fa-chevron-right sg-svc-arr"></i>
+                </button>
                 <button class="sg-svc-btn" onclick="ScheduleGraphPage._switchToSubstReport()">
                     <div class="sg-svc-ico" style="background:rgba(245,158,11,.12);color:#f59e0b"><i class="fa-solid fa-file-lines"></i></div>
                     <div class="sg-svc-body">
@@ -1237,14 +1258,7 @@ ${this._manCss()}
                     </div>
                     <i class="fa-solid fa-chevron-right sg-svc-arr"></i>
                 </button>
-                <button class="sg-svc-btn" onclick="ScheduleGraphPage._showViewersModal()">
-                    <div class="sg-svc-ico" style="background:rgba(99,102,241,.12);color:#6366f1"><i class="fa-solid fa-eye"></i></div>
-                    <div class="sg-svc-body">
-                        <div class="sg-svc-title">Доступи</div>
-                        <div class="sg-svc-desc">Хто може переглядати</div>
-                    </div>
-                    <i class="fa-solid fa-chevron-right sg-svc-arr"></i>
-                </button>`;
+`;
                 })()}
             </div>
         </div>`}
@@ -1709,6 +1723,7 @@ ${this._manCss()}
     _prevMonth() {
         if (this._month === 0) { this._month = 11; this._year--; } else this._month--;
         this._pastMonthUnlocked = false;
+        this._saveMonth();
         const load = this._locId === 'all' ? this._loadAllData() : this._loadPageData();
         load.then(() => this._render(this._container));
     },
@@ -1716,6 +1731,7 @@ ${this._manCss()}
     _nextMonth() {
         if (this._month === 11) { this._month = 0; this._year++; } else this._month++;
         this._pastMonthUnlocked = false;
+        this._saveMonth();
         const load = this._locId === 'all' ? this._loadAllData() : this._loadPageData();
         load.then(() => this._render(this._container));
     },
@@ -3088,11 +3104,13 @@ ${this._manCss()}
 
     _substReportPrevMonth() {
         if (this._month === 0) { this._month = 11; this._year--; } else this._month--;
+        this._saveMonth();
         this._loadSubstReport().then(() => this._render(this._container));
     },
 
     _substReportNextMonth() {
         if (this._month === 11) { this._month = 0; this._year++; } else this._month++;
+        this._saveMonth();
         this._loadSubstReport().then(() => this._render(this._container));
     },
 
@@ -3204,12 +3222,12 @@ ${this._manCss()}
         return `${before}<mark class="sg-srep-hl">${match}</mark>${after}`;
     },
 
-    _buildSubstReportRows(entries, query = '') {
+    _buildSubstReportRows(entries, query = '', sortBy = 'date') {
         const { profMap = {}, mgrMap = {}, locMap = {} } = this._substReport || {};
         const byUser = {};
         entries.forEach(r => { (byUser[r.user_id] ||= []).push(r); });
 
-        return Object.entries(byUser).map(([uid, uEntries]) => {
+        return Object.entries(byUser).map(([uid, uEntriesRaw]) => {
             const prof  = profMap[uid];
             const name  = prof?.full_name || '—';
             const pos   = prof?.job_position || '';
@@ -3219,6 +3237,18 @@ ${this._manCss()}
             const color = this._avatarColor(uid);
             const ini   = name !== '—' ? name.split(' ').filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase() : '?';
             const meta  = [pos, city].filter(Boolean).map(Fmt.esc).join(', ');
+
+            // Сортування записів конкретного співробітника — за датою (типово),
+            // локацією або адресою.
+            const uEntries = [...uEntriesRaw].sort((a, b) => {
+                if (sortBy === 'loc') {
+                    return (locMap[a.location_id]?.name || '').localeCompare(locMap[b.location_id]?.name || '', 'uk') || a.date.localeCompare(b.date);
+                }
+                if (sortBy === 'addr') {
+                    return (locMap[a.location_id]?.address || '').localeCompare(locMap[b.location_id]?.address || '', 'uk') || a.date.localeCompare(b.date);
+                }
+                return a.date.localeCompare(b.date);
+            });
 
             return uEntries.map((r, i) => {
                 const loc     = locMap[r.location_id];
@@ -3250,22 +3280,44 @@ ${this._manCss()}
         }).join('');
     },
 
+    _resetSubstReportFilters() {
+        const q = document.getElementById('sg-srep-q');
+        if (q) q.value = '';
+        const mgr = document.getElementById('sg-srep-mgr-filter');
+        if (mgr) mgr.value = '';
+        const sort = document.getElementById('sg-srep-sort');
+        if (sort) sort.value = 'date';
+        this._substReportSort = 'date';
+        this._substReportLocFilter = new Set();
+        this._substReportAddrFilter = new Set();
+        document.querySelectorAll('#sg-srep-loc-dd-menu input:checked, #sg-srep-addr-dd-menu input:checked').forEach(i => i.checked = false);
+        const locLabel = document.getElementById('sg-srep-loc-dd-label');
+        if (locLabel) locLabel.textContent = 'Локація';
+        const addrLabel = document.getElementById('sg-srep-addr-dd-label');
+        if (addrLabel) addrLabel.textContent = 'Адреса';
+        this._applySubstReportFilter();
+    },
+
     _applySubstReportFilter() {
         const q   = (document.getElementById('sg-srep-q')?.value || '').trim().toLowerCase();
         const mgr = document.getElementById('sg-srep-mgr-filter')?.value || '';
-        const loc = document.getElementById('sg-srep-loc-filter')?.value || '';
-        const { profMap = {}, rows = [] } = this._substReport || {};
+        const locSet  = this._substReportLocFilter  || new Set();
+        const addrSet = this._substReportAddrFilter || new Set();
+        const sortBy = document.getElementById('sg-srep-sort')?.value || 'date';
+        this._substReportSort = sortBy;
+        const { profMap = {}, locMap = {}, rows = [] } = this._substReport || {};
 
         const filtered = rows.filter(r => {
             const prof = profMap[r.user_id];
-            const matchQ   = !q || (prof?.full_name || '').toLowerCase().includes(q);
-            const matchMgr = !mgr || prof?.manager_id === mgr;
-            const matchLoc = !loc || r.location_id === loc;
-            return matchQ && matchMgr && matchLoc;
+            const matchQ    = !q || (prof?.full_name || '').toLowerCase().includes(q);
+            const matchMgr  = !mgr || prof?.manager_id === mgr;
+            const matchLoc  = locSet.size === 0 || locSet.has(r.location_id);
+            const matchAddr = addrSet.size === 0 || addrSet.has(locMap[r.location_id]?.address || '');
+            return matchQ && matchMgr && matchLoc && matchAddr;
         });
 
         const tbody = document.getElementById('sg-srep-tbody');
-        if (tbody) tbody.innerHTML = this._buildSubstReportRows(filtered, q);
+        if (tbody) tbody.innerHTML = this._buildSubstReportRows(filtered, q, sortBy);
 
         const visiblePeople = new Set(filtered.map(r => r.user_id)).size;
         const pEl = document.getElementById('sg-srep-stat-people');
@@ -3276,11 +3328,106 @@ ${this._manCss()}
         if (emptyEl) emptyEl.style.display = filtered.length === 0 ? '' : 'none';
     },
 
+    _positionSrepDdMenu(btnId, menuId, minWidth = 200) {
+        const btn = document.getElementById(btnId);
+        const menu = document.getElementById(menuId);
+        if (!btn || !menu) return;
+        const r = btn.getBoundingClientRect();
+        const width = Math.max(r.width, minWidth);
+        let left = r.left;
+        if (left + width > window.innerWidth - 8) left = window.innerWidth - width - 8;
+        if (left < 8) left = 8;
+        menu.style.position = 'fixed';
+        menu.style.top = (r.bottom + 6) + 'px';
+        menu.style.left = left + 'px';
+        menu.style.right = 'auto';
+        menu.style.width = width + 'px';
+    },
+
+    _toggleSrepLocDropdown(e) {
+        e?.stopPropagation();
+        this._closeSrepAddrDropdown();
+        const menu = document.getElementById('sg-srep-loc-dd-menu');
+        if (!menu) return;
+        const opening = menu.style.display === 'none';
+        if (opening) this._positionSrepDdMenu('sg-srep-loc-dd-btn', 'sg-srep-loc-dd-menu');
+        menu.style.display = opening ? 'block' : 'none';
+        document.getElementById('sg-srep-loc-dd-btn')?.classList.toggle('open', opening);
+        if (opening) {
+            const fn = ev => {
+                if (!ev.target.closest('#sg-srep-loc-dd-btn') && !ev.target.closest('#sg-srep-loc-dd-menu')) this._closeSrepLocDropdown();
+            };
+            this._srepLocDdOutsideFn = fn;
+            setTimeout(() => { document.addEventListener('click', fn); document.addEventListener('scroll', fn, true); }, 0);
+        } else {
+            this._closeSrepLocDropdown();
+        }
+    },
+
+    _closeSrepLocDropdown() {
+        const menu = document.getElementById('sg-srep-loc-dd-menu');
+        if (menu) menu.style.display = 'none';
+        document.getElementById('sg-srep-loc-dd-btn')?.classList.remove('open');
+        if (this._srepLocDdOutsideFn) { document.removeEventListener('click', this._srepLocDdOutsideFn); document.removeEventListener('scroll', this._srepLocDdOutsideFn, true); this._srepLocDdOutsideFn = null; }
+    },
+
+    _onSrepLocCheck() {
+        const checked = [...document.querySelectorAll('#sg-srep-loc-dd-menu input:checked')];
+        this._substReportLocFilter = new Set(checked.map(i => i.value));
+        const label = document.getElementById('sg-srep-loc-dd-label');
+        if (label) {
+            label.textContent = checked.length === 0 ? 'Локація'
+                : checked.length === 1 ? (checked[0].dataset.name || 'Обрано 1')
+                : `Локацій: ${checked.length}`;
+        }
+        this._applySubstReportFilter();
+    },
+
+    _toggleSrepAddrDropdown(e) {
+        e?.stopPropagation();
+        this._closeSrepLocDropdown();
+        const menu = document.getElementById('sg-srep-addr-dd-menu');
+        if (!menu) return;
+        const opening = menu.style.display === 'none';
+        if (opening) this._positionSrepDdMenu('sg-srep-addr-dd-btn', 'sg-srep-addr-dd-menu', 280);
+        menu.style.display = opening ? 'block' : 'none';
+        document.getElementById('sg-srep-addr-dd-btn')?.classList.toggle('open', opening);
+        if (opening) {
+            const fn = ev => {
+                if (!ev.target.closest('#sg-srep-addr-dd-btn') && !ev.target.closest('#sg-srep-addr-dd-menu')) this._closeSrepAddrDropdown();
+            };
+            this._srepAddrDdOutsideFn = fn;
+            setTimeout(() => { document.addEventListener('click', fn); document.addEventListener('scroll', fn, true); }, 0);
+        } else {
+            this._closeSrepAddrDropdown();
+        }
+    },
+
+    _closeSrepAddrDropdown() {
+        const menu = document.getElementById('sg-srep-addr-dd-menu');
+        if (menu) menu.style.display = 'none';
+        document.getElementById('sg-srep-addr-dd-btn')?.classList.remove('open');
+        if (this._srepAddrDdOutsideFn) { document.removeEventListener('click', this._srepAddrDdOutsideFn); document.removeEventListener('scroll', this._srepAddrDdOutsideFn, true); this._srepAddrDdOutsideFn = null; }
+    },
+
+    _onSrepAddrCheck() {
+        const checked = [...document.querySelectorAll('#sg-srep-addr-dd-menu input:checked')];
+        this._substReportAddrFilter = new Set(checked.map(i => i.value));
+        const label = document.getElementById('sg-srep-addr-dd-label');
+        if (label) {
+            label.textContent = checked.length === 0 ? 'Адреса'
+                : checked.length === 1 ? checked[0].value
+                : `Адрес: ${checked.length}`;
+        }
+        this._applySubstReportFilter();
+    },
+
     _substReportSection() {
         const { byUser = {}, profMap = {}, mgrMap = {}, locMap = {}, rows = [] } = this._substReport || {};
         const monthLabel = new Date(this._year, this._month).toLocaleDateString('uk-UA', { month: 'long', year: 'numeric' });
 
-        const tableRows = this._buildSubstReportRows(rows);
+        const sortBy = this._substReportSort || 'date';
+        const tableRows = this._buildSubstReportRows(rows, '', sortBy);
 
         const totalSubs   = rows.length;
         const totalPeople = Object.keys(byUser).length;
@@ -3291,6 +3438,8 @@ ${this._manCss()}
             .sort((a, b) => a.name.localeCompare(b.name, 'uk'));
         const locations = [...usedLocIds].map(id => ({ id, name: locMap[id]?.name || '—' }))
             .sort((a, b) => a.name.localeCompare(b.name, 'uk'));
+        const usedAddrs = new Set(rows.map(r => locMap[r.location_id]?.address).filter(Boolean));
+        const addresses = [...usedAddrs].sort((a, b) => a.localeCompare(b, 'uk'));
 
         return `
 <div class="sg-section sg-srep-section">
@@ -3303,21 +3452,16 @@ ${this._manCss()}
         </div>
         ${totalSubs ? `
         <div class="sg-srep-filters">
-            <div class="sg-srep-search-wrap">
-                <i class="fa-solid fa-magnifying-glass sg-srep-search-ico"></i>
-                <input class="sg-srep-search" placeholder="Пошук співробітника..." id="sg-srep-q"
-                    oninput="ScheduleGraphPage._applySubstReportFilter()" autocomplete="off">
-            </div>
             ${managers.length > 1 ? `
             <select id="sg-srep-mgr-filter" class="sg-srep-select" onchange="ScheduleGraphPage._applySubstReportFilter()">
                 <option value="">Всі керівники</option>
                 ${managers.map(m => `<option value="${m.id}">${Fmt.esc(m.name)}</option>`).join('')}
             </select>` : ''}
-            ${locations.length > 1 ? `
-            <select id="sg-srep-loc-filter" class="sg-srep-select" onchange="ScheduleGraphPage._applySubstReportFilter()">
-                <option value="">Всі локації</option>
-                ${locations.map(l => `<option value="${l.id}">${Fmt.esc(l.name)}</option>`).join('')}
-            </select>` : ''}
+            <select id="sg-srep-sort" class="sg-srep-select" onchange="ScheduleGraphPage._applySubstReportFilter()" title="Сортування записів кожного співробітника">
+                <option value="date" ${sortBy === 'date' ? 'selected' : ''}>Сортувати за датою</option>
+                <option value="loc" ${sortBy === 'loc' ? 'selected' : ''}>Сортувати за локацією</option>
+                <option value="addr" ${sortBy === 'addr' ? 'selected' : ''}>Сортувати за адресою</option>
+            </select>
         </div>
         <div class="sg-srep-stats-inline">
             <b id="sg-srep-stat-people">${totalPeople}</b> співробітників · <b id="sg-srep-stat-subs">${totalSubs}</b> підмін
@@ -3333,11 +3477,49 @@ ${this._manCss()}
         <table class="sg-srep-table">
             <thead>
                 <tr>
-                    <th class="sg-srep-th sg-srep-th-emp">Співробітник</th>
+                    <th class="sg-srep-th sg-srep-th-emp">
+                        <div class="sg-srep-th-search-wrap">
+                            <i class="fa-solid fa-magnifying-glass sg-srep-th-search-ico"></i>
+                            <input class="sg-srep-th-search" id="sg-srep-q" placeholder="Співробітник"
+                                oninput="ScheduleGraphPage._applySubstReportFilter()" autocomplete="off">
+                        </div>
+                    </th>
                     <th class="sg-srep-th sg-srep-th-mgr">Керівник</th>
                     <th class="sg-srep-th">Дата</th>
-                    <th class="sg-srep-th">Локація</th>
-                    <th class="sg-srep-th">Адреса</th>
+                    <th class="sg-srep-th sg-srep-th-filterable">
+                        ${locations.length > 1 ? `
+                        <button class="sg-srep-th-dd-btn" id="sg-srep-loc-dd-btn" onclick="event.stopPropagation();ScheduleGraphPage._toggleSrepLocDropdown(event)">
+                            <span id="sg-srep-loc-dd-label">Локація</span>
+                            <i class="fa-solid fa-chevron-down sg-srep-th-dd-chev"></i>
+                        </button>
+                        <div class="sg-emp-pos-dd-menu" id="sg-srep-loc-dd-menu" style="display:none">
+                            ${locations.map(l => `
+                            <label class="sg-emp-pos-dd-item">
+                                <input type="checkbox" value="${l.id}" data-name="${Fmt.esc(l.name)}" onchange="ScheduleGraphPage._onSrepLocCheck()">
+                                <span>${Fmt.esc(l.name)}</span>
+                            </label>`).join('')}
+                        </div>` : `<span>Локація</span>`}
+                    </th>
+                    <th class="sg-srep-th sg-srep-th-filterable">
+                        <div class="sg-srep-th-addr-row">
+                            ${addresses.length > 1 ? `
+                            <button class="sg-srep-th-dd-btn" id="sg-srep-addr-dd-btn" onclick="event.stopPropagation();ScheduleGraphPage._toggleSrepAddrDropdown(event)">
+                                <span id="sg-srep-addr-dd-label">Адреса</span>
+                                <i class="fa-solid fa-chevron-down sg-srep-th-dd-chev"></i>
+                            </button>` : `<span>Адреса</span>`}
+                            <button class="sg-srep-th-reset-btn" onclick="ScheduleGraphPage._resetSubstReportFilters()" title="Скинути фільтри">
+                                <i class="fa-solid fa-filter-circle-xmark"></i>
+                            </button>
+                        </div>
+                        ${addresses.length > 1 ? `
+                        <div class="sg-emp-pos-dd-menu" id="sg-srep-addr-dd-menu" style="display:none">
+                            ${addresses.map(a => `
+                            <label class="sg-emp-pos-dd-item">
+                                <input type="checkbox" value="${Fmt.esc(a)}" onchange="ScheduleGraphPage._onSrepAddrCheck()">
+                                <span>${Fmt.esc(a)}</span>
+                            </label>`).join('')}
+                        </div>` : ''}
+                    </th>
                 </tr>
             </thead>
             <tbody id="sg-srep-tbody">${tableRows}</tbody>
@@ -4456,6 +4638,10 @@ ${this._manCss()}
                     }).catch(e => console.error('[sg notify]', e));
                 }
             }
+            // Перезавантажуємо дані локації — інакше зміни доданих співробітників
+            // в ІНШИХ локаціях (крос-локаційні бейджі) з'являться лише після
+            // повного оновлення сторінки, а не одразу.
+            if (added > 0 || pinned > 0) await this._loadPageData();
         } finally {
             Loader.hide();
         }
@@ -5468,7 +5654,7 @@ ${this._manCss()}
 .sg-v2-mgmt-hint { font-size:.75rem;color:var(--text-muted);margin:4px 0 0; }
 .sg-v2-legend-section { margin-bottom:12px; }
 .sg-v2-hint { font-size:.72rem;color:var(--text-muted);display:flex;align-items:center;gap:6px;margin:8px 0 4px;padding:0 2px; }
-.sg-v2-svc-list { display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px; }
+.sg-v2-svc-list { display:grid;grid-template-columns:1fr 1fr;gap:6px; }
 .sg-v2-svc-item { display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;cursor:pointer;transition:background .12s;border:1px solid transparent; }
 .sg-v2-svc-item:hover { background:var(--bg-raised);border-color:var(--border); }
 .sg-v2-svc-icon { width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.9rem;flex-shrink:0; }
@@ -6254,6 +6440,7 @@ tr:last-child td { border-bottom:none; }
     display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:8px;
     cursor:pointer;font-size:.84rem;color:var(--text-primary);transition:background .12s;
 }
+.sg-emp-pos-dd-item span { white-space:nowrap; }
 .sg-emp-pos-dd-item:hover { background:var(--bg-hover); }
 .sg-emp-pos-dd-item input { width:16px;height:16px;flex-shrink:0;accent-color:var(--primary);cursor:pointer; }
 .sg-emp-panel-list {
@@ -6553,14 +6740,16 @@ body:not(.light-theme) .sg-subrep-btn { color:#f59e0b; }
 .sg-srep-section { padding:14px 20px 20px; }
 .sg-srep-toolbar { display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:16px; }
 .sg-srep-filters { display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex:1;min-width:0; }
-.sg-srep-search-wrap { position:relative;min-width:200px; }
-.sg-srep-search-ico { position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:.78rem;pointer-events:none; }
-.sg-srep-search {
-    width:100%;height:38px;padding:0 12px 0 34px;border-radius:11px;
-    border:1.5px solid var(--border);background:var(--bg-raised);color:var(--text-primary);
-    font-size:.85rem;outline:none;box-sizing:border-box;transition:border-color .15s;font-family:inherit;
+.sg-srep-th-search-wrap { position:relative; }
+.sg-srep-th-search-ico { position:absolute;left:8px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:.72rem;pointer-events:none; }
+.sg-srep-th-search {
+    width:100%;height:26px;padding:0 8px 0 26px;border-radius:7px;box-sizing:border-box;
+    border:1px solid var(--border);background:var(--bg-surface);color:var(--text-primary);
+    font-size:.8rem;font-weight:600;text-transform:none;letter-spacing:normal;outline:none;
+    transition:border-color .15s;font-family:inherit;
 }
-.sg-srep-search:focus { border-color:var(--primary); }
+.sg-srep-th-search::placeholder { color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;font-size:.72rem; }
+.sg-srep-th-search:focus { border-color:var(--primary); }
 .sg-srep-select {
     height:38px;padding:0 30px 0 12px;border-radius:11px;width:auto;
     border:1.5px solid var(--border);background:var(--bg-raised);color:var(--text-primary);
@@ -6570,14 +6759,37 @@ body:not(.light-theme) .sg-subrep-btn { color:#f59e0b; }
 .sg-srep-stats-inline { font-size:.82rem;color:var(--text-muted);white-space:nowrap;flex-shrink:0; }
 .sg-srep-stats-inline b { color:var(--text-primary);font-weight:800; }
 .sg-srep-body-static {
-    background:var(--bg-surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;
+    background:var(--bg-surface);border:1px solid var(--border);border-radius:16px;
 }
+.sg-srep-table thead tr:first-child th:first-child { border-top-left-radius:16px; }
+.sg-srep-table thead tr:first-child th:last-child { border-top-right-radius:16px; }
+.sg-srep-table tbody tr:last-child td:first-child { border-bottom-left-radius:16px; }
+.sg-srep-table tbody tr:last-child td:last-child { border-bottom-right-radius:16px; }
 .sg-srep-empty-filtered {
     padding:2rem 1rem;text-align:center;color:var(--text-muted);font-size:.85rem;
     display:flex;align-items:center;justify-content:center;gap:8px;
 }
 .sg-srep-table { width:100%;border-collapse:collapse;table-layout:fixed; }
-.sg-srep-th { position:sticky;top:0;z-index:1;padding:8px 14px;font-size:.68rem;font-weight:700;color:var(--text-muted);text-align:left;text-transform:uppercase;letter-spacing:.05em;background:var(--bg-raised);border-bottom:2px solid var(--border); }
+.sg-srep-th { position:sticky;top:0;z-index:1;padding:8px 14px;font-size:.8rem;font-weight:700;color:var(--text-muted);text-align:left;text-transform:uppercase;letter-spacing:.05em;background:var(--bg-raised);border-bottom:2px solid var(--border); }
+.sg-srep-th-dd-btn {
+    display:inline-flex;align-items:center;gap:6px;
+    text-transform:none;letter-spacing:normal;font-weight:700;font-size:.8rem;
+    padding:4px 8px;border-radius:7px;width:auto;max-width:100%;
+    border:1px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);
+    cursor:pointer;outline:none;font-family:inherit;
+}
+.sg-srep-th-dd-btn:hover, .sg-srep-th-dd-btn.open { border-color:var(--primary);color:var(--primary); }
+.sg-srep-th-dd-btn span { max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.sg-srep-th-dd-chev { font-size:.65rem;transition:transform .15s; }
+.sg-srep-th-dd-btn.open .sg-srep-th-dd-chev { transform:rotate(180deg); }
+.sg-srep-th-addr-row { display:flex;align-items:center;justify-content:space-between;gap:6px; }
+.sg-srep-th-reset-btn {
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+    width:24px;height:24px;border-radius:7px;border:1px solid var(--border);
+    background:var(--bg-surface);color:var(--text-secondary);cursor:pointer;
+    font-size:.75rem;outline:none;transition:border-color .15s,color .15s;
+}
+.sg-srep-th-reset-btn:hover { border-color:var(--danger,#ef4444);color:var(--danger,#ef4444); }
 .sg-srep-th-emp { width:33%; }
 .sg-srep-th-mgr { width:20%; }
 .sg-srep-tr-first td { border-top:3px solid var(--primary); }

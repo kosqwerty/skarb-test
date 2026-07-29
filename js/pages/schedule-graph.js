@@ -249,6 +249,7 @@ const ScheduleGraphPage = {
             this._loadShiftConfig()
         ]);
         this._isAssignedAsEmployee = (empCheck.count || 0) > 0;
+        await this._loadPartnerLocations();
 
         if (this._locations.length && !this._locId) this._locId = this._locations[0].id;
         await this._loadPageData();
@@ -546,32 +547,27 @@ const ScheduleGraphPage = {
 
         this._applyEmpOrder();
 
-        // Cross-location shift badges: load real shifts of these employees в БУДЬ-ЯКІЙ
-        // локації системи (не лише своїх + партнерських) — керівник має бачити всі
-        // виходи співробітника, незалежно від того, у кого він доданий до графіку.
+        // Cross-location shift badges: load real shifts of these employees in other locations
+        // (own + partner) — керівник без спільного блоку не повинен бачити виходи
+        // співробітника в локаціях сторонніх керівників.
         this._otherLocDayOff = {};
         this._otherLocSubConf = {}; // __sub_confirmed__ entries at other locations (priority override)
+        const ownOtherLocIds   = this._locations.filter(l => l.id !== this._locId).map(l => l.id);
+        const partnerLocIds    = (this._partnerLocations || []).map(l => l.id);
+        const otherLocIds      = [...ownOtherLocIds, ...partnerLocIds];
         const empIds = [...new Set(this._assignments.map(a => a.user_id || a.original_user_id).filter(Boolean))];
-        if (empIds.length) {
+        if (otherLocIds.length && empIds.length) {
             const { data: otherE } = await supabase.from('schedule_entries')
                 .select('user_id, date, location_id, shift_type, notes')
                 .in('user_id', empIds)
-                .neq('location_id', this._locId)
+                .in('location_id', otherLocIds)
                 .gte('date', dateFrom)
                 .lte('date', dateTo);
-            const knownLocIds = new Set([...this._locations.map(l => l.id), ...(this._partnerLocations || []).map(l => l.id)]);
-            const foreignLocIds = [...new Set((otherE || []).map(e => e.location_id))].filter(id => id && !knownLocIds.has(id));
-            let foreignLocMap = {};
-            if (foreignLocIds.length) {
-                const { data: fLocs } = await supabase.from('schedule_locations').select('id, name').in('id', foreignLocIds);
-                foreignLocMap = Object.fromEntries((fLocs || []).map(l => [l.id, l.name]));
-            }
             (otherE || []).forEach(e => {
                 if (!_isRealShift(e)) return;
                 const key = `${e.user_id}_${e.date}`;
                 const locName = this._locations.find(l => l.id === e.location_id)?.name
-                    || (this._partnerLocations || []).find(l => l.id === e.location_id)?.name
-                    || foreignLocMap[e.location_id] || '';
+                    || (this._partnerLocations || []).find(l => l.id === e.location_id)?.name || '';
                 if (e.notes === '__sub_confirmed__') {
                     // Confirmed substitution always takes priority
                     this._otherLocSubConf[key] = locName;
@@ -626,6 +622,10 @@ const ScheduleGraphPage = {
                             return `<span class="sg-past-badge">🔒 завершено</span><button class="sg-past-unlock-btn" onclick="ScheduleGraphPage._togglePastMonthUnlock()" title="Розблокувати редагування минулого графіку">Розблокувати</button>`;
                         })()}
                     </span>
+                    ${!this._isViewOnlyLoc(this._locId) ? `<button class="sg-lock-btn-icon ${this._isLocked() ? 'locked' : ''}" onclick="ScheduleGraphPage._toggleLock()"
+                        title="${this._isLocked() ? 'Розблокувати редагування графіка' : 'Заблокувати редагування графіка'}">
+                        <i class="fa-solid ${this._isLocked() ? 'fa-lock' : 'fa-lock-open'}"></i>
+                    </button>` : ''}
                     <button class="sg-mnav" onclick="ScheduleGraphPage._nextMonth()">›</button>
                 </div>
                 ` : ''}
@@ -1189,7 +1189,6 @@ ${this._manCss()}
         const wStart = wh.start || '09:00';
         const wEnd   = wh.end   || '18:00';
         const locName = this._locations.find(l => l.id === this._locId)?.name || '';
-        const locked  = this._isLocked();
         const viewOnly = this._isViewOnlyLoc(this._locId);
 
         const loc = this._locations.find(l => l.id === this._locId);
@@ -1316,11 +1315,7 @@ ${this._manCss()}
                 ${!viewOnly && this._quickType === k ? '<span class="sg-leg-active-mark">✓ активно</span>' : ''}
             </button>`).join('')}
             ${viewOnly ? '' : `
-            <button class="sg-types-mgr-btn" onclick="ScheduleGraphPage._showShiftTypesModal()" title="Налаштувати типи змін">⚙️ Налаштування</button>
-            <button class="sg-lock-btn ${locked ? 'locked' : ''}" onclick="ScheduleGraphPage._toggleLock()"
-                title="${locked ? 'Розблокувати редагування графіка' : 'Заблокувати редагування графіка'}">
-                ${locked ? '🔒 Заблоковано для правок' : '🔓 Можна редагувати'}
-            </button>`}
+            <button class="sg-types-mgr-btn" onclick="ScheduleGraphPage._showShiftTypesModal()" title="Налаштувати типи змін">⚙️ Налаштування</button>`}
         </div>
     </div>
     ${this._quickType ? `
@@ -1940,6 +1935,17 @@ ${this._manCss()}
         if ((this._partnerIds || []).length) await this._loadPartnerData();
     },
 
+    // Легкий завантажувач — лише список локацій партнерів (без призначень/змін).
+    // Потрібен у режимі однієї локації для крос-локаційних бейджів; повний
+    // _loadPartnerData() викликається лише з _loadAllData() (вкладка "Всі локації").
+    async _loadPartnerLocations() {
+        if (!(this._partnerIds || []).length) { this._partnerLocations = []; return; }
+        const { data: pLocs } = await supabase.from('schedule_locations')
+            .select('*').is('deleted_at', null)
+            .in('created_by', this._partnerIds);
+        this._partnerLocations = pLocs || [];
+    },
+
     async _loadPartnerData() {
         const p = n => String(n).padStart(2, '0');
         const dateFrom = `${this._year}-${p(this._month + 1)}-01`;
@@ -2396,9 +2402,21 @@ ${this._manCss()}
             if (this._isLockedForLoc(locId || this._locId)) { Toast.error('Графік заблоковано', 'Розблокуйте графік перед редагуванням'); return; }
         }
         this._substDate = date;
-        document.getElementById('sg-subst-modal')?.remove();
-        if (date) this._openSubstModal(date);
+        if (date) {
+            document.getElementById('sg-subst-backdrop')?.remove();
+            document.getElementById('sg-subst-modal')?.remove();
+            this._openSubstModal(date);
+        } else {
+            this._closeSubstModal();
+        }
         this._render(this._container);
+    },
+
+    _closeSubstModal() {
+        const panel    = document.getElementById('sg-subst-modal');
+        const backdrop = document.getElementById('sg-subst-backdrop');
+        if (panel)    { panel.classList.remove('open');    panel.addEventListener('transitionend', () => panel.remove(),    { once: true }); }
+        if (backdrop) { backdrop.classList.remove('open'); backdrop.addEventListener('transitionend', () => backdrop.remove(), { once: true }); }
     },
 
     _switchSubstTab(tab) {
@@ -2559,19 +2577,28 @@ ${this._manCss()}
             </div>`;
         };
 
+        document.getElementById('sg-subst-backdrop')?.remove();
         document.getElementById('sg-subst-modal')?.remove();
-        const el = document.createElement('div');
-        el.id = 'sg-subst-modal';
-        el.className = 'sg-overlay';
-        el.innerHTML = `
-<div class="sg-modal sg-subst-modal-box">
-    <div class="sg-mhdr">
-        <div>
-            <h3 style="margin:0;font-size:1.05rem">🔍 Пошук підміни</h3>
-            <p style="margin:3px 0 0;color:var(--text-muted);font-size:.8rem;text-transform:capitalize">📅 ${sdLabel}</p>
-        </div>
-        <button class="sg-mclose" onclick="ScheduleGraphPage._selectSubstDate(null)">✕</button>
+
+        const backdrop = document.createElement('div');
+        backdrop.id = 'sg-subst-backdrop';
+        backdrop.className = 'sg-emp-backdrop';
+        backdrop.onclick = () => ScheduleGraphPage._selectSubstDate(null);
+        document.body.appendChild(backdrop);
+
+        const panel = document.createElement('div');
+        panel.id = 'sg-subst-modal';
+        panel.className = 'sg-emp-panel sg-subst-panel';
+        panel.innerHTML = `
+<div class="sg-emp-panel-header">
+    <div class="sg-emp-panel-header-ico"><i class="fa-solid fa-arrow-right-arrow-left"></i></div>
+    <div style="flex:1;min-width:0">
+        <div style="font-size:1.05rem;font-weight:800">Пошук підміни</div>
+        <div style="font-size:.78rem;color:var(--text-muted);margin-top:2px;text-transform:capitalize">📅 ${sdLabel}</div>
     </div>
+    <button class="sg-mclose" onclick="ScheduleGraphPage._selectSubstDate(null)">✕</button>
+</div>
+<div class="sg-subst-panel-body">
     <div class="sg-subst-tabs">
         <button class="sg-subst-tab active" id="sg-stab-free" onclick="ScheduleGraphPage._switchSubstTab('free')">
             🟢 Вільні <span class="sg-stab-count">${freeList.length}</span>
@@ -2602,8 +2629,11 @@ ${this._manCss()}
         </div>
     </div>
 </div>`;
-        document.body.appendChild(el);
-        el.addEventListener('click', e => { if (e.target === el) this._selectSubstDate(null); });
+        document.body.appendChild(panel);
+        requestAnimationFrame(() => {
+            backdrop.classList.add('open');
+            panel.classList.add('open');
+        });
     },
 
 
@@ -4351,7 +4381,12 @@ ${this._manCss()}
             supabase.from('profile_dovirenosti').select('profile_id, dovirenosti(name)'),
             API.directories.getAll('positions').catch(() => [])
         ]);
-        const profiles = (profRes.data || []).filter(p => !visibleUserIds.has(p.id));
+        // Без спільного блоку керівник не повинен бачити/додавати чужого співробітника:
+        // дозволені лише власні (manager_id === self), нічиї (manager_id null) та
+        // співробітники block-партнерів (this._partnerIds).
+        const allowedMgrIds = new Set([AppState.user.id, ...(this._partnerIds || [])]);
+        const profiles = (profRes.data || []).filter(p =>
+            !visibleUserIds.has(p.id) && (!p.manager_id || allowedMgrIds.has(p.manager_id)));
         if (!profiles.length) { Toast.info('Всіх доступних вже додано'); return; }
         profiles.forEach(p => {
             const hiddenA = hiddenAssignments.get(p.id);
@@ -5872,10 +5907,11 @@ ${this._manCss()}
     white-space:nowrap;transition:all .15s;
 }
 .sg-subst-clear:hover { border-color:#ef4444;color:#ef4444; }
-.sg-subst-modal-box {
-    width:480px;max-width:95vw;
+.sg-subst-panel { width:440px; }
+.sg-subst-panel-body {
+    flex:1;min-height:0;overflow:hidden;
     display:flex;flex-direction:column;
-    max-height:85vh;
+    padding:16px 24px 24px;
 }
 .sg-subst-tabs {
     display:flex;gap:6px;
@@ -5902,7 +5938,8 @@ ${this._manCss()}
 .sg-subst-tab.active .sg-stab-count {
     background:var(--primary);color:#fff;
 }
-.sg-subst-tab-content { flex:1;overflow:hidden; }
+.sg-subst-tab-content { flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column; }
+.sg-subst-panel .sg-subst-modal-scroll { max-height:none;height:100%; }
 .sg-subst-modal-scroll {
     max-height:520px;overflow-y:auto;
     scrollbar-width:thin;scrollbar-color:var(--border) transparent;
@@ -6167,14 +6204,15 @@ ${this._manCss()}
 .sg-viewers-del:hover { background:#fee2e2;color:#ef4444;border-color:#fca5a5; }
 
 
-.sg-lock-btn {
-    margin-left:auto;border:none;background:none;cursor:pointer;font-size:1rem;
-    opacity:.45;transition:all .15s;padding:3px 6px;border-radius:8px;
+.sg-lock-btn-icon {
+    display:flex;align-items:center;justify-content:center;
+    width:30px;height:30px;border-radius:8px;flex-shrink:0;
+    border:1px solid var(--border);background:var(--bg-surface);
+    color:var(--text-muted);cursor:pointer;font-size:.85rem;transition:all .15s;
 }
-.sg-lock-btn:hover { opacity:1;background:var(--bg-hover); }
-.sg-lock-btn.locked {
-    opacity:1;background:rgba(239,68,68,.1);
-    border:1px solid rgba(239,68,68,.25);
+.sg-lock-btn-icon:hover { color:var(--text-primary);border-color:var(--text-muted); }
+.sg-lock-btn-icon.locked {
+    color:#ef4444;background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.3);
 }
 .sg-locked-bar { background:rgba(239,68,68,.06); }
 .sg-locked-banner {

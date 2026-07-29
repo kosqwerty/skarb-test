@@ -166,7 +166,6 @@ const ScheduleGraphPage = {
     _collapsedLocs:       new Set(),
     _pastMonthUnlocked:   false,
     _locSortAlpha:        false,
-    _locCreators:         {},
 
     async init(container) {
         this._container = container;
@@ -213,20 +212,15 @@ const ScheduleGraphPage = {
     },
 
     async _loadLocations() {
-        let query = supabase.from('schedule_locations')
-            .select('*').is('deleted_at', null).order('created_at');
-        if (!AppState.isSuperAdmin()) query = query.eq('created_by', AppState.user.id);
-        const { data } = await query;
+        // Кожен (включно з superadmin) бачить у розділі керування лише
+        // локації, які створив сам. Доступ до чужих — тільки через явне
+        // надання (schedule_viewers → сторінка перегляду schedule-view),
+        // а не автоматично за роллю.
+        const { data } = await supabase.from('schedule_locations')
+            .select('*').is('deleted_at', null).order('created_at')
+            .eq('created_by', AppState.user.id);
         this._locations = data || [];
         this._applyLocOrder();
-        if (AppState.isSuperAdmin() && this._locations.length) {
-            const ids = [...new Set(this._locations.map(l => l.created_by).filter(Boolean))];
-            if (ids.length) {
-                const { data: profs } = await supabase.from('profiles').select('id, full_name').in('id', ids);
-                this._locCreators = {};
-                (profs || []).forEach(p => { this._locCreators[p.id] = p.full_name; });
-            }
-        }
     },
 
     async _autoLockForNewMonth() {
@@ -601,7 +595,7 @@ const ScheduleGraphPage = {
                 <h3>Немає локацій</h3>
                 <p>Додайте першу локацію щоб починати складати графіки</p>
                 <button class="sg-add-btn" onclick="ScheduleGraphPage._addLocation()">
-                    <span class="sg-add-ico">＋</span> Додати локацію
+                    <span class="sg-add-ico">＋</span> Додати філію
                 </button>
                 <button class="sg-manual-btn" onclick="ScheduleGraphPage._showManual()" style="margin-top:16px;display:inline-flex;align-items:center;gap:8px;">
                     📖 Довідка — як користуватись графіком
@@ -1144,7 +1138,6 @@ ${this._manCss()}
         const viewOnly = this._isViewOnlyLoc(this._locId);
 
         const loc = this._locations.find(l => l.id === this._locId);
-        const creatorName = AppState.isSuperAdmin() && loc?.created_by ? (this._locCreators[loc.created_by] || null) : null;
         const trashCount = this._deletedLocations.length;
         const svcHtml = `<div class="sg-v2-card sg-v2-service">
             <div class="sg-v2-card-label">Сервіс</div>
@@ -1197,7 +1190,6 @@ ${this._manCss()}
             </div>
             ${loc?.address ? `<div class="sg-v2-loc-address"><i class="fa-solid fa-location-dot" style="color:var(--text-muted);font-size:.75rem"></i> ${Fmt.esc(loc.address)}</div>` : ''}
             ${loc?.phone ? `<div class="sg-v2-loc-address"><i class="fa-solid fa-phone" style="color:var(--text-muted);font-size:.75rem"></i> ${Fmt.esc(loc.phone)}</div>` : ''}
-            ${creatorName ? `<div class="sg-v2-loc-row"><i class="fa-solid fa-user-tie" style="color:var(--text-muted)"></i> ${Fmt.esc(creatorName)}</div>` : ''}
             <div class="sg-v2-loc-row">
                 <i class="fa-regular fa-clock" style="color:var(--text-muted)"></i>
                 <span>Робочий час</span>

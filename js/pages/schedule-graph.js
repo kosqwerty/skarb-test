@@ -87,14 +87,9 @@
 // CREATE POLICY "slog_select" ON schedule_log FOR SELECT USING (true);
 // CREATE POLICY "slog_insert" ON schedule_log FOR INSERT WITH CHECK (true);
 //
-// Migration: block name support
-// ALTER TABLE schedule_partners ADD COLUMN IF NOT EXISTS block_name text;
-//
-// Migration: fix schedule_partners RLS so the block owner can update block_name
-// (run in Supabase SQL editor if "Назва блоку" rename silently does nothing)
-// DROP POLICY IF EXISTS "spartner_update" ON schedule_partners;
-// CREATE POLICY "spartner_update" ON schedule_partners FOR UPDATE
-//     USING (owner_id = auth.uid() OR partner_id = auth.uid());
+// Migration v167: справжні N-масштабовані БЛОКи керівників (schedule_blocks +
+// schedule_block_members) замінили попарну модель schedule_partners — див.
+// sql/migration_v167.sql. Стара таблиця schedule_partners більше не використовується.
 //
 // Migration: shift type config stored per-user in DB
 // CREATE TABLE IF NOT EXISTS schedule_shift_config (
@@ -365,20 +360,17 @@ const ScheduleGraphPage = {
         localStorage.setItem(this._locOrderKey(), JSON.stringify(this._locations.map(l => l.id)));
     },
 
-    _empOrderKey() { return `sg_emp_order_${this._locId}`; },
-
-    _getEmpOrder() {
-        try { return JSON.parse(localStorage.getItem(this._empOrderKey()) || '[]'); } catch { return []; }
+    // locId-параметризовані версії — потрібні для "Всі локації", де this._locId
+    // завжди 'all' і не годиться як ключ (перемішав би порядок різних локацій).
+    _empOrderKeyFor(locId) { return `sg_emp_order_${locId}`; },
+    _getEmpOrderFor(locId) {
+        try { return JSON.parse(localStorage.getItem(this._empOrderKeyFor(locId)) || '[]'); } catch { return []; }
     },
-
-    _saveEmpOrder() {
-        localStorage.setItem(this._empOrderKey(), JSON.stringify(this._assignments.map(a => a.id)));
-    },
-
-    _applyEmpOrder() {
-        const saved = this._getEmpOrder();
+    _saveEmpOrderFor(locId, ids) { localStorage.setItem(this._empOrderKeyFor(locId), JSON.stringify(ids)); },
+    _applyEmpOrderTo(list, locId) {
+        const saved = this._getEmpOrderFor(locId);
         if (!saved.length) return;
-        this._assignments.sort((a, b) => {
+        list.sort((a, b) => {
             const ai = saved.indexOf(a.id), bi = saved.indexOf(b.id);
             if (ai === -1 && bi === -1) return 0;
             if (ai === -1) return 1;
@@ -386,6 +378,11 @@ const ScheduleGraphPage = {
             return ai - bi;
         });
     },
+
+    _empOrderKey() { return this._empOrderKeyFor(this._locId); },
+    _getEmpOrder() { return this._getEmpOrderFor(this._locId); },
+    _saveEmpOrder() { this._saveEmpOrderFor(this._locId, this._assignments.map(a => a.id)); },
+    _applyEmpOrder() { this._applyEmpOrderTo(this._assignments, this._locId); },
 
     _moveLocation(id, dir) {
         const i = this._locations.findIndex(l => l.id === id);
@@ -1112,14 +1109,6 @@ ${this._manCss()}
     </div>
     <div class="sg-loc-sidebar-list"
         ondragend="ScheduleGraphPage._draggingLocId=null;document.querySelectorAll('.sg-loc-item-row.sg-loc-dragging,.sg-loc-item-row.sg-loc-drag-over').forEach(r=>r.classList.remove('sg-loc-dragging','sg-loc-drag-over'))">
-        ${this._locations.length > 1 ? `
-        <div class="sg-loc-item-row">
-            <button class="sg-loc-item sg-loc-item-all ${this._locId === 'all' ? 'active' : ''}"
-                onclick="ScheduleGraphPage._selectLocation('all')" title="Всі локації">
-                <span class="sg-loc-item-ico"><i class="fa-solid fa-folder-open"></i></span>
-                <span class="sg-loc-item-code">Всі</span>
-            </button>
-        </div>` : ''}
         ${(() => {
             const p = n => String(n).padStart(2, '0');
             const monthPrefix = `${this._year}-${p(this._month + 1)}`;
@@ -1154,9 +1143,9 @@ ${this._manCss()}
     </div>
     ${this._locations.length ? `
     <div class="sg-loc-legend">
-        <span class="sg-loc-legend-item"><span class="sg-loc-legend-dot" style="background:#6366f1"></span>Технічний</span>
+        <span class="sg-loc-legend-item"><span class="sg-loc-legend-dot" style="background:#2f7bfd"></span>Технічний</span>
         <span class="sg-loc-legend-item"><span class="sg-loc-legend-dot" style="background:#d97706"></span>Золотий</span>
-        <span class="sg-loc-legend-item"><span class="sg-loc-legend-dot" style="background:linear-gradient(135deg,#6366f1,#f59e0b)"></span>Універсальний</span>
+        <span class="sg-loc-legend-item"><span class="sg-loc-legend-dot" style="background:linear-gradient(135deg,#2f7bfd,#f59e0b)"></span>Універсальний</span>
         <span class="sg-loc-legend-item"><span class="sg-loc-legend-badge sg-loc-legend-badge-shop"><img src="/icons/logo_tehnoscarb1.png" alt=""></span>Магазин (лого Техноскарб)</span>
         <span class="sg-loc-legend-item"><span class="sg-loc-legend-badge sg-loc-legend-badge-currency">$</span>Обмін валют</span>
         <span class="sg-loc-legend-item"><span class="sg-loc-legend-dot sg-loc-legend-dot-pulse"></span>Потрібна підміна</span>
@@ -1174,16 +1163,19 @@ ${this._manCss()}
             return lid && nums.some(d => this._entries[`${lid}_${this._dateStr(d)}`]);
         };
         const now = new Date();
-        const isCurrentOrPastMonth = this._year < now.getFullYear() ||
-            (this._year === now.getFullYear() && this._month <= now.getMonth());
+        // Лише РЕАЛЬНИЙ поточний місяць показує тимчасового/підміну без записів (щоб
+        // можна було одразу проставити першу зміну) — минулі місяці більше НЕ показують
+        // "порожнього" підмінного співробітника суцільно, лише там, де в нього справді
+        // є запис, інакше він дублювався б у кожен минулий місяць після одного додавання.
+        const isCurrentMonth = this._year === now.getFullYear() && this._month === now.getMonth();
 
         const monthKey = this._monthKey(this._year, this._month);
         const visibleAssignments = this._assignments.filter(a => {
             if (!a.user_id) return _hasEntries(a);          // уволенный — только если есть записи
             if (a.is_primary) return true;                   // постоянный — всегда
-            if (isCurrentOrPastMonth) return true;           // тимчасовий в текущем/прошлом — показывать
+            if (isCurrentMonth) return true;                 // тимчасовий у поточному місяці — показувати
             if ((a.pinned_months || []).includes(monthKey)) return true; // закріплено вручну для цього місяця
-            return _hasEntries(a);                           // тимчасовий в будущем — только если есть записи
+            return _hasEntries(a);                           // інакше — лише якщо є записи саме тут
         });
 
         const workTotal = a => {
@@ -1299,7 +1291,7 @@ ${this._manCss()}
                     </div>
                     <i class="fa-solid fa-chevron-right sg-svc-arr"></i>
                 </button>
-                <button class="sg-svc-btn" onclick="ScheduleGraphPage._goToSubst('${this._locId}')">
+                <button class="sg-svc-btn" onclick="ScheduleGraphPage._openSubstModalDirect()">
                     <div class="sg-svc-ico" style="background:rgba(16,185,129,.12);color:#10b981"><i class="fa-solid fa-arrow-right-arrow-left"></i></div>
                     <div class="sg-svc-body">
                         <div class="sg-svc-title">Пошук підміни</div>
@@ -1315,6 +1307,23 @@ ${this._manCss()}
                     </div>
                     <i class="fa-solid fa-chevron-right sg-svc-arr"></i>
                 </button>
+                <button class="sg-svc-btn" onclick="ScheduleGraphPage._showPartnersModal()">
+                    <div class="sg-svc-ico" style="background:rgba(16,185,129,.12);color:#10b981"><i class="fa-solid fa-handshake"></i></div>
+                    <div class="sg-svc-body">
+                        <div class="sg-svc-title">${Fmt.esc(this._blockName || 'БЛОК')}${(this._pendingIncoming||[]).length ? `<span class="sg-svc-badge">${this._pendingIncoming.length}</span>` : ''}</div>
+                        <div class="sg-svc-desc">Спільний пошук замін з іншими керівниками</div>
+                    </div>
+                    <i class="fa-solid fa-chevron-right sg-svc-arr"></i>
+                </button>
+                ${this._locations.length > 1 ? `
+                <button class="sg-svc-btn" onclick="ScheduleGraphPage._selectLocation('all')">
+                    <div class="sg-svc-ico" style="background:rgba(99,102,241,.12);color:#6366f1"><i class="fa-solid fa-folder-open"></i></div>
+                    <div class="sg-svc-body">
+                        <div class="sg-svc-title">${(this._partnerIds||[]).length ? 'Всі локації блоку' : 'Всі локації'}</div>
+                        <div class="sg-svc-desc">Зведений графік усіх точок${(this._partnerIds||[]).length ? ' і партнерів' : ''}</div>
+                    </div>
+                    <i class="fa-solid fa-chevron-right sg-svc-arr"></i>
+                </button>` : ''}
 `;
                 })()}
             </div>
@@ -1776,7 +1785,6 @@ ${this._manCss()}
         this._quickType = null;
         this._substDate = null;
         this._filteredUserId = null;
-        this._showPartnerLocs = true;
         this._pastMonthUnlocked = false;
         const content   = this._container.querySelector('.sg-content');
         if (content) content.innerHTML = '<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>';
@@ -1813,32 +1821,6 @@ ${this._manCss()}
         this._locSortAlpha = !this._locSortAlpha;
         localStorage.setItem('sg_loc_sort_alpha', this._locSortAlpha ? '1' : '');
         this._render(this._container);
-    },
-
-    _goToSubst(focusLocId) {
-        const prevLocId = focusLocId || this._locId;
-        this._locId = 'all';
-        this._tab   = 'subst';
-        this._substDate    = null;
-        this._filteredUserId = null;
-        const content = this._container.querySelector('.sg-content');
-        if (content) content.innerHTML = '<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>';
-        this._loadAllData().then(() => {
-            this._render(this._container);
-            if (prevLocId && prevLocId !== 'all') {
-                // collapse all except the focused location
-                this._locations.forEach(l => {
-                    if (l.id !== prevLocId) {
-                        this._collapsedLocs.add(l.id);
-                        document.querySelectorAll(`[data-loc-rows="${l.id}"]`).forEach(tr => { tr.style.display = 'none'; });
-                        const btn = document.querySelector(`[data-loc-toggle="${l.id}"]`);
-                        if (btn) btn.textContent = '▼';
-                        const badge = document.querySelector(`[data-loc-badge="${l.id}"]`);
-                        if (badge) badge.style.display = 'inline';
-                    }
-                });
-            }
-        });
     },
 
     _switchTab(tab) {
@@ -2021,6 +2003,13 @@ ${this._manCss()}
                     if (r.dovirenosti?.name) pDovByUser[r.profile_id].push(r.dovirenosti.name);
                 });
                 pProfiles.forEach(p => { p._dovirenosti = pDovByUser[p.id] || []; });
+
+                const pMgrIds = [...new Set(pProfiles.map(p => p.manager_id).filter(Boolean))];
+                if (pMgrIds.length) {
+                    const { data: pMgrs } = await supabase.from('profiles').select('id, full_name').in('id', pMgrIds);
+                    const pMgrMap = Object.fromEntries((pMgrs || []).map(m => [m.id, m.full_name]));
+                    pProfiles.forEach(p => { p._managerName = pMgrMap[p.manager_id] || null; });
+                }
             }
         }
 
@@ -2059,35 +2048,52 @@ ${this._manCss()}
         this._partnerIds            = [];
         this._partnerLocations      = [];
         this._partnerProfiles       = {};
-        this._partnerRows           = [];
-        this._pendingIncoming       = [];
-        this._pendingOutgoing       = [];
-        this._blockName             = null;   // name of the block this user owns or belongs to
-        this._blockOwnerId          = null;   // uid of the block owner (may be self)
-        this._isBlockOwner          = false;  // can this user rename the block?
+        this._partnerRows           = [];   // прийняті ІНШІ учасники мого блоку
+        this._pendingIncoming       = [];   // запрошення ДО мене, ще не прийняті
+        this._pendingOutgoing       = [];   // запрошення від мого блоку іншим, ще не прийняті
+        this._blockId                = null;
+        this._blockName             = null;
+        this._blockOwnerId          = null;   // uid творця блоку
+        this._isBlockOwner          = false;
         try {
             const uid = AppState.user.id;
-            const { data: all, error } = await supabase.from('schedule_partners')
-                .select('id, owner_id, partner_id, status, block_name')
-                .or(`owner_id.eq.${uid},partner_id.eq.${uid}`);
+            const { data: myRows, error } = await supabase.from('schedule_block_members')
+                .select('id, block_id, user_id, status, invited_by')
+                .eq('user_id', uid);
             if (error) return;
 
-            const rows = all || [];
-            this._partnerRows     = rows.filter(r => r.status === 'accepted');
-            this._pendingIncoming = rows.filter(r => r.status === 'pending' && r.partner_id === uid);
-            this._pendingOutgoing = rows.filter(r => r.status === 'pending' && r.owner_id   === uid);
+            const acceptedMine = (myRows || []).filter(r => r.status === 'accepted');
+            const pendingMine  = (myRows || []).filter(r => r.status === 'pending');
+            this._pendingIncoming = pendingMine;
+            this._blockId = acceptedMine[0]?.block_id || pendingMine[0]?.block_id || null;
 
-            this._partnerIds = this._partnerRows.map(r => r.owner_id === uid ? r.partner_id : r.owner_id);
-
-            // Determine block name and ownership from accepted rows
-            const acceptedRow = this._partnerRows[0] || this._pendingOutgoing[0] || null;
-            if (acceptedRow) {
-                this._blockName     = acceptedRow.block_name || null;
-                this._blockOwnerId  = acceptedRow.owner_id;
-                this._isBlockOwner  = acceptedRow.owner_id === uid;
+            if (acceptedMine.length) {
+                // Я прийнятий учасник — бачу всіх (RLS дозволяє) інших учасників мого блоку
+                const blockIds = [...new Set(acceptedMine.map(r => r.block_id))];
+                const { data: allMembers } = await supabase.from('schedule_block_members')
+                    .select('id, block_id, user_id, status, invited_by')
+                    .in('block_id', blockIds);
+                const members = allMembers || [];
+                this._partnerRows     = members.filter(r => r.status === 'accepted' && r.user_id !== uid);
+                this._pendingOutgoing = members.filter(r => r.status === 'pending'  && r.user_id !== uid);
+                this._partnerIds      = this._partnerRows.map(r => r.user_id);
             }
 
-            const profileIds = [...new Set(rows.flatMap(r => [r.owner_id, r.partner_id]).filter(id => id !== uid))];
+            if (this._blockId) {
+                const { data: blockRow } = await supabase.from('schedule_blocks')
+                    .select('id, name, created_by').eq('id', this._blockId).maybeSingle();
+                if (blockRow) {
+                    this._blockName    = blockRow.name || null;
+                    this._blockOwnerId = blockRow.created_by;
+                    this._isBlockOwner = blockRow.created_by === uid;
+                }
+            }
+
+            const profileIds = [...new Set([
+                ...this._partnerRows.map(r => r.user_id),
+                ...this._pendingOutgoing.map(r => r.user_id),
+                ...this._pendingIncoming.map(r => r.invited_by).filter(Boolean),
+            ])];
             if (profileIds.length) {
                 const { data: profs } = await supabase.from('profiles')
                     .select('id, full_name, job_position').in('id', profileIds);
@@ -2102,9 +2108,18 @@ ${this._manCss()}
 
         const uid = AppState.user.id;
         const allProfiles = [];
-        { const { data } = await supabase.from('profiles').select('id, full_name').order('full_name');
+        { const { data } = await supabase.from('profiles').select('id, full_name, role')
+            .in('role', ['manager', 'admin', 'superadmin']).order('full_name');
           allProfiles.push(...(data || [])); }
-        this._partnerAllProfiles = allProfiles.filter(p => p.id !== uid);
+        // Не показуємо тих, хто вже прийнятий учасник блоку, вже запрошений
+        // (очікує відповіді), або мене самого
+        const excludeIds = new Set([
+            uid,
+            ...this._partnerRows.map(r => r.user_id),
+            ...this._pendingOutgoing.map(r => r.user_id),
+        ]);
+        this._partnerAllProfiles = allProfiles.filter(p => !excludeIds.has(p.id));
+        this._partnerSelected = new Set();
 
         const el = document.createElement('div');
         el.id = 'sg-partners-modal';
@@ -2125,20 +2140,19 @@ ${this._manCss()}
             <span class="sg-block-name-label">Назва блоку</span>
             <span class="sg-block-name-value">${this._blockName
                 ? `<strong>${this._blockName}</strong>`
-                : `<em style="opacity:.5">${this._isBlockOwner || !this._blockOwnerId ? 'Не задано' : 'Не вказана власником'}</em>`
+                : `<em style="opacity:.5">Не задано</em>`
             }</span>
         </div>
-        ${this._isBlockOwner || !this._blockOwnerId && (this._partnerRows.length || this._pendingOutgoing.length) ? `
         <button class="sg-block-rename-btn" onclick="ScheduleGraphPage._renameBlock()" title="Змінити назву блоку">
             <i class="fa-solid fa-pen"></i> Змінити
-        </button>` : ''}
+        </button>
     </div>
 
     ${this._pendingIncoming.length ? `
     <div class="sg-partners-section">
         <div class="sg-partners-section-title">📬 Вхідні запити (${this._pendingIncoming.length})</div>
         ${this._pendingIncoming.map(r => {
-            const name = this._partnerProfiles[r.owner_id]?.full_name || r.owner_id;
+            const name = this._partnerProfiles[r.invited_by]?.full_name || r.invited_by;
             return `<div class="sg-partners-row" id="sg-prow-${r.id}">
                 <div class="sg-av sm">${name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}</div>
                 <div class="sg-partners-info">
@@ -2155,7 +2169,7 @@ ${this._manCss()}
     <div class="sg-partners-section">
         <div class="sg-partners-section-title">📤 Надіслані запити</div>
         ${this._pendingOutgoing.map(r => {
-            const name = this._partnerProfiles[r.partner_id]?.full_name || r.partner_id;
+            const name = this._partnerProfiles[r.user_id]?.full_name || r.user_id;
             return `<div class="sg-partners-row" id="sg-prow-${r.id}">
                 <div class="sg-av sm">${name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}</div>
                 <div class="sg-partners-info">
@@ -2171,7 +2185,7 @@ ${this._manCss()}
         <div class="sg-partners-section-title">✅ Керівники (${this._partnerRows.length})</div>
         <div id="sg-partners-list">
         ${this._partnerRows.length ? this._partnerRows.map(r => {
-            const otherId = r.owner_id === uid ? r.partner_id : r.owner_id;
+            const otherId = r.user_id;
             const prof = this._partnerProfiles[otherId];
             const name = prof?.full_name || otherId;
             const pos  = prof?.job_position || '';
@@ -2192,20 +2206,27 @@ ${this._manCss()}
         <div class="sg-partners-add">
             <div class="sg-viewer-search-wrap">
                 <input type="text" id="sg-partner-search" class="sg-viewer-search-input"
-                    placeholder="🔍 Пошук за іменем…" autocomplete="off"
+                    placeholder="🔍 Пошук за іменем… (можна обрати декількох)" autocomplete="off"
                     oninput="ScheduleGraphPage._filterPartnerUsers(this.value)"
                     onfocus="ScheduleGraphPage._openPartnerDropdown()"
                     onblur="setTimeout(()=>ScheduleGraphPage._closePartnerDropdown(),150)">
-                <input type="hidden" id="sg-partner-user">
                 <div class="sg-viewer-dropdown" id="sg-partner-dropdown">
-                    ${this._partnerAllProfiles.map(p => `
-                    <div class="sg-viewer-drop-item" data-id="${p.id}" data-name="${(p.full_name||'').replace(/"/g,'&quot;')}"
-                        onmousedown="ScheduleGraphPage._pickPartnerUser('${p.id}',${JSON.stringify(p.full_name||p.id).replace(/"/g,'&quot;')})">
-                        ${Fmt.esc(p.full_name || p.id)}
-                    </div>`).join('')}
+                    ${this._partnerAllProfiles.length ? this._partnerAllProfiles.map(p => `
+                    <div class="sg-viewer-drop-item sg-partner-drop-item${this._partnerSelected.has(p.id) ? ' selected' : ''}"
+                        data-id="${p.id}" data-name="${(p.full_name||'').replace(/"/g,'&quot;')}"
+                        onmousedown="event.preventDefault();ScheduleGraphPage._togglePartnerSelect('${p.id}')">
+                        <span class="sg-partner-drop-check"><i class="fa-solid fa-check"></i></span>
+                        ${Fmt.esc(p.full_name || p.id)} ${Fmt.roleBadge(p.role)}
+                    </div>`).join('') : '<div class="sg-viewer-drop-empty">Немає доступних керівників</div>'}
                 </div>
             </div>
-            <button class="sg-viewers-add-btn" onclick="ScheduleGraphPage._addPartner()">🤝 Запросити</button>
+            <button class="sg-viewers-add-btn" id="sg-partner-invite-btn" onclick="ScheduleGraphPage._addPartner()" ${this._partnerSelected.size ? '' : 'disabled'}>🤝 Запросити${this._partnerSelected.size ? ` (${this._partnerSelected.size})` : ''}</button>
+        </div>
+        <div class="sg-partner-chips" id="sg-partner-chips" style="display:${this._partnerSelected.size ? 'flex' : 'none'}">
+            ${[...this._partnerSelected].map(id => {
+                const p = this._partnerAllProfiles.find(x => x.id === id);
+                return `<span class="sg-partner-chip">${Fmt.esc(p?.full_name || id)}<button type="button" onclick="ScheduleGraphPage._togglePartnerSelect('${id}')" title="Прибрати">✕</button></span>`;
+            }).join('')}
         </div>
     </div>
 </div>`;
@@ -2238,90 +2259,140 @@ ${this._manCss()}
             const name = (item.dataset.name || '').toLowerCase();
             item.classList.toggle('hidden', q.length > 0 && !name.includes(q));
         });
-        document.getElementById('sg-partner-user').value = '';
     },
 
-    _pickPartnerUser(id, name) {
-        document.getElementById('sg-partner-user').value = id;
-        document.getElementById('sg-partner-search').value = name;
-        this._closePartnerDropdown();
+    _togglePartnerSelect(id) {
+        if (this._partnerSelected.has(id)) this._partnerSelected.delete(id);
+        else this._partnerSelected.add(id);
+        document.querySelectorAll(`#sg-partner-dropdown .sg-partner-drop-item[data-id="${id}"]`)
+            .forEach(el => el.classList.toggle('selected', this._partnerSelected.has(id)));
+
+        const n = this._partnerSelected.size;
+        const btn = document.getElementById('sg-partner-invite-btn');
+        if (btn) { btn.disabled = n === 0; btn.innerHTML = `🤝 Запросити${n ? ` (${n})` : ''}`; }
+
+        const chips = document.getElementById('sg-partner-chips');
+        if (chips) {
+            chips.style.display = n ? 'flex' : 'none';
+            chips.innerHTML = [...this._partnerSelected].map(pid => {
+                const p = this._partnerAllProfiles.find(x => x.id === pid);
+                return `<span class="sg-partner-chip">${Fmt.esc(p?.full_name || pid)}<button type="button" onclick="ScheduleGraphPage._togglePartnerSelect('${pid}')" title="Прибрати">✕</button></span>`;
+            }).join('');
+        }
     },
 
-    async _renameBlock() {
-        const uid = AppState.user.id;
+    _renameBlock() {
         const current = this._blockName || '';
-        this._showLocModal({
-            title: '<i class="fa-solid fa-pen"></i> Назва блоку',
-            placeholder: 'Наприклад: Блок Центр, Мережа Південь…',
-            value: current,
-            onSave: async name => {
-                if (name === current) return;
-                // Update all schedule_partners rows where this user is owner
-                const { data: updated, error } = await supabase.from('schedule_partners')
-                    .update({ block_name: name })
-                    .eq('owner_id', uid)
-                    .select('id');
-                if (error) { Toast.error('Помилка', error.message); return; }
-                if (!updated?.length) {
-                    Toast.error('Не вдалось зберегти', 'Запустіть міграцію SQL (spartner_update) у Supabase');
-                    return;
-                }
-                this._blockName = name;
-                Toast.success('Назву блоку змінено');
-                await this._showPartnersModal();
-            }
-        });
+        if (!this._blockId) { Toast.error('Спершу запросіть керівника'); return; }
+        document.getElementById('sg-rename-block-modal')?.remove();
+        const el = document.createElement('div');
+        el.id = 'sg-rename-block-modal';
+        el.className = 'sg-overlay';
+        el.innerHTML = `
+<div class="sg-modal" style="max-width:400px;height:auto">
+    <div class="sg-mhdr">
+        <h3 style="margin:0;font-size:1rem"><i class="fa-solid fa-pen"></i> Назва блоку</h3>
+        <button class="sg-mclose" onclick="document.getElementById('sg-rename-block-modal').remove()">✕</button>
+    </div>
+    <input id="sg-rename-block-input" class="sg-loc-input" placeholder="Наприклад: Блок Центр, Мережа Південь…"
+        value="${current.replace(/"/g,'&quot;')}" autocomplete="off" spellcheck="false" style="margin-bottom:16px">
+    <div class="sg-modal-actions">
+        <button class="sg-btn-save" id="sg-rename-block-save">Зберегти</button>
+        <button class="sg-btn-cancel" onclick="document.getElementById('sg-rename-block-modal').remove()">Скасувати</button>
+    </div>
+</div>`;
+        document.body.appendChild(el);
+        el.addEventListener('click', e => { if (e.target === el) el.remove(); });
+        const input = document.getElementById('sg-rename-block-input');
+        input.focus();
+        input.select();
+
+        const save = async () => {
+            const name = input.value.trim();
+            if (!name || name === current) { el.remove(); return; }
+            // Будь-який прийнятий учасник блоку може перейменувати (RLS дозволяє)
+            const { error } = await supabase.from('schedule_blocks')
+                .update({ name }).eq('id', this._blockId);
+            if (error) { Toast.error('Помилка', error.message); return; }
+            this._blockName = name;
+            el.remove();
+            Toast.success('Назву блоку змінено');
+            this._render(this._container);
+            await this._showPartnersModal();
+        };
+        document.getElementById('sg-rename-block-save').onclick = save;
+        input.addEventListener('keydown', e => { if (e.key === 'Enter') save(); });
     },
 
     async _addPartner() {
-        const partnerId = document.getElementById('sg-partner-user')?.value;
-        if (!partnerId) { Toast.error('Оберіть керівника зі списку'); return; }
+        const partnerIds = [...(this._partnerSelected || [])];
+        if (!partnerIds.length) { Toast.error('Оберіть хоча б одного керівника зі списку'); return; }
         const uid = AppState.user.id;
-        if (partnerId === uid) { Toast.error('Не можна запросити себе'); return; }
 
-        const { error } = await supabase.from('schedule_partners').insert({
-            owner_id: uid, partner_id: partnerId, status: 'pending'
-        });
-        if (error) {
-            if (error.code === '23505') Toast.error('Запит вже надіслано');
-            else Toast.error('Помилка', error.message);
-            return;
+        let blockId = this._blockId;
+        if (!blockId) {
+            // У мене ще немає блоку — створюємо новий і одразу стаю прийнятим учасником
+            const { data: newBlock, error: blockErr } = await supabase.from('schedule_blocks')
+                .insert({ created_by: uid }).select('id').single();
+            if (blockErr) { Toast.error('Помилка', blockErr.message); return; }
+            blockId = newBlock.id;
+            const { error: selfErr } = await supabase.from('schedule_block_members')
+                .insert({ block_id: blockId, user_id: uid, status: 'accepted', invited_by: uid });
+            if (selfErr) { Toast.error('Помилка', selfErr.message); return; }
+            this._blockId = blockId;
         }
-        const partnerName = this._partnerAllProfiles.find(p => p.id === partnerId)?.full_name || 'Керівник';
+
         const myName = AppState.profile?.full_name || 'Керівник';
-        await supabase.from('notifications').insert({
-            user_id: partnerId,
-            title:   '🤝 Запит на партнерство',
-            message: `${myName} запрошує вас до спільного пошуку замін`
-        });
-        Toast.success('Запит надіслано', partnerName);
+        let sent = 0, failed = 0;
+        for (const partnerId of partnerIds) {
+            const { error } = await supabase.from('schedule_block_members').insert({
+                block_id: blockId, user_id: partnerId, status: 'pending', invited_by: uid
+            });
+            if (error) { failed++; continue; }
+            sent++;
+            await supabase.from('notifications').insert({
+                user_id: partnerId,
+                title:   '🤝 Запит на партнерство',
+                message: `${myName} запрошує вас до спільного пошуку замін`,
+                link:    'schedule-graph?openBlock=1'
+            });
+        }
+
+        if (sent)   Toast.success(sent === 1 ? 'Запит надіслано' : `Запити надіслано (${sent})`);
+        if (failed) Toast.error('Частину запитів не вдалось надіслати', `${failed} вже мали активний запит`);
+
         document.getElementById('sg-partner-search').value = '';
-        document.getElementById('sg-partner-user').value   = '';
+        this._partnerSelected = new Set();
+        await this._loadPartners();
+        this._render(this._container);
         await this._showPartnersModal();
     },
 
     async _acceptPartner(rowId) {
-        const { error } = await supabase.from('schedule_partners')
+        const { error } = await supabase.from('schedule_block_members')
             .update({ status: 'accepted' }).eq('id', rowId);
         if (error) { Toast.error('Помилка', error.message); return; }
         Toast.success('Партнерство прийнято');
         await this._loadPartners();
+        this._render(this._container);
         await this._showPartnersModal();
     },
 
     async _declinePartner(rowId) {
-        const { error } = await supabase.from('schedule_partners')
-            .update({ status: 'declined' }).eq('id', rowId);
+        const { error } = await supabase.from('schedule_block_members').delete().eq('id', rowId);
         if (error) { Toast.error('Помилка', error.message); return; }
         Toast.info('Запит відхилено');
+        await this._loadPartners();
+        this._render(this._container);
         await this._showPartnersModal();
     },
 
     async _removePartner(rowId) {
-        const { error } = await supabase.from('schedule_partners').delete().eq('id', rowId);
+        const { error } = await supabase.from('schedule_block_members').delete().eq('id', rowId);
         if (error) { Toast.error('Помилка', error.message); return; }
         Toast.success('Партнерство розірвано');
         await this._loadPartners();
+        this._render(this._container);
         await this._showPartnersModal();
     },
 
@@ -2378,9 +2449,9 @@ ${this._manCss()}
             </thead>
             <tbody>
                 ${Object.entries(byLoc).sort(([a],[b])=>(_locOrder[a]??999)-(_locOrder[b]??999)).map(([locId, loc]) => `
-                <tr class="sg-loc-header-row${loc.isPartner?' sg-loc-header-partner':''}">
+                <tr class="sg-loc-header-row${loc.isPartner?' sg-loc-header-partner':''}" data-node="${(this._locations.find(l => l.id === locId) || this._partnerLocations?.find(l => l.id === locId))?.node_type || ''}">
                     <td colspan="${days + 1}" class="sg-loc-group-header">
-                        ${loc.isPartner?'🤝':'🏪'} ${Fmt.esc(loc.name)}
+                        <span class="sg-loc-header-ico"><i class="fa-solid ${loc.isPartner ? 'fa-handshake' : 'fa-shop'}"></i></span> ${Fmt.esc(loc.name)}
                         ${(() => { const l = this._locations.find(l => l.id === locId); return (l?.address ? `<span class="sg-loc-acc-addr"><i class="fa-solid fa-location-dot"></i> ${Fmt.esc(l.address)}</span>` : '') + (l?.phone ? `<span class="sg-loc-acc-addr"><i class="fa-solid fa-phone"></i> ${Fmt.esc(l.phone)}</span>` : ''); })()}
                         ${loc.isPartner ? `<span class="sg-partner-loc-badge">${loc.members[0]?.partnerOwnerLabel||'Керівник'}: ${Fmt.esc(loc.members[0]?.partnerOwnerName||'')}</span>` : ''}
                     </td>
@@ -2432,6 +2503,113 @@ ${this._manCss()}
 </div>`;
     },
 
+    // Відкриває бокову панель "Пошук підміни" одразу (на сьогодні), без переходу
+    // в розділ "Всі локації" — попередню локацію відновлюємо після закриття панелі
+    // Реальна сьогоднішня дата — НЕ this._dateStr(new Date().getDate()), бо те
+    // мішає день реальної дати з роком/місяцем, які зараз ПЕРЕГЛЯДАЄ керівник
+    // (наприклад, сьогодні 30 липня, а на екрані серпень → вийшло б "2026-08-30")
+    _realTodayStr() {
+        const n = new Date();
+        const p = x => String(x).padStart(2, '0');
+        return `${n.getFullYear()}-${p(n.getMonth()+1)}-${p(n.getDate())}`;
+    },
+
+    _openSubstModalDirect() {
+        const originLocId = this._locId !== 'all' ? this._locId : null;
+        // Завжди перезаписуємо (навіть на null) — інакше стара локація "прилипає"
+        // до заголовка панелі й до _findNeedSubDate(), навіть коли поточне відкриття
+        // не прив'язане до конкретної локації (клік із вкладки "Всі локації").
+        this._substQuickPrevLocId = originLocId;
+        this._locId = 'all';
+        this._showSubstLoadingOverlay();
+        this._loadAllData().then(() => {
+            this._hideSubstLoadingOverlay();
+            const date = this._findNeedSubDate(originLocId) || this._defaultSubstDate();
+            this._selectSubstDate(date, 'all');
+        }).catch(e => { this._hideSubstLoadingOverlay(); Toast.error('Помилка', e.message); });
+    },
+
+    // _allEntries вантажиться лише за ПЕРЕГЛЯДАНИЙ місяць (_loadAllData), тому дата за
+    // замовчуванням має лежати в цьому ж місяці — інакше зайнятість ніхто не знайде
+    // (немає завантажених entries на "сьогодні", якщо переглядається інший місяць) і
+    // панель хибно покаже "всі вільні".
+    _defaultSubstDate() {
+        const t = this._realTodayStr();
+        const [ty, tm] = t.split('-').map(Number);
+        if (ty === this._year && tm === this._month + 1) return t;
+        const p = n => String(n).padStart(2, '0');
+        return `${this._year}-${p(this._month + 1)}-01`;
+    },
+
+    // Усі дати в цій локації, де "потрібна підміна" — НЕ прапорець notes==='__needsub__'
+    // (той ставить лише сам співробітник зі свого кабінету), а той самий критерій,
+    // що фарбує колонку в червоний у сітці графіка (.sg-cell-no-work): день у
+    // переглядуваному місяці, на який у ЖОДНОГО видимого співробітника локації
+    // немає реальної зміни (див. datesWithWork у _tableSection()).
+    _findAllNeedSubDates(locId) {
+        if (!locId) return [];
+        const days = new Date(this._year, this._month + 1, 0).getDate();
+        const nums = Array.from({ length: days }, (_, i) => i + 1);
+        const _hasEntries = a => {
+            const lid = a.user_id || a.original_user_id;
+            return lid && nums.some(d => this._entries[`${lid}_${this._dateStr(d)}`]);
+        };
+        const now = new Date();
+        const isCurrentMonth = this._year === now.getFullYear() && this._month === now.getMonth();
+        const monthKey = this._monthKey(this._year, this._month);
+        const visibleAssignments = (this._assignments || []).filter(a => {
+            if (!a.user_id) return _hasEntries(a);
+            if (a.is_primary) return true;
+            if (isCurrentMonth) return true;
+            if ((a.pinned_months || []).includes(monthKey)) return true;
+            return _hasEntries(a);
+        });
+        if (!visibleAssignments.length) return [];
+
+        const datesWithWork = new Set();
+        visibleAssignments.forEach(a => {
+            const lid = a.user_id || a.original_user_id;
+            if (!lid) return;
+            nums.forEach(d => {
+                if (_isRealShift(this._entries[`${lid}_${this._dateStr(d)}`]))
+                    datesWithWork.add(this._dateStr(d));
+            });
+        });
+
+        return nums.map(d => this._dateStr(d)).filter(dateStr => !datesWithWork.has(dateStr));
+    },
+
+    _findNeedSubDate(locId) {
+        return this._findAllNeedSubDates(locId)[0] || null;
+    },
+
+    _showSubstLoadingOverlay() {
+        document.getElementById('sg-subst-loading')?.remove();
+        const captions = ['Збираємо інформацію про графіки…', 'Перевіряємо зайнятість співробітників…', 'Шукаємо вільних для підміни…'];
+        const el = document.createElement('div');
+        el.id = 'sg-subst-loading';
+        el.className = 'sg-subst-loading-overlay';
+        el.innerHTML = `
+<div class="sg-subst-loading-card">
+    <div class="sg-subst-loading-icon"><i class="fa-solid fa-arrow-right-arrow-left"></i></div>
+    <div class="sg-subst-loading-caption" id="sg-subst-loading-caption">${captions[0]}</div>
+    <div class="sg-subst-loading-bar"><div class="sg-subst-loading-bar-fill"></div></div>
+</div>`;
+        document.body.appendChild(el);
+        let i = 0;
+        this._substLoadingTimer = setInterval(() => {
+            i = (i + 1) % captions.length;
+            const cap = document.getElementById('sg-subst-loading-caption');
+            if (cap) cap.textContent = captions[i];
+        }, 900);
+    },
+
+    _hideSubstLoadingOverlay() {
+        clearInterval(this._substLoadingTimer);
+        this._substLoadingTimer = null;
+        document.getElementById('sg-subst-loading')?.remove();
+    },
+
     _selectSubstDate(date, locId) {
         if (date) {
             if (this._isPastMonth()) { Toast.error('Місяць завершено', 'Редагування минулих місяців заблоковано'); return; }
@@ -2439,16 +2617,56 @@ ${this._manCss()}
         }
         this._substDate = date;
         if (date) {
+            // Локація, з клітинки якої натиснули дату (напр. рядок конкретної локації
+            // в таблиці "Всі локації") — лише для показу назви в заголовку панелі,
+            // не плутати з _substQuickPrevLocId (той ще й визначає, куди повернутись
+            // після закриття, і на яких даних рахувати "дати без співробітника").
+            this._substClickedLocId = (locId && locId !== 'all') ? locId : null;
             document.getElementById('sg-subst-backdrop')?.remove();
             document.getElementById('sg-subst-modal')?.remove();
-            this._openSubstModal(date);
-        } else {
-            this._closeSubstModal();
+            // _allEntries охоплює лише локації ЦЬОГО керівника (+ прийняті блок-партнери) —
+            // співробітник міг того ж дня працювати десь ЦІЛКОМ поза цим набором (інший
+            // керівник, не в блоці). Тому перевіряємо зайнятість по всій системі окремим
+            // запитом, перш ніж рендерити список "вільних".
+            this._showSubstLoadingOverlay();
+            this._fetchSystemBusyIds(date).then(ids => {
+                this._substBusyIds = ids;
+                this._hideSubstLoadingOverlay();
+                this._openSubstModal(date);
+            }).catch(e => { this._hideSubstLoadingOverlay(); this._substBusyIds = null; this._openSubstModal(date); });
+            return;
+        }
+        this._closeSubstModal();
+        if (this._substQuickPrevLocId) {
+            this._locId = this._substQuickPrevLocId;
+            this._substQuickPrevLocId = null;
+            this._loadPageData().then(() => this._render(this._container));
+            return;
         }
         this._render(this._container);
     },
 
+    // Усі user_id, зайняті реальною зміною на цю дату БУДЬ-ДЕ в системі (не лише в
+    // локаціях цього керівника/партнерів) — щоб "Пошук підміни" не пропонував як
+    // "вільних" тих, хто того дня вже працює в іншій, зовсім не пов'язаній локації.
+    async _fetchSystemBusyIds(date) {
+        const realKeys = Object.keys(getShiftTypes()).filter(_isRealShiftType);
+        const { data } = await supabase.from('schedule_entries')
+            .select('user_id, notes')
+            .eq('date', date)
+            .in('shift_type', realKeys);
+        // notes-фільтр навмисно в JS, не в .not('notes','in',...) — той у Postgres дає
+        // NULL (а не true) для notes IS NULL, тому мовчки виключав усі звичайні зміни
+        // (notes завжди null), і "зайнятість по всій системі" фактично завжди була порожньою.
+        return new Set((data || [])
+            .filter(e => !_FLAG_NOTES.includes(e.notes))
+            .map(e => e.user_id)
+            .filter(Boolean));
+    },
+
     _closeSubstModal() {
+        this._substSearchQuery = '';
+        this._substClickedLocId = null;
         const panel    = document.getElementById('sg-subst-modal');
         const backdrop = document.getElementById('sg-subst-backdrop');
         if (panel)    { panel.classList.remove('open');    panel.addEventListener('transitionend', () => panel.remove(),    { once: true }); }
@@ -2460,9 +2678,79 @@ ${this._manCss()}
         document.querySelectorAll('.sg-subst-tab-content').forEach(c => { c.style.display = c.id === `sg-stab-content-${tab}` ? '' : 'none'; });
     },
 
+    _switchPartnerMgrTab(scope, mgrKey) {
+        const tabsWrap = document.getElementById(`sg-psub-tabs-${scope}`);
+        const listWrap = document.getElementById(`sg-psub-list-${scope}`);
+        if (!tabsWrap || !listWrap) return;
+        tabsWrap.querySelectorAll('.sg-psub-tab').forEach(t => t.classList.toggle('active', t.dataset.mgr === mgrKey));
+        const query = (this._substSearchQuery || '').trim().toLowerCase();
+        listWrap.querySelectorAll('.sg-subst-row').forEach(p => {
+            const matchesMgr = mgrKey === '__all__' || p.dataset.mgr === mgrKey;
+            const name = (p.querySelector('.sg-subst-name')?.textContent || '').toLowerCase();
+            p.style.display = (matchesMgr && (!query || name.includes(query))) ? '' : 'none';
+        });
+    },
+
+    // Пошук за ПІБ у "Пошук підміни" — одразу по "Моїх співробітниках" і по всіх
+    // партнерських (незалежно від того, яка вкладка-керівник зараз активна).
+    _filterSubstByName(q) {
+        this._substSearchQuery = q;
+        const query = (q || '').trim().toLowerCase();
+        ['free', 'busy'].forEach(scope => {
+            document.getElementById(`sg-own-list-${scope}`)?.querySelectorAll('.sg-subst-row').forEach(row => {
+                const name = (row.querySelector('.sg-subst-name')?.textContent || '').toLowerCase();
+                row.style.display = (!query || name.includes(query)) ? '' : 'none';
+            });
+            const tabsWrap  = document.getElementById(`sg-psub-tabs-${scope}`);
+            const activeMgr = tabsWrap?.querySelector('.sg-psub-tab.active')?.dataset.mgr || '__all__';
+            document.getElementById(`sg-psub-list-${scope}`)?.querySelectorAll('.sg-subst-row').forEach(row => {
+                const matchesMgr = activeMgr === '__all__' || row.dataset.mgr === activeMgr;
+                const name = (row.querySelector('.sg-subst-name')?.textContent || '').toLowerCase();
+                row.style.display = (matchesMgr && (!query || name.includes(query))) ? '' : 'none';
+            });
+        });
+    },
+
+    // Захист від випадкового закриття вікна пошуку підміни (клік по фону/✕).
+    // Власна центрована модалка (не глобальний Modal.confirm — той є боковою
+    // панеллю по всьому додатку, а тут потрібне саме по центру екрана).
+    _confirmCloseSubstModal() {
+        document.getElementById('sg-subst-close-confirm')?.remove();
+        const el = document.createElement('div');
+        el.id = 'sg-subst-close-confirm';
+        el.className = 'sg-overlay';
+        el.innerHTML = `
+<div class="sg-modal" style="max-width:400px;height:auto">
+    <div class="sg-mhdr">
+        <h3 style="margin:0;font-size:1rem">Закрити пошук підміни?</h3>
+        <button class="sg-mclose" onclick="document.getElementById('sg-subst-close-confirm').remove()">✕</button>
+    </div>
+    <p style="font-size:.88rem;line-height:1.55;color:var(--text-muted);margin:0 0 20px">
+        Вікно пошуку підміни буде закрито.
+    </p>
+    <div class="sg-modal-actions">
+        <button class="sg-btn-save" onclick="document.getElementById('sg-subst-close-confirm').remove();ScheduleGraphPage._selectSubstDate(null)">Закрити</button>
+        <button class="sg-btn-cancel" onclick="document.getElementById('sg-subst-close-confirm').remove()">Скасувати</button>
+    </div>
+</div>`;
+        document.body.appendChild(el);
+        el.addEventListener('click', e => { if (e.target === el) el.remove(); });
+    },
+
     _openSubstModal(date) {
         const sd = date;
         const sdLabel = new Date(sd + 'T00:00:00').toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', weekday: 'short' });
+        const displayLocId = this._substQuickPrevLocId || this._substClickedLocId;
+        const originLocName = displayLocId
+            ? (this._locations.find(l => l.id === displayLocId)?.name
+                || this._partnerLocations?.find(l => l.id === displayLocId)?.name || '')
+            : '';
+        const monthLabelHdr = `${MONTHS_UA[this._month]} ${this._year}`;
+        // _findAllNeedSubDates() рахує по this._entries/_assignments — валідно лише коли
+        // це дані САМЕ цієї локації (тобто прийшли через кнопку "Пошук підміни" одиничної
+        // локації), інакше (клік по даті в таблиці "Всі локації") дані іншої локації —
+        // рахувати на них не можна, тому чіпи там просто не показуємо.
+        const needDates = this._substQuickPrevLocId ? this._findAllNeedSubDates(this._substQuickPrevLocId) : [];
 
         const isAllLocs = this._locId === 'all';
 
@@ -2482,24 +2770,36 @@ ${this._manCss()}
                 if (e?.shift_type === 'day_off' || (!a.is_primary && e?.shift_type === 'work')) subCount[a.user_id] = (subCount[a.user_id] || 0) + 1;
             });
         }
-        const getSubGroup = uid => { const n = subCount[uid] || 0; return n <= 1 ? 0 : n <= 3 ? 1 : 2; };
 
-        // Find last real shift date per user (in current month, before sd)
-        const lastShiftDate = {};
+        // Останню зміну шукаємо СТРОГО до дати заміни (sd) — інакше зміна, яка ще
+        // тільки БУДЕ (напр. 31-го, коли шукаємо заміну на 10-те), хибно підписувалась
+        // як "Остання зміна". Якщо до sd взагалі нічого немає (в межах місяця) —
+        // тоді як запасний варіант показуємо найближчу МАЙБУТНЮ зміну окремим бейджем.
+        const lastShiftDate  = {};
+        const lastShiftLoc   = {};
+        const nextShiftDate  = {};
+        const nextShiftLoc   = {};
         for (let d = 1; d <= days; d++) {
             const dateStr = this._dateStr(d);
-            if (sd && dateStr >= sd) continue;
             this._allAssignments.forEach(a => {
                 if (!a.user_id) return;
                 const e = this._allEntries[`${a.locId}_${a.user_id}_${dateStr}`]
                     || (this._entriesByLoc?.[a.locId] || {})[`${a.user_id}_${dateStr}`] || null;
-                if (_isRealShift(e)) lastShiftDate[a.user_id] = dateStr;
+                if (_isRealShift(e)) {
+                    if (!sd || dateStr < sd) {
+                        lastShiftDate[a.user_id] = dateStr;
+                        lastShiftLoc[a.user_id] = a.locName || '';
+                    } else if (!nextShiftDate[a.user_id]) {
+                        nextShiftDate[a.user_id] = dateStr;
+                        nextShiftLoc[a.user_id] = a.locName || '';
+                    }
+                }
             });
         }
 
         // Check if last shift was yesterday or today (recently worked)
-        const todayStr = this._dateStr(new Date().getDate());
         const _pad = n => String(n).padStart(2, '0');
+        const todayStr = this._realTodayStr();
         const yesterday = (() => {
             const y = new Date(); y.setDate(y.getDate() - 1);
             return `${y.getFullYear()}-${_pad(y.getMonth()+1)}-${_pad(y.getDate())}`;
@@ -2514,7 +2814,7 @@ ${this._manCss()}
         this._allAssignments.forEach(a => {
             if (!a.user_id || seenUids.has(a.user_id)) return;
             seenUids.add(a.user_id);
-            const isBusy = this._allAssignments
+            const isBusy = this._substBusyIds?.has(a.user_id) || this._allAssignments
                 .filter(a2 => a2.user_id === a.user_id)
                 .some(a2 => {
                     const e = this._allEntries[`${a2.locId}_${a2.user_id}_${sd}`]
@@ -2533,11 +2833,14 @@ ${this._manCss()}
             return Math.round(diff / 86400000);
         };
         const sortBySubCount = list => list.slice().sort((a, b) => {
-            // More days since last shift → higher (smaller days = more recent = bottom)
+            // Спершу за кількістю підмін цього місяця — 0 на першому місці
+            const ca = subCount[a.user_id] || 0;
+            const cb = subCount[b.user_id] || 0;
+            if (ca !== cb) return ca - cb;
+            // Тай-брейк: довше без зміни → вище
             const da = daysSinceLastShift(a.user_id);
             const db = daysSinceLastShift(b.user_id);
-            if (da !== db) return db - da; // більше днів → вище
-            return getSubGroup(a.user_id) - getSubGroup(b.user_id);
+            return db - da;
         });
         freeList = sortBySubCount(freeList);
         busyList = sortBySubCount(busyList);
@@ -2560,57 +2863,126 @@ ${this._manCss()}
             const cnt          = subCount[a.user_id] || 0;
             const cntColor     = cnt <= 1 ? '#10b981' : cnt <= 3 ? '#f59e0b' : '#ef4444';
             const cntBadge     = `<span class="sg-sub-cnt-badge" style="background:${cntColor}1a;color:${cntColor};border-color:${cntColor}40">${cnt} підм.</span>`;
-            const lastShift    = lastShiftDate[a.user_id];
-            const isRecent     = recentlyWorked(a.user_id);
+            const lastShift     = lastShiftDate[a.user_id];
+            const lastShiftLocN = lastShiftLoc[a.user_id] || '';
+            const isRecent      = recentlyWorked(a.user_id);
             const lastShiftBadge = lastShift
-                ? `<span class="sg-sub-last-shift${isRecent ? ' sg-sub-last-recent' : ''}" title="Остання зміна">
-                    <i class="fa-regular fa-calendar"></i> Остання зміна: ${lastShift === todayStr ? 'сьогодні' : lastShift === yesterday ? 'вчора' : Fmt.dateShort(new Date(lastShift + 'T00:00:00'))}
+                ? `<span class="sg-sub-last-shift${isRecent ? ' sg-sub-last-recent' : ''}" title="Остання зміна${lastShiftLocN ? ' у «' + Fmt.esc(lastShiftLocN) + '»' : ''}">
+                    <i class="fa-regular fa-calendar"></i> ${lastShift === todayStr ? 'сьогодні' : lastShift === yesterday ? 'вчора' : Fmt.dateShort(new Date(lastShift + 'T00:00:00'))}${lastShiftLocN ? ` · ${Fmt.esc(lastShiftLocN)}` : ''}
+                   </span>`
+                : '';
+            // Наступна запланована зміна ПІСЛЯ дати заміни — показуємо завжди поруч зі
+            // статусом (не лише як заміну "останньої", коли минулих змін немає), щоб
+            // керівник одразу бачив, коли співробітник знову вийде після sd.
+            const nextShift     = nextShiftDate[a.user_id];
+            const nextShiftLocN = nextShiftLoc[a.user_id] || '';
+            const nextShiftBadge = nextShift
+                ? `<span class="sg-sub-next-shift" title="Наступна запланована зміна після дати заміни${nextShiftLocN ? ' у «' + Fmt.esc(nextShiftLocN) + '»' : ''}">
+                    <i class="fa-regular fa-calendar-plus"></i> ${Fmt.dateShort(new Date(nextShift + 'T00:00:00'))}${nextShiftLocN ? ` · ${Fmt.esc(nextShiftLocN)}` : ''}
                    </span>`
                 : '';
             const position     = a.profile?.job_position || '';
             const managerName  = a.profile?._managerName || '';
             const dovirenosti  = a.profile?._dovirenosti || [];
-            const phone        = a.profile?.phone || '';
             const badge        = shift
-                ? `<span class="sg-badge" style="background:${shift.bg};color:${shift.color};margin-left:auto">${shift.short}</span>`
-                : '';
+                ? `<span class="sg-subst-status-shift"><span class="sg-badge" style="background:${shift.bg};color:${shift.color}">${shift.short}</span> ${Fmt.esc(shift.label)}</span>`
+                // зайнятий цього дня деінде в системі (поза локаціями цього керівника/партнерів) —
+                // локального entry немає, тому shift/badge вище порожні
+                : (this._substBusyIds?.has(a.user_id) ? `<span class="sg-subst-status-shift" style="color:#ef4444"><i class="fa-solid fa-building-lock"></i> Зайнятий в іншій локації</span>` : '');
 
-            const extraInfo = `
-                ${managerName ? `<div class="sg-subst-meta">Керівник: <span class="sg-subst-meta-val">${Fmt.esc(managerName)}</span></div>` : ''}
-                ${dovirenosti.length ? `<div class="sg-subst-meta">Довіреність: <span class="sg-subst-meta-val">${Fmt.esc(dovirenosti.join(', '))}</span></div>` : ''}
-                ${phone ? `<div class="sg-subst-meta">${Fmt.esc(phone)}</div>` : ''}
-            `;
+            const dovClean = dovirenosti.filter(d => d && d.trim());
+            const dovPills = dovClean.length
+                ? dovClean.map(d => `<span class="sg-subst-dov-pill">${Fmt.esc(d)}</span>`).join('')
+                : '<span class="sg-subst-td-empty">—</span>';
+
+            const mainStatus = wantsSub ? `<span class="sg-sub-wants-badge">🙋 Пропонує</span>`
+                : needsSub    ? `<span class="sg-needsub-badge">🆘 Потрібна підміна</span>`
+                : badge       ? badge
+                : lastShiftBadge ? lastShiftBadge
+                : '<span class="sg-subst-td-empty">—</span>';
+            // Наступна запланована зміна — окремим рядком нижче основного статусу.
+            const statusHtml = `<div class="sg-subst-status-row">${mainStatus}</div>`
+                + (nextShiftBadge ? `<div class="sg-subst-status-row">${nextShiftBadge}</div>` : '');
+
+            const mgrAttr = Fmt.esc(managerName || 'Без керівника');
 
             if (isFree) {
                 const onclick = isPartner
                     ? `ScheduleGraphPage._confirmPartnerSubstitute('${a.user_id}',${JSON.stringify(name||'').replace(/"/g,'&quot;')})`
                     : `ScheduleGraphPage._assignSubstitute('${a.user_id}')`;
-                return `<div class="sg-subst-person sg-subst-free-card${wantsSub?' sg-subst-wants-sub':''}${isPartner?' sg-subst-partner':''}"
-                    onclick="${onclick}" title="Натисніть щоб призначити на підміну">
-                    <div class="sg-av sm">${initials}</div>
-                    <div style="flex:1;min-width:0">
-                        <div class="sg-subst-name">${Fmt.esc(name)}</div>
-                        ${position ? `<div class="sg-subst-position">${Fmt.esc(position)}</div>` : ''}
-                        ${extraInfo}
-                        ${wantsSub ? `<div class="sg-sub-wants-badge">🙋 Пропонує підміну</div>` : ''}
-                        ${lastShiftBadge}
-                    </div>
-                    ${cntBadge}
-                    ${badge}
-                    <span class="sg-subst-add-btn">+</span>
-                </div>`;
+                return `<tr class="sg-subst-row${wantsSub?' sg-subst-wants-sub':''}${isPartner?' sg-subst-partner':''}"
+                    data-mgr="${mgrAttr}" onclick="${onclick}">
+                    <td class="sg-subst-td-emp">
+                        <div class="sg-subst-td-emp-inner">
+                            <div class="sg-av sm">${initials}</div>
+                            <div style="min-width:0">
+                                <div class="sg-subst-name">${Fmt.esc(name)}</div>
+                                ${position ? `<div class="sg-subst-position">${Fmt.esc(position)}</div>` : ''}
+                            </div>
+                        </div>
+                    </td>
+                    <td class="sg-subst-td-mgr">${managerName ? Fmt.esc(managerName) : '<span class="sg-subst-td-empty">—</span>'}</td>
+                    <td class="sg-subst-td-dov"><div class="sg-subst-dov-wrap">${dovPills}</div></td>
+                    <td class="sg-subst-td-cnt">${cntBadge}</td>
+                    <td class="sg-subst-td-status"><div class="sg-subst-status-stack">${statusHtml}</div></td>
+                    <td class="sg-subst-td-action"><span class="sg-subst-add-btn">+</span></td>
+                </tr>`;
             }
-            return `<div class="sg-subst-person busy${needsSub?' sg-subst-needs-sub':''}${isPartner?' sg-subst-partner':''}">
-                <div class="sg-av sm">${initials}</div>
-                <div style="flex:1;min-width:0">
-                    <div class="sg-subst-name">${Fmt.esc(name)}</div>
-                    ${position ? `<div class="sg-subst-position">${Fmt.esc(position)}</div>` : ''}
-                    ${extraInfo}
-                    ${needsSub ? `<div class="sg-needsub-badge">🆘 Потрібна підміна</div>` : ''}
-                </div>
-                ${cntBadge}
-                ${badge}
-            </div>`;
+            return `<tr class="sg-subst-row busy${needsSub?' sg-subst-needs-sub':''}${isPartner?' sg-subst-partner':''}" data-mgr="${mgrAttr}">
+                <td class="sg-subst-td-emp">
+                    <div class="sg-subst-td-emp-inner">
+                        <div class="sg-av sm">${initials}</div>
+                        <div style="min-width:0">
+                            <div class="sg-subst-name">${Fmt.esc(name)}</div>
+                            ${position ? `<div class="sg-subst-position">${Fmt.esc(position)}</div>` : ''}
+                        </div>
+                    </div>
+                </td>
+                <td class="sg-subst-td-mgr">${managerName ? Fmt.esc(managerName) : '<span class="sg-subst-td-empty">—</span>'}</td>
+                <td class="sg-subst-td-dov"><div class="sg-subst-dov-wrap">${dovPills}</div></td>
+                <td class="sg-subst-td-cnt">${cntBadge}</td>
+                <td class="sg-subst-td-status"><div class="sg-subst-status-stack">${statusHtml}</div></td>
+                <td class="sg-subst-td-action"></td>
+            </tr>`;
+        };
+
+        // Партнерів групуємо по ПІБ їх керівника й показуємо вкладками-пілюлями
+        // для фільтрації (окремо для "Вільні"/"Зайняті" — scope='free'|'busy')
+        const substTableHead = `<thead><tr>
+            <th class="sg-subst-th-emp">Співробітник</th>
+            <th>Керівник</th>
+            <th>Довіреність</th>
+            <th class="sg-subst-th-cnt">Підм.</th>
+            <th>Статус</th>
+            <th class="sg-subst-th-action"></th>
+        </tr></thead>`;
+
+        // "Мої співробітники" = реальні прямі підлеглі (profile.manager_id === я), а не
+        // всі, кого просто додано в МОЮ локацію графіка — інакше чужий співробітник,
+        // якого я підключив собі на підміну, хибно показувався б як "мій".
+        const _myProfileId = AppState.profile?.id;
+        const _isMine = a => !a.isPartner && (!a.profile?.manager_id || a.profile.manager_id === _myProfileId);
+
+        const renderPartnerBlock = (list, isFreeTab, scope) => {
+            if (!list.length) return '';
+            const groups = {};
+            list.forEach(a => {
+                const mgr = a.profile?._managerName || 'Без керівника';
+                (groups[mgr] ||= []).push(a);
+            });
+            const mgrNames = Object.keys(groups).sort((x, y) => x.localeCompare(y, 'uk'));
+            return `
+            <div class="sg-subst-section-sep">🤝 Партнери — узгодьте заміну у їх керівника</div>
+            <div class="sg-psub-tabs" id="sg-psub-tabs-${scope}">
+                <button class="sg-psub-tab active" data-mgr="__all__" onclick="ScheduleGraphPage._switchPartnerMgrTab('${scope}','__all__')">Всі <span class="sg-psub-tab-count">${list.length}</span></button>
+                ${mgrNames.map(m => `<button class="sg-psub-tab" data-mgr="${Fmt.esc(m)}" onclick="ScheduleGraphPage._switchPartnerMgrTab('${scope}',${JSON.stringify(m).replace(/"/g,'&quot;')})">${Fmt.esc(m)} <span class="sg-psub-tab-count">${groups[m].length}</span></button>`).join('')}
+            </div>
+            <table class="sg-subst-table">
+                ${substTableHead}
+                <tbody id="sg-psub-list-${scope}">
+                    ${list.map(a => renderPerson(a, isFreeTab)).join('')}
+                </tbody>
+            </table>`;
         };
 
         document.getElementById('sg-subst-backdrop')?.remove();
@@ -2619,7 +2991,7 @@ ${this._manCss()}
         const backdrop = document.createElement('div');
         backdrop.id = 'sg-subst-backdrop';
         backdrop.className = 'sg-emp-backdrop';
-        backdrop.onclick = () => ScheduleGraphPage._selectSubstDate(null);
+        backdrop.onclick = () => ScheduleGraphPage._confirmCloseSubstModal();
         document.body.appendChild(backdrop);
 
         const panel = document.createElement('div');
@@ -2629,12 +3001,28 @@ ${this._manCss()}
 <div class="sg-emp-panel-header">
     <div class="sg-emp-panel-header-ico"><i class="fa-solid fa-arrow-right-arrow-left"></i></div>
     <div style="flex:1;min-width:0">
-        <div style="font-size:1.05rem;font-weight:800">Пошук підміни</div>
-        <div style="font-size:.78rem;color:var(--text-muted);margin-top:2px;text-transform:capitalize">📅 ${sdLabel}</div>
+        <div style="font-size:1.05rem;font-weight:800">Пошук підміни${originLocName ? ` · ${Fmt.esc(originLocName)}` : ''}</div>
+        <div style="font-size:.78rem;color:var(--text-muted);margin-top:2px">
+            <span style="text-transform:capitalize">📅 ${sdLabel}</span> · <span style="text-transform:capitalize">${monthLabelHdr}</span>
+        </div>
     </div>
-    <button class="sg-mclose" onclick="ScheduleGraphPage._selectSubstDate(null)">✕</button>
+    <button class="sg-mclose" onclick="ScheduleGraphPage._confirmCloseSubstModal()">✕</button>
 </div>
 <div class="sg-subst-panel-body">
+    ${needDates.length > 1 ? `
+    <div class="sg-subst-needdates">
+        <span class="sg-subst-needdates-label">🆘 Дати без співробітника (${needDates.length}):</span>
+        <div class="sg-subst-needdates-chips">
+            ${needDates.map(nd => `<button class="sg-subst-needdate-chip${nd === sd ? ' active' : ''}"
+                onclick="ScheduleGraphPage._selectSubstDate('${nd}','${this._substQuickPrevLocId}')">${Fmt.dateShort(new Date(nd + 'T00:00:00'))}</button>`).join('')}
+        </div>
+    </div>` : ''}
+    <div class="sg-subst-search-bar">
+        <span class="sg-subst-search-ico"><i class="fa-solid fa-magnifying-glass"></i></span>
+        <input type="text" id="sg-subst-search" placeholder="Пошук за ПІБ — свої й партнерські…" autocomplete="off"
+            value="${Fmt.esc(this._substSearchQuery || '')}"
+            oninput="ScheduleGraphPage._filterSubstByName(this.value)">
+    </div>
     <div class="sg-subst-tabs">
         <button class="sg-subst-tab active" id="sg-stab-free" onclick="ScheduleGraphPage._switchSubstTab('free')">
             🟢 Вільні <span class="sg-stab-count">${freeList.length}</span>
@@ -2646,22 +3034,25 @@ ${this._manCss()}
     <div class="sg-subst-tab-content" id="sg-stab-content-free">
         <div class="sg-subst-scroll sg-subst-modal-scroll">
             ${(() => {
-                const own     = freeList.filter(a => !a.isPartner);
-                const partner = freeList.filter(a =>  a.isPartner);
+                const own     = freeList.filter(_isMine);
+                const partner = freeList.filter(a => !_isMine(a));
                 if (!freeList.length) return '<div class="sg-subst-empty">Немає вільних співробітників</div>';
-                return [
-                    ...own.map(a => renderPerson(a, true)),
-                    ...(partner.length ? [
-                        `<div class="sg-subst-section-sep">🤝 Партнери — узгодьте заміну у їх керівника</div>`,
-                        ...partner.map(a => renderPerson(a, true))
-                    ] : [])
-                ].join('');
+                return (own.length ? `<div class="sg-subst-own-label">👤 Мої співробітники</div>
+                    <table class="sg-subst-table">${substTableHead}<tbody id="sg-own-list-free">${own.map(a => renderPerson(a, true)).join('')}</tbody></table>` : '')
+                    + renderPartnerBlock(partner, true, 'free');
             })()}
         </div>
     </div>
     <div class="sg-subst-tab-content" id="sg-stab-content-busy" style="display:none">
         <div class="sg-subst-scroll sg-subst-modal-scroll">
-            ${busyList.length ? busyList.map(a => renderPerson(a, false)).join('') : '<div class="sg-subst-empty">Всі вільні</div>'}
+            ${(() => {
+                const own     = busyList.filter(_isMine);
+                const partner = busyList.filter(a => !_isMine(a));
+                if (!busyList.length) return '<div class="sg-subst-empty">Всі вільні</div>';
+                return (own.length ? `<div class="sg-subst-own-label">👤 Мої співробітники</div>
+                    <table class="sg-subst-table">${substTableHead}<tbody id="sg-own-list-busy">${own.map(a => renderPerson(a, false)).join('')}</tbody></table>` : '')
+                    + renderPartnerBlock(partner, false, 'busy');
+            })()}
         </div>
     </div>
 </div>`;
@@ -2670,6 +3061,7 @@ ${this._manCss()}
             backdrop.classList.add('open');
             panel.classList.add('open');
         });
+        if (this._substSearchQuery) this._filterSubstByName(this._substSearchQuery);
     },
 
 
@@ -2684,6 +3076,16 @@ ${this._manCss()}
             Toast.info('Вже доданий до всіх локацій');
             return;
         }
+
+        // "Пошук підміни" відкрито з конкретної локації (кнопкою) АБО кліком по
+        // даті в конкретному рядку локації (напр. у таблиці "Всі локації") —
+        // призначаємо туди одразу, без зайвого кроку вибору серед усіх локацій
+        const originLocId = this._substQuickPrevLocId || this._substClickedLocId;
+        if (originLocId && available.some(l => l.id === originLocId)) {
+            this._confirmSubstitute(userId, originLocId);
+            return;
+        }
+
         this._showSubstModal(userId, userName, available);
     },
 
@@ -2725,10 +3127,10 @@ ${this._manCss()}
     },
 
     _showSubstModal(userId, userName, locations) {
-        document.getElementById('sg-subst-modal')?.remove();
+        document.getElementById('sg-subst-loc-picker')?.remove();
         const initials = userName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
         const el = document.createElement('div');
-        el.id = 'sg-subst-modal';
+        el.id = 'sg-subst-loc-picker';
         el.className = 'sg-overlay';
         el.innerHTML = `
 <div class="sg-modal">
@@ -2740,7 +3142,7 @@ ${this._manCss()}
                 <p style="margin:2px 0 0;color:var(--text-muted);font-size:.82rem">${Fmt.esc(userName)}</p>
             </div>
         </div>
-        <button class="sg-mclose" onclick="document.getElementById('sg-subst-modal').remove()">✕</button>
+        <button class="sg-mclose" onclick="document.getElementById('sg-subst-loc-picker').remove()">✕</button>
     </div>
     <p style="font-size:.82rem;color:var(--text-muted);margin:0 0 14px">
         Оберіть локацію — співробітник буде доданий до її графіку:
@@ -2763,16 +3165,18 @@ ${this._manCss()}
     },
 
     async _confirmSubstitute(userId, locId) {
-        document.getElementById('sg-subst-modal')?.remove();
+        document.getElementById('sg-subst-loc-picker')?.remove();
         const prof      = this._allAssignments.find(a => a.user_id === userId)?.profile;
         const isForeign = prof?.manager_id && prof.manager_id !== AppState.user.id;
 
+        // Це завжди підміна на конкретну (обрану в пошуку) дату — не постійне
+        // основне призначення, незалежно від того, свій це співробітник чи партнерський
         const { error } = await supabase.from('schedule_assignments')
-            .insert({ location_id: locId, user_id: userId, created_by: AppState.user.id, is_primary: !isForeign });
+            .insert({ location_id: locId, user_id: userId, created_by: AppState.user.id, is_primary: false });
         if (error) { Toast.error('Помилка', error.message); return; }
 
-        if (isForeign && this._substDate) {
-            await supabase.from('schedule_entries').upsert({
+        if (this._substDate) {
+            const { error: entErr } = await supabase.from('schedule_entries').upsert({
                 location_id: locId,
                 user_id:     userId,
                 date:        this._substDate,
@@ -2780,28 +3184,45 @@ ${this._manCss()}
                 updated_by:  AppState.user.id,
                 updated_at:  new Date().toISOString(),
             }, { onConflict: 'location_id,user_id,date' });
+            if (entErr) Toast.error('Помилка запису зміни', entErr.message);
         }
 
         const loc = this._locations.find(l => l.id === locId);
+        const dateLabel = this._substDate
+            ? new Date(this._substDate + 'T00:00:00').toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' })
+            : '';
+        // Клік по сповіщенню одразу відкриває "Мій графік" на потрібних локації й місяці
+        // (а не поточному місяці за замовчуванням) — беремо рік/місяць саме з дати підміни.
+        const [substYear, substMonth] = this._substDate ? this._substDate.split('-') : [null, null];
+        const notifLink = substYear
+            ? `schedule-graph?view=employee&year=${substYear}&month=${substMonth}&loc=${locId}`
+            : `schedule-graph?view=employee&loc=${locId}`;
+        const { error: notifErr } = await supabase.from('notifications').insert({
+            user_id:    userId,
+            title:      '📅 Вас додано до графіку',
+            message:    `${AppState.profile?.full_name || 'Керівник'} додав вас як підміну до локації «${loc?.name || ''}»${dateLabel ? ` на ${dateLabel}` : ''}.`,
+            type:       'general',
+            link:       notifLink,
+            created_by: AppState.user.id,
+        });
+        if (notifErr) console.error('[sg notify]', notifErr);
 
-        if (isForeign) {
-            const dateLabel = this._substDate
-                ? new Date(this._substDate + 'T00:00:00').toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' })
-                : '';
-            const { error: notifErr } = await supabase.from('notifications').insert({
-                user_id:    userId,
-                title:      '📅 Вас додано до графіку',
-                message:    `${AppState.profile?.full_name || 'Керівник'} додав вас як підміну до локації «${loc?.name || ''}»${dateLabel ? ` на ${dateLabel}` : ''}.`,
-                type:       'general',
-                created_by: AppState.user.id,
-            });
-            if (notifErr) console.error('[sg notify]', notifErr);
-        }
-
-        Toast.success(`${Fmt.esc(prof?.full_name) || 'Співробітника'} додано до "${Fmt.esc(loc?.name) || 'локації'}"`);
+        Toast.success(`${Fmt.esc(prof?.full_name) || 'Співробітника'} призначено на підміну${dateLabel ? ` (${dateLabel})` : ''} у "${Fmt.esc(loc?.name) || 'локації'}"`);
 
         await this._loadAllData();
-        this._render(this._container);
+        // Панель "Пошук підміни" ще відкрита (_locId='all' для її внутрішніх даних) —
+        // рендерити фон в цьому стані означає "Всі локації" мигне позаду панелі,
+        // хоча керівник відкривав пошук із конкретної локації. Тимчасово повертаємось
+        // на локацію-джерело для фонового рендеру, потім відновлюємо 'all' для панелі.
+        if (this._substQuickPrevLocId) {
+            const savedLocId = this._locId;
+            this._locId = this._substQuickPrevLocId;
+            await this._loadPageData();
+            this._render(this._container);
+            this._locId = savedLocId;
+        } else {
+            this._render(this._container);
+        }
     },
 
     _showSubstResolveModal(userId, date, entry, profile, locId) {
@@ -3767,8 +4188,7 @@ ${this._manCss()}
         const _hasEntries    = a => nums.some(d => _getEntry(a, this._dateStr(d)));
         const _isPartnerLoc  = locId => this._partnerLocations?.some(l => l.id === locId);
         const _now = new Date();
-        const _isCurrentOrPastMonth = this._year < _now.getFullYear() ||
-            (this._year === _now.getFullYear() && this._month <= _now.getMonth());
+        const _isCurrentMonth = this._year === _now.getFullYear() && this._month === _now.getMonth();
         const _monthKey = this._monthKey(this._year, this._month);
 
         // Cross-location shift: uid_date → [{ locId, locName }, ...] — all real shifts per employee per date
@@ -3793,7 +4213,7 @@ ${this._manCss()}
             // months or if pinned for this month, otherwise only if they have entries
             const visible = a.isPartner ? _hasEntries(a)
                 : (a.is_primary && a.user_id) ? true
-                : (a.user_id && (_isCurrentOrPastMonth || (a.pinned_months || []).includes(_monthKey))) ? true
+                : (a.user_id && (_isCurrentMonth || (a.pinned_months || []).includes(_monthKey))) ? true
                 : _hasEntries(a);
             if (!visible) return;
             // Employee filter: if active, only show rows matching the selected user
@@ -3806,12 +4226,27 @@ ${this._manCss()}
             if (!byLoc[a.locId].members.find(m => m.id === a.id))
                 byLoc[a.locId].members.push(a);
         });
+        // Порядок співробітників (drag&drop) — окремий localStorage-ключ на кожну
+        // локацію (не this._locId, той тут завжди 'all'), тому зберігаємо/читаємо
+        // per-loc через _empOrderKeyFor().
+        Object.entries(byLoc).forEach(([locId, loc]) => this._applyEmpOrderTo(loc.members, locId));
         const _locOrder = Object.fromEntries(this._locations.map((l, i) => [l.id, i]));
 
-        const partnerLocCount = Object.values(byLoc).filter(l => l.isPartner).length;
-        const visibleByLoc = this._showPartnerLocs
-            ? byLoc
-            : Object.fromEntries(Object.entries(byLoc).filter(([, l]) => !l.isPartner));
+        // Фільтр "Мої локації" / ФІБ керівника блоку — одна активна вкладка,
+        // як kb-type-chips у Базі знань.
+        if (!this._locScope) this._locScope = 'mine';
+        const partnerMgrCounts = {};
+        Object.values(byLoc).forEach(l => {
+            if (!l.isPartner) return;
+            const mgr = l.members[0]?.partnerOwnerName || 'Партнер';
+            partnerMgrCounts[mgr] = (partnerMgrCounts[mgr] || 0) + 1;
+        });
+        const partnerMgrNames = Object.keys(partnerMgrCounts).sort((a, b) => a.localeCompare(b, 'uk'));
+        if (this._locScope !== 'mine' && !partnerMgrNames.includes(this._locScope)) this._locScope = 'mine';
+        const ownLocCount = Object.values(byLoc).filter(l => !l.isPartner).length;
+        const visibleByLoc = this._locScope === 'mine'
+            ? Object.fromEntries(Object.entries(byLoc).filter(([, l]) => !l.isPartner))
+            : Object.fromEntries(Object.entries(byLoc).filter(([, l]) => l.isPartner && (l.members[0]?.partnerOwnerName || 'Партнер') === this._locScope));
 
         // Per-location: which dates have at least one 'work' entry (for no-work highlight)
         const locDatesWithWork = {};
@@ -3830,63 +4265,33 @@ ${this._manCss()}
         const datesWithAnyWork = new Set();
         Object.values(locDatesWithWork).forEach(s => s.forEach(d => datesWithAnyWork.add(d)));
 
-        const legend = getShiftTypeEntries().map(([k, v]) => `
-            <button class="sg-leg-btn ${this._quickType === k ? 'active' : ''}"
-                style="--lc:${v.color};--lb:${v.bg}"
-                onclick="ScheduleGraphPage._setQuickType('${k}')">
-                <span class="sg-leg-short">${v.short}</span>
-                ${v.label}
-                ${this._quickType === k ? '<span class="sg-leg-active-mark">✓</span>' : ''}
-            </button>`).join('');
-
         return `
 <div class="sg-section">
-    <div class="sg-toolbar">
-        <div class="sg-tb-section">
-            <span class="sg-tb-label"><i class="fa-solid fa-list-check"></i> Легенда</span>
-            <div class="sg-legend">${legend}<button class="sg-types-mgr-btn" onclick="ScheduleGraphPage._showShiftTypesModal()" title="Налаштувати типи змін">⚙️</button></div>
+    ${partnerMgrNames.length ? `
+    <div class="sg-loc-scope-bar">
+        <div class="sg-loc-scope-chips">
+            <button class="sg-loc-scope-chip${this._locScope==='mine'?' active':''}" onclick="ScheduleGraphPage._setLocScope('mine')">
+                Мої локації <span class="sg-loc-scope-count">${ownLocCount}</span>
+            </button>
+            <span class="sg-loc-scope-sep"></span>
+            ${partnerMgrNames.map(mgr => `<button class="sg-loc-scope-chip${this._locScope===mgr?' active':''}"
+                onclick="ScheduleGraphPage._setLocScope(${JSON.stringify(mgr).replace(/"/g,'&quot;')})">
+                ${Fmt.esc(mgr)} <span class="sg-loc-scope-count">${partnerMgrCounts[mgr]}</span>
+            </button>`).join('')}
         </div>
-        <div class="sg-tb-section">
-            <span class="sg-tb-label"><i class="fa-solid fa-table-list"></i> Вигляд</span>
-            <div style="display:flex;gap:6px">
-                <button class="sg-collapse-all-btn" title="Згорнути всі локації" onclick="ScheduleGraphPage._collapseAllLocs()"><i class="fa-solid fa-angles-up"></i> Згорнути</button>
-                <button class="sg-collapse-all-btn" title="Розгорнути всі локації" onclick="ScheduleGraphPage._expandAllLocs()"><i class="fa-solid fa-angles-down"></i> Розгорнути</button>
-            </div>
-        </div>
-        <div class="sg-tb-section">
-            <span class="sg-tb-label"><i class="fa-solid fa-arrow-right-arrow-left"></i> Підміни</span>
-            <div style="display:flex;gap:6px;flex-wrap:wrap">
-                <button class="sg-mgr-help-btn" onclick="ScheduleGraphPage._showManagerHelpModal()">
-                    🆘 Потрібна${(() => {
-                        const cnt = Object.values(this._allEntries||{}).filter(e=>e.notes==='__needsub__').length;
-                        return cnt ? ` <span class="sg-cansub-badge">${cnt}</span>` : '';
-                    })()}
-                </button>
-                <button class="sg-cansub-list-btn" onclick="ScheduleGraphPage._showCanSubModal()">
-                    🙋 Можуть${(() => {
-                        const myUids = new Set([...(this._allAssignments||[]),...(this._assignments||[])].map(a=>a.user_id).filter(Boolean));
-                        const src = this._locId === 'all' ? (this._allEntries||{}) : (this._entries||{});
-                        const cnt = new Set(Object.values(src).filter(e=>e.notes==='__sub__'&&myUids.has(e.user_id)).map(e=>e.user_id)).size;
-                        return cnt ? ` <span class="sg-cansub-badge">${cnt}</span>` : '';
-                    })()}
-                </button>
-                <button class="sg-subrep-btn" onclick="ScheduleGraphPage._switchToSubstReport()">
-                    <i class="fa-solid fa-file-lines"></i> Звіт з підмін
-                </button>
-            </div>
-        </div>
-        <div class="sg-tb-section">
-            <span class="sg-tb-label"><i class="fa-solid fa-lock"></i> Доступ</span>
-            <div style="display:flex;gap:6px">
-                <button class="sg-viewers-btn" onclick="ScheduleGraphPage._showViewersModal()">
-                    <i class="fa-solid fa-eye"></i> Доступ
-                </button>
-                <button class="sg-partners-btn${(this._pendingIncoming||[]).length?' sg-partners-btn--badge':''}"
-                    onclick="ScheduleGraphPage._showPartnersModal()"
-                    title="Спільний пошук замін з іншими керівниками">
-                    🤝 ${this._blockName || 'БЛОК'}${(this._pendingIncoming||[]).length?` <span class="sg-partners-badge">${this._pendingIncoming.length}</span>`:''}
-                </button>
-            </div>
+    </div>` : ''}
+    <div class="sg-v2-legend-section" style="padding:8px 16px">
+        <div class="sg-legend">
+            ${getShiftTypeEntries().map(([k, v]) => `
+            <button class="sg-leg-btn ${this._quickType === k ? 'active' : ''}"
+                style="--lc:${v.color};--lb:${v.bg}"
+                onclick="ScheduleGraphPage._setQuickType('${k}')"
+                title="${this._quickType === k ? 'Клік щоб скасувати' : 'Клік щоб вибрати — потім тиснути комірки'}">
+                <span class="sg-leg-short">${v.short}</span>
+                ${v.label}
+                ${this._quickType === k ? '<span class="sg-leg-active-mark">✓ активно</span>' : ''}
+            </button>`).join('')}
+            <button class="sg-types-mgr-btn" onclick="ScheduleGraphPage._showShiftTypesModal()" title="Налаштувати типи змін">⚙️ Налаштування</button>
         </div>
     </div>
     ${this._quickType ? `
@@ -3913,6 +4318,7 @@ ${this._manCss()}
             </colgroup>
             <tbody>
                 ${Object.entries(visibleByLoc).sort(([a],[b])=>(_locOrder[a]??999)-(_locOrder[b]??999)).map(([locId, loc]) => {
+                    const viewOnlyLoc = loc.isPartner || this._isViewOnlyLoc(locId);
                     const rows = loc.members.map(a => {
                         const p = a.profile || {};
                         const init = (p.full_name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
@@ -3962,8 +4368,14 @@ ${this._manCss()}
                         }).join('');
                         const rowType  = sd ? _getEntry(a, sd)?.shift_type : null;
                         const rowClass = sd ? (!rowType ? 'sg-row-free' : 'sg-row-busy') : '';
-                        return `<tr class="${rowClass}${a.isPartner?' sg-row-partner':''}">
-                            ${this._nameCellAll(a)}
+                        const canDrag  = !a.isPartner && !viewOnlyLoc && a.user_id;
+                        return `<tr class="${rowClass}${a.isPartner?' sg-row-partner':''}"
+                            ${canDrag ? `draggable="true" data-assign-id="${a.id}"
+                                ondragstart="ScheduleGraphPage._onEmpDragStartAll(event,'${a.id}','${locId}')"
+                                ondragover="ScheduleGraphPage._onEmpDragOver(event)"
+                                ondragleave="ScheduleGraphPage._onEmpDragLeave(event)"
+                                ondrop="ScheduleGraphPage._onEmpDropAll(event,'${a.id}','${locId}')"` : ''}>
+                            ${this._nameCellAll(a, locId, viewOnlyLoc)}
                             ${cells}
                             <td class="sg-td-sum">${workDays}</td>
                         </tr>`;
@@ -3978,12 +4390,21 @@ ${this._manCss()}
                             return _isRealShift(e);
                         }).length;
                     }, 0);
+                    const locRec  = this._locations.find(l => l.id === locId) || this._partnerLocations?.find(l => l.id === locId);
+                    const locNode = locRec?.node_type || '';
+                    const locIsSeller  = !loc.isPartner && locNode.endsWith('_seller');
+                    const locHasCurExc = !loc.isPartner && !!locRec?.has_currency_exchange;
+                    const headerIco = `<span class="sg-loc-header-ico">
+                        <i class="fa-solid ${loc.isPartner ? 'fa-handshake' : 'fa-shop'}"></i>
+                        ${locIsSeller ? `<span class="sg-loc-item-badge sg-loc-item-badge-shop"><img src="/icons/logo_tehnoscarb1.png" alt=""></span>` : ''}
+                        ${locHasCurExc ? `<span class="sg-loc-item-badge sg-loc-item-badge-currency">$</span>` : ''}
+                    </span>`;
                     return `
-                    <tr class="sg-loc-header-row${loc.isPartner?' sg-loc-header-partner':''}"
+                    <tr class="sg-loc-header-row${loc.isPartner?' sg-loc-header-partner':''}" data-node="${locNode}"
                         style="cursor:pointer" onclick="ScheduleGraphPage._toggleLoc('${locId}')">
                         <td colspan="${days + 2}" class="sg-loc-group-header">
                             <span class="sg-loc-chevron" data-loc-toggle="${locId}">${isCollapsed ? '▼' : '▲'}</span>
-                            ${loc.isPartner?'🤝':'🏪'} ${Fmt.esc(loc.name)}
+                            ${headerIco} ${Fmt.esc(loc.name)}
                             ${(() => { const l = this._locations.find(l => l.id === locId); return (l?.address ? `<span class="sg-loc-acc-addr"><i class="fa-solid fa-location-dot"></i> ${Fmt.esc(l.address)}</span>` : '') + (l?.phone ? `<span class="sg-loc-acc-addr"><i class="fa-solid fa-phone"></i> ${Fmt.esc(l.phone)}</span>` : ''); })()}
                             ${loc.isPartner ? `<span class="sg-partner-loc-badge">${loc.members[0]?.partnerOwnerLabel||'Керівник'}: ${Fmt.esc(loc.members[0]?.partnerOwnerName||'')}</span>` : ''}
                             <span class="sg-loc-meta">
@@ -4004,8 +4425,9 @@ ${this._manCss()}
                             const _isSd   = _date === sd;
                             const _noWork = !datesWithAnyWork.has(_date);
                             return `<td class="sg-th-day${_we?' we':''}${_isSd?' sg-sd-col':''}${_noWork?' sg-th-no-work':''}"
-                                style="cursor:pointer" title="Клік — пошук підміни"
-                                onclick="ScheduleGraphPage._selectSubstDate('${_date}','${locId}')">
+                                ${loc.isPartner
+                                    ? `style="cursor:default" title="Локація партнера — лише перегляд"`
+                                    : `style="cursor:pointer" title="Клік — пошук підміни" onclick="ScheduleGraphPage._selectSubstDate('${_date}','${locId}')"`}>
                                 <div class="sg-day-num">${d}</div>
                                 <div class="sg-day-dow">${DAYS_SHORT[_dow]}</div>
                             </td>`;
@@ -4021,43 +4443,12 @@ ${this._manCss()}
             </tbody>
         </table>
     </div>
-    ${partnerLocCount ? `
-    <div style="display:flex;justify-content:center;padding:10px 0 4px">
-        <button class="sg-show-partners-btn" onclick="ScheduleGraphPage._togglePartnerLocs()">
-            ${this._showPartnerLocs
-                ? '▲ Сховати локації блоку'
-                : `🤝 Показати локації блоку (${partnerLocCount})`}
-        </button>
-    </div>` : ''}
 </div>`;
     },
 
-    _togglePartnerLocs() {
-        this._showPartnerLocs = !this._showPartnerLocs;
+    _setLocScope(scope) {
+        this._locScope = scope;
         this._render(this._container);
-    },
-
-    _collapseAllLocs() {
-        document.querySelectorAll('[data-loc-toggle]').forEach(el => {
-            const id = el.dataset.locToggle;
-            this._collapsedLocs.add(id);
-            document.querySelectorAll(`[data-loc-rows="${id}"]`).forEach(tr => { tr.style.display = 'none'; });
-            el.textContent = '▼';
-            const badge = document.querySelector(`[data-loc-badge="${id}"]`);
-            if (badge) badge.style.display = 'inline';
-        });
-    },
-
-    _expandAllLocs() {
-        const ids = [...this._collapsedLocs];
-        this._collapsedLocs.clear();
-        ids.forEach(id => {
-            document.querySelectorAll(`[data-loc-rows="${id}"]`).forEach(tr => { tr.style.display = ''; });
-            const btn = document.querySelector(`[data-loc-toggle="${id}"]`);
-            if (btn) btn.textContent = '▲';
-            const badge = document.querySelector(`[data-loc-badge="${id}"]`);
-            if (badge) badge.style.display = 'none';
-        });
     },
 
     _toggleLoc(locId) {
@@ -4078,25 +4469,11 @@ ${this._manCss()}
         if (badge) badge.style.display = collapsed ? 'none' : 'inline';
     },
 
+    // Excel-подібне редагування (виділення/подвійний клік/Delete) — той самий
+    // функціонал, що й в одиничній локації, через уніфікований _openCell(...,locId).
     _openCellAll(locId, userId, date) {
         if (!userId || userId === 'null') return;
-        if (this._partnerLocations?.some(l => l.id === locId)) return;
-        if (this._isViewOnlyLoc(locId)) return;
-        if (this._isPastMonth()) { Toast.error('Місяць завершено', 'Редагування минулих місяців заблоковано'); return; }
-        if (this._isLockedForLoc(locId)) { Toast.error('Графік заблоковано', 'Розблокуйте графік перед редагуванням'); return; }
-        if (this._quickType) {
-            this._quickSaveAll(locId, userId, date, this._quickType);
-            return;
-        }
-        const entry = this._allEntries[`${locId}_${userId}_${date}`];
-        const a = this._allAssignments.find(a => a.user_id === userId && a.locId === locId);
-        if (entry?.notes === '__sub__' || entry?.notes === '__needsub__') {
-            this._showSubstResolveModal(userId, date, entry, a?.profile, locId);
-            return;
-        }
-        this._showShiftModal(userId, date, entry, a?.profile, false);
-        // Override save to use allEntries
-        this.__allLocId = locId;
+        this._openCell(userId, date, locId);
     },
 
     async _quickSaveAll(locId, userId, date, type) {
@@ -4151,15 +4528,18 @@ ${this._manCss()}
 
     async _getWorkConflictLoc(userId, date, locId) {
         const realKeys = Object.keys(getShiftTypes()).filter(_isRealShiftType);
+        // notes-фільтр в JS, не в .not('notes','in',...) — той дає NULL (не true) для
+        // notes IS NULL у Postgres і мовчки виключає звичайні зміни (notes завжди null),
+        // через що конфлікт-перевірка фактично ніколи не спрацьовувала.
         const { data } = await supabase.from('schedule_entries')
-            .select('location_id')
+            .select('location_id, notes')
             .eq('user_id', userId)
             .eq('date', date)
             .in('shift_type', realKeys)
-            .not('notes', 'in', '("__sub__","__needsub__")')
             .neq('location_id', locId);
-        if (!data?.length) return null;
-        const conflictId = data[0].location_id;
+        const conflicts = (data || []).filter(e => !_FLAG_NOTES.includes(e.notes));
+        if (!conflicts.length) return null;
+        const conflictId = conflicts[0].location_id;
         const known = this._locations.find(l => l.id === conflictId);
         if (known) return known.name;
         const { data: ld } = await supabase.from('schedule_locations')
@@ -4398,15 +4778,14 @@ ${this._manCss()}
         // (немає pinned_months/записів), мають лишатись доступними для повторного
         // "додавання" — насправді це лише закріпить їх видимість на цей місяць.
         const now = new Date();
-        const isCurrentOrPastMonth = this._year < now.getFullYear() ||
-            (this._year === now.getFullYear() && this._month <= now.getMonth());
+        const isCurrentMonth = this._year === now.getFullYear() && this._month === now.getMonth();
         const monthKey = this._monthKey(this._year, this._month);
         const _hasEntries = uid => Object.keys(this._entries).some(k => k.startsWith(`${uid}_`));
         const hiddenAssignments = new Map(); // userId → assignment (потрібно лише "закріпити", не додавати заново)
         const visibleUserIds = new Set();
         this._assignments.forEach(a => {
             if (!a.user_id) return;
-            const isVisible = a.is_primary || isCurrentOrPastMonth ||
+            const isVisible = a.is_primary || isCurrentMonth ||
                 (a.pinned_months || []).includes(monthKey) || _hasEntries(a.user_id);
             if (isVisible) visibleUserIds.add(a.user_id);
             else hiddenAssignments.set(a.user_id, a);
@@ -4796,50 +5175,71 @@ ${this._manCss()}
     async _removeEmployee(assignId, userId, e) {
         if (e) e.stopPropagation();
         document.getElementById('sg-rm-emp-modal')?.remove();
+        const { data: assignRow } = await supabase.from('schedule_assignments')
+            .select('location_id').eq('id', assignId).single();
         const { error } = await supabase.from('schedule_assignments').delete().eq('id', assignId);
         if (error) { Toast.error('Помилка', error.message); return; }
-        await this._loadPageData();
+        // Видалення assignment НЕ каскадить на schedule_entries (FK-каскад лише по
+        // location_id) — без цього "осиротілі" зміни (напр. day_off від підміни)
+        // лишались би в БД і хибно позначали співробітника зайнятим у "Пошуку підміни",
+        // хоча в графіку його рядок уже видалено і жодної зміни не видно.
+        if (assignRow?.location_id) {
+            await supabase.from('schedule_entries').delete()
+                .eq('location_id', assignRow.location_id).eq('user_id', userId);
+        }
+        if (this._locId === 'all') await this._loadAllData();
+        else await this._loadPageData();
         this._render(this._container);
         Toast.success('Видалено');
     },
 
-    _openCell(userId, date) {
-        if (this._isViewOnlyLoc(this._locId)) return;
+    // locId — лише для контексту "Всі локації" (кожен рядок може належати іншій
+    // локації); без нього поводиться як і раніше для однієї локації.
+    _openCell(userId, date, locId = null) {
+        const effLoc = locId || this._locId;
+        if (locId && this._partnerLocations?.some(l => l.id === locId)) return;
+        if (this._isViewOnlyLoc(effLoc)) return;
         if (this._isPastMonth()) { Toast.error('Місяць завершено', 'Редагування минулих місяців заблоковано'); return; }
-        if (this._isLocked()) { Toast.error('Графік заблоковано', 'Розблокуйте графік перед редагуванням'); return; }
+        if (this._isLockedForLoc(effLoc)) { Toast.error('Графік заблоковано', 'Розблокуйте графік перед редагуванням'); return; }
 
         // Ручне розпізнавання подвійного кліку по одній і тій самій клітинці
-        const key = `${userId}_${date}`;
+        const key = `${locId||''}_${userId}_${date}`;
         const now = Date.now();
         const isDbl = this._lastCellClick?.key === key && (now - this._lastCellClick.time) < 350;
         this._lastCellClick = isDbl ? null : { key, time: now };
         if (isDbl) {
-            this._editCellText(null, userId, date);
+            this._editCellText(null, userId, date, null, locId);
             return;
         }
 
-        this._selectCell(userId, date);
+        this._selectCell(userId, date, locId);
 
         if (this._quickType) {
-            this._quickSave(userId, date, this._quickType);
+            if (locId) this._quickSaveAll(locId, userId, date, this._quickType);
+            else this._quickSave(userId, date, this._quickType);
             return;
         }
 
         // Без активного quick-fill типу одинарний клік нічого не робить (лише
         // виділяє клітинку) — відкрити модалку типу зміни можна лише подвійним кліком.
         // Виняток: активний запит на підміну — його завжди можна обробити одним кліком.
-        const entry = this._entries[`${userId}_${date}`];
+        const entry = locId ? this._allEntries[`${locId}_${userId}_${date}`] : this._entries[`${userId}_${date}`];
         if (entry?.notes === '__sub__' || entry?.notes === '__needsub__') {
-            const profile = this._assignments.find(a => a.user_id === userId)?.profile;
-            this._showSubstResolveModal(userId, date, entry, profile, this._locId);
+            const profile = (locId
+                ? this._allAssignments.find(a => a.user_id === userId && a.locId === locId)
+                : this._assignments.find(a => a.user_id === userId))?.profile;
+            this._showSubstResolveModal(userId, date, entry, profile, effLoc);
         }
     },
 
-    _selectCell(userId, date) {
+    _selectCell(userId, date, locId = null) {
         document.querySelectorAll('.sg-cell.sg-cell-selected').forEach(td => td.classList.remove('sg-cell-selected'));
-        const td = document.querySelector(`.sg-cell[data-uid="${userId}"][data-date="${date}"]`);
+        const sel = locId
+            ? `.sg-cell[data-uid="${userId}"][data-date="${date}"][data-locid="${locId}"]`
+            : `.sg-cell[data-uid="${userId}"][data-date="${date}"]`;
+        const td = document.querySelector(sel);
         if (td) td.classList.add('sg-cell-selected');
-        this._selectedCell = { userId, date };
+        this._selectedCell = { userId, date, locId };
         if (!this._kbListenerAttached) {
             this._kbListenerAttached = true;
             document.addEventListener('keydown', ev => this._onCellKeydown(ev));
@@ -4852,50 +5252,57 @@ ${this._manCss()}
         const active = document.activeElement;
         if (active && ['INPUT','TEXTAREA'].includes(active.tagName)) return;
         if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
-        const { userId, date } = this._selectedCell;
+        const { userId, date, locId } = this._selectedCell;
 
         if (ev.key === 'Delete' || ev.key === 'Backspace') {
             ev.preventDefault();
-            this._deleteSelectedCell(userId, date);
+            this._deleteSelectedCell(userId, date, locId);
             return;
         }
 
         if (ev.key.length !== 1) return;
         ev.preventDefault();
-        this._editCellText(null, userId, date, ev.key);
+        this._editCellText(null, userId, date, ev.key, locId);
     },
 
     // Delete/Backspace на виділеній клітинці — та сама дія, що й кнопка
     // видалення в модалці зміни, але доступна без відкриття модалки
-    _deleteSelectedCell(userId, date) {
-        if (this._isViewOnlyLoc(this._locId)) return;
+    _deleteSelectedCell(userId, date, locId = null) {
+        const effLoc = locId || this._locId;
+        if (locId && this._partnerLocations?.some(l => l.id === locId)) return;
+        if (this._isViewOnlyLoc(effLoc)) return;
         if (this._isPastMonth()) { Toast.error('Місяць завершено', 'Редагування минулих місяців заблоковано'); return; }
-        if (this._isLocked()) { Toast.error('Графік заблоковано', 'Розблокуйте графік перед редагуванням'); return; }
-        const entry = this._entries[`${userId}_${date}`];
+        if (this._isLockedForLoc(effLoc)) { Toast.error('Графік заблоковано', 'Розблокуйте графік перед редагуванням'); return; }
+        const entry = locId ? this._allEntries[`${locId}_${userId}_${date}`] : this._entries[`${userId}_${date}`];
         if (!entry) return;
         if (_RESERVED_ENTRY_NOTES.includes(entry.notes)) {
             Toast.warning('Недоступно', 'У цієї клітинки спеціальний статус (підміна/запит) — спершу обробіть його');
             return;
         }
-        this._deleteEntry(userId, date, null);
+        this._deleteEntry(userId, date, locId);
     },
 
     // Подвійний клік (або друк на клавіатурі по виділеній клітинці) — довільний
     // текст замість типу зміни (як в Excel: клітинка перетворюється на текстове
     // поле, що само розширюється). initialValue — якщо задано, замінює поточний
     // текст клітинки (друк "з нуля"), інакше редагується наявний текст.
-    _editCellText(e, userId, date, initialValue = null) {
+    _editCellText(e, userId, date, initialValue = null, locId = null) {
         e?.stopPropagation();
-        if (this._isViewOnlyLoc(this._locId)) return;
+        const effLoc = locId || this._locId;
+        if (locId && this._partnerLocations?.some(l => l.id === locId)) return;
+        if (this._isViewOnlyLoc(effLoc)) return;
         if (this._isPastMonth()) { Toast.error('Місяць завершено', 'Редагування минулих місяців заблоковано'); return; }
-        if (this._isLocked()) { Toast.error('Графік заблоковано', 'Розблокуйте графік перед редагуванням'); return; }
-        const entry = this._entries[`${userId}_${date}`];
+        if (this._isLockedForLoc(effLoc)) { Toast.error('Графік заблоковано', 'Розблокуйте графік перед редагуванням'); return; }
+        const entry = locId ? this._allEntries[`${locId}_${userId}_${date}`] : this._entries[`${userId}_${date}`];
         if (entry?.notes && _RESERVED_ENTRY_NOTES.includes(entry.notes)) {
             Toast.warning('Недоступно', 'У цієї клітинки спеціальний статус (підміна/запит) — спершу обробіть його');
             return;
         }
         document.getElementById('sg-shift-modal')?.remove();
-        const td = document.querySelector(`.sg-cell[data-uid="${userId}"][data-date="${date}"]`);
+        const sel = locId
+            ? `.sg-cell[data-uid="${userId}"][data-date="${date}"][data-locid="${locId}"]`
+            : `.sg-cell[data-uid="${userId}"][data-date="${date}"]`;
+        const td = document.querySelector(sel);
         if (!td) return;
         const current = initialValue !== null ? initialValue : (_customCellNote(entry) || '');
         td.classList.add('sg-cell-editing');
@@ -4909,24 +5316,27 @@ ${this._manCss()}
         input.addEventListener('blur', () => {
             td.classList.remove('sg-cell-editing');
             if (input.dataset.cancelled) { this._render(this._container); return; }
-            this._saveCellText(userId, date, input.value);
+            this._saveCellText(userId, date, input.value, locId);
         });
         input.focus();
         if (initialValue !== null) input.setSelectionRange(current.length, current.length);
         else input.select();
     },
 
-    async _saveCellText(userId, date, rawValue) {
-        const value  = rawValue.trim();
-        const key    = `${userId}_${date}`;
-        const oldEnt = this._entries[key];
-        const empName = this._assignments.find(a => a.user_id === userId)?.profile?.full_name || '';
+    async _saveCellText(userId, date, rawValue, locId = null) {
+        const value   = rawValue.trim();
+        const effLoc  = locId || this._locId;
+        const key     = locId ? `${locId}_${userId}_${date}` : `${userId}_${date}`;
+        const oldEnt  = locId ? this._allEntries[key] : this._entries[key];
+        const empName = (locId
+            ? this._allAssignments.find(a => a.user_id === userId && a.locId === locId)
+            : this._assignments.find(a => a.user_id === userId))?.profile?.full_name || '';
 
         if (!value) {
             if (!oldEnt) { this._render(this._container); return; }
             const { error } = await supabase.from('schedule_entries')
                 .update({ notes: null, updated_by: AppState.user.id, updated_at: new Date().toISOString() })
-                .eq('location_id', this._locId).eq('user_id', userId).eq('date', date);
+                .eq('location_id', effLoc).eq('user_id', userId).eq('date', date);
             if (error) { Toast.error('Помилка', error.message); return; }
             oldEnt.notes = null;
             this._render(this._container);
@@ -4934,7 +5344,7 @@ ${this._manCss()}
         }
 
         const payload = {
-            location_id: this._locId, user_id: userId, date,
+            location_id: effLoc, user_id: userId, date,
             shift_type: oldEnt?.shift_type || 'work',
             shift_start: oldEnt?.shift_start || null, shift_end: oldEnt?.shift_end || null,
             notes: value, updated_by: AppState.user.id, updated_at: new Date().toISOString()
@@ -4945,13 +5355,14 @@ ${this._manCss()}
         if (error) { Toast.error('Помилка', error.message); return; }
 
         await supabase.from('schedule_log').insert({
-            location_id: this._locId, user_id: userId, date, employee_name: empName,
+            location_id: effLoc, user_id: userId, date, employee_name: empName,
             old_value: oldEnt ? { shift_type: oldEnt.shift_type, notes: oldEnt.notes } : null,
             new_value: { shift_type: payload.shift_type, notes: value },
             changed_by: AppState.user.id
         });
 
-        this._entries[key] = data;
+        if (locId) this._allEntries[key] = data;
+        else this._entries[key] = data;
         this._render(this._container);
     },
 
@@ -5228,7 +5639,7 @@ ${this._manCss()}
         <button class="sg-btn-cancel"
             onclick="document.getElementById('sg-shift-modal').remove()">Скасувати</button>
         ${entry ? `<button class="sg-del-btn"
-            onclick="ScheduleGraphPage._deleteEntry('${userId}','${date}',${isEmployee ? `'${ScheduleGraphEmployee._locId}'` : 'null'})"
+            onclick="ScheduleGraphPage._deleteEntry('${userId}','${date}',${isEmployee ? `'${ScheduleGraphEmployee._locId}'` : 'null'},${isEmployee})"
             title="Видалити запис"><i class="fa-solid fa-trash"></i></button>` : ''}
     </div>
 </div>`;
@@ -5347,9 +5758,12 @@ ${this._manCss()}
         Toast.success('Збережено');
     },
 
-    async _deleteEntry(userId, date, locIdOverride) {
+    // isEmployeeCall — явний прапорець, бо locIdOverride тепер також передається
+    // менеджером у режимі "Всі локації" (реальний location_id рядка), і сам факт
+    // "override заданий" більше не означає однозначно "це виклик з боку співробітника".
+    async _deleteEntry(userId, date, locIdOverride, isEmployeeCall = false) {
         const locId  = locIdOverride || (this._locId === 'all' ? this.__allLocId : this._locId);
-        const isEmp  = !!locIdOverride;
+        const isEmp  = isEmployeeCall;
         const oldEnt = isEmp
             ? ScheduleGraphEmployee._entries[date]
             : (this._locId === 'all' ? this._allEntries[`${locId}_${userId}_${date}`] : this._entries[`${userId}_${date}`]);
@@ -5513,11 +5927,15 @@ ${this._manCss()}
         this._render(this._container);
     },
 
-    _nameCellAll(a) {
+    // locId/viewOnly — те саме, що й у _nameCell(), але для рядка в "Всі локації"
+    // (кожен рядок може належати іншій локації, тому viewOnly обчислюється per-loc).
+    _nameCellAll(a, locId = null, viewOnly = false) {
         const p       = a.profile || null;
         const name    = p?.full_name || a.employee_name || 'Без імені';
         const fired   = a.user_id === null;
         const isFiltered = this._filteredUserId === (a.user_id || a.original_user_id);
+        const isOwner = !a.isPartner && !viewOnly && (AppState.isAdmin() || AppState.isSuperAdmin() ||
+                        (typeof AppState.isManager === 'function' && AppState.isManager()));
 
         const firedBadge = (() => {
             const words = name.trim().split(/\s+/);
@@ -5534,16 +5952,33 @@ ${this._manCss()}
                 onclick="event.stopPropagation();ScheduleGraphPage._toggleMismatchTip(this)">
                 <i class="fa-solid fa-circle-info"></i>
             </button>` : '';
+
+        const primaryBtn = !fired && isOwner
+            ? `<button class="sg-primary-btn${a.is_primary ? ' active' : ''}"
+                title="${a.is_primary ? 'Основний співробітник — клік щоб зробити тимчасовим' : 'Тимчасовий (підміна) — клік щоб зробити основним'}"
+                onclick="event.stopPropagation();ScheduleGraphPage._togglePrimary('${a.id}',${!a.is_primary},event)">
+                ${a.is_primary ? '<i class="fa-solid fa-star"></i>' : '<i class="fa-regular fa-star"></i>'}
+               </button>`
+            : '';
+        const rmBtn = !fired && isOwner ? `<button class="sg-rm sg-rm-inline" title="Видалити зі списку"
+            data-name="${Fmt.esc(name)}"
+            onclick="event.stopPropagation();ScheduleGraphPage._removeEmployeeConfirm('${a.id}','${a.user_id}',this.dataset.name)">
+            <i class="fa-solid fa-trash"></i>
+        </button>` : '';
+        const dragHandle = !fired && isOwner ? `<span class="sg-drag-handle" title="Перетягнути">⠿</span>` : '';
+
         return `
 <td class="sg-td-name sg-td-name--clickable${isFiltered ? ' sg-td-name--active' : ''}"
     title="${isFiltered ? 'Натисніть щоб скинути фільтр' : 'Натисніть щоб показати тільки цього співробітника'}"
     onclick="ScheduleGraphPage._filterByEmployee('${uid}')">
+    ${dragHandle}
     <div class="sg-name-full${fired ? ' sg-name-deleted' : ''}">
-        <span class="sg-name-text">${Fmt.esc(name)}</span>${mismatchBtn}${fired
+        ${primaryBtn}<span class="sg-name-text">${Fmt.esc(name)}</span>${mismatchBtn}${fired
         ? ` <span class="sg-deleted-badge">${firedBadge}</span>`
         : !a.is_primary ? ` <span class="sg-temp-badge">підміна</span>` : ''}
         ${isFiltered ? ' <span class="sg-filter-active-badge">✓ фільтр</span>' : ''}
     </div>
+    ${rmBtn}
 </td>`;
     },
 
@@ -5576,6 +6011,34 @@ ${this._manCss()}
         const [item] = arr.splice(from, 1);
         arr.splice(to, 0, item);
         this._saveEmpOrder();
+        this._render(this._container);
+    },
+
+    // "Всі локації" — той самий drag&drop, але порядок зберігається окремо для
+    // КОЖНОЇ локації (assignId сам по собі не каже, з якої він локації, тому
+    // locId передається явно і звіряється, щоб не перетягнути співробітника
+    // між рядками різних локацій).
+    _onEmpDragStartAll(e, assignId, locId) {
+        this._draggingEmpId = assignId;
+        this._draggingEmpLocId = locId;
+        e.dataTransfer.effectAllowed = 'move';
+        e.currentTarget.classList.add('sg-row-dragging');
+    },
+
+    _onEmpDropAll(e, targetId, locId) {
+        e.preventDefault();
+        e.currentTarget.classList.remove('sg-row-drag-over');
+        const fromId = this._draggingEmpId;
+        if (!fromId || fromId === targetId || this._draggingEmpLocId !== locId) return;
+        const members = this._allAssignments.filter(a => a.locId === locId).map(a => ({ id: a.id }));
+        this._applyEmpOrderTo(members, locId);
+        const ids  = members.map(m => m.id);
+        const from = ids.indexOf(fromId);
+        const to   = ids.indexOf(targetId);
+        if (from === -1 || to === -1) return;
+        const [item] = ids.splice(from, 1);
+        ids.splice(to, 0, item);
+        this._saveEmpOrderFor(locId, ids);
         this._render(this._container);
     },
 
@@ -5682,7 +6145,7 @@ ${this._manCss()}
 
     _styles() {
         return `<style>
-.sg-page { max-width:100%;overflow-x:hidden;animation:fadeSlideUp .3s cubic-bezier(.16,1,.3,1); }
+.sg-page { max-width:100%;animation:fadeSlideUp .3s cubic-bezier(.16,1,.3,1); }
 
 /* Manager help request button */
 .sg-mgr-help-btn {
@@ -5747,7 +6210,7 @@ ${this._manCss()}
 
 /* Body: sidebar + content */
 .sg-body { display:flex;flex-direction:column;gap:16px; }
-.sg-content { min-width:0;overflow-x:hidden; }
+.sg-content { min-width:0; }
 
 /* Location sidebar (horizontal bar) */
 .sg-loc-sidebar {
@@ -5796,20 +6259,47 @@ ${this._manCss()}
 .sg-loc-item:active { transform:translateY(0) scale(.97); }
 
 .sg-loc-item[data-node="technical"]::before,
-.sg-loc-item[data-node="technical_seller"]::before { background:#6366f1; }
-.sg-loc-item[data-node="technical"] .sg-loc-item-ico,
-.sg-loc-item[data-node="technical_seller"] .sg-loc-item-ico { background:rgba(99,102,241,.16);color:#6366f1; }
+.sg-loc-item[data-node="technical_seller"]::before { background:#2f7bfd; }
 .sg-loc-item[data-node="gold"]::before { background:#d97706; }
-.sg-loc-item[data-node="gold"] .sg-loc-item-ico { background:rgba(245,158,11,.18);color:#d97706; }
 .sg-loc-item[data-node="universal"]::before,
-.sg-loc-item[data-node="universal_seller"]::before { background:linear-gradient(90deg,#6366f1,#f59e0b); }
+.sg-loc-item[data-node="universal_seller"]::before { background:linear-gradient(90deg,#2f7bfd,#f59e0b); }
+
+.sg-loc-item[data-node="technical"] .sg-loc-item-ico,
+.sg-loc-item[data-node="technical_seller"] .sg-loc-item-ico {
+    background:linear-gradient(135deg,#4f9bff 0%,#2f6bfd 100%);color:#fff;
+    box-shadow:
+        inset 0 1px 2px rgba(255,255,255,.75),
+        inset 0 -2px 3px rgba(0,0,0,.25),
+        0 3px 10px rgba(47,107,253,.45),
+        0 0 0 1px rgba(255,255,255,.15);
+}
+.sg-loc-item[data-node="gold"] .sg-loc-item-ico {
+    background:linear-gradient(135deg,#fcd34d 0%,#d97706 100%);color:#fff;
+    box-shadow:
+        inset 0 1px 2px rgba(255,255,255,.75),
+        inset 0 -2px 3px rgba(0,0,0,.25),
+        0 3px 10px rgba(217,119,6,.45),
+        0 0 0 1px rgba(255,255,255,.15);
+}
 .sg-loc-item[data-node="universal"] .sg-loc-item-ico,
 .sg-loc-item[data-node="universal_seller"] .sg-loc-item-ico {
-    background:linear-gradient(135deg,#6366f1 0%,#6366f1 50%,#f59e0b 50%,#f59e0b 100%);color:#fff;
+    background:linear-gradient(135deg,#2f7bfd 0%,#4f9bff 38%,#fbbf24 62%,#ffb020 100%);
+    color:#fff;
+    box-shadow:
+        inset 0 1px 2px rgba(255,255,255,.75),
+        inset 0 -2px 3px rgba(0,0,0,.25),
+        0 3px 10px rgba(47,123,253,.5),
+        0 0 0 1px rgba(255,255,255,.15);
 }
-.sg-loc-item-all::before { background:#d97706; }
-.sg-loc-item-all .sg-loc-item-ico { background:rgba(245,158,11,.18);color:#d97706; }
-
+.sg-loc-item[data-node="technical"] .sg-loc-item-ico::after,
+.sg-loc-item[data-node="technical_seller"] .sg-loc-item-ico::after,
+.sg-loc-item[data-node="gold"] .sg-loc-item-ico::after,
+.sg-loc-item[data-node="universal"] .sg-loc-item-ico::after,
+.sg-loc-item[data-node="universal_seller"] .sg-loc-item-ico::after {
+    content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+    background:linear-gradient(135deg,rgba(255,255,255,.85) 0%,rgba(255,255,255,.3) 30%,rgba(255,255,255,0) 55%);
+    mix-blend-mode:overlay;
+}
 .sg-loc-item.active {
     background:color-mix(in srgb,var(--primary) 12%,var(--bg-surface));
     border-color:var(--primary);color:var(--primary);
@@ -5945,7 +6435,11 @@ ${this._manCss()}
 .sg-v2-loc-actions { display:flex;gap:8px;align-items:center;margin-top:4px; }
 .sg-v2-mgmt-btns { display:flex;flex-wrap:wrap;gap:8px; }
 .sg-v2-mgmt-hint { font-size:.75rem;color:var(--text-muted);margin:4px 0 0; }
-.sg-v2-legend-section { margin-bottom:12px; }
+.sg-v2-legend-section {
+    margin-bottom:12px;position:sticky;top:64px;z-index:40;
+    background:var(--bg-surface);padding:8px 0;
+    box-shadow:0 6px 12px -6px rgba(0,0,0,.15);
+}
 .sg-v2-hint { font-size:.72rem;color:var(--text-muted);display:flex;align-items:center;gap:6px;margin:8px 0 4px;padding:0 2px; }
 .sg-v2-svc-list { display:grid;grid-template-columns:1fr 1fr;gap:6px; }
 .sg-v2-svc-item { display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;cursor:pointer;transition:background .12s;border:1px solid transparent; }
@@ -5971,7 +6465,50 @@ ${this._manCss()}
     white-space:nowrap;transition:all .15s;
 }
 .sg-subst-clear:hover { border-color:#ef4444;color:#ef4444; }
-.sg-subst-panel { width:440px; }
+.sg-emp-panel.sg-subst-panel { width:1220px; max-width:94vw; }
+.sg-subst-loading-overlay {
+    position:fixed;inset:0;z-index:10000;
+    display:flex;align-items:center;justify-content:center;
+    background:rgba(0,0,0,.35);backdrop-filter:blur(3px);
+    animation:fadeIn .15s;
+}
+.sg-subst-loading-card {
+    display:flex;flex-direction:column;align-items:center;gap:16px;
+    padding:32px 40px;border-radius:20px;
+    background:var(--bg-surface);border:1px solid var(--border);
+    box-shadow:0 20px 50px rgba(0,0,0,.3);min-width:280px;
+}
+.sg-subst-loading-icon {
+    width:52px;height:52px;border-radius:16px;
+    display:flex;align-items:center;justify-content:center;font-size:1.3rem;
+    background:color-mix(in srgb,var(--primary) 14%,transparent);color:var(--primary);
+    animation:sgSubstIconSpin 1.4s ease-in-out infinite;
+}
+@keyframes sgSubstIconSpin {
+    0%,100% { transform:rotate(0deg); }
+    50%     { transform:rotate(180deg); }
+}
+.sg-subst-loading-caption {
+    font-size:.86rem;font-weight:600;color:var(--text-primary);text-align:center;
+    min-height:1.2em;
+}
+.sg-subst-loading-bar {
+    width:200px;height:5px;border-radius:3px;overflow:hidden;
+    background:var(--bg-hover);
+}
+.sg-subst-loading-bar-fill {
+    height:100%;width:40%;border-radius:3px;
+    background:linear-gradient(90deg,var(--primary),color-mix(in srgb,var(--primary) 60%,#fff));
+    animation:sgSubstBarSlide 1.1s ease-in-out infinite;
+}
+@keyframes sgSubstBarSlide {
+    0%   { transform:translateX(-100%); }
+    100% { transform:translateX(350%); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .sg-subst-loading-icon { animation:none; }
+    .sg-subst-loading-bar-fill { animation:none;width:100%; }
+}
 .sg-subst-panel-body {
     flex:1;min-height:0;overflow:hidden;
     display:flex;flex-direction:column;
@@ -6018,27 +6555,45 @@ ${this._manCss()}
 }
 .sg-subst-col-title.free { color:#10b981; }
 .sg-subst-col-title.busy { color:#ef4444; }
-.sg-subst-person {
-    display:flex;align-items:center;gap:7px;padding:5px 8px;
-    border-radius:8px;margin-bottom:3px;background:var(--bg-surface);
-    border:1px solid var(--border);transition:background .12s;font-size:.8rem;
+.sg-subst-table { width:100%;border-collapse:collapse;table-layout:fixed;margin-bottom:8px; }
+.sg-subst-table thead th {
+    position:sticky;top:0;z-index:1;text-align:left;font-size:.6rem;font-weight:800;
+    text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);
+    padding:6px 8px;background:var(--bg-raised);border-bottom:1.5px solid var(--border);
 }
-.sg-subst-person:hover { background:var(--bg-hover); }
-.sg-subst-person.busy { opacity:.65; }
-.sg-subst-free-card {
-    cursor:pointer;transition:all .15s;
+.sg-subst-th-emp { width:32%; }
+.sg-subst-th-cnt { width:90px;text-align:center; }
+.sg-subst-th-action { width:32px; }
+.sg-subst-row td { padding:7px 8px;border-bottom:1px solid var(--border);vertical-align:middle;font-size:.78rem;transition:background .12s; }
+.sg-subst-row:nth-child(even) td { background:color-mix(in srgb,var(--bg-raised) 50%,transparent); }
+.sg-subst-row.busy { opacity:.6; }
+.sg-subst-row:not(.busy) { cursor:pointer; }
+.sg-subst-row:not(.busy):hover td { background:rgba(16,185,129,.08); }
+.sg-subst-row.sg-subst-wants-sub td:first-child { border-left:3px solid #f59e0b; }
+.sg-subst-row.sg-subst-needs-sub td:first-child { border-left:3px solid #ef4444; }
+.sg-subst-row.sg-subst-partner td { background:color-mix(in srgb,#6366f1 5%,transparent); }
+.sg-subst-td-emp-inner { display:flex;align-items:center;gap:8px;min-width:0; }
+.sg-subst-td-mgr, .sg-subst-td-dov { color:var(--text-secondary);font-size:.72rem; }
+.sg-subst-dov-wrap { display:flex;flex-wrap:wrap;gap:3px; }
+.sg-subst-dov-pill {
+    display:inline-block;padding:1px 6px;border-radius:8px;font-size:.64rem;font-weight:600;
+    background:color-mix(in srgb,var(--primary) 10%,transparent);color:var(--primary);white-space:nowrap;
 }
-.sg-subst-free-card:hover {
-    border-color:#10b981;background:rgba(16,185,129,.06);
-}
+.sg-subst-td-cnt { text-align:center; }
+.sg-subst-td-status { white-space:normal;min-width:150px; }
+.sg-subst-status-stack { display:flex;flex-direction:column;align-items:flex-start;gap:4px; }
+.sg-subst-status-stack > * { margin-top:0 !important; }
+.sg-subst-status-row { display:flex;align-items:center;gap:6px;flex-wrap:wrap; }
+.sg-subst-status-shift { display:inline-flex;align-items:center;gap:5px;font-weight:600;color:var(--text-primary); }
+.sg-subst-td-empty { color:var(--text-muted); }
 .sg-subst-add-btn {
-    width:24px;height:24px;border-radius:50%;
+    width:22px;height:22px;border-radius:50%;
     background:rgba(16,185,129,.15);color:#10b981;
-    font-size:1rem;font-weight:700;line-height:1;
+    font-size:.95rem;font-weight:700;line-height:1;
     display:flex;align-items:center;justify-content:center;
     flex-shrink:0;transition:all .15s;
 }
-.sg-subst-free-card:hover .sg-subst-add-btn {
+.sg-subst-row:not(.busy):hover .sg-subst-add-btn {
     background:#10b981;color:#fff;
 }
 .sg-subst-loc-btn {
@@ -6051,11 +6606,33 @@ ${this._manCss()}
 .sg-subst-loc-wh { font-size:.78rem;color:var(--text-muted); }
 .sg-subst-loc-arrow { color:var(--text-muted);font-size:1rem; }
 .sg-subst-name { font-size:.8rem;font-weight:600;color:var(--text-primary); }
-.sg-sub-last-shift { font-size:.68rem;color:var(--text-muted);display:inline-flex;align-items:center;gap:3px;margin-top:2px; }
-.sg-sub-last-recent { color:#f59e0b;font-weight:600; }
+.sg-subst-search-bar { position:relative;padding:10px 20px;border-bottom:1px solid var(--border); }
+.sg-subst-search-ico { position:absolute;left:34px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:.85rem;pointer-events:none; }
+.sg-subst-search-bar input {
+    width:100%;height:36px;padding:0 12px 0 34px;border-radius:10px;
+    border:1px solid var(--border);background:var(--bg-surface);color:var(--text-primary);
+    font-size:.82rem;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color .15s,box-shadow .15s;
+}
+.sg-subst-search-bar input::placeholder { color:var(--text-muted); }
+.sg-subst-search-bar input:focus { border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-glow); }
+.sg-sub-last-shift, .sg-sub-next-shift {
+    font-size:.68rem;font-weight:600;display:inline-flex;align-items:center;gap:4px;
+    padding:2px 8px;border-radius:var(--radius-full);white-space:nowrap;line-height:1.4;
+}
+.sg-sub-last-shift { color:var(--text-muted);background:var(--bg-hover);border:1px solid var(--border); }
+.sg-sub-last-recent { color:#f59e0b;background:rgba(245,158,11,.12);border-color:rgba(245,158,11,.35);font-weight:700; }
+.sg-sub-next-shift { color:var(--primary);background:color-mix(in srgb,var(--primary) 10%,transparent);border:1px solid color-mix(in srgb,var(--primary) 30%,transparent); }
+.sg-subst-needdates { padding:10px 20px;border-bottom:1px solid var(--border);background:rgba(239,68,68,.05); }
+.sg-subst-needdates-label { font-size:.75rem;font-weight:700;color:#ef4444;display:block;margin-bottom:6px; }
+.sg-subst-needdates-chips { display:flex;flex-wrap:wrap;gap:6px; }
+.sg-subst-needdate-chip {
+    border:1px solid rgba(239,68,68,.35);background:var(--bg-surface);color:#ef4444;
+    font-size:.75rem;font-weight:600;padding:4px 11px;border-radius:var(--radius-full);
+    cursor:pointer;transition:background .15s,color .15s,border-color .15s;
+}
+.sg-subst-needdate-chip:hover { background:rgba(239,68,68,.12); }
+.sg-subst-needdate-chip.active { background:#ef4444;color:#fff;border-color:#ef4444; }
 .sg-subst-position { font-size:.7rem;color:var(--text-secondary);margin-top:1px; }
-.sg-subst-meta { font-size:.7rem;color:var(--text-muted);margin-top:1px; }
-.sg-subst-meta-val { font-weight:700;color:var(--primary); }
 .sg-subst-empty { font-size:.82rem;color:var(--text-muted);font-style:italic;padding:8px 0; }
 .sg-loc-group-header {
     padding:9px 16px;font-size:1rem;font-weight:500;
@@ -6186,28 +6763,116 @@ ${this._manCss()}
     background:rgba(99,102,241,.13);color:rgba(99,102,241,.9);
     border-top-color:rgba(99,102,241,.3);border-bottom-color:rgba(99,102,241,.2);
 }
-.sg-show-partners-btn {
-    border:1.5px solid rgba(99,102,241,.3);border-radius:20px;
-    background:rgba(99,102,241,.06);color:rgba(99,102,241,.85);
-    font-size:.78rem;font-weight:600;padding:6px 18px;cursor:pointer;
-    transition:all .15s;
+
+/* Group header tinted per node_type of the location — same palette as the sidebar icons */
+.sg-loc-header-row[data-node="technical"] .sg-loc-group-header,
+.sg-loc-header-row[data-node="technical_seller"] .sg-loc-group-header {
+    background:rgba(47,123,253,.13);color:#4f9bff;
+    border-top-color:rgba(47,123,253,.4);border-bottom-color:rgba(47,123,253,.22);
 }
-.sg-show-partners-btn:hover { background:rgba(99,102,241,.14);border-color:rgba(99,102,241,.5); }
+.sg-loc-header-row[data-node="gold"] .sg-loc-group-header {
+    background:rgba(217,119,6,.13);color:#e0973a;
+    border-top-color:rgba(217,119,6,.4);border-bottom-color:rgba(217,119,6,.22);
+}
+.sg-loc-header-row[data-node="universal"] .sg-loc-group-header,
+.sg-loc-header-row[data-node="universal_seller"] .sg-loc-group-header {
+    background:linear-gradient(90deg,rgba(47,123,253,.13),rgba(245,158,11,.13));
+    border-top:2px solid;border-image:linear-gradient(90deg,#2f7bfd,#f59e0b) 1;
+    border-bottom-color:rgba(120,120,120,.18);
+}
+
+/* Іконка перед назвою локації — той самий рельєф/блік, що й у "Розділ локацій" */
+.sg-loc-header-ico {
+    position:relative;display:inline-flex;align-items:center;justify-content:center;
+    width:24px;height:24px;border-radius:8px;font-size:.75rem;flex-shrink:0;
+    background:var(--bg-hover);color:var(--text-muted);vertical-align:-6px;margin-right:2px;
+}
+.sg-loc-header-partner .sg-loc-header-ico {
+    background:linear-gradient(135deg,#818cf8 0%,#6366f1 100%);color:#fff;
+    box-shadow:
+        inset 0 1px 2px rgba(255,255,255,.6),
+        inset 0 -2px 3px rgba(0,0,0,.25),
+        0 2px 8px rgba(99,102,241,.4);
+}
+.sg-loc-header-row[data-node="technical"] .sg-loc-header-ico,
+.sg-loc-header-row[data-node="technical_seller"] .sg-loc-header-ico {
+    background:linear-gradient(135deg,#4f9bff 0%,#2f6bfd 100%);color:#fff;
+    box-shadow:
+        inset 0 1px 2px rgba(255,255,255,.75),
+        inset 0 -2px 3px rgba(0,0,0,.25),
+        0 2px 8px rgba(47,107,253,.4);
+}
+.sg-loc-header-row[data-node="gold"] .sg-loc-header-ico {
+    background:linear-gradient(135deg,#fcd34d 0%,#d97706 100%);color:#fff;
+    box-shadow:
+        inset 0 1px 2px rgba(255,255,255,.75),
+        inset 0 -2px 3px rgba(0,0,0,.25),
+        0 2px 8px rgba(217,119,6,.4);
+}
+.sg-loc-header-row[data-node="universal"] .sg-loc-header-ico,
+.sg-loc-header-row[data-node="universal_seller"] .sg-loc-header-ico {
+    background:linear-gradient(135deg,#2f7bfd 0%,#4f9bff 38%,#fbbf24 62%,#ffb020 100%);color:#fff;
+    box-shadow:
+        inset 0 1px 2px rgba(255,255,255,.75),
+        inset 0 -2px 3px rgba(0,0,0,.25),
+        0 2px 8px rgba(47,123,253,.45);
+}
+.sg-loc-header-partner .sg-loc-header-ico::after,
+.sg-loc-header-row[data-node="technical"] .sg-loc-header-ico::after,
+.sg-loc-header-row[data-node="technical_seller"] .sg-loc-header-ico::after,
+.sg-loc-header-row[data-node="gold"] .sg-loc-header-ico::after,
+.sg-loc-header-row[data-node="universal"] .sg-loc-header-ico::after,
+.sg-loc-header-row[data-node="universal_seller"] .sg-loc-header-ico::after {
+    content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+    background:linear-gradient(135deg,rgba(255,255,255,.85) 0%,rgba(255,255,255,.3) 30%,rgba(255,255,255,0) 55%);
+    mix-blend-mode:overlay;
+}
+.sg-loc-scope-bar { display:flex;padding:10px 16px;border-bottom:1px solid var(--border); }
+.sg-loc-scope-chips { display:inline-flex;gap:4px;flex-wrap:wrap;padding:5px;background:var(--bg-surface);border:1px solid var(--border);border-radius:16px;box-shadow:0 2px 10px rgba(15,23,42,.05); }
+body:not(.light-theme) .sg-loc-scope-chips { box-shadow:0 2px 14px rgba(0,0,0,.2); }
+.sg-loc-scope-chip {
+    display:inline-flex;align-items:center;gap:7px;padding:9px 16px;border-radius:12px;
+    background:transparent;border:none;color:var(--text-muted);font-size:.85rem;font-weight:600;
+    cursor:pointer;transition:background .18s ease,color .18s ease,transform .12s ease;white-space:nowrap;
+}
+.sg-loc-scope-chip:hover:not(.active) { color:var(--text-primary);background:var(--bg-hover);transform:translateY(-1px); }
+.sg-loc-scope-chip.active { color:var(--primary);background:color-mix(in srgb,var(--primary) 12%,var(--bg-surface)); }
+.sg-loc-scope-count { background:var(--bg-hover);color:var(--text-muted);border-radius:20px;padding:1px 8px;font-size:.72rem;font-weight:700; }
+.sg-loc-scope-sep { width:1px;align-self:stretch;margin:4px 2px;background:var(--border);flex-shrink:0; }
+.sg-loc-scope-chip.active .sg-loc-scope-count { background:var(--primary);color:#fff; }
 .sg-partner-loc-badge {
     font-size:.68rem;font-weight:600;opacity:.7;
     background:rgba(99,102,241,.15);border-radius:4px;padding:1px 6px;margin-left:6px;
-}
-.sg-subst-partner {
-    background:rgba(99,102,241,.05) !important;
-    border-left:3px solid rgba(99,102,241,.35);
-    cursor:default !important;
-    opacity:.85;
 }
 .sg-subst-section-sep {
     font-size:.72rem;color:var(--text-muted);font-style:italic;
     padding:8px 4px 4px;margin-top:6px;
     border-top:1px solid var(--border);
 }
+.sg-subst-own-label {
+    font-size:.72rem;font-weight:700;color:var(--primary);
+    text-transform:uppercase;letter-spacing:.04em;
+    padding:4px 4px 8px;
+}
+.sg-psub-tabs {
+    display:flex;flex-wrap:wrap;gap:6px;padding:6px 4px 10px;
+}
+.sg-psub-tab {
+    display:inline-flex;align-items:center;gap:5px;
+    padding:5px 11px;border-radius:20px;border:1.5px solid var(--border);
+    background:var(--bg-raised);color:var(--text-secondary);
+    font-size:.76rem;font-weight:600;cursor:pointer;transition:all .15s;font-family:inherit;
+    white-space:nowrap;
+}
+.sg-psub-tab:hover { border-color:color-mix(in srgb,#6366f1 40%,var(--border)); }
+.sg-psub-tab.active {
+    background:color-mix(in srgb,#6366f1 14%,var(--bg-raised));
+    border-color:#6366f1;color:#6366f1;
+}
+.sg-psub-tab-count {
+    background:var(--bg-hover);border-radius:10px;padding:1px 6px;font-size:.68rem;
+}
+.sg-psub-tab.active .sg-psub-tab-count { background:#6366f1;color:#fff; }
 
 /* Viewers modal */
 .sg-viewers-modal-box { max-width:520px; }
@@ -6241,6 +6906,30 @@ ${this._manCss()}
 }
 .sg-viewer-drop-item:hover { background:var(--bg-hover); }
 .sg-viewer-drop-item.hidden { display:none; }
+.sg-viewer-drop-empty { padding:12px 14px;font-size:.82rem;color:var(--text-muted);text-align:center; }
+.sg-partner-drop-item { display:flex;align-items:center;gap:9px; }
+.sg-partner-drop-check {
+    width:16px;height:16px;border-radius:5px;border:1.5px solid var(--border);flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;font-size:.6rem;color:transparent;
+    transition:all .12s;
+}
+.sg-partner-drop-item.selected { background:color-mix(in srgb,#6366f1 10%,transparent); }
+.sg-partner-drop-item.selected .sg-partner-drop-check {
+    background:#6366f1;border-color:#6366f1;color:#fff;
+}
+.sg-partner-chips { display:flex;flex-wrap:wrap;gap:6px;margin-top:10px; }
+.sg-partner-chip {
+    display:inline-flex;align-items:center;gap:6px;
+    padding:4px 6px 4px 10px;border-radius:20px;font-size:.78rem;font-weight:600;
+    background:color-mix(in srgb,#6366f1 12%,var(--bg-raised));color:#6366f1;
+    border:1px solid color-mix(in srgb,#6366f1 25%,transparent);
+}
+.sg-partner-chip button {
+    width:16px;height:16px;border-radius:50%;border:none;cursor:pointer;
+    background:color-mix(in srgb,#6366f1 20%,transparent);color:#6366f1;font-size:.6rem;
+    display:flex;align-items:center;justify-content:center;padding:0;
+}
+.sg-partner-chip button:hover { background:#6366f1;color:#fff; }
 .sg-viewers-add-btn {
     padding:9px 16px;border-radius:10px;border:none;
     background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;
@@ -6369,23 +7058,6 @@ ${this._manCss()}
 }
 .sg-trash-permdel:hover { background:#ef4444;color:#fff;border-color:#ef4444; }
 
-/* Toolbar */
-.sg-toolbar {
-    display:flex;align-items:stretch;gap:12px;
-    padding:14px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap;
-}
-.sg-tb-section {
-    display:flex;flex-direction:column;gap:8px;padding:10px 14px;
-    background:var(--bg-surface);border:1px solid var(--border);border-radius:16px;
-    box-shadow:0 2px 10px rgba(15,23,42,.05);
-}
-body:not(.light-theme) .sg-tb-section { box-shadow:0 2px 14px rgba(0,0,0,.2); }
-.sg-tb-label {
-    display:flex;align-items:center;gap:6px;
-    font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;
-    color:var(--text-muted);white-space:nowrap;
-}
-.sg-tb-label i { font-size:.68rem;opacity:.75; }
 .sg-legend { display:flex;flex-wrap:wrap;gap:4px;align-items:center; }
 .sg-v2-legend-section .sg-legend {
     padding:5px;background:var(--bg-surface);border:1px solid var(--border);
@@ -6398,7 +7070,6 @@ body:not(.light-theme) .sg-v2-legend-section .sg-legend { box-shadow:0 2px 14px 
 .sg-node-badge.sg-node-technical         { background:rgba(99,102,241,.14);color:#6366f1; }
 .sg-node-badge.sg-node-technical-seller  { background:rgba(99,102,241,.14);color:#6366f1; }
 .sg-node-badge.sg-node-gold              { background:rgba(245,158,11,.14);color:#d97706; }
-.sg-tb-section .sg-legend { display:grid;grid-template-columns:repeat(3,auto);gap:5px 8px;align-items:center; }
 .sg-leg-btn {
     display:inline-flex;align-items:center;gap:9px;
     padding:9px 16px 9px 10px;border-radius:12px;font-size:.85rem;font-weight:600;white-space:nowrap;
@@ -6898,12 +7569,6 @@ body:not(.light-theme) .sg-emp-warn { color:#f59e0b; }
     animation:dotBlink 1.4s ease-in-out infinite;
 }
 
-/* "Wants sub" highlight in free panel */
-.sg-subst-wants-sub {
-    border-color:#10b981 !important;
-    background:rgba(16,185,129,.08) !important;
-    box-shadow:0 0 0 2px rgba(16,185,129,.2);
-}
 .sg-sub-cnt-badge {
     font-size:.7rem;font-weight:700;padding:2px 6px;border-radius:6px;
     border:1px solid;white-space:nowrap;flex-shrink:0;
@@ -6913,12 +7578,8 @@ body:not(.light-theme) .sg-emp-warn { color:#f59e0b; }
 }
 
 /* "Needs sub" highlight in busy panel */
-.sg-subst-needs-sub {
-    border-color:#f97316 !important;
-    background:rgba(249,115,22,.08) !important;
-    box-shadow:0 0 0 2px rgba(249,115,22,.2);
-    opacity:1 !important;
-}
+.sg-subst-row.sg-subst-needs-sub { opacity:1 !important; }
+.sg-subst-row.sg-subst-needs-sub td { background:rgba(249,115,22,.08) !important; }
 .sg-needsub-badge {
     font-size:.7rem;font-weight:700;color:#f97316;margin-top:2px;
 }
@@ -7482,10 +8143,19 @@ const ScheduleGraphEmployee = {
     _quickType: null,
     _subMode: false,
 
-    async init(container) {
+    async init(container, params = {}) {
         this._container = container;
         UI.setBreadcrumb([{ label: 'Мій графік' }]);
         container.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
+        // Перехід із сповіщення "Вас додано до графіку" — одразу відкриваємо
+        // потрібний місяць/локацію, а не поточний місяць за замовчуванням.
+        const y = parseInt(params.year, 10);
+        const m = parseInt(params.month, 10);
+        if (Number.isInteger(y) && Number.isInteger(m) && m >= 1 && m <= 12) {
+            this._year  = y;
+            this._month = m - 1;
+        }
+        this._pendingLocId = params.loc || null;
         await this._loadData();
         this._render(container);
     },
@@ -7521,8 +8191,12 @@ const ScheduleGraphEmployee = {
             };
         });
 
-        if (!this._locId || !this._assignments.find(a => a.locId === this._locId))
+        if (this._pendingLocId && this._assignments.find(a => a.locId === this._pendingLocId)) {
+            this._locId = this._pendingLocId;
+        } else if (!this._locId || !this._assignments.find(a => a.locId === this._locId)) {
             this._locId = this._assignments[0].locId;
+        }
+        this._pendingLocId = null;
         await this._loadEntries();
         await this._loadMyShiftConfig();
     },
@@ -7565,8 +8239,7 @@ const ScheduleGraphEmployee = {
         // temporary/fired only show in current/past months, or if they actually
         // have entries this month — otherwise stale/removed rows leak into the view.
         const now = new Date();
-        const isCurrentOrPastMonth = this._year < now.getFullYear() ||
-            (this._year === now.getFullYear() && this._month <= now.getMonth());
+        const isCurrentMonth = this._year === now.getFullYear() && this._month === now.getMonth();
         const _hasEntries = a => {
             const lid = a.user_id;
             return lid && Object.keys(this._locEntries).some(k => k.startsWith(`${lid}_`));
@@ -7575,7 +8248,7 @@ const ScheduleGraphEmployee = {
         this._locAssignments = withProfile.filter(a => {
             if (!a.user_id) return _hasEntries(a);
             if (a.is_primary) return true;
-            if (isCurrentOrPastMonth) return true;
+            if (isCurrentMonth) return true;
             if ((a.pinned_months || []).includes(monthKey)) return true;
             return _hasEntries(a);
         });
@@ -7733,9 +8406,9 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
         }).join('')}
     </div>
     <div class="sg-loc-legend">
-        <span class="sg-loc-legend-item"><span class="sg-loc-legend-dot" style="background:#6366f1"></span>Технічний</span>
+        <span class="sg-loc-legend-item"><span class="sg-loc-legend-dot" style="background:#2f7bfd"></span>Технічний</span>
         <span class="sg-loc-legend-item"><span class="sg-loc-legend-dot" style="background:#d97706"></span>Золотий</span>
-        <span class="sg-loc-legend-item"><span class="sg-loc-legend-dot" style="background:linear-gradient(135deg,#6366f1,#f59e0b)"></span>Універсальний</span>
+        <span class="sg-loc-legend-item"><span class="sg-loc-legend-dot" style="background:linear-gradient(135deg,#2f7bfd,#f59e0b)"></span>Універсальний</span>
         <span class="sg-loc-legend-item"><span class="sg-loc-legend-badge sg-loc-legend-badge-shop"><img src="/icons/logo_tehnoscarb1.png" alt=""></span>Магазин (лого Техноскарб)</span>
         <span class="sg-loc-legend-item"><span class="sg-loc-legend-badge sg-loc-legend-badge-currency">$</span>Обмін валют</span>
     </div>
@@ -7758,7 +8431,7 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
             <span class="sg-mlabel">${MONTHS_UA[this._month]} ${this._year}</span>
             <button class="sg-mnav" onclick="ScheduleGraphEmployee._nextMonth()">›</button>
         </div>
-        <div class="sg-v2-legend-section" style="flex:1;margin-bottom:0">
+        <div class="sg-v2-legend-section" style="flex:1;margin-bottom:0;position:static;box-shadow:none;padding:0;background:transparent">
             <div class="sg-legend">
                 ${['work','vacation'].map(k => {
                     const v = getShiftTypes()[k];

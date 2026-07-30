@@ -258,8 +258,11 @@ const App = {
 
             'schedule-graph': async ({ container, params }) => {
                 if (!requireTrusted()) return;
-                if (params?.view === 'employee') await ScheduleGraphEmployee.init(container);
-                else await ScheduleGraphPage.init(container);
+                if (params?.view === 'employee') await ScheduleGraphEmployee.init(container, params);
+                else {
+                    await ScheduleGraphPage.init(container);
+                    if (params?.openBlock) ScheduleGraphPage._showPartnersModal();
+                }
             },
 
             'schedule-view': async ({ container }) => {

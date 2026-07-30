@@ -109,6 +109,12 @@ const Auth = {
                     AppState.profile.role_switched_at = null;
                 }
             } catch(_) {}
+            // Скидаємо lms_last_active ДО reload — інакше InactivityWatcher.start()
+            // при завантаженні (App.boot() → session-restore, не через _showApp())
+            // прочитає застарілий таймстемп з минулої (давньої) сесії й одразу
+            // виконає примусовий вихід через "неактивність", навіть щойно після
+            // успішного логіну.
+            localStorage.setItem('lms_last_active', Date.now());
             // Повне перезавантаження сторінки замість м'якого SPA-переходу —
             // інакше стан сторінкових модулів (напр. ScheduleGraphPage._locations,
             // _entries, _cachedShiftTypes — звичайні поля об'єкта, не прив'язані
@@ -168,11 +174,27 @@ const Auth = {
     },
 
     async logout() {
-        const confirmed = await Modal.confirm({
-            title: 'Вихід',
-            message: 'Ви впевнені, що хочете вийти із системи?',
-            confirmText: 'Вийти',
-            danger: true
+        // Власна центрована модалка (не глобальний Modal.confirm — той є боковою
+        // панеллю по всьому додатку, а для виходу з системи потрібне саме по центру).
+        const confirmed = await new Promise(resolve => {
+            document.getElementById('logout-confirm-backdrop')?.remove();
+            const el = document.createElement('div');
+            el.id = 'logout-confirm-backdrop';
+            el.className = 'center-confirm-backdrop';
+            el.innerHTML = `
+                <div class="center-confirm-box">
+                    <h3>Вихід</h3>
+                    <p>Ви впевнені, що хочете вийти із системи?</p>
+                    <div class="center-confirm-actions">
+                        <button class="btn btn-secondary" id="logout-confirm-cancel">Скасувати</button>
+                        <button class="btn btn-danger" id="logout-confirm-ok">Вийти</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(el);
+            const finish = ok => { el.remove(); resolve(ok); };
+            el.addEventListener('click', e => { if (e.target === el) finish(false); });
+            document.getElementById('logout-confirm-cancel').onclick = () => finish(false);
+            document.getElementById('logout-confirm-ok').onclick     = () => finish(true);
         });
         if (!confirmed) return;
 

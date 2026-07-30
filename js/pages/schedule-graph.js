@@ -424,6 +424,8 @@ const ScheduleGraphPage = {
         this._render(this._container);
     },
 
+    _shiftTypesStorageKey() { return `sg_shift_types_${AppState.user?.id || ''}`; },
+
     async _loadShiftConfig() {
         try {
             const { data } = await supabase.from('schedule_shift_config')
@@ -433,7 +435,7 @@ const ScheduleGraphPage = {
             } else {
                 // Migrate from localStorage on first DB load
                 try {
-                    const s = localStorage.getItem('sg_shift_types');
+                    const s = localStorage.getItem(this._shiftTypesStorageKey());
                     if (s) {
                         _cachedShiftTypes = JSON.parse(s);
                         await supabase.from('schedule_shift_config')
@@ -443,7 +445,7 @@ const ScheduleGraphPage = {
             }
         } catch(e) {
             // Table not yet created — fall back to localStorage
-            try { const s = localStorage.getItem('sg_shift_types'); if (s) _cachedShiftTypes = JSON.parse(s); } catch(e2) {}
+            try { const s = localStorage.getItem(this._shiftTypesStorageKey()); if (s) _cachedShiftTypes = JSON.parse(s); } catch(e2) {}
         }
     },
 
@@ -451,7 +453,7 @@ const ScheduleGraphPage = {
         const { error } = await supabase.from('schedule_shift_config')
             .upsert({ user_id: AppState.user.id, config: _cachedShiftTypes }, { onConflict: 'user_id' });
         if (error) Toast.error('Помилка збереження типів', error.message);
-        else localStorage.setItem('sg_shift_types', JSON.stringify(_cachedShiftTypes));
+        else localStorage.setItem(this._shiftTypesStorageKey(), JSON.stringify(_cachedShiftTypes));
     },
 
     async _loadHelpLocIds() {
@@ -1094,7 +1096,7 @@ ${this._manCss()}
         return `
 <aside class="sg-loc-sidebar">
     <div class="sg-loc-sidebar-head">
-        <span class="sg-loc-sidebar-title"><i class="fa-solid fa-map-location-dot"></i>Розділ локацій</span>
+        <span class="sg-loc-sidebar-title"><img src="/icons/free-icon-ukraine.png" alt="" class="sg-loc-sidebar-title-ico">Розділ локацій</span>
         <div style="display:flex;gap:4px;align-items:center">
             ${AppState.isSuperAdmin() ? `
             <button class="sg-loc-add-ico${this._locSortAlpha ? ' active' : ''}"
@@ -1111,11 +1113,13 @@ ${this._manCss()}
     <div class="sg-loc-sidebar-list"
         ondragend="ScheduleGraphPage._draggingLocId=null;document.querySelectorAll('.sg-loc-item-row.sg-loc-dragging,.sg-loc-item-row.sg-loc-drag-over').forEach(r=>r.classList.remove('sg-loc-dragging','sg-loc-drag-over'))">
         ${this._locations.length > 1 ? `
-        <button class="sg-loc-item sg-loc-item-all ${this._locId === 'all' ? 'active' : ''}"
-            onclick="ScheduleGraphPage._selectLocation('all')">
-            <span class="sg-loc-item-ico"><i class="fa-solid fa-folder-open"></i></span>
-            <span class="sg-loc-item-name">Всі локації</span>
-        </button>` : ''}
+        <div class="sg-loc-item-row">
+            <button class="sg-loc-item sg-loc-item-all ${this._locId === 'all' ? 'active' : ''}"
+                onclick="ScheduleGraphPage._selectLocation('all')" title="Всі локації">
+                <span class="sg-loc-item-ico"><i class="fa-solid fa-folder-open"></i></span>
+                <span class="sg-loc-item-code">Всі</span>
+            </button>
+        </div>` : ''}
         ${(() => {
             const p = n => String(n).padStart(2, '0');
             const monthPrefix = `${this._year}-${p(this._month + 1)}`;
@@ -1123,6 +1127,8 @@ ${this._manCss()}
             const hasHelp = [...(this._helpByLoc[l.id] || [])].some(d => d.startsWith(monthPrefix));
             const isActive = l.id === this._locId;
             const viewOnly = this._isViewOnlyLoc(l.id);
+            const isSeller  = !viewOnly && (l.node_type || '').endsWith('_seller');
+            const hasCurExc = !viewOnly && l.has_currency_exchange;
             return `
         <div class="sg-loc-item-row${viewOnly ? ' sg-loc-view-only' : ''}" draggable="${viewOnly ? 'false' : 'true'}"
             ondragstart="${viewOnly ? '' : `ScheduleGraphPage._onLocDragStart(event,'${l.id}')`}"
@@ -1130,20 +1136,31 @@ ${this._manCss()}
             ondragleave="${viewOnly ? '' : 'ScheduleGraphPage._onLocDragLeave(event)'}"
             ondrop="${viewOnly ? '' : `ScheduleGraphPage._onLocDrop(event,'${l.id}')`}">
             ${viewOnly ? '' : `<span class="sg-loc-drag-handle" title="Перетягнути">⠿</span>`}
-            <button class="sg-loc-item ${isActive ? 'active' : ''}${hasHelp ? ' has-help' : ''}"
+            <button class="sg-loc-item ${isActive ? 'active' : ''}${hasHelp ? ' has-help' : ''}${viewOnly ? ' viewonly' : ''}"
                 data-node="${l.node_type || ''}"
-                onclick="ScheduleGraphPage._selectLocation('${l.id}')">
-                <span class="sg-loc-item-ico">${viewOnly ? '<i class="fa-solid fa-eye"></i>' : '<i class="fa-solid fa-shop"></i>'}</span>
-                <span class="sg-loc-item-name" title="${Fmt.esc(l.name)}">${Fmt.esc(l.name).slice(0,3)}</span>
-                <span class="sg-loc-item-meta">
-                    ${hasHelp ? `<span class="sg-loc-item-helpdot"></span>` : ''}
-                    ${viewOnly ? `<span class="sg-loc-item-ro" title="Тільки перегляд"><i class="fa-solid fa-eye"></i></span>` : ''}
+                onclick="ScheduleGraphPage._selectLocation('${l.id}')"
+                title="${Fmt.esc(l.name)}${hasCurExc ? ' · Обмін валют' : ''}">
+                ${hasHelp ? `<span class="sg-loc-item-helpdot" title="Потрібна підміна"></span>` : ''}
+                <span class="sg-loc-item-ico">
+                    <i class="fa-solid ${viewOnly ? 'fa-eye' : 'fa-shop'}"></i>
+                    ${isSeller ? `<span class="sg-loc-item-badge sg-loc-item-badge-shop"><img src="/icons/logo_tehnoscarb1.png" alt=""></span>` : ''}
+                    ${hasCurExc ? `<span class="sg-loc-item-badge sg-loc-item-badge-currency">$</span>` : ''}
                 </span>
+                <span class="sg-loc-item-code">${Fmt.esc(l.name).slice(0,3)}</span>
             </button>
         </div>`;
             }).join('');
         })()}
     </div>
+    ${this._locations.length ? `
+    <div class="sg-loc-legend">
+        <span class="sg-loc-legend-item"><span class="sg-loc-legend-dot" style="background:#6366f1"></span>Технічний</span>
+        <span class="sg-loc-legend-item"><span class="sg-loc-legend-dot" style="background:#d97706"></span>Золотий</span>
+        <span class="sg-loc-legend-item"><span class="sg-loc-legend-dot" style="background:linear-gradient(135deg,#6366f1,#f59e0b)"></span>Універсальний</span>
+        <span class="sg-loc-legend-item"><span class="sg-loc-legend-badge sg-loc-legend-badge-shop"><img src="/icons/logo_tehnoscarb1.png" alt=""></span>Магазин (лого Техноскарб)</span>
+        <span class="sg-loc-legend-item"><span class="sg-loc-legend-badge sg-loc-legend-badge-currency">$</span>Обмін валют</span>
+        <span class="sg-loc-legend-item"><span class="sg-loc-legend-dot sg-loc-legend-dot-pulse"></span>Потрібна підміна</span>
+    </div>` : ''}
 </aside>`;
     },
 
@@ -1232,11 +1249,15 @@ ${this._manCss()}
             <div class="sg-v2-loc-name">
                 <span class="sg-loc-name-ico">🏪</span>
                 <span class="sg-loc-name-text">${Fmt.esc(locName)}</span>
-                ${loc?.node_type ? `<span class="sg-node-badge sg-node-${loc.node_type.replace(/_/g,'-')}">${{universal:'Універсальний',technical:'Технічний',gold:'Золотий',universal_seller:'Універсальний + магазин',technical_seller:'Технічний + магазин'}[loc.node_type]||''}</span>` : ''}
                 ${viewOnly ? `
                 <span class="sg-view-only-badge"><i class="fa-solid fa-eye"></i> Перегляд</span>` : `
                 <button class="sg-loc-name-edit" onclick="ScheduleGraphPage._renameLocation('${this._locId}',${JSON.stringify(locName||'').replace(/"/g,'&quot;')})" title="Редагувати локацію"><i class="fa-solid fa-pen"></i></button>`}
             </div>
+            ${loc?.node_type || loc?.has_currency_exchange ? `
+            <div class="sg-v2-loc-badges">
+                ${loc?.node_type ? `<span class="sg-node-badge sg-node-${loc.node_type.replace(/_/g,'-')}">${{universal:'Універсальний',technical:'Технічний',gold:'Золотий',universal_seller:'Універсальний + магазин',technical_seller:'Технічний + магазин'}[loc.node_type]||''}</span>` : ''}
+                ${loc?.has_currency_exchange ? `<span class="sg-currency-badge" title="У локації доступний обмін валют"><i class="fa-solid fa-money-bill-transfer"></i></span>` : ''}
+            </div>` : ''}
             ${loc?.address ? `<div class="sg-v2-loc-address"><i class="fa-solid fa-location-dot" style="color:var(--text-muted);font-size:.75rem"></i> ${Fmt.esc(loc.address)}</div>` : ''}
             ${loc?.phone ? `<div class="sg-v2-loc-address"><i class="fa-solid fa-phone" style="color:var(--text-muted);font-size:.75rem"></i> ${Fmt.esc(loc.phone)}</div>` : ''}
             <div class="sg-v2-loc-row">
@@ -1511,7 +1532,7 @@ ${this._manCss()}
         input.value = r;
     },
 
-    _showLocModal({ title, placeholder, value = '', address = '', phone = '', nodeType = '', workStart = '', workEnd = '', onSave }) {
+    _showLocModal({ title, placeholder, value = '', address = '', phone = '', nodeType = '', workStart = '', workEnd = '', hasCurrencyExchange = false, onSave }) {
         document.getElementById('sg-loc-modal')?.remove();
         const NODE_LABELS = { universal:'Універсальний', universal_seller:'Універсальний + магазин', technical:'Технічний', technical_seller:'Технічний + магазин', gold:'Золотий' };
         const nodeOptions = [['','— Вузол не вказано —'], ...Object.entries(NODE_LABELS)]
@@ -1537,9 +1558,19 @@ ${this._manCss()}
             <input id="sg-loc-input" class="sg-loc-input" placeholder="${placeholder}"
                 value="${value.replace(/"/g,'&quot;')}" autocomplete="off" spellcheck="false">
         </div>
-        <div class="sg-loc-field">
-            <label class="sg-loc-label"><i class="fa-solid fa-sitemap sg-loc-lbl-ico"></i>Тип вузла</label>
-            <select id="sg-loc-node-type" class="sg-loc-input sg-loc-select">${nodeOptions}</select>
+        <div class="sg-loc-row2 sg-loc-row2-nodetype">
+            <div class="sg-loc-field">
+                <label class="sg-loc-label"><i class="fa-solid fa-sitemap sg-loc-lbl-ico"></i>Тип вузла</label>
+                <select id="sg-loc-node-type" class="sg-loc-input sg-loc-select">${nodeOptions}</select>
+            </div>
+            <label class="sg-loc-toggle-field" for="sg-loc-currency">
+                <div class="sg-loc-toggle-ico"><i class="fa-solid fa-money-bill-transfer"></i></div>
+                <div class="sg-loc-toggle-text">
+                    <div class="sg-loc-toggle-title">Обмін валют</div>
+                </div>
+                <input type="checkbox" id="sg-loc-currency" class="sg-loc-toggle-input" ${hasCurrencyExchange ? 'checked' : ''}>
+                <span class="sg-loc-toggle-switch"></span>
+            </label>
         </div>
         <div class="sg-loc-row2">
             <div class="sg-loc-field">
@@ -1595,8 +1626,9 @@ ${this._manCss()}
             const nt    = document.getElementById('sg-loc-node-type')?.value || '';
             const whs   = document.getElementById('sg-loc-wh-start')?.value || '';
             const whe   = document.getElementById('sg-loc-wh-end')?.value || '';
+            const curEx = document.getElementById('sg-loc-currency')?.checked || false;
             el.remove();
-            onSave(v, addr, ph, nt, whs, whe);
+            onSave(v, addr, ph, nt, whs, whe, curEx);
         };
         document.getElementById('sg-loc-save-btn').onclick = save;
         input.addEventListener('keydown', e => { if (e.key === 'Enter') save(); });
@@ -1606,9 +1638,9 @@ ${this._manCss()}
         this._showLocModal({
             title: 'Нова локація',
             placeholder: 'Назва філії…',
-            onSave: async (name, address, phone, nodeType, workStart, workEnd) => {
+            onSave: async (name, address, phone, nodeType, workStart, workEnd, hasCurrencyExchange) => {
                 const { data, error } = await supabase.from('schedule_locations')
-                    .insert({ name, address: address || null, phone: phone || null, node_type: nodeType || null, work_start: workStart || null, work_end: workEnd || null, created_by: AppState.user.id })
+                    .insert({ name, address: address || null, phone: phone || null, node_type: nodeType || null, work_start: workStart || null, work_end: workEnd || null, has_currency_exchange: hasCurrencyExchange, created_by: AppState.user.id })
                     .select().single();
                 if (error) { Toast.error('Помилка', error.message); return; }
                 this._locations.push(data);
@@ -1633,7 +1665,8 @@ ${this._manCss()}
             nodeType: loc?.node_type || '',
             workStart: loc?.work_start || '',
             workEnd: loc?.work_end || '',
-            onSave: async (name, address, phone, nodeType, workStart, workEnd) => {
+            hasCurrencyExchange: loc?.has_currency_exchange || false,
+            onSave: async (name, address, phone, nodeType, workStart, workEnd, hasCurrencyExchange) => {
                 const { error } = await supabase.from('schedule_locations')
                     .update({
                         name,
@@ -1642,6 +1675,7 @@ ${this._manCss()}
                         node_type:  nodeType  || null,
                         work_start: workStart || null,
                         work_end:   workEnd   || null,
+                        has_currency_exchange: hasCurrencyExchange,
                     })
                     .eq('id', id);
                 if (error) { Toast.error('Помилка', error.message); return; }
@@ -1649,6 +1683,7 @@ ${this._manCss()}
                     loc.name = name; loc.address = address || null; loc.phone = phone || null;
                     loc.node_type = nodeType || null;
                     loc.work_start = workStart || null; loc.work_end = workEnd || null;
+                    loc.has_currency_exchange = hasCurrencyExchange;
                 }
                 this._render(this._container);
                 Toast.success('Збережено');
@@ -1734,6 +1769,7 @@ ${this._manCss()}
     },
 
     _selectLocation(id) {
+        if (id === this._locId && this._tab === 'schedule') return;
         this._locId     = id;
         this._saveLoc();
         this._tab       = 'schedule';
@@ -5728,7 +5764,7 @@ ${this._manCss()}
     font-size:1rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;
     color:var(--primary);
 }
-.sg-loc-sidebar-title i { font-size:.8rem;opacity:.85; }
+.sg-loc-sidebar-title-ico { width:32px;height:32px;object-fit:contain;flex-shrink:0; }
 .sg-loc-sidebar-sep { width:1px;height:22px;background:var(--border);flex-shrink:0; }
 .sg-loc-add-ico {
     width:24px;height:24px;border-radius:7px;border:1.5px solid var(--border);
@@ -5739,75 +5775,102 @@ ${this._manCss()}
 .sg-loc-add-ico:hover { background:var(--primary);color:#fff;border-color:var(--primary); }
 .sg-loc-add-ico.active { background:var(--primary);color:#fff;border-color:var(--primary); }
 .sg-loc-sidebar-list {
-    padding:6px;display:flex;flex-direction:row;flex-wrap:wrap;gap:4px;
+    padding:10px;display:grid;grid-template-columns:repeat(auto-fill,minmax(58px,1fr));gap:8px;
     max-height:none;overflow-y:visible;
 }
-.sg-loc-item-row { display:flex;align-items:center;gap:2px; }
+.sg-loc-item-row { position:relative; }
 .sg-loc-item {
-    min-width:0;
-    display:inline-flex;align-items:center;gap:8px;
-    padding:7px 14px 7px 7px;border-radius:12px;border:none;
-    background:transparent;color:var(--text-muted);
-    font-size:1rem;font-weight:600;cursor:pointer;text-align:left;white-space:nowrap;
-    transition:background .18s ease,color .18s ease;
+    width:100%;min-width:0;position:relative;
+    display:flex;flex-direction:column;align-items:center;gap:6px;
+    padding:10px 4px 8px;border-radius:14px;border:1.5px solid var(--border);
+    background:var(--bg-raised);color:var(--text-muted);
+    font-size:.8rem;font-weight:800;letter-spacing:.01em;cursor:pointer;text-align:center;
+    transition:transform .15s cubic-bezier(.4,0,.2,1),border-color .15s,box-shadow .15s,background .15s;
+    overflow:hidden;
 }
-.sg-loc-item:hover:not(.active):not(.has-help) { background:var(--bg-hover);color:var(--text-primary); }
+.sg-loc-item::before { content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--border); }
+.sg-loc-item:hover:not(.active):not(.has-help) {
+    transform:translateY(-2px);border-color:color-mix(in srgb,var(--primary) 35%,var(--border));
+    box-shadow:0 8px 18px rgba(0,0,0,.08);
+}
+.sg-loc-item:active { transform:translateY(0) scale(.97); }
+
+.sg-loc-item[data-node="technical"]::before,
+.sg-loc-item[data-node="technical_seller"]::before { background:#6366f1; }
 .sg-loc-item[data-node="technical"] .sg-loc-item-ico,
 .sg-loc-item[data-node="technical_seller"] .sg-loc-item-ico { background:rgba(99,102,241,.16);color:#6366f1; }
+.sg-loc-item[data-node="gold"]::before { background:#d97706; }
 .sg-loc-item[data-node="gold"] .sg-loc-item-ico { background:rgba(245,158,11,.18);color:#d97706; }
+.sg-loc-item[data-node="universal"]::before,
+.sg-loc-item[data-node="universal_seller"]::before { background:linear-gradient(90deg,#6366f1,#f59e0b); }
 .sg-loc-item[data-node="universal"] .sg-loc-item-ico,
 .sg-loc-item[data-node="universal_seller"] .sg-loc-item-ico {
     background:linear-gradient(135deg,#6366f1 0%,#6366f1 50%,#f59e0b 50%,#f59e0b 100%);color:#fff;
 }
+.sg-loc-item-all::before { background:#d97706; }
 .sg-loc-item-all .sg-loc-item-ico { background:rgba(245,158,11,.18);color:#d97706; }
+
 .sg-loc-item.active {
-    background:color-mix(in srgb,var(--primary) 14%,var(--bg-surface));color:var(--primary);
-    font-size:.92rem;font-weight:800;
+    background:color-mix(in srgb,var(--primary) 12%,var(--bg-surface));
+    border-color:var(--primary);color:var(--primary);
+    box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 16%,transparent);
 }
+.sg-loc-item.active::before { background:var(--primary); }
 .sg-loc-item.active:not([data-node]) .sg-loc-item-ico,
 .sg-loc-item.active[data-node=""] .sg-loc-item-ico { background:var(--primary);color:#fff; }
-.sg-loc-item.has-help {
-    color:#ef4444;background:rgba(239,68,68,.08);
-    animation:locHelpPulse 2.2s ease-in-out infinite;
-}
-.sg-loc-item.has-help .sg-loc-item-ico { background:rgba(239,68,68,.16);color:#ef4444; }
-.sg-loc-item.active.has-help { background:#ef4444;color:#fff; }
-.sg-loc-item.active.has-help .sg-loc-item-ico { background:#fff;color:#ef4444; }
+
+.sg-loc-item.has-help { animation:locHelpPulse 2.2s ease-in-out infinite; }
+.sg-loc-item.viewonly { opacity:.6; }
+.sg-loc-item.viewonly .sg-loc-item-ico { background:var(--bg-hover);color:var(--text-muted); }
+
 .sg-loc-item-ico {
-    width:24px;height:24px;border-radius:7px;font-size:.75rem;flex-shrink:0;
+    position:relative;width:36px;height:36px;border-radius:11px;font-size:1rem;flex-shrink:0;
     display:flex;align-items:center;justify-content:center;
     background:var(--bg-hover);color:var(--text-muted);transition:all .18s ease;
 }
-.sg-loc-item-name { flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
-.sg-loc-item-meta { display:flex;align-items:center;gap:4px;flex-shrink:0; }
-.sg-loc-item-helpdot {
-    width:6px;height:6px;border-radius:50%;background:#ef4444;flex-shrink:0;
-    animation:dotBlink 1.4s ease-in-out infinite;
-}
-.sg-loc-item.active .sg-loc-item-helpdot { background:#fff; }
-.sg-loc-item-rename, .sg-loc-item-del {
-    flex-shrink:0;width:24px;height:24px;border-radius:7px;border:none;
-    background:transparent;cursor:pointer;font-size:.78rem;
+.sg-loc-item-badge {
+    position:absolute;width:15px;height:15px;border-radius:50%;
     display:flex;align-items:center;justify-content:center;
-    color:var(--text-muted);transition:all .15s;
-    opacity:0;
+    font-size:.55rem;font-weight:800;box-shadow:0 0 0 2px var(--bg-raised);color:#fff;
 }
-.sg-loc-item-row:hover .sg-loc-item-rename,
-.sg-loc-item-row:hover .sg-loc-item-del { opacity:1; }
-.sg-loc-item-rename:hover { background:var(--bg-hover,rgba(0,0,0,.07));color:var(--primary); }
-.sg-loc-item-del:hover { background:rgba(239,68,68,.1);color:#ef4444; }
+.sg-loc-item.active .sg-loc-item-badge { box-shadow:0 0 0 2px color-mix(in srgb,var(--primary) 12%,var(--bg-surface)); }
+.sg-loc-item-badge-shop { bottom:-3px;right:-4px;background:#fff;padding:0; }
+.sg-loc-item-badge-shop img { width:11px;height:11px;object-fit:contain;border-radius:50%; }
+.sg-loc-item-badge-currency { top:-3px;right:-4px;background:#059669; }
+
+.sg-loc-item-code { line-height:1;white-space:nowrap; }
+
+.sg-loc-item-helpdot {
+    position:absolute;top:6px;left:6px;width:6px;height:6px;border-radius:50%;background:#ef4444;
+    box-shadow:0 0 0 3px rgba(239,68,68,.18);animation:dotBlink 1.4s ease-in-out infinite;z-index:1;
+}
+
 .sg-loc-drag-handle {
-    cursor:grab;color:var(--text-muted);font-size:1rem;
-    opacity:0;flex-shrink:0;user-select:none;padding:0 4px;
-    transition:opacity .15s;line-height:1;
+    position:absolute;top:50%;left:3px;transform:translateY(-50%);cursor:grab;color:var(--text-muted);font-size:.6rem;
+    opacity:0;z-index:2;user-select:none;transition:opacity .15s;line-height:1;
 }
-.sg-loc-item-row:hover .sg-loc-drag-handle { opacity:.45; }
+.sg-loc-item-row:hover .sg-loc-drag-handle { opacity:.5; }
 .sg-loc-drag-handle:active { cursor:grabbing; }
 .sg-loc-item-row.sg-loc-dragging { opacity:.4; }
 .sg-loc-item-row.sg-loc-drag-over .sg-loc-item {
     background:rgba(99,102,241,.12) !important;
     outline:2px solid var(--primary);outline-offset:-2px;
 }
+.sg-loc-legend {
+    display:flex;flex-wrap:wrap;gap:14px;
+    padding:12px 16px;border-top:1px dashed var(--border);
+}
+.sg-loc-legend-item { display:flex;align-items:center;gap:7px;font-size:.74rem;color:var(--text-secondary); }
+.sg-loc-legend-dot { width:10px;height:10px;border-radius:3px;flex-shrink:0; }
+.sg-loc-legend-dot-pulse { border-radius:50%;background:#ef4444; }
+.sg-loc-legend-badge {
+    width:15px;height:15px;border-radius:50%;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;
+    font-size:.55rem;font-weight:800;color:#fff;border:1px solid var(--border);
+}
+.sg-loc-legend-badge-shop { background:#fff; }
+.sg-loc-legend-badge-shop img { width:11px;height:11px;object-fit:contain;border-radius:50%; }
+.sg-loc-legend-badge-currency { background:#059669;border-color:#059669; }
 
 @keyframes locHelpPulse {
     0%,100% { box-shadow:0 0 0 0 rgba(239,68,68,.25); }
@@ -5876,6 +5939,7 @@ ${this._manCss()}
 .sg-svc-badge { font-size:.62rem;font-weight:700;background:rgba(239,68,68,.15);color:#ef4444;border-radius:8px;padding:1px 5px;line-height:1.4; }
 .sg-svc-badge-green { background:rgba(16,185,129,.15);color:#10b981; }
 .sg-v2-loc-name { display:flex;align-items:center;gap:6px;font-weight:600;font-size:.95rem; }
+.sg-v2-loc-badges { display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:4px 0 2px; }
 .sg-v2-loc-row { display:flex;align-items:center;gap:8px;font-size:.8rem;color:var(--text-secondary); }
 .sg-v2-loc-val { font-weight:600;color:var(--text-primary); }
 .sg-v2-loc-actions { display:flex;gap:8px;align-items:center;margin-top:4px; }
@@ -6040,8 +6104,6 @@ ${this._manCss()}
     font-size:.75rem;font-weight:600;padding:2px 8px;border-radius:20px;
     background:rgba(139,92,246,.12);color:#8b5cf6;border:1px solid rgba(139,92,246,.25);
 }
-.sg-loc-item-ro { font-size:.7rem;opacity:.7; }
-.sg-loc-view-only .sg-loc-item { opacity:.85; }
 .sg-work-hours-bar {
     display:flex;align-items:center;gap:10px;flex-wrap:wrap;
     padding:10px 20px;border-bottom:1px solid var(--border);
@@ -6863,7 +6925,7 @@ body:not(.light-theme) .sg-emp-warn { color:#f59e0b; }
 
 /* Location modal */
 .sg-loc-modal-box {
-    max-width:460px;width:100%;height:auto!important;
+    max-width:560px;width:100%;height:auto!important;
     padding:0!important;overflow:hidden;
 }
 .sg-loc-modal-hero {
@@ -6929,6 +6991,41 @@ body:not(.light-theme) .sg-emp-warn { color:#f59e0b; }
     color:var(--text-primary)!important;text-align:center;cursor:pointer;width:100%;
 }
 .sg-loc-time-arrow { color:var(--text-muted);font-size:.7rem;flex-shrink:0;padding:0 4px; }
+.sg-loc-row2-nodetype { align-items:end; }
+.sg-loc-toggle-field {
+    display:flex;align-items:center;gap:10px;cursor:pointer;
+    padding:0 14px;height:41px;border-radius:10px;
+    background:var(--bg-raised);border:1.5px solid var(--border);
+    transition:border-color .18s,box-shadow .18s;
+}
+.sg-loc-toggle-field:has(.sg-loc-toggle-input:checked) {
+    border-color:color-mix(in srgb,#059669 40%,var(--border));
+    background:rgba(16,185,129,.06);
+}
+.sg-loc-toggle-ico {
+    width:34px;height:34px;border-radius:10px;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;font-size:.9rem;
+    background:rgba(16,185,129,.12);color:#059669;
+}
+.sg-loc-toggle-text { flex:1;min-width:0; }
+.sg-loc-toggle-title { font-size:.88rem;font-weight:700;color:var(--text-primary); }
+.sg-loc-toggle-sub { font-size:.72rem;color:var(--text-muted);margin-top:1px; }
+.sg-loc-toggle-input { position:absolute;opacity:0;width:0;height:0; }
+.sg-loc-toggle-switch {
+    position:relative;flex-shrink:0;width:40px;height:24px;border-radius:20px;
+    background:var(--border);transition:background .18s;
+}
+.sg-loc-toggle-switch::before {
+    content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;
+    background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .18s;
+}
+.sg-loc-toggle-input:checked ~ .sg-loc-toggle-switch { background:#059669; }
+.sg-loc-toggle-input:checked ~ .sg-loc-toggle-switch::before { transform:translateX(16px); }
+.sg-currency-badge {
+    display:inline-flex;align-items:center;justify-content:center;
+    width:26px;height:26px;border-radius:8px;font-size:1.05rem;
+    background:rgba(16,185,129,.14);color:#059669;
+}
 .sg-loc-modal-footer {
     display:flex;gap:10px;padding:16px 22px 20px;
     border-top:1px solid var(--border);margin-top:4px;flex-shrink:0;
@@ -7403,7 +7500,7 @@ const ScheduleGraphEmployee = {
 
         const locIds = assignRows.map(a => a.location_id);
         const { data: lData } = await supabase.from('schedule_locations')
-            .select('id, name, locked_months, work_start, work_end, address, phone, created_by')
+            .select('id, name, locked_months, work_start, work_end, address, phone, created_by, node_type, has_currency_exchange')
             .in('id', locIds);
         const locs = lData || [];
 
@@ -7419,6 +7516,8 @@ const ScheduleGraphEmployee = {
                 address:       loc.address || null,
                 phone:         loc.phone || null,
                 created_by:    loc.created_by || null,
+                node_type:     loc.node_type || null,
+                has_currency_exchange: !!loc.has_currency_exchange,
             };
         });
 
@@ -7611,10 +7710,17 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
         const locTabs = this._assignments.length >= 1 ? `
 <div class="sg-loc-bar" style="margin-bottom:16px">
     <div class="sg-loc-tabs">
-        ${this._assignments.map(a => `
-        <button class="sg-loc-tab ${a.locId === this._locId ? 'active' : ''}"
+        ${this._assignments.map(a => {
+            const isSeller  = (a.node_type || '').endsWith('_seller');
+            const hasCurExc = a.has_currency_exchange;
+            return `
+        <button class="sg-loc-tab ${a.locId === this._locId ? 'active' : ''}" data-node="${a.node_type || ''}"
             onclick="ScheduleGraphEmployee._switchLoc('${a.locId}')">
-            <span class="sg-loc-tab-ico"><i class="fa-solid fa-shop"></i></span>
+            <span class="sg-loc-tab-ico">
+                <i class="fa-solid fa-shop"></i>
+                ${isSeller ? `<span class="sg-loc-item-badge sg-loc-item-badge-shop"><img src="/icons/logo_tehnoscarb1.png" alt=""></span>` : ''}
+                ${hasCurExc ? `<span class="sg-loc-item-badge sg-loc-item-badge-currency">$</span>` : ''}
+            </span>
             <span class="sge-tab-body">
                 <span class="sge-tab-name">${Fmt.esc(a.locName)} <span class="sge-tab-status${a.is_primary === false ? ' sge-tab-status-sub' : ''}">${a.is_primary === false ? 'підміна' : 'основний'}</span></span>
                 <span class="sge-tab-meta-row">
@@ -7623,7 +7729,15 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
                     ${a.work_start && a.work_end ? `<span class="sge-tab-addr"><i class="fa-regular fa-clock"></i> ${a.work_start.slice(0,5)}–${a.work_end.slice(0,5)}</span>` : ''}
                 </span>
             </span>
-        </button>`).join('')}
+        </button>`;
+        }).join('')}
+    </div>
+    <div class="sg-loc-legend">
+        <span class="sg-loc-legend-item"><span class="sg-loc-legend-dot" style="background:#6366f1"></span>Технічний</span>
+        <span class="sg-loc-legend-item"><span class="sg-loc-legend-dot" style="background:#d97706"></span>Золотий</span>
+        <span class="sg-loc-legend-item"><span class="sg-loc-legend-dot" style="background:linear-gradient(135deg,#6366f1,#f59e0b)"></span>Універсальний</span>
+        <span class="sg-loc-legend-item"><span class="sg-loc-legend-badge sg-loc-legend-badge-shop"><img src="/icons/logo_tehnoscarb1.png" alt=""></span>Магазин (лого Техноскарб)</span>
+        <span class="sg-loc-legend-item"><span class="sg-loc-legend-badge sg-loc-legend-badge-currency">$</span>Обмін валют</span>
     </div>
 </div>` : '';
 
@@ -7817,9 +7931,16 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
 }
 body:not(.light-theme) .sg-loc-tab { box-shadow:0 2px 10px rgba(0,0,0,.15); }
 .sg-loc-tab-ico {
-    width:36px;height:36px;border-radius:11px;flex-shrink:0;
+    position:relative;width:36px;height:36px;border-radius:11px;flex-shrink:0;
     display:flex;align-items:center;justify-content:center;font-size:1rem;
     background:var(--bg-hover);color:var(--text-muted);transition:all .18s ease;
+}
+.sg-loc-tab[data-node="technical"] .sg-loc-tab-ico,
+.sg-loc-tab[data-node="technical_seller"] .sg-loc-tab-ico { background:rgba(99,102,241,.16);color:#6366f1; }
+.sg-loc-tab[data-node="gold"] .sg-loc-tab-ico { background:rgba(245,158,11,.18);color:#d97706; }
+.sg-loc-tab[data-node="universal"] .sg-loc-tab-ico,
+.sg-loc-tab[data-node="universal_seller"] .sg-loc-tab-ico {
+    background:linear-gradient(135deg,#6366f1 0%,#6366f1 50%,#f59e0b 50%,#f59e0b 100%);color:#fff;
 }
 .sge-tab-body { display:flex;flex-direction:column;gap:3px;min-width:0; }
 .sge-tab-name { font-size:.92rem;font-weight:700;color:var(--text-primary); }
@@ -7833,7 +7954,8 @@ body:not(.light-theme) .sg-loc-tab { box-shadow:0 2px 10px rgba(0,0,0,.15); }
 .sge-tab-addr { font-size:.74rem;font-weight:500;color:var(--text-muted);display:flex;align-items:center;gap:4px;white-space:nowrap; }
 .sg-loc-tab:hover:not(.active) { border-color:color-mix(in srgb,var(--primary) 40%,var(--border)); }
 .sg-loc-tab.active { border-color:var(--primary);background:color-mix(in srgb,var(--primary) 7%,var(--bg-surface)); }
-.sg-loc-tab.active .sg-loc-tab-ico { background:var(--primary);color:#fff; }
+.sg-loc-tab.active:not([data-node]) .sg-loc-tab-ico,
+.sg-loc-tab.active[data-node=""] .sg-loc-tab-ico { background:var(--primary);color:#fff; }
 .sge-sub-btn {
     display:inline-flex;align-items:center;gap:6px;
     padding:13px 16px;border-radius:12px;font-size:.85rem;font-weight:700;cursor:pointer;line-height:1;

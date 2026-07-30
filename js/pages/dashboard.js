@@ -993,6 +993,65 @@ const DashboardPage = {
         this._drawCalWidget();
     },
 
+    // Вивантажує графік роботи (поточний + 2 наступні місяці) у .ics-файл —
+    // універсальний формат, імпортується в Google Calendar / Outlook / Apple
+    // Calendar без OAuth та налаштувань у Google Cloud.
+    async _exportScheduleIcs() {
+        Loader.show();
+        try {
+            const pad = n => String(n).padStart(2, '0');
+            const fmt = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+            const today = new Date();
+            const from  = new Date(today.getFullYear(), today.getMonth(), 1);
+            const to    = new Date(today.getFullYear(), today.getMonth() + 3, 0);
+
+            const { data, error } = await supabase.from('schedule_entries')
+                .select('date,shift_type,notes,location_id,schedule_locations(name)')
+                .eq('user_id', AppState.user.id)
+                .gte('date', fmt(from)).lte('date', fmt(to))
+                .order('date');
+            if (error) throw error;
+
+            const FLAG_NOTES = ['__sub__', '__needsub__'];
+            const LABELS = { work: 'Зміна', day_off: 'Підміна', vacation: 'Відпустка', sick: 'Лікарняний' };
+            const events = (data || []).filter(e => e.shift_type && !FLAG_NOTES.includes(e.notes));
+            if (!events.length) { Toast.info('Немає змін', 'За найближчі місяці графік порожній'); return; }
+
+            const escIcs = s => String(s).replace(/[,;\\]/g, m => '\\' + m);
+            const dtstamp = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+            const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Скарбниця//Графік роботи//UA', 'CALSCALE:GREGORIAN'];
+            events.forEach(e => {
+                const label   = LABELS[e.shift_type] || e.shift_type;
+                const locName = e.schedule_locations?.name || '';
+                const dStart  = e.date.replace(/-/g, '');
+                const next    = new Date(e.date + 'T00:00:00'); next.setDate(next.getDate() + 1);
+                const dEnd    = `${next.getFullYear()}${pad(next.getMonth()+1)}${pad(next.getDate())}`;
+                lines.push(
+                    'BEGIN:VEVENT',
+                    `UID:sg-${e.date}-${e.location_id || 'x'}@skarbnytsia`,
+                    `DTSTAMP:${dtstamp}`,
+                    `DTSTART;VALUE=DATE:${dStart}`,
+                    `DTEND;VALUE=DATE:${dEnd}`,
+                    `SUMMARY:${escIcs(label + (locName ? ' — ' + locName : ''))}`,
+                    'END:VEVENT'
+                );
+            });
+            lines.push('END:VCALENDAR');
+
+            const blob = new Blob([lines.join('\r\n')], { type: 'text/calendar;charset=utf-8' });
+            const url  = URL.createObjectURL(blob);
+            const a    = document.createElement('a');
+            a.href = url; a.download = 'grafik-roboty.ics';
+            document.body.appendChild(a); a.click(); a.remove();
+            URL.revokeObjectURL(url);
+            Toast.success('Файл завантажено', 'Імпортуйте .ics у Google Calendar: Налаштування → Імпорт та експорт → Обрати файл');
+        } catch(e) {
+            Toast.error('Помилка', e.message);
+        } finally {
+            Loader.hide();
+        }
+    },
+
     _drawCalWidget() {
         const el = document.getElementById('db-cal-widget');
         if (!el) return;
@@ -1193,6 +1252,7 @@ const DashboardPage = {
                         <div class="db-cnav-arrows">
                             <button class="db-cnav-btn" onclick="DashboardPage._calNav(-1)" title="Попередній місяць"><i class="fa-solid fa-chevron-left"></i></button>
                             <button class="db-cnav-btn" onclick="DashboardPage._calNav(1)" title="Наступний місяць"><i class="fa-solid fa-chevron-right"></i></button>
+                            <button class="db-cnav-btn" onclick="DashboardPage._exportScheduleIcs()" title="Додати графік роботи в Google Calendar"><i class="fa-brands fa-google"></i></button>
                             <button onclick="DashboardPage._showHolidays()" title="Свята України"
                                 style="display:inline-flex;align-items:center;gap:.35rem;padding:.28rem .75rem;border-radius:20px;border:none;cursor:pointer;font-size:.78rem;font-weight:700;background:linear-gradient(135deg,#005BBB,#0073e6);color:#fff;box-shadow:0 2px 8px rgba(0,91,187,.35);transition:all .15s;letter-spacing:.02em;font-family:inherit"
                                 onmouseenter="this.style.transform='translateY(-1px)';this.style.boxShadow='0 4px 14px rgba(0,91,187,.45)'"

@@ -306,7 +306,12 @@ const UI = {
             animation:fadeSlideUp .25s cubic-bezier(.16,1,.3,1);
         `;
         el.innerHTML = `
-            <div style="display:flex;align-items:flex-start;gap:10px">
+            <button onclick="document.getElementById('${id}').remove()"
+                title="Закрити"
+                style="position:absolute;top:8px;right:8px;width:22px;height:22px;border-radius:50%;border:none;background:transparent;color:var(--text-muted);font-size:.85rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s,color .15s"
+                onmouseover="this.style.background='var(--bg-hover)';this.style.color='var(--text-primary)'"
+                onmouseout="this.style.background='transparent';this.style.color='var(--text-muted)'">✕</button>
+            <div style="display:flex;align-items:flex-start;gap:10px;padding-right:16px">
                 <div style="width:36px;height:36px;border-radius:50%;background:rgba(16,185,129,.12);color:#10b981;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0">🙋</div>
                 <div style="flex:1;min-width:0">
                     <div style="font-weight:700;font-size:.88rem;color:var(--text-primary);margin-bottom:4px">${Fmt.esc(n.title || '')}</div>
@@ -315,10 +320,6 @@ const UI = {
                         <button onclick="UI._openSchedulerRequest(${JSON.stringify(n.link||'').replace(/"/g,'&quot;')});document.getElementById('${id}')?.remove()"
                             style="flex:1;padding:6px 10px;border-radius:8px;border:none;background:#10b981;color:#fff;font-size:.78rem;font-weight:600;cursor:pointer">
                             Відкрити графік
-                        </button>
-                        <button onclick="document.getElementById('${id}').remove()"
-                            style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text-muted);font-size:.78rem;cursor:pointer">
-                            Закрити
                         </button>
                     </div>
                 </div>

@@ -467,16 +467,10 @@ const ScheduleGraphPage = {
     },
 
     async _persistShiftConfig() {
-        // Ніколи не зберігаємо партнерські типи (домерджовані для "Всі локації")
-        // у ВЛАСНИЙ конфіг — інакше чужий тип назавжди "прилипне" до менеджера.
-        let toSave = _cachedShiftTypes;
-        if (this._partnerShiftTypeKeys?.size) {
-            toSave = Object.fromEntries(Object.entries(_cachedShiftTypes).filter(([k]) => !this._partnerShiftTypeKeys.has(k)));
-        }
         const { error } = await supabase.from('schedule_shift_config')
-            .upsert({ user_id: AppState.user.id, config: toSave }, { onConflict: 'user_id' });
+            .upsert({ user_id: AppState.user.id, config: _cachedShiftTypes }, { onConflict: 'user_id' });
         if (error) Toast.error('Помилка збереження типів', error.message);
-        else localStorage.setItem(this._shiftTypesStorageKey(), JSON.stringify(toSave));
+        else localStorage.setItem(this._shiftTypesStorageKey(), JSON.stringify(_cachedShiftTypes));
     },
 
     async _loadHelpLocIds() {
@@ -1317,7 +1311,7 @@ ${this._manCss()}
                 <button class="sg-svc-btn" onclick="ScheduleGraphPage._showCanSubModal()">
                     <div class="sg-svc-ico" style="background:rgba(16,185,129,.12);color:#10b981"><i class="fa-solid fa-hand"></i></div>
                     <div class="sg-svc-body">
-                        <div class="sg-svc-title">Можуть підмінити${cansubCnt ? `<span class="sg-svc-badge sg-svc-badge-green">${cansubCnt}</span>` : ''}</div>
+                        <div class="sg-svc-title">Можуть підмінити${cansubCnt ? `<span class="sg-svc-badge sg-svc-badge-green sg-svc-badge-pulse">${cansubCnt}</span>` : ''}</div>
                         <div class="sg-svc-desc">Готові вийти на заміну</div>
                     </div>
                     <i class="fa-solid fa-chevron-right sg-svc-arr"></i>
@@ -2039,31 +2033,24 @@ ${this._manCss()}
 
         // Кастомні типи змін — персональні per-керівник. Локації партнера можуть
         // використовувати ЙОГО типи, яких немає в конфігу поточного керівника —
-        // без цього мерджу такий shift_type не резолвиться (getShiftTypes()[key]
-        // === undefined), і бейдж/легенда для нього просто не малюються.
-        // Домерджовуємо в _cachedShiftTypes лише ВІДСУТНІ ключі (власні типи
-        // пріоритетні при колізії) і запам'ятовуємо, які ключі — партнерські
-        // (this._partnerShiftTypeKeys), щоб: (а) не показувати їх як "свої" в
-        // "Налаштування" (не можна редагувати/видаляти чуже), (б) НІКОЛИ не
-        // зберегти їх у власний schedule_shift_config при наступному збереженні
-        // (див. _persistShiftConfig) — інакше чужий тип назавжди "прилип" би.
+        // без цього такий shift_type не резолвиться (getShiftTypes()[key] ===
+        // undefined), і бейдж/легенда для нього не малюються. Зберігаємо ОКРЕМО
+        // (this._partnerShiftTypesMap), НЕ мутуючи глобальний _cachedShiftTypes —
+        // інакше партнерські типи "просочувались" у легенду й "Налаштування"
+        // однієї (СВОЄЇ) локації, де їм не місце. Читається лише через
+        // _effShiftTypes()/_effShiftTypeEntries(), і тільки в "Всі локації".
+        this._partnerShiftTypesMap = {};
         const partnerOwnerIds = [...new Set(this._partnerLocations.map(l => l.created_by).filter(Boolean))];
         if (partnerOwnerIds.length) {
             const { data: cfgRows } = await supabase.from('schedule_shift_config')
                 .select('user_id, config').in('user_id', partnerOwnerIds);
             if (cfgRows?.length) {
                 const own = getShiftTypes();
-                const merged = { ...own };
-                this._partnerShiftTypeKeys = this._partnerShiftTypeKeys || new Set();
                 cfgRows.forEach(row => {
                     Object.entries(row.config || {}).forEach(([key, v]) => {
-                        if (!own[key]) {
-                            merged[key] = v;
-                            this._partnerShiftTypeKeys.add(key);
-                        }
+                        if (!own[key]) this._partnerShiftTypesMap[key] = v;
                     });
                 });
-                _cachedShiftTypes = merged;
             }
         }
 
@@ -4170,24 +4157,35 @@ ${this._manCss()}
 
         const p = n => String(n).padStart(2, '0');
         const today = new Date();
-        const defaultDate = `${today.getFullYear()}-${p(today.getMonth()+1)}-${p(today.getDate())}`;
+        const todayStr = `${today.getFullYear()}-${p(today.getMonth()+1)}-${p(today.getDate())}`;
+        // Локація, з якої натиснули кнопку — фіксовано, як і в "Пошук підміни"
+        // (кнопка доступна лише в контексті однієї конкретної локації).
         const defaultLoc = (this._locId && this._locId !== 'all') ? this._locId : this._locations[0]?.id || '';
+        const defaultLocName = this._locations.find(l => l.id === defaultLoc)?.name || '';
+        const needDates = this._findAllNeedSubDates(defaultLoc);
+        // За замовчуванням підставляємо найближчу дату без покриття (перший чіп) —
+        // щоб поле дати й чіпи були синхронізовані одразу при відкритті, а не
+        // показували непов'язані "сьогодні" внизу і жоден активний чіп вгорі.
+        const defaultDate = needDates[0] || todayStr;
 
         el.innerHTML = `
 <div class="sg-modal sg-mgr-help-box">
     <div class="sg-mhdr">
         <div>
-            <h3 style="margin:0;font-size:1.05rem">🆘 Потрібна підміна</h3>
+            <h3 style="margin:0;font-size:1.05rem">🆘 Потрібна підміна · ${Fmt.esc(defaultLocName)}</h3>
             <p style="margin:3px 0 0;color:var(--text-muted);font-size:.8rem">
                 Всі співробітники ваших локацій отримають сповіщення та мітку в календарі
             </p>
         </div>
         <button class="sg-mclose" onclick="document.getElementById('sg-mgr-help-modal').remove()">✕</button>
     </div>
-    <label style="font-size:.82rem;color:var(--text-muted);display:block;margin-bottom:6px">Локація</label>
-    <select id="sg-mgr-help-loc" class="sg-loc-input" style="margin-bottom:10px">
-        ${this._locations.map(l => `<option value="${l.id}"${l.id === defaultLoc ? ' selected' : ''}>🏪 ${Fmt.esc(l.name)}</option>`).join('')}
-    </select>
+    <input type="hidden" id="sg-mgr-help-loc" value="${defaultLoc}">
+    ${needDates.length ? `
+    <label style="font-size:.82rem;color:var(--text-muted);display:block;margin-bottom:6px">Дати без співробітника в цій локації</label>
+    <div class="sg-subst-needdates-chips" style="margin-bottom:10px">
+        ${needDates.map(nd => `<button type="button" class="sg-subst-needdate-chip${nd === defaultDate ? ' active' : ''}"
+            onclick="ScheduleGraphPage._pickMgrHelpDate('${nd}',this)">${Fmt.dateShort(new Date(nd + 'T00:00:00'))}</button>`).join('')}
+    </div>` : ''}
     <label style="font-size:.82rem;color:var(--text-muted);display:block;margin-bottom:6px">Дата підміни</label>
     <input type="date" id="sg-mgr-help-date" class="sg-loc-input" value="${defaultDate}">
     <div class="sg-modal-actions" style="margin-top:16px">
@@ -4215,6 +4213,13 @@ ${this._manCss()}
 </div>`;
         document.body.appendChild(el);
         el.addEventListener('click', e => { if (e.target === el) el.remove(); });
+    },
+
+    _pickMgrHelpDate(date, btn) {
+        const input = document.getElementById('sg-mgr-help-date');
+        if (input) input.value = date;
+        btn?.closest('.sg-subst-needdates-chips')?.querySelectorAll('.sg-subst-needdate-chip')
+            .forEach(c => c.classList.toggle('active', c === btn));
     },
 
     async _saveManagerHelp() {
@@ -4262,11 +4267,56 @@ ${this._manCss()}
         Toast.success(`Запит надіслано${userIds.length ? ` ${userIds.length} співробітникам` : ''}`);
     },
 
+    // "✕" на активному запиті = підміну знайшли (сам відгукнувся або керівник
+    // домовився іншим шляхом) — прибираємо позначку і повідомляємо всіх, хто
+    // отримав початковий запит, що дата вже закрита (не чекають дарма).
     async _cancelManagerHelp(id) {
+        const { data: entry } = await supabase.from('schedule_entries')
+            .select('date, location_id').eq('id', id).single();
+
         await supabase.from('schedule_entries').delete().eq('id', id);
+
+        if (entry) {
+            const locName = this._locations.find(l => l.id === entry.location_id)?.name || 'локації';
+            const allLocIds = this._locations.map(l => l.id);
+            const { data: assigns } = await supabase.from('schedule_assignments')
+                .select('user_id').in('location_id', allLocIds).not('user_id', 'is', null);
+            const userIds = [...new Set((assigns || []).map(a => a.user_id).filter(Boolean))];
+            if (userIds.length) {
+                const dateLabel = new Date(entry.date + 'T00:00:00')
+                    .toLocaleDateString('uk-UA', { weekday:'long', day:'numeric', month:'long' });
+                const managerName = AppState.profile?.full_name || 'Керівник';
+                const { error: ne } = await supabase.from('notifications').insert(
+                    userIds.map(uid => ({
+                        user_id: uid,
+                        title: '✅ Підміну знайдено',
+                        message: `Підміну на ${dateLabel} у «${locName}» вже знайдено. Дякуємо всім, хто відгукнувся! — ${managerName}`,
+                        type: 'general', created_by: AppState.user.id,
+                        link: 'schedule-graph?view=employee'
+                    }))
+                );
+                if (ne) console.error('[NeedSub close] notifications error:', ne);
+            }
+        }
+
         await this._loadHelpLocIds();
         this._render(this._container);
         await this._showManagerHelpModal();
+        Toast.success('Запит закрито, співробітників повідомлено');
+    },
+
+    // Реєстр типів змін ДЛЯ "Всі локації" — власні + домерджовані партнерські
+    // (this._partnerShiftTypesMap, наповнюється в _loadPartnerData()). НЕ чіпати
+    // глобальний getShiftTypes() напряму — той використовується й одиничною
+    // локацією, де партнерські типи бачити не потрібно.
+    _effShiftTypes() {
+        return { ...(this._partnerShiftTypesMap || {}), ...getShiftTypes() };
+    },
+    _effShiftTypeEntries() {
+        const t = this._effShiftTypes();
+        const builtin = _BUILTIN_SHIFT_KEYS.filter(k => t[k]).map(k => [k, t[k]]);
+        const custom  = Object.entries(t).filter(([k]) => !_BUILTIN_SHIFT_KEYS.includes(k));
+        return [...builtin, ...custom];
     },
 
     _allLocsSection() {
@@ -4380,7 +4430,7 @@ ${this._manCss()}
     </div>` : ''}
     <div class="sg-v2-legend-section" style="padding:8px 16px">
         <div class="sg-legend">
-            ${getShiftTypeEntries().map(([k, v]) => `
+            ${this._effShiftTypeEntries().map(([k, v]) => `
             <button class="sg-leg-btn ${this._quickType === k ? 'active' : ''}"
                 style="--lc:${v.color};--lb:${v.bg}"
                 onclick="ScheduleGraphPage._setQuickType('${k}')"
@@ -4395,8 +4445,8 @@ ${this._manCss()}
     ${this._quickType ? `
     <div class="sg-quick-bar">
         <span>⚡ Швидке заповнення:</span>
-        <span class="sg-quick-badge" style="background:${getShiftTypes()[this._quickType].bg};color:${getShiftTypes()[this._quickType].color}">
-            ${getShiftTypes()[this._quickType].short} ${getShiftTypes()[this._quickType].label}
+        <span class="sg-quick-badge" style="background:${this._effShiftTypes()[this._quickType].bg};color:${this._effShiftTypes()[this._quickType].color}">
+            ${this._effShiftTypes()[this._quickType].short} ${this._effShiftTypes()[this._quickType].label}
         </span>
         <span>— натискайте комірки</span>
         <button class="sg-quick-cancel" onclick="ScheduleGraphPage._setQuickType(null)">✕</button>
@@ -4425,7 +4475,7 @@ ${this._manCss()}
                             const date   = this._dateStr(d);
                             const entry  = _getEntry(a, date);
                             const dispType = entry && !a.is_primary && entry.shift_type === 'work' ? 'day_off' : entry?.shift_type;
-                            const shift  = entry ? getShiftTypes()[dispType] : null;
+                            const shift  = entry ? this._effShiftTypes()[dispType] : null;
                             const dow    = new Date(this._year, this._month, d).getDay();
                             const we     = dow === 0 || dow === 6;
                             const isSd   = date === sd;
@@ -4619,7 +4669,7 @@ ${this._manCss()}
         this._allEntries[key] = data;
         if (!this._entriesByLoc[locId]) this._entriesByLoc[locId] = {};
         this._entriesByLoc[locId][`${userId}_${date}`] = data;
-        const shift = getShiftTypes()[type];
+        const shift = this._effShiftTypes()[type];
         document.querySelectorAll(`.sg-cell[data-uid="${userId}"][data-date="${date}"][data-locid="${locId}"]`)
             .forEach(td => { td.innerHTML = `<span class="sg-badge" style="background:${shift.bg};color:${shift.color}">${shift.short}</span>`; });
         this._propagateVacation(userId, date, type, locId);
@@ -5749,7 +5799,7 @@ ${this._manCss()}
     </div>
     ${empMode ? `<div style="font-size:.72rem;color:var(--text-muted);padding:0 0 6px">Типи, налаштовані керівником вашої локації</div>` : ''}
     <div id="sg-typelist" style="display:flex;flex-direction:column;gap:6px;max-height:50vh;overflow-y:auto;padding:12px 0">
-        ${getShiftTypeEntries().filter(([k]) => !this._partnerShiftTypeKeys?.has(k)).map(([k, v]) => rowHtml(k, v)).join('')}
+        ${getShiftTypeEntries().map(([k, v]) => rowHtml(k, v)).join('')}
     </div>
     ${!empMode ? `<div style="padding-top:10px;border-top:1px solid var(--border)">
         <button class="sg-btn-add-type" id="sg-add-type-trigger" onclick="ScheduleGraphPage._showAddTypeForm()">＋ Додати тип</button>
@@ -6735,6 +6785,11 @@ ${this._manCss()}
 .sg-svc-arr { font-size:.65rem;color:var(--text-muted);flex-shrink:0; }
 .sg-svc-badge { font-size:.62rem;font-weight:700;background:rgba(239,68,68,.15);color:#ef4444;border-radius:8px;padding:1px 5px;line-height:1.4; }
 .sg-svc-badge-green { background:rgba(16,185,129,.15);color:#10b981; }
+.sg-svc-badge-pulse { animation:svcBadgePulse 1.6s ease-in-out infinite; }
+@keyframes svcBadgePulse {
+    0%, 100% { box-shadow:0 0 0 0 rgba(16,185,129,.45); }
+    50% { box-shadow:0 0 0 4px rgba(16,185,129,0); }
+}
 .sg-v2-loc-name { display:flex;align-items:center;gap:6px;font-weight:600;font-size:.95rem; }
 .sg-v2-loc-badges { display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:4px 0 2px; }
 .sg-v2-loc-row { display:flex;align-items:center;gap:8px;font-size:.8rem;color:var(--text-secondary); }

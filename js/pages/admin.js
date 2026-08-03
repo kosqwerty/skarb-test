@@ -2828,7 +2828,7 @@ const AdminPage = {
             }
             this._bulkDeleteProgressUpdate(done + failed, toDelete.length, null);
         }
-        Modal.close();
+        document.getElementById('bdp-backdrop')?.remove();
 
         if (done) {
             AuditLog.write('user_delete', 'users', toDelete.map(u => u.full_name).join(', '), { count: done });
@@ -2839,28 +2839,27 @@ const AdminPage = {
         this._renderUsersList(document.getElementById('admin-content'));
     },
 
+    // Власна центрована модалка (не глобальний Modal.open — той є боковою
+    // панеллю по всьому додатку) — прогрес видалення без можливості закрити.
     _bulkDeleteProgressOpen(total) {
-        Modal.open({
-            title: '<i class="fa-solid fa-trash"></i> Видалення користувачів',
-            size: 'sm',
-            body: `
+        document.getElementById('bdp-backdrop')?.remove();
+        const el = document.createElement('div');
+        el.id = 'bdp-backdrop';
+        el.className = 'center-confirm-backdrop';
+        el.innerHTML = `
+            <div class="center-confirm-box" style="max-width:420px">
+                <h3><i class="fa-solid fa-trash" style="color:var(--danger);margin-right:6px"></i> Видалення користувачів</h3>
                 <style>
-                    .bdp-wrap { height: 100%; display: flex; flex-direction: column; justify-content: center; }
                     .bdp-track { height: 10px; border-radius: 999px; background: var(--bg-hover); overflow: hidden; }
                     .bdp-fill { height: 100%; width: 0%; background: var(--danger); border-radius: 999px; transition: width .25s ease; }
                     .bdp-status { margin-top: .7rem; font-size: .85rem; color: var(--text-secondary); text-align: center; }
                     .bdp-count { font-weight: 700; color: var(--text-primary); }
                 </style>
-                <div class="bdp-wrap">
-                    <div class="bdp-track"><div id="bdp-bar" class="bdp-fill"></div></div>
-                    <div id="bdp-status" class="bdp-status">Підготовка…</div>
-                </div>`,
-            footer: ''
-        });
-        // Заблокувати закриття модалки поки триває видалення
-        const backdrop = document.getElementById('modal-backdrop');
-        if (backdrop) backdrop.onclick = null;
-        document.removeEventListener('keydown', Modal._escHandler);
+                <div class="bdp-track"><div id="bdp-bar" class="bdp-fill"></div></div>
+                <div id="bdp-status" class="bdp-status">Підготовка…</div>
+            </div>`;
+        document.body.appendChild(el);
+        // Без onclick на backdrop і без обробника Escape — закрити не можна, поки триває видалення
     },
 
     _bulkDeleteProgressUpdate(done, total, currentName) {
@@ -2894,7 +2893,7 @@ const AdminPage = {
     _importRows: [],
 
     _importCols: ['last_name','first_name','patronymic','login','email','password','role','gender','phone','birth_date','city','job_position','subdivision','label','dovirenosti'],
-    _importHeaders: ['Прізвище','Ім\u2019я','По батькові','Логін','Email','Пароль','Роль','Стать','Телефон','Дата нар.','Місто','Посада','Підрозділ','Довіреність'],
+    _importHeaders: ['Прізвище','Ім\u2019я','По батькові','Логін','Email','Пароль','Роль','Стать','Телефон','Дата нар.','Місто','Посада','Підрозділ','Довіреність','Керівник','Дата оформлення','На посаді з'],
 
     importUsers() {
         this._importRows = [];
@@ -2902,16 +2901,69 @@ const AdminPage = {
             title: '<i class="fa-solid fa-file-import" style="color:var(--primary)"></i> Імпорт користувачів',
             size: 'lg',
             body: `
-                <p style="color:var(--text-secondary);font-size:.875rem;margin:0 0 1rem">
-                    Завантажте CSV-файл з даними користувачів. Обов\u2019язкові поля:
-                    <strong>Прізвище, Ім\u2019я, Email, Пароль</strong>.
-                    Роздільник — крапка з комою <code>;</code>.
-                </p>
+                <style>
+                    .imp-info-card { background:var(--bg-raised);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:1rem; }
+                    .imp-info-head { display:flex;align-items:flex-start;gap:10px;margin-bottom:12px; }
+                    .imp-info-ico { width:32px;height:32px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--primary) 14%,transparent);color:var(--primary);font-size:.9rem; }
+                    .imp-info-title { font-weight:700;font-size:.9rem;color:var(--text-primary); }
+                    .imp-info-sub { font-size:.76rem;color:var(--text-muted);margin-top:1px; }
+                    .imp-field-row { display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:8px; }
+                    .imp-field-label { font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);min-width:112px; }
+                    .imp-field-chip { display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;font-size:.75rem;font-weight:600;background:var(--bg-hover);color:var(--text-secondary);border:1px solid var(--border); }
+                    .imp-field-chip.req { background:color-mix(in srgb,var(--danger) 12%,transparent);color:var(--danger);border-color:color-mix(in srgb,var(--danger) 30%,transparent); }
+                    .imp-field-chip.auto { background:color-mix(in srgb,var(--primary) 12%,transparent);color:var(--primary);border-color:color-mix(in srgb,var(--primary) 30%,transparent); }
+                    .imp-notes { list-style:none;margin:10px 0 0;padding:10px 0 0;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:6px; }
+                    .imp-notes li { display:flex;align-items:flex-start;gap:8px;font-size:.78rem;color:var(--text-secondary);line-height:1.4; }
+                    .imp-notes li i { color:var(--primary);width:14px;margin-top:2px;flex-shrink:0; }
+                    .imp-dropzone { display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.75rem;padding:2rem;border:2px dashed var(--border);border-radius:12px;cursor:pointer;transition:border-color .15s,background .15s; }
+                    .imp-dropzone:hover { border-color:var(--primary);background:color-mix(in srgb,var(--primary) 4%,transparent); }
+                </style>
+                <div class="imp-info-card">
+                    <div class="imp-info-head">
+                        <span class="imp-info-ico"><i class="fa-solid fa-file-csv"></i></span>
+                        <div>
+                            <div class="imp-info-title">Формат CSV-файлу</div>
+                            <div class="imp-info-sub">Роздільник — крапка з комою «;» · кодування UTF-8</div>
+                        </div>
+                    </div>
+                    <div class="imp-field-row">
+                        <span class="imp-field-label">Обов'язково</span>
+                        <span class="imp-field-chip req">Прізвище</span>
+                        <span class="imp-field-chip req">Ім'я</span>
+                        <span class="imp-field-chip req">Email</span>
+                    </div>
+                    <div class="imp-field-row">
+                        <span class="imp-field-label">Автозаповнення</span>
+                        <span class="imp-field-chip auto">Логін</span>
+                        <span class="imp-field-chip auto">Пароль</span>
+                    </div>
+                    <div class="imp-field-row">
+                        <span class="imp-field-label">Необов'язково</span>
+                        <span class="imp-field-chip">По батькові</span>
+                        <span class="imp-field-chip">Стать</span>
+                        <span class="imp-field-chip">Телефон</span>
+                        <span class="imp-field-chip">Дата нар.</span>
+                        <span class="imp-field-chip">Роль</span>
+                        <span class="imp-field-chip">Місто</span>
+                        <span class="imp-field-chip">Посада</span>
+                        <span class="imp-field-chip">Підрозділ</span>
+                        <span class="imp-field-chip">Довіреність</span>
+                        <span class="imp-field-chip">Керівник</span>
+                        <span class="imp-field-chip">Дата оформлення</span>
+                        <span class="imp-field-chip">На посаді з</span>
+                    </div>
+                    <ul class="imp-notes">
+                        <li><i class="fa-solid fa-key"></i> Порожні Логін/Пароль генеруються автоматично — так само, як при ручному створенні (логін з ПІБ, пароль з дати народження або випадковий надійний)</li>
+                        <li><i class="fa-solid fa-user-tie"></i> Керівник — точний ПІБ вже існуючого користувача з роллю «Керівник»</li>
+                        <li><i class="fa-regular fa-calendar"></i> Дати — у форматі ДД.ММ.РРРР</li>
+                        <li><i class="fa-solid fa-layer-group"></i> Кілька довіреностей — через «|», напр. <code>Ф-47|Ф-112</code></li>
+                    </ul>
+                </div>
                 <div style="display:flex;gap:.75rem;margin-bottom:1.25rem;align-items:center">
                     <button class="btn btn-ghost btn-sm" onclick="AdminPage._downloadImportExample()"><i class="fa-solid fa-download"></i> Завантажити приклад</button>
                 </div>
-                <label style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.75rem;padding:2rem;border:2px dashed var(--border);border-radius:12px;cursor:pointer;transition:border-color .15s" onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='var(--border)'">
-                    <i class="fa-solid fa-file-csv" style="font-size:2rem;color:var(--primary)"></i>
+                <label class="imp-dropzone">
+                    <i class="fa-solid fa-cloud-arrow-up" style="font-size:2rem;color:var(--primary)"></i>
                     <span style="font-weight:600">Натисніть або перетягніть CSV-файл</span>
                     <span style="font-size:.78rem;color:var(--text-muted)">CSV, TXT · UTF-8</span>
                     <input type="file" id="import-file-input" accept=".csv,.txt" style="display:none" onchange="AdminPage._onImportFile(this)">
@@ -2926,11 +2978,11 @@ const AdminPage = {
     _downloadImportExample() {
         const header = this._importHeaders.join(';');
         const rows = [
-            'Іваненко;Олег;Петрович;o.ivanenko;oleg@company.com;pass123;user;male;+380501234567;1990-05-15;Київ;Менеджер;Відділ продажів;Новий;Ф-47',
-            'Коваль;Марія;Андріївна;m.koval;maria@company.com;pass456;smm;female;+380671112233;20.11.1985;Львів;Викладач;HR;;Ф-47|Ф-112',
-            'Сидоренко;Андрій;Васильович;a.sydorenko;andrii@company.com;secure99;admin;male;+380931234567;1978-03-10;Харків;Адміністратор;IT;;',
-            'Бондаренко;Олена;;o.bondar;olena@company.com;qwerty1;smm;female;;;Одеса;SMM-спеціаліст;Маркетинг;;',
-            'Гриценко;Ірина;Олексіївна;i.hrytsenko;iryna@company.com;pass789;manager;female;+380671234567;15.03.1992;Дніпро;Керівник відділу;Операційний;'
+            'Іваненко;Олег;Петрович;o.ivanenko;oleg@company.com;pass123;user;male;+380501234567;1990-05-15;Київ;Менеджер;Відділ продажів;Ф-47;Гриценко Ірина Олексіївна;01.06.2026;01.06.2026',
+            'Коваль;Марія;Андріївна;m.koval;maria@company.com;pass456;smm;female;+380671112233;20.11.1985;Львів;Викладач;HR;Ф-47|Ф-112',
+            'Сидоренко;Андрій;Васильович;a.sydorenko;andrii@company.com;secure99;admin;male;+380931234567;1978-03-10;Харків;Адміністратор;IT',
+            'Бондаренко;Олена;;o.bondar;olena@company.com;qwerty1;smm;female;;;Одеса;SMM-спеціаліст;Маркетинг;;Гриценко Ірина Олексіївна',
+            'Гриценко;Ірина;Олексіївна;i.hrytsenko;iryna@company.com;pass789;manager;female;+380671234567;15.03.1992;Дніпро;Керівник відділу;Операційний'
         ];
         const bom = '\uFEFF';
         const csv = bom + [header, ...rows].join('\r\n');
@@ -2955,11 +3007,35 @@ const AdminPage = {
         reader.readAsText(file, 'UTF-8');
     },
 
+    // RFC4180-ish: розбиває один рядок CSV на поля з урахуванням лапок — поле
+    // в лапках може містити роздільник і екрановані лапки "" (→ один символ ").
+    // Наївний .split(delim) + обрізання лише зовнішніх лапок ламав значення на
+    // кшталт ТОВ "АЙ ЛОМБАРД" (лапки подвоювались і лишались в результаті).
+    _splitCSVLine(line, delim) {
+        const out = [];
+        let cur = '', inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+            const ch = line[i];
+            if (inQuotes) {
+                if (ch === '"') {
+                    if (line[i + 1] === '"') { cur += '"'; i++; }
+                    else inQuotes = false;
+                } else cur += ch;
+            } else if (ch === '"' && cur === '') {
+                inQuotes = true;
+            } else if (ch === delim) {
+                out.push(cur); cur = '';
+            } else cur += ch;
+        }
+        out.push(cur);
+        return out.map(v => v.trim());
+    },
+
     _parseCSV(text) {
         const lines = text.split(/\r?\n/).filter(l => l.trim());
         if (lines.length < 2) return [];
         const delim = lines[0].includes(';') ? ';' : ',';
-        const rawHeaders = lines[0].split(delim).map(h => h.trim().toLowerCase());
+        const rawHeaders = this._splitCSVLine(lines[0], delim).map(h => h.toLowerCase());
 
         // map column names to internal keys
         const colAlias = {
@@ -2976,18 +3052,41 @@ const AdminPage = {
             'місто':'city','город':'city','city':'city',
             'посада':'job_position','должность':'job_position','job_position':'job_position','position':'job_position',
             'підрозділ':'subdivision','подразделение':'subdivision','subdivision':'subdivision',
-            'довіреність':'dovirenosti','доверенность':'dovirenosti','dovirenosti':'dovirenosti'
+            'довіреність':'dovirenosti','доверенность':'dovirenosti','dovirenosti':'dovirenosti',
+            'керівник':'manager','руководитель':'manager','manager':'manager',
+            'дата оформлення':'hired_at','дата прийому':'hired_at','дата приема':'hired_at','hired_at':'hired_at',
+            'на посаді з':'position_since','на должности с':'position_since','position_since':'position_since'
         };
         const colMap = rawHeaders.map(h => colAlias[h] || null);
 
         return lines.slice(1).map((line, idx) => {
-            const vals = line.split(delim).map(v => v.trim().replace(/^"|"$/g, ''));
+            const vals = this._splitCSVLine(line, delim);
             const row = { _line: idx + 2 };
             colMap.forEach((key, i) => { if (key) row[key] = vals[i] || ''; });
             // DD.MM.YYYY → YYYY-MM-DD
-            if (row.birth_date && /^\d{2}\.\d{2}\.\d{4}$/.test(row.birth_date)) {
-                const [d, m, y] = row.birth_date.split('.');
-                row.birth_date = `${y}-${m}-${d}`;
+            ['birth_date','hired_at','position_since'].forEach(f => {
+                if (row[f] && /^\d{2}\.\d{2}\.\d{4}$/.test(row[f])) {
+                    const [d, m, y] = row[f].split('.');
+                    row[f] = `${y}-${m}-${d}`;
+                }
+            });
+            // Автозаповнення логіну/пароля, якщо в файлі не вказані — так само,
+            // як автозаповнення в формі "Новий користувач" (_autoLogin/_autoPassword)
+            if (!row.login && row.last_name && row.first_name) {
+                row.login = (row.last_name + row.first_name)
+                    .replace(/\s+/g, '')
+                    .replace(/[^a-zA-ZА-ЯҐЄІЇа-яґєії0-9_]/g, '');
+                row._autoLogin = true;
+            }
+            if (!row.password) {
+                if (row.birth_date && /^\d{4}-\d{2}-\d{2}$/.test(row.birth_date)) {
+                    const [y, m, d] = row.birth_date.split('-');
+                    row.password = d + m + y;
+                } else {
+                    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
+                    row.password = Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+                }
+                row._autoPassword = true;
             }
             row._errors = [];
             if (!row.last_name)  row._errors.push('Прізвище');
@@ -2999,6 +3098,8 @@ const AdminPage = {
             if (row.role && !validRoles.includes(row.role)) row._errors.push('Роль (невірне значення)');
             if (row.gender && !['male','female'].includes(row.gender)) row._errors.push('Стать (male або female)');
             if (row.birth_date && !/^\d{4}-\d{2}-\d{2}$/.test(row.birth_date)) row._errors.push('Дата нар. (формат РРРР-ММ-ДД)');
+            if (row.hired_at && !/^\d{4}-\d{2}-\d{2}$/.test(row.hired_at)) row._errors.push('Дата оформлення (формат РРРР-ММ-ДД)');
+            if (row.position_since && !/^\d{4}-\d{2}-\d{2}$/.test(row.position_since)) row._errors.push('На посаді з (формат РРРР-ММ-ДД)');
             return row;
         }).filter(r => Object.keys(r).length > 2); // skip totally empty rows
     },
@@ -3066,7 +3167,7 @@ const AdminPage = {
                                 <td style="color:var(--text-muted)">${r._line - 1}</td>
                                 <td>${Fmt.esc([r.last_name, r.first_name, r.patronymic].filter(Boolean).join(' ')) || '<span style="color:var(--danger)">—</span>'}</td>
                                 <td>${Fmt.esc(r.email) || '<span style="color:var(--danger)">—</span>'}</td>
-                                <td style="color:var(--text-muted)">${Fmt.esc(r.login || '—')}</td>
+                                <td style="color:var(--text-muted)">${Fmt.esc(r.login || '—')}${r._autoLogin || r._autoPassword ? ` <span style="color:var(--primary);font-size:.65rem" title="Логін і/або пароль згенеровано автоматично">🔑 авто</span>` : ''}</td>
                                 <td>${r.role ? Fmt.roleBadge(r.role) : '<span style="color:var(--text-muted)">user</span>'}</td>
                                 <td style="color:var(--text-muted)">${Fmt.esc(r.city || '—')}</td>
                                 <td style="color:var(--text-muted)">${Fmt.esc(r.job_position || '—')}</td>
@@ -3110,6 +3211,13 @@ const AdminPage = {
 
         renderProgress();
 
+        // Одноразово наперед — щоб не тягнути довіреності/керівників на кожен рядок
+        const allDov = await API.dovirenosti.getAll().catch(() => []);
+        const { data: managerRes } = await API.profiles.getAll({ role: 'manager', pageSize: 500 }).catch(() => ({ data: [] }));
+        const managers = managerRes || [];
+        const warnings = [];
+        const generated = []; // { name, email, login, password } — для показу в підсумку
+
         for (const row of rows) {
             if (!row.email || !row.email.trim()) { failed++; renderProgress(); continue; }
             try {
@@ -3133,13 +3241,39 @@ const AdminPage = {
                 if (row.dovirenosti) {
                     const names = row.dovirenosti.split('|').map(s => s.trim()).filter(Boolean);
                     if (names.length) {
-                        const allDov = await API.dovirenosti.getAll().catch(() => []);
+                        // Порівнюємо не лише без урахування регістру, а й нормалізуючи
+                        // внутрішні пробіли (подвійний пробіл робив "однакові" назви різними)
+                        const norm = s => s.trim().replace(/\s+/g, ' ').toLowerCase();
                         const ids = await Promise.all(names.map(async name => {
-                            const ex = allDov.find(d => d.name.toLowerCase() === name.toLowerCase());
-                            return ex ? ex.id : (await API.dovirenosti.create(name)).id;
+                            const ex = allDov.find(d => norm(d.name) === norm(name));
+                            if (ex) return ex.id;
+                            const created = await API.dovirenosti.create(name.replace(/\s+/g, ' '));
+                            allDov.push(created);
+                            return created.id;
                         }));
                         await API.dovirenosti.setForProfile(userId, ids).catch(() => {});
                     }
+                }
+                // Керівник / дата оформлення / на посаді з — так само, як у формі
+                // "Новий користувач" (admin_user_create RPC цих полів не приймає)
+                if (row.manager || row.hired_at || row.position_since) {
+                    let managerId = null;
+                    if (row.manager) {
+                        const mgr = managers.find(m => m.full_name.toLowerCase().trim() === row.manager.toLowerCase().trim());
+                        if (mgr) managerId = mgr.id;
+                        else warnings.push(`Рядок ${row._line}: керівника «${row.manager}» не знайдено — пропущено`);
+                    }
+                    const extra = {};
+                    if (managerId)          extra.manager_id     = managerId;
+                    if (row.hired_at)       extra.hired_at       = row.hired_at;
+                    if (row.position_since) extra.position_since = row.position_since;
+                    if (Object.keys(extra).length) await supabase.from('profiles').update(extra).eq('id', userId);
+                }
+                if (row._autoLogin || row._autoPassword) {
+                    generated.push({
+                        name: [row.last_name, row.first_name, row.patronymic].filter(Boolean).join(' '),
+                        email: row.email, login: row.login, password: row.password
+                    });
                 }
                 done++;
 
@@ -3159,7 +3293,29 @@ const AdminPage = {
             </div>
             ${errors.length ? `
             <div style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-md);padding:.5rem .75rem">
-                ${errors.map(e => `<div style="font-size:.75rem;color:var(--danger);padding:.2rem 0;border-bottom:1px solid var(--border-light)">${e}</div>`).join('')}
+                ${errors.map(e => `<div style="font-size:.75rem;color:var(--danger);padding:.2rem 0;border-bottom:1px solid var(--border-light)">${Fmt.esc(e)}</div>`).join('')}
+            </div>` : ''}
+            ${warnings.length ? `
+            <div style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-md);padding:.5rem .75rem;margin-top:.5rem">
+                ${warnings.map(w => `<div style="font-size:.75rem;color:var(--warning);padding:.2rem 0;border-bottom:1px solid var(--border-light)">⚠ ${Fmt.esc(w)}</div>`).join('')}
+            </div>` : ''}
+            ${generated.length ? `
+            <div style="margin-top:.75rem">
+                <div style="font-size:.8rem;font-weight:600;margin-bottom:.4rem">🔑 Згенеровані дані входу — збережіть, повторно їх ніде не побачити:</div>
+                <div style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-md)">
+                    <table style="width:100%;font-size:.75rem;border-collapse:collapse">
+                        <thead><tr style="text-align:left;color:var(--text-muted)">
+                            <th style="padding:.35rem .6rem">ПІБ</th><th style="padding:.35rem .6rem">Логін</th><th style="padding:.35rem .6rem">Пароль</th>
+                        </tr></thead>
+                        <tbody>
+                            ${generated.map(g => `<tr style="border-top:1px solid var(--border-light)">
+                                <td style="padding:.35rem .6rem">${Fmt.esc(g.name)}</td>
+                                <td style="padding:.35rem .6rem">${Fmt.esc(g.login || '—')}</td>
+                                <td style="padding:.35rem .6rem;font-family:monospace">${Fmt.esc(g.password || '—')}</td>
+                            </tr>`).join('')}
+                        </tbody>
+                    </table>
+                </div>
             </div>` : ''}`;
         // sync new subdivisions to the directory table
         const newSubdivisions = [...new Set(rows.filter(r => r.subdivision).map(r => r.subdivision.trim()))];

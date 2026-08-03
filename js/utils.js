@@ -1627,12 +1627,14 @@ const CreatableSelect = {
         const wrap  = btn.closest('.cs-wrap');
         const table = wrap.dataset.csTable;
         const input = wrap.querySelector('.cs-input');
-        const name  = input.value.trim();
-        if (!name) return;
+        const rawName = input.value.trim();
+        if (!rawName) return;
+        const name = rawName.replace(/\s+/g, ' ');
 
-        // перевірка дубліката (без урахування регістру)
+        // перевірка дубліката (без урахування регістру й зайвих внутрішніх пробілів)
+        const norm = s => s.trim().replace(/\s+/g, ' ').toLowerCase();
         const existing = [...wrap.querySelectorAll('.cs-opt[data-val]')]
-            .find(o => o.dataset.val.toLowerCase() === name.toLowerCase());
+            .find(o => norm(o.dataset.val) === norm(name));
         if (existing) { this._pick(existing); return; }
 
         btn.disabled = true;
@@ -1815,8 +1817,15 @@ const CreatableMultiSelect = (() => {
 
         async _confirmAdd(id) {
             const input = document.getElementById(`cms-input-${id}`);
-            const name = input?.value?.trim();
-            if (!name) return;
+            const rawName = input?.value?.trim();
+            if (!rawName) return;
+            const name = rawName.replace(/\s+/g, ' ');
+            // Захист від дублів без урахування регістру й зайвих внутрішніх пробілів
+            // (той самий патерн, що й CreatableSelect._confirmAdd) — на випадок
+            // застарілого кешу options.
+            const norm = s => s.trim().replace(/\s+/g, ' ').toLowerCase();
+            const existing = _st(id).options.find(o => norm(o.name) === norm(name));
+            if (existing) { _pick(id, existing.id, existing.name); _closeDrop(id); return; }
             const btn = document.getElementById(`cms-add-btn-${id}`);
             if (btn) btn.disabled = true;
             try {

@@ -256,15 +256,30 @@ const ScheduleGraphPage = {
     },
 
     async _loadLocations() {
-        // Кожен (включно з superadmin) бачить у розділі керування лише
-        // локації, які створив сам. Доступ до чужих — тільки через явне
-        // надання (schedule_viewers → сторінка перегляду schedule-view),
-        // а не автоматично за роллю.
+        // Кожен (включно з superadmin) бачить у розділі керування локації, які
+        // сам створив, ПЛЮС ті, де він доданий як співвласник (co_owner_id) —
+        // "Спільна локація": рівні права редагування, не просто перегляд.
+        // Доступ до чужих БЕЗ цього — тільки через явне надання (schedule_viewers
+        // → сторінка перегляду schedule-view), а не автоматично за роллю.
         const { data } = await supabase.from('schedule_locations')
-            .select('*').is('deleted_at', null).order('created_at')
-            .eq('created_by', AppState.user.id);
+            .select('*').is('deleted_at', null)
+            .order('order_index', { ascending: true, nullsFirst: false }).order('created_at')
+            .or(`created_by.eq.${AppState.user.id},co_owner_id.eq.${AppState.user.id}`);
         this._locations = data || [];
         this._applyLocOrder();
+        this._syncLocOrderToDb();
+    },
+
+    // Best-effort, у фоні — записує order_index = поточна позиція в масиві, щоб
+    // порядок локацій (раніше лише localStorage, per-браузер) став видимим і
+    // партнерам по блоку в "Всі локації" (там порядок читається саме з БД).
+    _syncLocOrderToDb() {
+        this._locations.forEach((l, i) => {
+            if (l.order_index !== i) {
+                l.order_index = i;
+                supabase.from('schedule_locations').update({ order_index: i }).eq('id', l.id).then(() => {});
+            }
+        });
     },
 
     async _autoLockForNewMonth() {
@@ -275,7 +290,7 @@ const ScheduleGraphPage = {
         const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
         const prevMonthKey = this._monthKey(prev.getFullYear(), prev.getMonth());
         const tolock = this._locations.filter(l =>
-            l.created_by === AppState.user.id &&
+            (l.created_by === AppState.user.id || l.co_owner_id === AppState.user.id) &&
             !(l.locked_months || []).includes(prevMonthKey)
         );
         if (tolock.length) {
@@ -300,7 +315,7 @@ const ScheduleGraphPage = {
         if (localStorage.getItem(storageKey) === currentKey) return;
         localStorage.setItem(storageKey, currentKey);
 
-        const locIds = this._locations.filter(l => l.created_by === AppState.user.id).map(l => l.id);
+        const locIds = this._locations.map(l => l.id);
         if (!locIds.length) return;
 
         try {
@@ -327,7 +342,7 @@ const ScheduleGraphPage = {
     _isViewOnlyLoc(locId) {
         if (!AppState.isSuperAdmin()) return false;
         const loc = this._locations.find(l => l.id === locId);
-        return !!loc && loc.created_by !== AppState.user.id;
+        return !!loc && loc.created_by !== AppState.user.id && loc.co_owner_id !== AppState.user.id;
     },
 
     async _loadDeletedLocations() {
@@ -336,7 +351,7 @@ const ScheduleGraphPage = {
             .select('*')
             .gte('deleted_at', cutoff)
             .order('deleted_at', { ascending: false })
-            .eq('created_by', AppState.user.id);
+            .or(`created_by.eq.${AppState.user.id},co_owner_id.eq.${AppState.user.id}`);
         this._deletedLocations = data || [];
     },
 
@@ -358,6 +373,7 @@ const ScheduleGraphPage = {
 
     _saveLocOrder() {
         localStorage.setItem(this._locOrderKey(), JSON.stringify(this._locations.map(l => l.id)));
+        this._syncLocOrderToDb();
     },
 
     // locId-параметризовані версії — потрібні для "Всі локації", де this._locId
@@ -418,6 +434,10 @@ const ScheduleGraphPage = {
         const [item] = arr.splice(from, 1);
         arr.splice(to, 0, item);
         this._saveLocOrder();
+        // Сортування А→Я щоразу перебудовувало список за абеткою під час рендеру,
+        // тому ручне перетягування миттєво "відкочувалось" назад — вимикаємо його,
+        // бо ручний порядок і автосортування взаємовиключні.
+        if (this._locSortAlpha) { this._locSortAlpha = false; localStorage.setItem('sg_loc_sort_alpha', ''); }
         this._render(this._container);
     },
 
@@ -447,10 +467,16 @@ const ScheduleGraphPage = {
     },
 
     async _persistShiftConfig() {
+        // Ніколи не зберігаємо партнерські типи (домерджовані для "Всі локації")
+        // у ВЛАСНИЙ конфіг — інакше чужий тип назавжди "прилипне" до менеджера.
+        let toSave = _cachedShiftTypes;
+        if (this._partnerShiftTypeKeys?.size) {
+            toSave = Object.fromEntries(Object.entries(_cachedShiftTypes).filter(([k]) => !this._partnerShiftTypeKeys.has(k)));
+        }
         const { error } = await supabase.from('schedule_shift_config')
-            .upsert({ user_id: AppState.user.id, config: _cachedShiftTypes }, { onConflict: 'user_id' });
+            .upsert({ user_id: AppState.user.id, config: toSave }, { onConflict: 'user_id' });
         if (error) Toast.error('Помилка збереження типів', error.message);
-        else localStorage.setItem(this._shiftTypesStorageKey(), JSON.stringify(_cachedShiftTypes));
+        else localStorage.setItem(this._shiftTypesStorageKey(), JSON.stringify(toSave));
     },
 
     async _loadHelpLocIds() {
@@ -1225,6 +1251,11 @@ ${this._manCss()}
                     <div class="sg-v2-svc-body"><div class="sg-v2-svc-title">Доступ</div><div class="sg-v2-svc-sub">Хто може переглядати</div></div>
                     <i class="fa-solid fa-angle-right sg-v2-svc-arr"></i>
                 </div>
+                <div class="sg-v2-svc-item" onclick="ScheduleGraphPage._showCoOwnerModal()">
+                    <div class="sg-v2-svc-icon" style="background:rgba(16,185,129,.12);color:#10b981"><i class="fa-solid fa-user-group"></i></div>
+                    <div class="sg-v2-svc-body"><div class="sg-v2-svc-title">Спільна локація${loc?.co_owner_id ? ' <span class="sg-svc-badge">1</span>' : ''}</div><div class="sg-v2-svc-sub">Другий керівник з однаковими правами</div></div>
+                    <i class="fa-solid fa-angle-right sg-v2-svc-arr"></i>
+                </div>
             </div>
         </div>`;
 
@@ -1420,7 +1451,7 @@ ${this._manCss()}
                         const customNote = _customCellNote(entry);
                         return `<td class="sg-cell${we?' we':''}${entry?.notes==='__needsub__'?' sg-needsub-cell':''}${noWork?' sg-cell-no-work':''}${viewOnly?' sg-cell-partner':''}${!a.is_primary && dispShift && !subConfAt?' sg-cell-sub':''}${customNote?' sg-cell-text':''}"
                             data-uid="${a.user_id}" data-date="${date}"
-                            ${viewOnly ? '' : `onclick="ScheduleGraphPage._openCell('${a.user_id}','${date}')"`}
+                            ${viewOnly ? '' : `onclick="ScheduleGraphPage._openCell('${a.user_id}','${date}',null,event)"`}
                             title="${customNote ? Fmt.esc(customNote) : entry?.notes==='__needsub__' ? 'Потрібна підміна' : subConfAt ? `Підміна у «${subConfAt}»` : isSubConf ? 'Підтверджена підміна' : shift ? shift.label : otherLocName ? `Підміна у «${otherLocName}»` : viewOnly ? '' : 'Клік щоб додати, подвійний клік щоб написати текст'}">
                             ${customNote ? `<span class="sg-cell-text-val">${Fmt.esc(customNote)}</span>`
                                 : flagIco ? `<span class="sg-flag-cell">${flagIco}</span>`
@@ -1833,6 +1864,23 @@ ${this._manCss()}
         else this._render(this._container);
     },
 
+    // PostgREST (Supabase) мовчки обрізає результат на 1000 рядків за замовчуванням,
+    // якщо не задати .range(). Для великого блоку (десятки локацій × співробітники ×
+    // дні місяця) schedule_entries легко перевищує цю межу — частина людей просто
+    // "не влазила" в перші 1000 рядків і зникала з графіка. Тягнемо сторінками.
+    // buildQuery — функція, що повертає СВІЖИЙ query builder (той одноразовий).
+    async _fetchAllRows(buildQuery, pageSize = 1000) {
+        let from = 0, all = [];
+        for (;;) {
+            const { data, error } = await buildQuery().range(from, from + pageSize - 1);
+            if (error) throw error;
+            all = all.concat(data || []);
+            if (!data || data.length < pageSize) break;
+            from += pageSize;
+        }
+        return all;
+    },
+
     async _loadAllData() {
         const p = n => String(n).padStart(2, '0');
         const dateFrom = `${this._year}-${p(this._month + 1)}-01`;
@@ -1842,10 +1890,11 @@ ${this._manCss()}
         const locIds = this._locations.map(l => l.id);
         if (!locIds.length) { this._allAssignments = []; this._allEntries = {}; return; }
 
-        const [aRes, eRes] = await Promise.all([
+        const [aRes, eRows] = await Promise.all([
             supabase.from('schedule_assignments').select('id, user_id, location_id, employee_name, original_user_id, is_primary, pinned_months').in('location_id', locIds),
-            supabase.from('schedule_entries').select('*').in('location_id', locIds).gte('date', dateFrom).lte('date', dateTo)
+            this._fetchAllRows(() => supabase.from('schedule_entries').select('*').in('location_id', locIds).gte('date', dateFrom).lte('date', dateTo))
         ]);
+        const eRes = { data: eRows };
 
         let assignRows = aRes.data || [];
         if (aRes.error) {
@@ -1960,8 +2009,14 @@ ${this._manCss()}
         if (!(this._partnerIds || []).length) { this._partnerLocations = []; return; }
         const { data: pLocs } = await supabase.from('schedule_locations')
             .select('*').is('deleted_at', null)
+            .order('order_index', { ascending: true, nullsFirst: false }).order('created_at')
             .in('created_by', this._partnerIds);
-        this._partnerLocations = pLocs || [];
+        // Спільна локація (co_owner_id) вже є "своєю" (this._locations) — якщо її
+        // власник ще й блок-партнер, вона б підвантажилась і зайшла ДРУГИЙ раз
+        // тут як "партнерська" (read-only, окремий кеш, не оновлюється при простих
+        // діях типу видалення клітинки) — звідси "не оновлюється без F5".
+        const ownIds = new Set(this._locations.map(l => l.id));
+        this._partnerLocations = (pLocs || []).filter(l => !ownIds.has(l.id));
     },
 
     async _loadPartnerData() {
@@ -1971,20 +2026,57 @@ ${this._manCss()}
 
         const { data: pLocs } = await supabase.from('schedule_locations')
             .select('*').is('deleted_at', null)
+            .order('order_index', { ascending: true, nullsFirst: false }).order('created_at')
             .in('created_by', this._partnerIds);
-        this._partnerLocations = pLocs || [];
+        // Спільна локація (co_owner_id) вже є "своєю" (this._locations) — якщо її
+        // власник ще й блок-партнер, вона б підвантажилась ДРУГИЙ раз тут як
+        // "партнерська" (окремий read-only кеш, не оновлюється при простих діях
+        // типу видалення клітинки) — звідси "не оновлюється без F5" для двох
+        // керівників спільної локації, які до того ж у блоці одне з одним.
+        const ownIds = new Set(this._locations.map(l => l.id));
+        this._partnerLocations = (pLocs || []).filter(l => !ownIds.has(l.id));
         if (!this._partnerLocations.length) return;
 
-        const pLocIds = this._partnerLocations.map(l => l.id);
-        const [paRes, peRes] = await Promise.all([
-            supabase.from('schedule_assignments')
-                .select('id, user_id, location_id, employee_name, original_user_id, is_primary')
-                .in('location_id', pLocIds),
-            supabase.from('schedule_entries').select('*')
-                .in('location_id', pLocIds).gte('date', dateFrom).lte('date', dateTo)
-        ]);
+        // Кастомні типи змін — персональні per-керівник. Локації партнера можуть
+        // використовувати ЙОГО типи, яких немає в конфігу поточного керівника —
+        // без цього мерджу такий shift_type не резолвиться (getShiftTypes()[key]
+        // === undefined), і бейдж/легенда для нього просто не малюються.
+        // Домерджовуємо в _cachedShiftTypes лише ВІДСУТНІ ключі (власні типи
+        // пріоритетні при колізії) і запам'ятовуємо, які ключі — партнерські
+        // (this._partnerShiftTypeKeys), щоб: (а) не показувати їх як "свої" в
+        // "Налаштування" (не можна редагувати/видаляти чуже), (б) НІКОЛИ не
+        // зберегти їх у власний schedule_shift_config при наступному збереженні
+        // (див. _persistShiftConfig) — інакше чужий тип назавжди "прилип" би.
+        const partnerOwnerIds = [...new Set(this._partnerLocations.map(l => l.created_by).filter(Boolean))];
+        if (partnerOwnerIds.length) {
+            const { data: cfgRows } = await supabase.from('schedule_shift_config')
+                .select('user_id, config').in('user_id', partnerOwnerIds);
+            if (cfgRows?.length) {
+                const own = getShiftTypes();
+                const merged = { ...own };
+                this._partnerShiftTypeKeys = this._partnerShiftTypeKeys || new Set();
+                cfgRows.forEach(row => {
+                    Object.entries(row.config || {}).forEach(([key, v]) => {
+                        if (!own[key]) {
+                            merged[key] = v;
+                            this._partnerShiftTypeKeys.add(key);
+                        }
+                    });
+                });
+                _cachedShiftTypes = merged;
+            }
+        }
 
-        const pAssignRows = paRes.data || [];
+        const pLocIds = this._partnerLocations.map(l => l.id);
+        const [pAssignRows, peRows] = await Promise.all([
+            this._fetchAllRows(() => supabase.from('schedule_assignments')
+                .select('id, user_id, location_id, employee_name, original_user_id, is_primary')
+                .in('location_id', pLocIds)),
+            this._fetchAllRows(() => supabase.from('schedule_entries').select('*')
+                .in('location_id', pLocIds).gte('date', dateFrom).lte('date', dateTo))
+        ]);
+        const peRes = { data: peRows };
+
         let pProfiles = [];
         if (pAssignRows.length) {
             const ids = [...new Set(pAssignRows.map(a => a.user_id).filter(Boolean))];
@@ -2417,7 +2509,10 @@ ${this._manCss()}
             if (!byLoc[a.locId]) byLoc[a.locId] = { name: a.locName, members: [], isPartner: _isPartnerLoc(a.locId) };
             byLoc[a.locId].members.push(a);
         });
-        const _locOrder = Object.fromEntries(this._locations.map((l, i) => [l.id, i]));
+        const _locOrder = Object.fromEntries([
+            ...this._locations.map((l, i) => [l.id, i]),
+            ...((this._partnerLocations || []).map((l, i) => [l.id, i])),
+        ]);
 
         return `
 <div class="sg-section">
@@ -4230,7 +4325,10 @@ ${this._manCss()}
         // локацію (не this._locId, той тут завжди 'all'), тому зберігаємо/читаємо
         // per-loc через _empOrderKeyFor().
         Object.entries(byLoc).forEach(([locId, loc]) => this._applyEmpOrderTo(loc.members, locId));
-        const _locOrder = Object.fromEntries(this._locations.map((l, i) => [l.id, i]));
+        const _locOrder = Object.fromEntries([
+            ...this._locations.map((l, i) => [l.id, i]),
+            ...((this._partnerLocations || []).map((l, i) => [l.id, i])),
+        ]);
 
         // Фільтр "Мої локації" / ФІБ керівника блоку — одна активна вкладка,
         // як kb-type-chips у Базі знань.
@@ -4356,7 +4454,7 @@ ${this._manCss()}
                                 : crossOther ? `Підміна у «${crossOther.locName}»` : 'Клік щоб додати';
                             return `<td class="sg-cell${we?' we':''}${isSd?' sg-sd-col':''}${isFree?' sg-free-cell':''}${isBusy?' sg-busy-cell':''}${entry?.notes==='__needsub__'?' sg-needsub-cell':''}${a.isPartner||isVOLoc?' sg-cell-partner':''}${isFired?' sg-cell-fired':''}${isEmpty?' sg-cell-no-work':''}"
                                 data-uid="${a.user_id}" data-date="${date}" data-locid="${locId}"
-                                ${(isFired || a.isPartner || isVOLoc) ? '' : `onclick="ScheduleGraphPage._openCellAll('${locId}','${a.user_id}','${date}')"`}
+                                ${(isFired || a.isPartner || isVOLoc) ? '' : `onclick="ScheduleGraphPage._openCellAll('${locId}','${a.user_id}','${date}',event)"`}
                                 title="${cellTitle}">
                                 ${flagIco
                                     ? `<span class="sg-flag-cell">${flagIco}</span>`
@@ -4471,9 +4569,9 @@ ${this._manCss()}
 
     // Excel-подібне редагування (виділення/подвійний клік/Delete) — той самий
     // функціонал, що й в одиничній локації, через уніфікований _openCell(...,locId).
-    _openCellAll(locId, userId, date) {
+    _openCellAll(locId, userId, date, event) {
         if (!userId || userId === 'null') return;
-        this._openCell(userId, date, locId);
+        this._openCell(userId, date, locId, event);
     },
 
     async _quickSaveAll(locId, userId, date, type) {
@@ -4524,6 +4622,57 @@ ${this._manCss()}
         const shift = getShiftTypes()[type];
         document.querySelectorAll(`.sg-cell[data-uid="${userId}"][data-date="${date}"][data-locid="${locId}"]`)
             .forEach(td => { td.innerHTML = `<span class="sg-badge" style="background:${shift.bg};color:${shift.color}">${shift.short}</span>`; });
+        this._propagateVacation(userId, date, type, locId);
+    },
+
+    // Коли керівник ставить "Відпустка" одному співробітнику — та сама відпустка
+    // на ту саму дату проставляється в УСІХ локаціях (своїх + прийнятих
+    // партнерських по блоку), де цей співробітник зараз є в графіку. Не
+    // покладаємось на кеш this._allAssignments — він не гарантовано свіжий у
+    // режимі однієї локації (_loadAllData() викликається лише для "Всі локації"),
+    // тож питаємо БД напряму.
+    async _propagateVacation(userId, date, type, originLocId) {
+        if (type !== 'vacation' || !userId) return;
+        try {
+            const locIds = [
+                ...(this._locations || []).map(l => l.id),
+                ...((this._partnerLocations || []).map(l => l.id))
+            ].filter(id => id && id !== originLocId);
+            if (!locIds.length) return;
+
+            const { data: assigns } = await supabase.from('schedule_assignments')
+                .select('location_id')
+                .eq('user_id', userId)
+                .in('location_id', locIds);
+            const targetLocIds = [...new Set((assigns || []).map(a => a.location_id))];
+            if (!targetLocIds.length) return;
+
+            await Promise.all(targetLocIds.map(locId =>
+                supabase.from('schedule_entries').upsert({
+                    location_id: locId, user_id: userId, date,
+                    shift_type: 'vacation', shift_start: null, shift_end: null, notes: null,
+                    updated_by: AppState.user.id, updated_at: new Date().toISOString()
+                }, { onConflict: 'location_id,user_id,date' })
+            ));
+
+            // Оновлюємо локальні кеші, щоб зміни були видно без перезавантаження
+            targetLocIds.forEach(locId => {
+                const key = `${locId}_${userId}_${date}`;
+                if (this._allEntries) {
+                    this._allEntries[key] = { ...(this._allEntries[key] || {}), location_id: locId, user_id: userId, date, shift_type: 'vacation' };
+                }
+                if (this._entriesByLoc) {
+                    if (!this._entriesByLoc[locId]) this._entriesByLoc[locId] = {};
+                    this._entriesByLoc[locId][`${userId}_${date}`] = this._allEntries?.[key] || { shift_type: 'vacation' };
+                }
+                if (locId === this._locId && this._entries) {
+                    this._entries[`${userId}_${date}`] = { shift_type: 'vacation' };
+                }
+            });
+            if (this._container) this._render(this._container);
+        } catch (e) {
+            console.error('[propagateVacation]', e);
+        }
     },
 
     async _getWorkConflictLoc(userId, date, locId) {
@@ -4542,9 +4691,18 @@ ${this._manCss()}
         const conflictId = conflicts[0].location_id;
         const known = this._locations.find(l => l.id === conflictId);
         if (known) return known.name;
+        // Локація не своя — можливо, у партнера по блоку є локація з тим самим
+        // кодом (напр. обидва назвали "A95"), тож без імені керівника повідомлення
+        // виглядало б як хибний конфлікт із власною ж локацією.
         const { data: ld } = await supabase.from('schedule_locations')
-            .select('name').eq('id', conflictId).single();
-        return ld?.name || 'іншій локації';
+            .select('name, created_by').eq('id', conflictId).single();
+        if (!ld) return 'іншій локації';
+        let ownerName = '';
+        if (ld.created_by) {
+            const { data: op } = await supabase.from('profiles').select('full_name').eq('id', ld.created_by).single();
+            ownerName = op?.full_name || '';
+        }
+        return ownerName ? `${ld.name} (керівник: ${ownerName})` : ld.name;
     },
 
     _showShiftModalError(msg) {
@@ -4770,6 +4928,106 @@ ${this._manCss()}
         this._viewers = this._viewers.filter(v => v.id !== id);
         document.getElementById('sg-viewers-list').innerHTML = this._renderViewersList();
         Toast.success('Доступ видалено');
+    },
+
+    // ── Спільна локація (co-owner) ───────────────────────────────
+    // Рівно один співвласник на локацію — має ТІ САМІ права редагування, що й
+    // власник (додавання/видалення співробітників, зміни, налаштування). На
+    // відміну від БЛОКу (крос-видимість усіх локацій кількох керівників), це —
+    // прямий спільний доступ саме до ОДНІЄЇ конкретної локації.
+    async _showCoOwnerModal() {
+        const loc = this._locations.find(l => l.id === this._locId);
+        if (!loc) return;
+        document.getElementById('sg-coowner-modal')?.remove();
+
+        const [{ data: managers }, coOwnerRes] = await Promise.all([
+            supabase.from('profiles').select('id, full_name, job_position').eq('role', 'manager').order('full_name'),
+            loc.co_owner_id
+                ? supabase.from('profiles').select('id, full_name').eq('id', loc.co_owner_id).single()
+                : Promise.resolve({ data: null })
+        ]);
+        const coOwnerProfile = coOwnerRes.data;
+        this._coOwnerCandidates = (managers || []).filter(m => m.id !== AppState.user.id && m.id !== loc.created_by);
+
+        const el = document.createElement('div');
+        el.id = 'sg-coowner-modal';
+        el.className = 'sg-overlay';
+        el.innerHTML = `
+<div class="sg-modal" style="max-width:440px;height:auto">
+    <div class="sg-mhdr">
+        <div>
+            <h3 style="margin:0;font-size:1.05rem"><i class="fa-solid fa-user-group"></i> Спільна локація</h3>
+            <p style="margin:4px 0 0;font-size:.78rem;color:var(--text-muted)">Другий керівник з однаковими правами редагування графіка «${Fmt.esc(loc.name)}»</p>
+        </div>
+        <button class="sg-mclose" onclick="document.getElementById('sg-coowner-modal').remove()">✕</button>
+    </div>
+    ${coOwnerProfile ? `
+    <div class="sg-viewers-row" style="border:1px solid var(--border);border-radius:12px;padding:10px 12px">
+        <div class="sg-av sm">${(coOwnerProfile.full_name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}</div>
+        <div class="sg-viewers-info"><div class="sg-viewers-name">${Fmt.esc(coOwnerProfile.full_name)}</div><div class="sg-viewers-scope">Співвласник</div></div>
+        <button class="sg-viewers-del" onclick="ScheduleGraphPage._removeCoOwner()" title="Прибрати співвласника">✕</button>
+    </div>` : `
+    <div class="sg-viewer-search-wrap" style="position:relative">
+        <input type="text" id="sg-coowner-search" class="sg-viewer-search-input" placeholder="🔍 Пошук керівника…" autocomplete="off"
+            oninput="ScheduleGraphPage._filterCoOwnerUsers(this.value)"
+            onfocus="ScheduleGraphPage._openCoOwnerDropdown()"
+            onblur="setTimeout(()=>ScheduleGraphPage._closeCoOwnerDropdown(),150)">
+        <div class="sg-viewer-dropdown" id="sg-coowner-dropdown">
+            ${this._coOwnerCandidates.map(p => `
+            <div class="sg-viewer-drop-item" data-name="${Fmt.esc(p.full_name||'')}"
+                onmousedown="ScheduleGraphPage._addCoOwner('${p.id}')">
+                ${Fmt.esc(p.full_name || p.id)}${p.job_position ? ` · ${Fmt.esc(p.job_position)}` : ''}
+            </div>`).join('')}
+        </div>
+    </div>
+    <p style="font-size:.72rem;color:var(--text-muted);margin:10px 0 0">Можна додати лише одного співвласника. Він одразу побачить цю локацію як власну — з правом додавати/видаляти співробітників, редагувати зміни та керувати доступом.</p>
+    `}
+</div>`;
+        document.body.appendChild(el);
+        el.addEventListener('click', e => { if (e.target === el) el.remove(); });
+    },
+
+    _openCoOwnerDropdown() {
+        const dd    = document.getElementById('sg-coowner-dropdown');
+        const input = document.getElementById('sg-coowner-search');
+        if (!dd || !input) return;
+        const rect = input.getBoundingClientRect();
+        dd.style.top   = (rect.bottom + 4) + 'px';
+        dd.style.left  = rect.left + 'px';
+        dd.style.width = rect.width + 'px';
+        dd.classList.add('open');
+    },
+    _closeCoOwnerDropdown() {
+        document.getElementById('sg-coowner-dropdown')?.classList.remove('open');
+    },
+    _filterCoOwnerUsers(query) {
+        const dd = document.getElementById('sg-coowner-dropdown');
+        if (!dd) return;
+        this._openCoOwnerDropdown();
+        const q = query.trim().toLowerCase();
+        dd.querySelectorAll('.sg-viewer-drop-item').forEach(item => {
+            item.classList.toggle('hidden', q.length > 0 && !(item.dataset.name || '').toLowerCase().includes(q));
+        });
+    },
+
+    async _addCoOwner(userId) {
+        const { error } = await supabase.from('schedule_locations').update({ co_owner_id: userId }).eq('id', this._locId);
+        if (error) { Toast.error('Помилка', error.message); return; }
+        const loc = this._locations.find(l => l.id === this._locId);
+        if (loc) loc.co_owner_id = userId;
+        document.getElementById('sg-coowner-modal')?.remove();
+        Toast.success('Співвласника додано');
+        this._render(this._container);
+    },
+
+    async _removeCoOwner() {
+        const { error } = await supabase.from('schedule_locations').update({ co_owner_id: null }).eq('id', this._locId);
+        if (error) { Toast.error('Помилка', error.message); return; }
+        const loc = this._locations.find(l => l.id === this._locId);
+        if (loc) loc.co_owner_id = null;
+        document.getElementById('sg-coowner-modal')?.remove();
+        Toast.success('Співвласника прибрано');
+        this._render(this._container);
     },
 
     async _addEmployee() {
@@ -5195,12 +5453,21 @@ ${this._manCss()}
 
     // locId — лише для контексту "Всі локації" (кожен рядок може належати іншій
     // локації); без нього поводиться як і раніше для однієї локації.
-    _openCell(userId, date, locId = null) {
+    // event — потрібен лише щоб перевірити event.shiftKey (діапазонне виділення).
+    _openCell(userId, date, locId = null, event = null) {
         const effLoc = locId || this._locId;
         if (locId && this._partnerLocations?.some(l => l.id === locId)) return;
         if (this._isViewOnlyLoc(effLoc)) return;
         if (this._isPastMonth()) { Toast.error('Місяць завершено', 'Редагування минулих місяців заблоковано'); return; }
         if (this._isLockedForLoc(effLoc)) { Toast.error('Графік заблоковано', 'Розблокуйте графік перед редагуванням'); return; }
+
+        // Shift+клік — розширення виділення діапазоном дат у тому ж рядку
+        // (той самий співробітник/локація) від попередньо виділеної клітинки.
+        // Ніякого подвійного кліку/quick-fill — лише виділення для масового Delete.
+        if (event?.shiftKey && this._selectedCell) {
+            this._selectCell(userId, date, locId, true);
+            return;
+        }
 
         // Ручне розпізнавання подвійного кліку по одній і тій самій клітинці
         const key = `${locId||''}_${userId}_${date}`;
@@ -5232,54 +5499,89 @@ ${this._manCss()}
         }
     },
 
-    _selectCell(userId, date, locId = null) {
+    // extend=true (Shift+клік) — розширює виділення діапазоном дат від this._selectedCell
+    // (незмінний "якір") до клікнутої клітинки, лише якщо це той самий рядок
+    // (userId+locId). this._selectedCells — повний список виділених клітинок,
+    // this._selectedCell лишається "якорем" для наступних Shift-кліків і для
+    // одинарного друку тексту (той працює лише коли виділена рівно одна клітинка).
+    _selectCell(userId, date, locId = null, extend = false) {
+        const anchor = this._selectedCell;
+        const sameRow = extend && anchor && anchor.userId === userId && (anchor.locId || null) === (locId || null);
+        if (sameRow) {
+            const d1 = parseInt(anchor.date.split('-')[2], 10);
+            const d2 = parseInt(date.split('-')[2], 10);
+            const lo = Math.min(d1, d2), hi = Math.max(d1, d2);
+            const prefix = date.slice(0, 8); // 'YYYY-MM-'
+            this._selectedCells = [];
+            for (let d = lo; d <= hi; d++) this._selectedCells.push({ userId, date: `${prefix}${String(d).padStart(2, '0')}`, locId });
+        } else {
+            this._selectedCell = { userId, date, locId };
+            this._selectedCells = [{ userId, date, locId }];
+        }
         document.querySelectorAll('.sg-cell.sg-cell-selected').forEach(td => td.classList.remove('sg-cell-selected'));
-        const sel = locId
-            ? `.sg-cell[data-uid="${userId}"][data-date="${date}"][data-locid="${locId}"]`
-            : `.sg-cell[data-uid="${userId}"][data-date="${date}"]`;
-        const td = document.querySelector(sel);
-        if (td) td.classList.add('sg-cell-selected');
-        this._selectedCell = { userId, date, locId };
+        this._selectedCells.forEach(c => {
+            const sel = c.locId
+                ? `.sg-cell[data-uid="${c.userId}"][data-date="${c.date}"][data-locid="${c.locId}"]`
+                : `.sg-cell[data-uid="${c.userId}"][data-date="${c.date}"]`;
+            document.querySelector(sel)?.classList.add('sg-cell-selected');
+        });
         if (!this._kbListenerAttached) {
             this._kbListenerAttached = true;
             document.addEventListener('keydown', ev => this._onCellKeydown(ev));
         }
     },
 
-    // Друк на клавіатурі одразу заповнює виділену клітинку (як в Excel)
+    // Друк на клавіатурі одразу заповнює виділену клітинку (як в Excel) — лише
+    // коли виділена рівно одна клітинка. Delete/Backspace очищує все виділене.
     _onCellKeydown(ev) {
         if (!this._selectedCell) return;
         const active = document.activeElement;
         if (active && ['INPUT','TEXTAREA'].includes(active.tagName)) return;
         if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
-        const { userId, date, locId } = this._selectedCell;
 
         if (ev.key === 'Delete' || ev.key === 'Backspace') {
             ev.preventDefault();
-            this._deleteSelectedCell(userId, date, locId);
+            this._deleteSelectedCells();
             return;
         }
 
+        if ((this._selectedCells?.length || 1) > 1) return; // друк тексту — лише для одиночного виділення
         if (ev.key.length !== 1) return;
         ev.preventDefault();
+        const { userId, date, locId } = this._selectedCell;
         this._editCellText(null, userId, date, ev.key, locId);
     },
 
-    // Delete/Backspace на виділеній клітинці — та сама дія, що й кнопка
-    // видалення в модалці зміни, але доступна без відкриття модалки
-    _deleteSelectedCell(userId, date, locId = null) {
-        const effLoc = locId || this._locId;
-        if (locId && this._partnerLocations?.some(l => l.id === locId)) return;
-        if (this._isViewOnlyLoc(effLoc)) return;
-        if (this._isPastMonth()) { Toast.error('Місяць завершено', 'Редагування минулих місяців заблоковано'); return; }
-        if (this._isLockedForLoc(effLoc)) { Toast.error('Графік заблоковано', 'Розблокуйте графік перед редагуванням'); return; }
-        const entry = locId ? this._allEntries[`${locId}_${userId}_${date}`] : this._entries[`${userId}_${date}`];
-        if (!entry) return;
-        if (_RESERVED_ENTRY_NOTES.includes(entry.notes)) {
-            Toast.warning('Недоступно', 'У цієї клітинки спеціальний статус (підміна/запит) — спершу обробіть його');
-            return;
+    // Delete/Backspace на виділеній клітинці (або кількох, при Shift-виділенні) —
+    // та сама дія, що й кнопка видалення в модалці зміни, але без відкриття модалки.
+    // Клітинки зі спецстатусом (підміна/запит) при масовому видаленні пропускаються мовчки.
+    async _deleteSelectedCells() {
+        const cells = this._selectedCells?.length ? this._selectedCells : (this._selectedCell ? [this._selectedCell] : []);
+        if (!cells.length) return;
+        const isBulk = cells.length > 1;
+        let deleted = 0, skippedReserved = 0;
+        for (const c of cells) {
+            const effLoc = c.locId || this._locId;
+            if (c.locId && this._partnerLocations?.some(l => l.id === c.locId)) continue;
+            if (this._isViewOnlyLoc(effLoc)) continue;
+            if (this._isPastMonth()) { Toast.error('Місяць завершено', 'Редагування минулих місяців заблоковано'); return; }
+            if (this._isLockedForLoc(effLoc)) { Toast.error('Графік заблоковано', 'Розблокуйте графік перед редагуванням'); return; }
+            const entry = c.locId ? this._allEntries[`${c.locId}_${c.userId}_${c.date}`] : this._entries[`${c.userId}_${c.date}`];
+            if (!entry) continue;
+            if (_RESERVED_ENTRY_NOTES.includes(entry.notes)) {
+                skippedReserved++;
+                if (!isBulk) Toast.warning('Недоступно', 'У цієї клітинки спеціальний статус (підміна/запит) — спершу обробіть його');
+                continue;
+            }
+            await this._deleteEntry(c.userId, c.date, c.locId, false, isBulk);
+            deleted++;
         }
-        this._deleteEntry(userId, date, locId);
+        if (!deleted) return;
+        if (isBulk) {
+            this._render(this._container);
+            const skipNote = skippedReserved ? ` (пропущено ${skippedReserved} зі спецстатусом)` : '';
+            Toast.success('Видалено', `Очищено клітинок: ${deleted}${skipNote}`);
+        }
     },
 
     // Подвійний клік (або друк на клавіатурі по виділеній клітинці) — довільний
@@ -5420,6 +5722,7 @@ ${this._manCss()}
             td.innerHTML = `<span class="sg-badge" style="background:${shift.bg};color:${shift.color}">${shift.short}</span>`;
         });
         if (_isRealShiftType(type) || _isRealShiftType(oldEnt?.shift_type)) this._updateNoWorkHighlight(date);
+        this._propagateVacation(userId, date, type, this._locId);
     },
 
     _showShiftTypesModal(empMode = false) {
@@ -5446,7 +5749,7 @@ ${this._manCss()}
     </div>
     ${empMode ? `<div style="font-size:.72rem;color:var(--text-muted);padding:0 0 6px">Типи, налаштовані керівником вашої локації</div>` : ''}
     <div id="sg-typelist" style="display:flex;flex-direction:column;gap:6px;max-height:50vh;overflow-y:auto;padding:12px 0">
-        ${getShiftTypeEntries().map(([k, v]) => rowHtml(k, v)).join('')}
+        ${getShiftTypeEntries().filter(([k]) => !this._partnerShiftTypeKeys?.has(k)).map(([k, v]) => rowHtml(k, v)).join('')}
     </div>
     ${!empMode ? `<div style="padding-top:10px;border-top:1px solid var(--border)">
         <button class="sg-btn-add-type" id="sg-add-type-trigger" onclick="ScheduleGraphPage._showAddTypeForm()">＋ Додати тип</button>
@@ -5754,6 +6057,7 @@ ${this._manCss()}
             this._entries[key] = data;
             this._render(this._container);
         }
+        if (!isEmployee) this._propagateVacation(userId, date, type, locId);
         document.getElementById('sg-shift-modal')?.remove();
         Toast.success('Збережено');
     },
@@ -5761,7 +6065,10 @@ ${this._manCss()}
     // isEmployeeCall — явний прапорець, бо locIdOverride тепер також передається
     // менеджером у режимі "Всі локації" (реальний location_id рядка), і сам факт
     // "override заданий" більше не означає однозначно "це виклик з боку співробітника".
-    async _deleteEntry(userId, date, locIdOverride, isEmployeeCall = false) {
+    // silent — при масовому видаленні (_deleteSelectedCells): пропустити toast і
+    // проміжний _render() для кожної клітинки окремо (викликач сам відрендерить
+    // і покаже один підсумковий toast після всього циклу).
+    async _deleteEntry(userId, date, locIdOverride, isEmployeeCall = false, silent = false) {
         const locId  = locIdOverride || (this._locId === 'all' ? this.__allLocId : this._locId);
         const isEmp  = isEmployeeCall;
         const oldEnt = isEmp
@@ -5801,17 +6108,17 @@ ${this._manCss()}
 
         if (isEmp) {
             delete ScheduleGraphEmployee._entries[date];
-            ScheduleGraphEmployee._render(ScheduleGraphEmployee._container);
+            if (!silent) ScheduleGraphEmployee._render(ScheduleGraphEmployee._container);
         } else if (this._locId === 'all') {
             delete this._allEntries[`${locId}_${userId}_${date}`];
-            this._render(this._container);
+            if (!silent) this._render(this._container);
         } else {
             delete this._entries[`${userId}_${date}`];
             if (_isRealShiftType(oldEnt?.shift_type)) this._updateNoWorkHighlight(date);
-            this._render(this._container);
+            if (!silent) this._render(this._container);
         }
         document.getElementById('sg-shift-modal')?.remove();
-        Toast.success('Запис видалено');
+        if (!silent) Toast.success('Запис видалено');
     },
 
     // ── Helpers ───────────────────────────────────────────────────
@@ -6337,9 +6644,9 @@ ${this._manCss()}
 
 .sg-loc-drag-handle {
     position:absolute;top:50%;left:3px;transform:translateY(-50%);cursor:grab;color:var(--text-muted);font-size:.6rem;
-    opacity:0;z-index:2;user-select:none;transition:opacity .15s;line-height:1;
+    opacity:.25;z-index:2;user-select:none;transition:opacity .15s;line-height:1;
 }
-.sg-loc-item-row:hover .sg-loc-drag-handle { opacity:.5; }
+.sg-loc-item-row:hover .sg-loc-drag-handle { opacity:.6; }
 .sg-loc-drag-handle:active { cursor:grabbing; }
 .sg-loc-item-row.sg-loc-dragging { opacity:.4; }
 .sg-loc-item-row.sg-loc-drag-over .sg-loc-item {

@@ -261,7 +261,13 @@ const App = {
                 if (params?.view === 'employee') await ScheduleGraphEmployee.init(container, params);
                 else {
                     await ScheduleGraphPage.init(container);
-                    if (params?.openBlock) ScheduleGraphPage._showPartnersModal();
+                    if (params?.openBlock) {
+                        ScheduleGraphPage._showPartnersModal();
+                        // Прибираємо ?openBlock=1 з хешу — інакше кожне оновлення сторінки
+                        // (F5) заново відкриває модалку, бо роутер щоразу бачить той самий
+                        // параметр. replaceState не додає запис в історію й не викликає hashchange.
+                        history.replaceState(null, '', location.pathname + location.search + '#/schedule-graph');
+                    }
                 }
             },
 

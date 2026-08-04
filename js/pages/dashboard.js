@@ -252,6 +252,7 @@ const DashboardPage = {
             .db-today{background:var(--primary);color:#fff;font-weight:700;box-shadow:0 3px 12px rgba(99,102,241,.4)}
             .db-has-ev:not(.db-today){background:rgba(99,102,241,.13);color:var(--primary);font-weight:600}
             .db-othm{color:var(--text-muted);opacity:.28;cursor:default;pointer-events:none}
+            @keyframes dbMgrHelpPulse{0%,100%{box-shadow:0 0 0 2px rgba(239,68,68,.2)}50%{box-shadow:0 0 0 4px rgba(239,68,68,0)}}
             .db-cup-wrap{border-top:1px solid rgba(16,185,129,.2);padding:.75rem 1.1rem .65rem;background:rgba(16,185,129,.04)}
             .db-cup-title{font-size:.85rem;font-weight:700;color:var(--text-primary);margin-bottom:.55rem}
             .db-cup-list{display:flex;flex-direction:column;gap:.2rem;max-height:120px;overflow-y:auto;scrollbar-width:thin;padding-right:.2rem}
@@ -350,7 +351,7 @@ const DashboardPage = {
         const monthStart = `${_mn.getFullYear()}-${_pad(_mn.getMonth()+1)}-01`;
         const monthEnd   = _fmtLocal(new Date(_mn.getFullYear(), _mn.getMonth() + 1, 0));
 
-        const [enrollments, newsRes, birthdays, recentNotifs, calEvents, scheduleEntries] = await Promise.all([
+        const [enrollments, newsRes, birthdays, recentNotifs, calEvents, scheduleEntries, mgrHelpDates] = await Promise.all([
             API.enrollments.getMyEnrollments().catch(() => []),
             API.news.getAll({ published: true, pageSize: 10 }).catch(() => ({ data: [] })),
             API.birthdays.getToday().catch(() => []),
@@ -370,6 +371,7 @@ const DashboardPage = {
                 .lte('date', monthEnd)
                 .then(r => r.data || [])
                 .catch(() => []),
+            this._loadMgrHelpDates(monthStart, monthEnd),
         ]);
         const unreadCount = recentNotifs.length;
 
@@ -382,7 +384,7 @@ const DashboardPage = {
         ]);
 
         this._renderWelcome(enrollments, testsCount, surveysCount);
-        this._renderCalWidget(calEvents, today, scheduleEntries);
+        this._renderCalWidget(calEvents, today, scheduleEntries, mgrHelpDates);
         this._renderImportantEvents(calEvents, today);
         this._renderAlerts(unackedDocs, recentNotifs);
         UI._setNotificationBadge(recentNotifs.length);
@@ -863,7 +865,7 @@ const DashboardPage = {
         requestAnimationFrame(() => { _sizeRcWrap(); setTimeout(_sizeRcWrap, 200); });
     },
 
-    _renderCalWidget(calEvents, today, scheduleEntries = []) {
+    _renderCalWidget(calEvents, today, scheduleEntries = [], mgrHelpDates = {}) {
         const now = new Date();
         this._calViewYear   = now.getFullYear();
         this._calViewMonth  = now.getMonth();
@@ -871,7 +873,31 @@ const DashboardPage = {
         this._calViewToday  = today;
         this._calViewShifts = {};
         scheduleEntries.forEach(e => { this._calViewShifts[e.date] = e; });
+        this._calViewMgrHelp = mgrHelpDates || {};
         this._drawCalWidget();
+    },
+
+    // Заявки "🆘 Потрібна підміна" зберігаються в schedule_entries під user_id
+    // КЕРІВНИКА (не співробітника) — тому для дашборду співробітника їх треба
+    // шукати окремо, по location_id його власних локацій, а не по user_id=я
+    // (той самий підхід, що й ScheduleGraphEmployee._managerHelpDates).
+    async _loadMgrHelpDates(dateFrom, dateTo) {
+        try {
+            const { data: assigns } = await supabase.from('schedule_assignments')
+                .select('location_id').eq('user_id', AppState.user.id);
+            const locIds = [...new Set((assigns || []).map(a => a.location_id).filter(Boolean))];
+            if (!locIds.length) return {};
+            const { data: helpData } = await supabase.from('schedule_entries')
+                .select('date, location_id, updated_by, schedule_locations(name)')
+                .eq('notes', '__mgr_help__')
+                .in('location_id', locIds)
+                .gte('date', dateFrom).lte('date', dateTo);
+            const map = {};
+            (helpData || []).forEach(e => {
+                if (!map[e.date]) map[e.date] = { locId: e.location_id, locName: e.schedule_locations?.name || '', managerId: e.updated_by };
+            });
+            return map;
+        } catch (e) { return {}; }
     },
 
     async _addHolidayToCalendar(dateStr, title, emoji, btn) {
@@ -975,7 +1001,7 @@ const DashboardPage = {
         const _fl = d => `${d.getFullYear()}-${_p2(d.getMonth()+1)}-${_p2(d.getDate())}`;
         const ms = `${this._calViewYear}-${_p2(this._calViewMonth+1)}-01`;
         const me = _fl(new Date(this._calViewYear, this._calViewMonth + 1, 0));
-        const [{ data }, shiftRes] = await Promise.all([
+        const [{ data }, shiftRes, mgrHelpDates] = await Promise.all([
             supabase.from('personal_cal_events')
                 .select('id,title,date,time,end_time,color,is_important,is_done,acked_date,repeat_type,remind_before_days')
                 .eq('user_id', AppState.user.id)
@@ -985,11 +1011,13 @@ const DashboardPage = {
                 .select('date,shift_type,notes,location_id,schedule_locations(name)')
                 .eq('user_id', AppState.user.id)
                 .gte('date', ms).lte('date', me)
-                .then(r => r.data || []).catch(() => [])
+                .then(r => r.data || []).catch(() => []),
+            this._loadMgrHelpDates(ms, me)
         ]);
         this._calViewEvents = data || [];
         this._calViewShifts = {};
         (Array.isArray(shiftRes) ? shiftRes : []).forEach(e => { this._calViewShifts[e.date] = e; });
+        this._calViewMgrHelp = mgrHelpDates || {};
         this._drawCalWidget();
     },
 
@@ -1057,7 +1085,7 @@ const DashboardPage = {
         if (!el) return;
         const _prevOpen = { today: document.getElementById('db-cup-today-body')?.classList.contains('open') ?? true, future: document.getElementById('db-cup-future-body')?.classList.contains('open') ?? true };
 
-        const { _calViewYear: year, _calViewMonth: month, _calViewEvents: calEvents, _calViewToday: today, _calViewShifts: shifts = {} } = this;
+        const { _calViewYear: year, _calViewMonth: month, _calViewEvents: calEvents, _calViewToday: today, _calViewShifts: shifts = {}, _calViewMgrHelp: mgrHelp = {} } = this;
         const now = new Date();
 
         // Build event map by date
@@ -1102,6 +1130,7 @@ const DashboardPage = {
         const gridHtml = cells.map(c => {
             const evs = c.other ? [] : (evByDate[c.date] || []);
             const shift = !c.other ? shifts[c.date] : null;
+            const help  = !c.other ? mgrHelp[c.date] : null;
             const isToday = c.date === today;
             const hasEv = !c.other && (evs.length || shift);
             const cls = ['db-cday',
@@ -1111,12 +1140,18 @@ const DashboardPage = {
             ].filter(Boolean).join(' ');
             const tips = [...evs.map(e => Fmt.esc(e.title))];
             if (shift && _shiftMeta[shift.shift_type]) tips.push(_shiftMeta[shift.shift_type].label);
+            if (help) tips.push(`🆘 Потрібна підміна${help.locName ? ' · ' + Fmt.esc(help.locName) : ''}`);
             const tipAttr = tips.length ? ` title="${tips.join(', ')}"` : '';
-            const dayOnclick = c.other ? `Router.go('my-calendar')` : `DashboardPage._calDayClick('${c.date}')`;
+            const dayOnclick = c.other ? `Router.go('my-calendar')`
+                : help ? `DashboardPage._confirmSubstituteModal('${c.date}')`
+                : `DashboardPage._calDayClick('${c.date}')`;
             const shiftDot = shift && _shiftMeta[shift.shift_type]
                 ? `<span style="position:absolute;bottom:2px;left:50%;transform:translateX(-50%);width:5px;height:5px;border-radius:50%;background:${_shiftMeta[shift.shift_type].color}"></span>`
                 : '';
-            return `<div class="${cls}" style="position:relative" onclick="${dayOnclick}"${tipAttr}>${c.day}${shiftDot}</div>`;
+            const helpDot = help
+                ? `<span style="position:absolute;top:1px;right:1px;width:6px;height:6px;border-radius:50%;background:#ef4444;box-shadow:0 0 0 2px rgba(239,68,68,.2);animation:dbMgrHelpPulse 1.4s ease-in-out infinite"></span>`
+                : '';
+            return `<div class="${cls}" style="position:relative" onclick="${dayOnclick}"${tipAttr}>${c.day}${shiftDot}${helpDot}</div>`;
         }).join('');
 
         const fmtBadge = dateStr => {
@@ -1669,6 +1704,60 @@ const DashboardPage = {
             document.head.insertAdjacentHTML('beforeend', MyCalendarPage._styles().replace('<style>', '<style id="mc-styles">'));
         }
         MyCalendarPage._openEventModal(date);
+    },
+
+    // Клік на день з активним запитом керівника "🆘 Потрібна підміна" —
+    // замість модалки особистих подій відкриває підтвердження виходу на заміну.
+    _confirmSubstituteModal(date) {
+        const help = this._calViewMgrHelp?.[date];
+        if (!help) { this._calDayClick(date); return; }
+        document.getElementById('db-sub-confirm')?.remove();
+        const el = document.createElement('div');
+        el.id = 'db-sub-confirm';
+        el.className = 'center-confirm-backdrop';
+        const dLabel = new Date(date + 'T00:00:00').toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' });
+        el.innerHTML = `
+<div class="center-confirm-box">
+    <h3>🆘 Підтвердити вихід на підміну?</h3>
+    <p>Керівник шукає підміну на <strong>${Fmt.esc(dLabel)}</strong>${help.locName ? ` у «${Fmt.esc(help.locName)}»` : ''}. Якщо готові вийти — підтвердіть, керівник одразу отримає сповіщення.</p>
+    <div class="center-confirm-actions">
+        <button class="btn btn-ghost" onclick="document.getElementById('db-sub-confirm').remove()">Скасувати</button>
+        <button class="btn btn-primary" onclick="DashboardPage._confirmSubstitute('${date}')">Так, можу вийти</button>
+    </div>
+</div>`;
+        document.body.appendChild(el);
+        el.addEventListener('click', e => { if (e.target === el) el.remove(); });
+    },
+
+    async _confirmSubstitute(date) {
+        const help = this._calViewMgrHelp?.[date];
+        document.getElementById('db-sub-confirm')?.remove();
+        if (!help?.locId) return;
+        Loader.show();
+        try {
+            const { data: existing } = await supabase.from('schedule_entries')
+                .select('shift_type').eq('location_id', help.locId).eq('user_id', AppState.user.id).eq('date', date).maybeSingle();
+            const { error } = await supabase.from('schedule_entries').upsert({
+                location_id: help.locId, user_id: AppState.user.id, date,
+                shift_type: existing?.shift_type || 'work', notes: '__sub__',
+                updated_by: AppState.user.id, updated_at: new Date().toISOString()
+            }, { onConflict: 'location_id,user_id,date' });
+            if (error) { Toast.error('Помилка', error.message); return; }
+
+            const userName = AppState.profile?.full_name || 'Співробітник';
+            const dLabel = new Date(date + 'T00:00:00').toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' });
+            if (help.managerId) {
+                await supabase.from('notifications').insert({
+                    user_id: help.managerId, title: '🙋 Готовий вийти на заміну',
+                    message: `${userName} може вийти на підміну ${dLabel}${help.locName ? ' у «' + help.locName + '»' : ''}`,
+                    type: 'general', created_by: AppState.user.id,
+                    link: `scheduler?loc=${help.locId}&date=${date}`
+                });
+            }
+            Toast.success('Дякуємо!', 'Керівник отримає сповіщення');
+        } finally {
+            Loader.hide();
+        }
     },
 
     _toggleAcc(bodyId) {

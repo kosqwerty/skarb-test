@@ -109,7 +109,12 @@ const SHIFT_TYPES = {
     vacation: { label: 'Відпустка',  short: 'ВД', color: '#f59e0b', bg: 'rgba(245,158,11,.14)' },
     sick:     { label: 'Лікарняний', short: 'Л',  color: '#ef4444', bg: 'rgba(239,68,68,.14)' },
 };
-const SUB_CONFIRMED = { label: 'Підміна', short: 'Р', color: '#f97316', bg: 'rgba(249,115,22,.14)' };
+// Підтверджена підміна раніше завжди малювалась хардкодженим помаранчевим "Р",
+// ігноруючи кастомну легенду конкретного керівника (кожен налаштовує свою:
+// інші короткі підписи/кольори через schedule_shift_config). "day_off" — це і є
+// вбудований тип "Підміна" в цій легенді, тож підтверджена підміна має виглядати
+// так само, як він, а не як окремий незалежний хардкод.
+function _subConfirmedShift(types) { return (types || getShiftTypes())['day_off'] || SHIFT_TYPES.day_off; }
 // Flag notes that indicate a request, not a confirmed work shift
 const _FLAG_NOTES = ['__sub__', '__needsub__'];
 // Усі службові значення notes — вільний текст керівника (подвійний клік по клітинці)
@@ -169,6 +174,8 @@ const ScheduleGraphPage = {
     _isAssignedAsEmployee: false,
     _helpLocIds:          new Set(),
     _helpByLoc:           {},
+    _needSubLocIds:       new Set(),
+    _cansubLocIds:        new Map(),
     _deletedLocations:    [],
     _viewers:             [],
     _filteredUserId:      null,
@@ -239,6 +246,7 @@ const ScheduleGraphPage = {
                     .select('id', { count: 'exact', head: true })
                     .eq('user_id', AppState.user.id),
             this._loadHelpLocIds(),
+            this._loadNeedSubLocIds(),
             this._loadDeletedLocations(),
             this._loadPartners(),
             this._loadShiftConfig()
@@ -257,14 +265,15 @@ const ScheduleGraphPage = {
 
     async _loadLocations() {
         // Кожен (включно з superadmin) бачить у розділі керування локації, які
-        // сам створив, ПЛЮС ті, де він доданий як співвласник (co_owner_id) —
+        // сам створив, ПЛЮС ті, де він доданий як співвласник (co_owner_ids) —
         // "Спільна локація": рівні права редагування, не просто перегляд.
         // Доступ до чужих БЕЗ цього — тільки через явне надання (schedule_viewers
         // → сторінка перегляду schedule-view), а не автоматично за роллю.
-        const { data } = await supabase.from('schedule_locations')
+        const { data, error } = await supabase.from('schedule_locations')
             .select('*').is('deleted_at', null)
             .order('order_index', { ascending: true, nullsFirst: false }).order('created_at')
-            .or(`created_by.eq.${AppState.user.id},co_owner_id.eq.${AppState.user.id}`);
+            .or(`created_by.eq.${AppState.user.id},co_owner_ids.cs.{${AppState.user.id}}`);
+        if (error) { console.error('_loadLocations', error); Toast.error('Помилка завантаження локацій', error.message); }
         this._locations = data || [];
         this._applyLocOrder();
         this._syncLocOrderToDb();
@@ -290,7 +299,7 @@ const ScheduleGraphPage = {
         const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
         const prevMonthKey = this._monthKey(prev.getFullYear(), prev.getMonth());
         const tolock = this._locations.filter(l =>
-            (l.created_by === AppState.user.id || l.co_owner_id === AppState.user.id) &&
+            (l.created_by === AppState.user.id || (l.co_owner_ids || []).includes(AppState.user.id)) &&
             !(l.locked_months || []).includes(prevMonthKey)
         );
         if (tolock.length) {
@@ -342,16 +351,17 @@ const ScheduleGraphPage = {
     _isViewOnlyLoc(locId) {
         if (!AppState.isSuperAdmin()) return false;
         const loc = this._locations.find(l => l.id === locId);
-        return !!loc && loc.created_by !== AppState.user.id && loc.co_owner_id !== AppState.user.id;
+        return !!loc && loc.created_by !== AppState.user.id && !(loc.co_owner_ids || []).includes(AppState.user.id);
     },
 
     async _loadDeletedLocations() {
         const cutoff = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
-        const { data } = await supabase.from('schedule_locations')
+        const { data, error } = await supabase.from('schedule_locations')
             .select('*')
             .gte('deleted_at', cutoff)
             .order('deleted_at', { ascending: false })
-            .or(`created_by.eq.${AppState.user.id},co_owner_id.eq.${AppState.user.id}`);
+            .or(`created_by.eq.${AppState.user.id},co_owner_ids.cs.{${AppState.user.id}}`);
+        if (error) console.error('_loadDeletedLocations', error);
         this._deletedLocations = data || [];
     },
 
@@ -483,6 +493,76 @@ const ScheduleGraphPage = {
         (data || []).forEach(e => {
             if (!this._helpByLoc[e.location_id]) this._helpByLoc[e.location_id] = new Set();
             this._helpByLoc[e.location_id].add(e.date);
+        });
+    },
+
+    // Легкий агрегований запит (за зразком _loadHelpLocIds) — для КОЖНОЇ своєї
+    // локації визначає, чи є в поточному місяці хоч один день без жодної
+    // реальної зміни серед видимих співробітників (той самий критерій, що й
+    // _findAllNeedSubDates/.sg-cell-no-work, але порахований одразу для ВСІХ
+    // локацій, а не лише для обраної — бо this._entries/_assignments
+    // прив'язані лише до поточної локації). Використовується для червоної
+    // пульсуючої точки в шапці "Розділ локацій" та на іконках локацій.
+    async _loadNeedSubLocIds() {
+        this._needSubLocIds = new Set();
+        this._cansubLocIds  = new Map();
+        const locIds = this._locations.map(l => l.id);
+        if (!locIds.length) return;
+        const y = this._year, m = this._month;
+        const p = n => String(n).padStart(2, '0');
+        const dateFrom = `${y}-${p(m + 1)}-01`;
+        const days = new Date(y, m + 1, 0).getDate();
+        const dateTo = `${y}-${p(m + 1)}-${p(days)}`;
+        const now = new Date();
+        const isCurrentMonth = y === now.getFullYear() && m === now.getMonth();
+        const monthKey = this._monthKey(y, m);
+
+        const [{ data: assigns }, { data: entries }] = await Promise.all([
+            supabase.from('schedule_assignments')
+                .select('location_id, user_id, original_user_id, is_primary, pinned_months')
+                .in('location_id', locIds),
+            supabase.from('schedule_entries')
+                .select('location_id, user_id, date, shift_type, notes')
+                .in('location_id', locIds).gte('date', dateFrom).lte('date', dateTo)
+        ]);
+
+        const entriesByLoc = {};
+        (entries || []).forEach(e => {
+            if (!entriesByLoc[e.location_id]) entriesByLoc[e.location_id] = {};
+            entriesByLoc[e.location_id][`${e.user_id}_${e.date}`] = e;
+            if (e.notes === '__sub__') {
+                this._cansubLocIds.set(e.location_id, (this._cansubLocIds.get(e.location_id) || 0) + 1);
+            }
+        });
+        const assignsByLoc = {};
+        (assigns || []).forEach(a => (assignsByLoc[a.location_id] = assignsByLoc[a.location_id] || []).push(a));
+
+        locIds.forEach(locId => {
+            const locEntries = entriesByLoc[locId] || {};
+            const _hasEntries = a => {
+                const lid = a.user_id || a.original_user_id;
+                return lid && Array.from({ length: days }, (_, i) => i + 1).some(d => locEntries[`${lid}_${this._dateStr(d)}`]);
+            };
+            const visible = (assignsByLoc[locId] || []).filter(a => {
+                if (!a.user_id) return _hasEntries(a);
+                if (a.is_primary) return true;
+                if (isCurrentMonth) return true;
+                if ((a.pinned_months || []).includes(monthKey)) return true;
+                return _hasEntries(a);
+            });
+            if (!visible.length) return;
+            const datesWithWork = new Set();
+            visible.forEach(a => {
+                const lid = a.user_id || a.original_user_id;
+                if (!lid) return;
+                for (let d = 1; d <= days; d++) {
+                    const ds = this._dateStr(d);
+                    if (_isRealShift(locEntries[`${lid}_${ds}`])) datesWithWork.add(ds);
+                }
+            });
+            for (let d = 1; d <= days; d++) {
+                if (!datesWithWork.has(this._dateStr(d))) { this._needSubLocIds.add(locId); break; }
+            }
         });
     },
 
@@ -1134,6 +1214,8 @@ ${this._manCss()}
             const monthPrefix = `${this._year}-${p(this._month + 1)}`;
             return (this._locSortAlpha ? [...this._locations].sort((a,b) => a.name.localeCompare(b.name, 'uk')) : this._locations).map(l => {
             const hasHelp = [...(this._helpByLoc[l.id] || [])].some(d => d.startsWith(monthPrefix));
+            const needGap = (this._needSubLocIds || new Set()).has(l.id);
+            const cansubCnt = (this._cansubLocIds || new Map()).get(l.id) || 0;
             const isActive = l.id === this._locId;
             const viewOnly = this._isViewOnlyLoc(l.id);
             const isSeller  = !viewOnly && (l.node_type || '').endsWith('_seller');
@@ -1149,11 +1231,14 @@ ${this._manCss()}
                 data-node="${l.node_type || ''}"
                 onclick="ScheduleGraphPage._selectLocation('${l.id}')"
                 title="${Fmt.esc(l.name)}${hasCurExc ? ' · Обмін валют' : ''}">
-                ${hasHelp ? `<span class="sg-loc-item-helpdot" title="Потрібна підміна"></span>` : ''}
+                ${needGap ? `<span class="sg-loc-item-needdot" title="Є день без підміни"></span>` : ''}
+                ${cansubCnt ? `<span class="sg-loc-item-cansubdot" title="Готові підмінити: ${cansubCnt}"></span>` : ''}
                 <span class="sg-loc-item-ico">
                     <i class="fa-solid ${viewOnly ? 'fa-eye' : 'fa-shop'}"></i>
+                    ${(l.co_owner_ids || []).length ? `<span class="sg-loc-item-badge sg-loc-item-badge-coowner" title="Спільна локація"><i class="fa-solid fa-user-group"></i></span>` : ''}
                     ${isSeller ? `<span class="sg-loc-item-badge sg-loc-item-badge-shop"><img src="/icons/logo_tehnoscarb1.png" alt=""></span>` : ''}
                     ${hasCurExc ? `<span class="sg-loc-item-badge sg-loc-item-badge-currency">$</span>` : ''}
+                    ${hasHelp ? `<span class="sg-loc-item-badge sg-loc-item-badge-sos" title="Потрібна підміна"><i class="fa-solid fa-bullhorn"></i></span>` : ''}
                 </span>
                 <span class="sg-loc-item-code">${Fmt.esc(l.name).slice(0,3)}</span>
             </button>
@@ -1245,11 +1330,6 @@ ${this._manCss()}
                     <div class="sg-v2-svc-body"><div class="sg-v2-svc-title">Доступ</div><div class="sg-v2-svc-sub">Хто може переглядати</div></div>
                     <i class="fa-solid fa-angle-right sg-v2-svc-arr"></i>
                 </div>
-                <div class="sg-v2-svc-item" onclick="ScheduleGraphPage._showCoOwnerModal()">
-                    <div class="sg-v2-svc-icon" style="background:rgba(16,185,129,.12);color:#10b981"><i class="fa-solid fa-user-group"></i></div>
-                    <div class="sg-v2-svc-body"><div class="sg-v2-svc-title">Спільна локація${loc?.co_owner_id ? ' <span class="sg-svc-badge">1</span>' : ''}</div><div class="sg-v2-svc-sub">Другий керівник з однаковими правами</div></div>
-                    <i class="fa-solid fa-angle-right sg-v2-svc-arr"></i>
-                </div>
             </div>
         </div>`;
 
@@ -1266,6 +1346,7 @@ ${this._manCss()}
             <div class="sg-v2-loc-name">
                 <span class="sg-loc-name-ico">🏪</span>
                 <span class="sg-loc-name-text">${Fmt.esc(locName)}</span>
+                ${(loc?.co_owner_ids || []).length ? `<span class="sg-loc-name-coowner" title="Спільна локація"><i class="fa-solid fa-user-group"></i></span>` : ''}
                 ${viewOnly ? `
                 <span class="sg-view-only-badge"><i class="fa-solid fa-eye"></i> Перегляд</span>` : `
                 <button class="sg-loc-name-edit" onclick="ScheduleGraphPage._renameLocation('${this._locId}',${JSON.stringify(locName||'').replace(/"/g,'&quot;')})" title="Редагувати локацію"><i class="fa-solid fa-pen"></i></button>`}
@@ -1434,7 +1515,7 @@ ${this._manCss()}
                         const dow   = new Date(this._year, this._month, d).getDay();
                         const we    = dow === 0 || dow === 6;
                         const isSubConf = entry?.notes === '__sub_confirmed__';
-                        const dispShift = isSubConf ? SUB_CONFIRMED : (entry?.notes === '__sub__' ? null : shift);
+                        const dispShift = isSubConf ? _subConfirmedShift() : (entry?.notes === '__sub__' ? null : shift);
                         if (fired) return `<td class="sg-cell sg-cell-fired${we?' we':''}" title="Звільнено">
                             ${dispShift ? `<span class="sg-badge" style="background:${dispShift.bg};color:${dispShift.color};opacity:.55">${dispShift.short}</span>` : ''}
                         </td>`;
@@ -1566,7 +1647,7 @@ ${this._manCss()}
         input.value = r;
     },
 
-    _showLocModal({ title, placeholder, value = '', address = '', phone = '', nodeType = '', workStart = '', workEnd = '', hasCurrencyExchange = false, onSave }) {
+    _showLocModal({ title, placeholder, value = '', address = '', phone = '', nodeType = '', workStart = '', workEnd = '', hasCurrencyExchange = false, locId = null, coOwnerCandidates = [], coOwnerProfiles = [], onSave }) {
         document.getElementById('sg-loc-modal')?.remove();
         const NODE_LABELS = { universal:'Універсальний', universal_seller:'Універсальний + магазин', technical:'Технічний', technical_seller:'Технічний + магазин', gold:'Золотий' };
         const nodeOptions = [['','— Вузол не вказано —'], ...Object.entries(NODE_LABELS)]
@@ -1619,6 +1700,15 @@ ${this._manCss()}
                     oninput="ScheduleGraphPage._fmtPhone(this)">
             </div>
         </div>
+        ${locId ? `
+        <div class="sg-loc-field">
+            <label class="sg-loc-label"><i class="fa-solid fa-user-group sg-loc-lbl-ico"></i>Спільна локація</label>
+            <div class="sg-loc-coowner-picker">
+                <div class="sg-loc-coowner-chips" id="sg-loc-coowner-chips"></div>
+                <input type="text" id="sg-loc-coowner-search" class="sg-loc-input" placeholder="🔍 Додати керівника…" autocomplete="off">
+                <div class="sg-viewer-dropdown sg-loc-coowner-dropdown" id="sg-loc-coowner-dropdown"></div>
+            </div>
+        </div>` : ''}
         <div class="sg-loc-field">
             <label class="sg-loc-label"><i class="fa-regular fa-clock sg-loc-lbl-ico"></i>Час роботи</label>
             <div class="sg-loc-time-row">
@@ -1652,6 +1742,56 @@ ${this._manCss()}
         input.focus();
         input.select();
 
+        // ── Спільна локація — inline мультивибір (чипи + випадний список) ──
+        let selectedCoOwners = coOwnerProfiles.map(p => ({ id: p.id, full_name: p.full_name }));
+        const chipsEl   = document.getElementById('sg-loc-coowner-chips');
+        const coInput   = document.getElementById('sg-loc-coowner-search');
+        const coDropEl  = document.getElementById('sg-loc-coowner-dropdown');
+
+        const renderCoChips = () => {
+            if (!chipsEl) return;
+            chipsEl.innerHTML = selectedCoOwners.map(p => `
+                <span class="sg-loc-coowner-chip" data-id="${p.id}">
+                    ${Fmt.esc(p.full_name || p.id)}
+                    <button type="button" class="sg-loc-coowner-chip-x" data-id="${p.id}">✕</button>
+                </span>`).join('');
+        };
+        const renderCoDropdown = (q = '') => {
+            if (!coDropEl) return;
+            const ql = q.trim().toLowerCase();
+            const avail = coOwnerCandidates.filter(c =>
+                !selectedCoOwners.some(s => s.id === c.id) &&
+                (!ql || (c.full_name || '').toLowerCase().includes(ql)));
+            coDropEl.innerHTML = avail.length
+                ? avail.map(c => `
+                    <div class="sg-viewer-drop-item" data-id="${c.id}" data-name="${Fmt.esc(c.full_name || '')}">
+                        ${Fmt.esc(c.full_name || c.id)}${c.job_position ? ` · ${Fmt.esc(c.job_position)}` : ''}
+                    </div>`).join('')
+                : `<div class="sg-viewer-drop-empty">Нікого не знайдено</div>`;
+        };
+        if (locId) {
+            renderCoChips();
+            renderCoDropdown();
+            chipsEl.addEventListener('click', e => {
+                const btn = e.target.closest('.sg-loc-coowner-chip-x');
+                if (!btn) return;
+                selectedCoOwners = selectedCoOwners.filter(p => p.id !== btn.dataset.id);
+                renderCoChips();
+                renderCoDropdown(coInput.value);
+            });
+            coInput.addEventListener('input', () => renderCoDropdown(coInput.value));
+            coInput.addEventListener('focus', () => coDropEl.classList.add('open'));
+            coInput.addEventListener('blur', () => setTimeout(() => coDropEl.classList.remove('open'), 150));
+            coDropEl.addEventListener('mousedown', e => {
+                const item = e.target.closest('.sg-viewer-drop-item');
+                if (!item) return;
+                selectedCoOwners.push({ id: item.dataset.id, full_name: item.dataset.name });
+                coInput.value = '';
+                renderCoChips();
+                renderCoDropdown();
+            });
+        }
+
         const save = () => {
             const v = input.value.trim();
             if (!v) { input.classList.add('sg-input-error'); input.focus(); return; }
@@ -1661,8 +1801,9 @@ ${this._manCss()}
             const whs   = document.getElementById('sg-loc-wh-start')?.value || '';
             const whe   = document.getElementById('sg-loc-wh-end')?.value || '';
             const curEx = document.getElementById('sg-loc-currency')?.checked || false;
+            const coIds = selectedCoOwners.map(p => p.id);
             el.remove();
-            onSave(v, addr, ph, nt, whs, whe, curEx);
+            onSave(v, addr, ph, nt, whs, whe, curEx, coIds);
         };
         document.getElementById('sg-loc-save-btn').onclick = save;
         input.addEventListener('keydown', e => { if (e.key === 'Enter') save(); });
@@ -1690,6 +1831,14 @@ ${this._manCss()}
 
     async _renameLocation(id, currentName) {
         const loc = this._locations.find(l => l.id === id);
+        const coOwnerIds = loc?.co_owner_ids || [];
+        const [{ data: managers }, coOwnerRes] = await Promise.all([
+            supabase.from('profiles').select('id, full_name, job_position').eq('role', 'manager').order('full_name'),
+            coOwnerIds.length
+                ? supabase.from('profiles').select('id, full_name').in('id', coOwnerIds)
+                : Promise.resolve({ data: [] })
+        ]);
+        const coOwnerCandidates = (managers || []).filter(m => m.id !== AppState.user.id && m.id !== loc?.created_by);
         this._showLocModal({
             title: 'Редагувати локацію',
             placeholder: 'Назва філії…',
@@ -1700,7 +1849,10 @@ ${this._manCss()}
             workStart: loc?.work_start || '',
             workEnd: loc?.work_end || '',
             hasCurrencyExchange: loc?.has_currency_exchange || false,
-            onSave: async (name, address, phone, nodeType, workStart, workEnd, hasCurrencyExchange) => {
+            locId: id,
+            coOwnerCandidates,
+            coOwnerProfiles: coOwnerRes.data || [],
+            onSave: async (name, address, phone, nodeType, workStart, workEnd, hasCurrencyExchange, coOwnerIdsNew) => {
                 const { error } = await supabase.from('schedule_locations')
                     .update({
                         name,
@@ -1710,6 +1862,7 @@ ${this._manCss()}
                         work_start: workStart || null,
                         work_end:   workEnd   || null,
                         has_currency_exchange: hasCurrencyExchange,
+                        co_owner_ids: coOwnerIdsNew || [],
                     })
                     .eq('id', id);
                 if (error) { Toast.error('Помилка', error.message); return; }
@@ -1718,6 +1871,7 @@ ${this._manCss()}
                     loc.node_type = nodeType || null;
                     loc.work_start = workStart || null; loc.work_end = workEnd || null;
                     loc.has_currency_exchange = hasCurrencyExchange;
+                    loc.co_owner_ids = coOwnerIdsNew || [];
                 }
                 this._render(this._container);
                 Toast.success('Збережено');
@@ -1831,7 +1985,7 @@ ${this._manCss()}
         this._pastMonthUnlocked = false;
         this._saveMonth();
         const load = this._locId === 'all' ? this._loadAllData() : this._loadPageData();
-        load.then(() => this._render(this._container));
+        Promise.all([load, this._loadNeedSubLocIds()]).then(() => this._render(this._container));
     },
 
     _nextMonth() {
@@ -1839,7 +1993,7 @@ ${this._manCss()}
         this._pastMonthUnlocked = false;
         this._saveMonth();
         const load = this._locId === 'all' ? this._loadAllData() : this._loadPageData();
-        load.then(() => this._render(this._container));
+        Promise.all([load, this._loadNeedSubLocIds()]).then(() => this._render(this._container));
     },
 
     _toggleLocSort() {
@@ -2554,7 +2708,7 @@ ${this._manCss()}
                         const isFree = sd && !type;
                         const isBusy = sd && !isFree;
                         const isSubConf = entry?.notes === '__sub_confirmed__';
-                        const dispShift = isSubConf ? SUB_CONFIRMED : (entry?.notes === '__sub__' ? null : shift);
+                        const dispShift = isSubConf ? _subConfirmedShift() : (entry?.notes === '__sub__' ? null : shift);
                         if (fired2) return `<td class="sg-cell sg-cell-fired${we?' we':''}${isSd?' sg-sd-col':''}" title="Звільнено">
                             ${dispShift ? `<span class="sg-badge" style="background:${dispShift.bg};color:${dispShift.color};opacity:.55">${dispShift.short}</span>` : ''}
                         </td>`;
@@ -2663,6 +2817,49 @@ ${this._manCss()}
 
     _findNeedSubDate(locId) {
         return this._findAllNeedSubDates(locId)[0] || null;
+    },
+
+    // Викликається після будь-якого редагування зміни в поточній локації
+    // (_saveCellText/_quickSave/_quickSaveAll). Якщо ця локація раніше мала
+    // "дірку" в графіку (this._needSubLocIds) і щойно останній прогалину
+    // закрили — знімаємо позначки "🙋 Готовий підмінити" (notes='__sub__') з усіх,
+    // хто відгукнувся цього місяця в цій локації, і надсилаємо їм подяку.
+    async _checkGapClosed() {
+        const locId = this._locId;
+        if (!locId || locId === 'all') return;
+        if (!(this._needSubLocIds || new Set()).has(locId)) return;
+        if (this._findAllNeedSubDates(locId).length) return;
+
+        this._needSubLocIds.delete(locId);
+
+        const p = n => String(n).padStart(2, '0');
+        const days = new Date(this._year, this._month + 1, 0).getDate();
+        const dateFrom = `${this._year}-${p(this._month + 1)}-01`;
+        const dateTo   = `${this._year}-${p(this._month + 1)}-${p(days)}`;
+        const { data: subs } = await supabase.from('schedule_entries')
+            .select('id, user_id, date')
+            .eq('location_id', locId).eq('notes', '__sub__')
+            .gte('date', dateFrom).lte('date', dateTo);
+
+        if (subs && subs.length) {
+            const userIds = [...new Set(subs.map(s => s.user_id))];
+            await supabase.from('schedule_entries')
+                .update({ notes: null, updated_by: AppState.user.id, updated_at: new Date().toISOString() })
+                .in('id', subs.map(s => s.id));
+            subs.forEach(s => {
+                const k = `${s.user_id}_${s.date}`;
+                if (this._entries[k]) this._entries[k].notes = null;
+            });
+            const locName = this._locations.find(l => l.id === locId)?.name || '';
+            await supabase.from('notifications').insert(userIds.map(uid => ({
+                user_id: uid, title: '✅ Дякуємо за відгук!',
+                message: `Графік у «${locName}» вже покрито — підміна більше не потрібна. Дякуємо, що відгукнулись!`,
+                type: 'general', created_by: AppState.user.id,
+                link: `scheduler?loc=${locId}`
+            })));
+        }
+        this._cansubLocIds?.delete(locId);
+        this._render(this._container);
     },
 
     _showSubstLoadingOverlay() {
@@ -4255,7 +4452,7 @@ ${this._manCss()}
                     title: '🆘 Потрібна підміна',
                     message: `${managerName} шукає підміну на ${dateLabel} у «${locName}». Якщо можете вийти — позначте дату у графіку.`,
                     type: 'general', created_by: AppState.user.id,
-                    link: 'schedule-graph?view=employee'
+                    link: `schedule-graph?view=employee&loc=${locId}&date=${date}`
                 }))
             );
             if (ne) console.error('[NeedSub] notifications error:', ne);
@@ -4485,7 +4682,7 @@ ${this._manCss()}
                             if (_isRealShift(entry)) workDays++;
                             const isSubConf = entry?.notes === '__sub_confirmed__';
                             const flagIco = entry?.notes === '__needsub__' ? '🆘' : '';
-                            const dispShift = isSubConf ? SUB_CONFIRMED : (entry?.notes === '__sub__' ? null : shift);
+                            const dispShift = isSubConf ? _subConfirmedShift(this._effShiftTypes()) : (entry?.notes === '__sub__' ? null : shift);
                             const isFired  = !a.user_id;
                             const isEmpty  = !isFired && !locDatesWithWork[locId]?.has(date);
                             const uid2 = a.user_id || a.original_user_id;
@@ -4978,106 +5175,6 @@ ${this._manCss()}
         this._viewers = this._viewers.filter(v => v.id !== id);
         document.getElementById('sg-viewers-list').innerHTML = this._renderViewersList();
         Toast.success('Доступ видалено');
-    },
-
-    // ── Спільна локація (co-owner) ───────────────────────────────
-    // Рівно один співвласник на локацію — має ТІ САМІ права редагування, що й
-    // власник (додавання/видалення співробітників, зміни, налаштування). На
-    // відміну від БЛОКу (крос-видимість усіх локацій кількох керівників), це —
-    // прямий спільний доступ саме до ОДНІЄЇ конкретної локації.
-    async _showCoOwnerModal() {
-        const loc = this._locations.find(l => l.id === this._locId);
-        if (!loc) return;
-        document.getElementById('sg-coowner-modal')?.remove();
-
-        const [{ data: managers }, coOwnerRes] = await Promise.all([
-            supabase.from('profiles').select('id, full_name, job_position').eq('role', 'manager').order('full_name'),
-            loc.co_owner_id
-                ? supabase.from('profiles').select('id, full_name').eq('id', loc.co_owner_id).single()
-                : Promise.resolve({ data: null })
-        ]);
-        const coOwnerProfile = coOwnerRes.data;
-        this._coOwnerCandidates = (managers || []).filter(m => m.id !== AppState.user.id && m.id !== loc.created_by);
-
-        const el = document.createElement('div');
-        el.id = 'sg-coowner-modal';
-        el.className = 'sg-overlay';
-        el.innerHTML = `
-<div class="sg-modal" style="max-width:440px;height:auto">
-    <div class="sg-mhdr">
-        <div>
-            <h3 style="margin:0;font-size:1.05rem"><i class="fa-solid fa-user-group"></i> Спільна локація</h3>
-            <p style="margin:4px 0 0;font-size:.78rem;color:var(--text-muted)">Другий керівник з однаковими правами редагування графіка «${Fmt.esc(loc.name)}»</p>
-        </div>
-        <button class="sg-mclose" onclick="document.getElementById('sg-coowner-modal').remove()">✕</button>
-    </div>
-    ${coOwnerProfile ? `
-    <div class="sg-viewers-row" style="border:1px solid var(--border);border-radius:12px;padding:10px 12px">
-        <div class="sg-av sm">${(coOwnerProfile.full_name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}</div>
-        <div class="sg-viewers-info"><div class="sg-viewers-name">${Fmt.esc(coOwnerProfile.full_name)}</div><div class="sg-viewers-scope">Співвласник</div></div>
-        <button class="sg-viewers-del" onclick="ScheduleGraphPage._removeCoOwner()" title="Прибрати співвласника">✕</button>
-    </div>` : `
-    <div class="sg-viewer-search-wrap" style="position:relative">
-        <input type="text" id="sg-coowner-search" class="sg-viewer-search-input" placeholder="🔍 Пошук керівника…" autocomplete="off"
-            oninput="ScheduleGraphPage._filterCoOwnerUsers(this.value)"
-            onfocus="ScheduleGraphPage._openCoOwnerDropdown()"
-            onblur="setTimeout(()=>ScheduleGraphPage._closeCoOwnerDropdown(),150)">
-        <div class="sg-viewer-dropdown" id="sg-coowner-dropdown">
-            ${this._coOwnerCandidates.map(p => `
-            <div class="sg-viewer-drop-item" data-name="${Fmt.esc(p.full_name||'')}"
-                onmousedown="ScheduleGraphPage._addCoOwner('${p.id}')">
-                ${Fmt.esc(p.full_name || p.id)}${p.job_position ? ` · ${Fmt.esc(p.job_position)}` : ''}
-            </div>`).join('')}
-        </div>
-    </div>
-    <p style="font-size:.72rem;color:var(--text-muted);margin:10px 0 0">Можна додати лише одного співвласника. Він одразу побачить цю локацію як власну — з правом додавати/видаляти співробітників, редагувати зміни та керувати доступом.</p>
-    `}
-</div>`;
-        document.body.appendChild(el);
-        el.addEventListener('click', e => { if (e.target === el) el.remove(); });
-    },
-
-    _openCoOwnerDropdown() {
-        const dd    = document.getElementById('sg-coowner-dropdown');
-        const input = document.getElementById('sg-coowner-search');
-        if (!dd || !input) return;
-        const rect = input.getBoundingClientRect();
-        dd.style.top   = (rect.bottom + 4) + 'px';
-        dd.style.left  = rect.left + 'px';
-        dd.style.width = rect.width + 'px';
-        dd.classList.add('open');
-    },
-    _closeCoOwnerDropdown() {
-        document.getElementById('sg-coowner-dropdown')?.classList.remove('open');
-    },
-    _filterCoOwnerUsers(query) {
-        const dd = document.getElementById('sg-coowner-dropdown');
-        if (!dd) return;
-        this._openCoOwnerDropdown();
-        const q = query.trim().toLowerCase();
-        dd.querySelectorAll('.sg-viewer-drop-item').forEach(item => {
-            item.classList.toggle('hidden', q.length > 0 && !(item.dataset.name || '').toLowerCase().includes(q));
-        });
-    },
-
-    async _addCoOwner(userId) {
-        const { error } = await supabase.from('schedule_locations').update({ co_owner_id: userId }).eq('id', this._locId);
-        if (error) { Toast.error('Помилка', error.message); return; }
-        const loc = this._locations.find(l => l.id === this._locId);
-        if (loc) loc.co_owner_id = userId;
-        document.getElementById('sg-coowner-modal')?.remove();
-        Toast.success('Співвласника додано');
-        this._render(this._container);
-    },
-
-    async _removeCoOwner() {
-        const { error } = await supabase.from('schedule_locations').update({ co_owner_id: null }).eq('id', this._locId);
-        if (error) { Toast.error('Помилка', error.message); return; }
-        const loc = this._locations.find(l => l.id === this._locId);
-        if (loc) loc.co_owner_id = null;
-        document.getElementById('sg-coowner-modal')?.remove();
-        Toast.success('Співвласника прибрано');
-        this._render(this._container);
     },
 
     async _addEmployee() {
@@ -5716,6 +5813,7 @@ ${this._manCss()}
         if (locId) this._allEntries[key] = data;
         else this._entries[key] = data;
         this._render(this._container);
+        if (!locId) this._checkGapClosed();
     },
 
     async _quickSave(userId, date, type) {
@@ -5773,6 +5871,7 @@ ${this._manCss()}
         });
         if (_isRealShiftType(type) || _isRealShiftType(oldEnt?.shift_type)) this._updateNoWorkHighlight(date);
         this._propagateVacation(userId, date, type, this._locId);
+        if (_isRealShiftType(type)) this._checkGapClosed();
     },
 
     _showShiftTypesModal(empMode = false) {
@@ -5939,15 +6038,96 @@ ${this._manCss()}
         const dateObj = new Date(date + 'T00:00:00');
         const dateLabel = dateObj.toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' });
         const curType = entry?.shift_type || 'work';
+        const curShift = getShiftTypes()[curType];
 
         const el = document.createElement('div');
         el.id = 'sg-shift-modal';
         el.className = 'sg-overlay';
+
+        if (isEmployee) {
+            const emColor = entry ? (curShift?.color || 'var(--primary)') : 'var(--primary)';
+            const canSub  = entry?.notes === '__sub__';
+            const needSub = entry?.notes === '__needsub__';
+            el.innerHTML = `
+<div class="sgm-modal" style="--em:${emColor}">
+    <div class="sgm-hero">
+        <div class="sgm-hero-ico">${entry ? (curShift?.short || '?') : '<i class="fa-regular fa-calendar-plus"></i>'}</div>
+        <div class="sgm-hero-text">
+            <div class="sgm-hero-title">Мій робочий день</div>
+            <div class="sgm-hero-sub">${dateLabel}</div>
+        </div>
+        <button class="sgm-close" onclick="document.getElementById('sg-shift-modal').remove()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <div class="sgm-body">
+        ${entry ? `
+        <div class="sgm-warn">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+            <span>Керівник отримає сповіщення про будь-яку зміну цього дня — зняття зміни чи вибір іншого типу.</span>
+        </div>` : ''}
+
+        <div class="sgm-section-label sgm-section-label-row">
+            <span>Тип дня</span>
+            ${entry ? `<button class="sgm-remove-inline"
+                onclick="ScheduleGraphPage._confirmRemoveShift('${userId}','${date}')"
+                title="Зняти зміну"><i class="fa-solid fa-trash"></i> Зняти зміну</button>` : ''}
+        </div>
+        <div class="sgm-type-grid">
+            ${getShiftTypeEntries().map(([k, v]) => `
+            <button class="sg-stype sgm-type ${curType === k ? 'active' : ''}"
+                style="--sc:${v.color};--sb:${v.bg}"
+                onclick="ScheduleGraphPage._pickType('${k}',this)" data-type="${k}">
+                <span class="sgm-type-ico" style="background:${v.bg};color:${v.color}">${v.short}</span>
+                <span class="sgm-type-label">${v.label}</span>
+                <span class="sgm-type-check"><i class="fa-solid fa-check"></i></span>
+            </button>`).join('')}
+        </div>
+
+        <div class="sgm-section-label">Статус для колег</div>
+        <label class="sgm-toggle-row sgm-toggle-green">
+            <span class="sgm-toggle-ico">🙋</span>
+            <span class="sgm-toggle-text">
+                <span class="sgm-toggle-title">Можу вийти на підміну</span>
+                <span class="sgm-toggle-sub">Керівник побачить, що ви готові підмінити когось</span>
+            </span>
+            <input type="checkbox" id="sg-cansub" class="sgm-toggle-input" ${canSub ? 'checked' : ''}
+                onchange="ScheduleGraphPage._onFlagChange(this,'sg-needsub');ScheduleGraphPage._sgmSyncToggle(this)">
+            <span class="sgm-toggle-pill"><span class="sgm-toggle-knob"></span></span>
+        </label>
+        <label class="sgm-toggle-row sgm-toggle-red">
+            <span class="sgm-toggle-ico">🆘</span>
+            <span class="sgm-toggle-text">
+                <span class="sgm-toggle-title">Потрібна підміна</span>
+                <span class="sgm-toggle-sub">Позначте, якщо цього дня вам потрібна заміна</span>
+            </span>
+            <input type="checkbox" id="sg-needsub" class="sgm-toggle-input" ${needSub ? 'checked' : ''}
+                onchange="ScheduleGraphPage._onFlagChange(this,'sg-cansub');ScheduleGraphPage._sgmSyncToggle(this)">
+            <span class="sgm-toggle-pill"><span class="sgm-toggle-knob"></span></span>
+        </label>
+
+        <div class="sgm-field">
+            <label class="sgm-label">Примітка</label>
+            <textarea id="sg-notes" class="sgm-textarea" placeholder="Необов'язково...">${(entry?.notes?.startsWith('__')) ? '' : (entry?.notes || '')}</textarea>
+        </div>
+    </div>
+
+    <div class="sgm-footer">
+        <button class="sgm-btn-save" onclick="ScheduleGraphPage._saveEntry('${userId}','${date}',true)">
+            <i class="fa-regular fa-floppy-disk"></i> Зберегти
+        </button>
+        <button class="sgm-btn-cancel" onclick="document.getElementById('sg-shift-modal').remove()">Скасувати</button>
+    </div>
+</div>`;
+            document.body.appendChild(el);
+            el.addEventListener('click', e => { if (e.target === el) el.remove(); });
+            return;
+        }
+
         el.innerHTML = `
 <div class="sg-modal">
     <div class="sg-mhdr">
         <div>
-            <h3 style="margin:0">${isEmployee ? 'Мій робочий день' : (profile?.full_name || 'Співробітник')}</h3>
+            <h3 style="margin:0">${profile?.full_name || 'Співробітник'}</h3>
             <p style="margin:4px 0 0;color:var(--text-muted);font-size:.82rem;text-transform:capitalize">${dateLabel}</p>
         </div>
         <button class="sg-mclose" onclick="document.getElementById('sg-shift-modal').remove()">✕</button>
@@ -5963,22 +6143,6 @@ ${this._manCss()}
         </button>`).join('')}
     </div>
 
-    ${isEmployee ? `
-    <div class="sg-cansub-row">
-        <label class="sg-cansub-label">
-            <input type="checkbox" id="sg-cansub" class="sg-cansub-check" ${entry?.notes === '__sub__' ? 'checked' : ''}
-                onchange="ScheduleGraphPage._onFlagChange(this,'sg-needsub')">
-            <span class="sg-cansub-ico">🙋</span>
-            <span class="sg-cansub-txt">Можу вийти на підміну</span>
-        </label>
-        <label class="sg-cansub-label sg-needsub-label">
-            <input type="checkbox" id="sg-needsub" class="sg-cansub-check sg-needsub-check" ${entry?.notes === '__needsub__' ? 'checked' : ''}
-                onchange="ScheduleGraphPage._onFlagChange(this,'sg-cansub')">
-            <span class="sg-cansub-ico">🆘</span>
-            <span class="sg-cansub-txt">Потрібна підміна</span>
-        </label>
-    </div>` : ''}
-
     <div class="sg-notes-wrap">
         <label class="sg-notes-label">Примітка</label>
         <textarea id="sg-notes" class="sg-notes" placeholder="Необов'язково...">${(entry?.notes?.startsWith('__')) ? '' : (entry?.notes || '')}</textarea>
@@ -5986,18 +6150,31 @@ ${this._manCss()}
 
     <div class="sg-modal-actions">
         <button class="sg-btn-save"
-            onclick="ScheduleGraphPage._saveEntry('${userId}','${date}',${isEmployee})">
+            onclick="ScheduleGraphPage._saveEntry('${userId}','${date}',false)">
             <i class="fa-regular fa-floppy-disk"></i> Зберегти
         </button>
         <button class="sg-btn-cancel"
             onclick="document.getElementById('sg-shift-modal').remove()">Скасувати</button>
         ${entry ? `<button class="sg-del-btn"
-            onclick="ScheduleGraphPage._deleteEntry('${userId}','${date}',${isEmployee ? `'${ScheduleGraphEmployee._locId}'` : 'null'},${isEmployee})"
+            onclick="ScheduleGraphPage._deleteEntry('${userId}','${date}',null,false)"
             title="Видалити запис"><i class="fa-solid fa-trash"></i></button>` : ''}
     </div>
 </div>`;
         document.body.appendChild(el);
         el.addEventListener('click', e => { if (e.target === el) el.remove(); });
+    },
+
+    // Синхронізує колір hero-плашки модалки з активним тумблером
+    // (можу підмінити → зелений, потрібна підміна → червоний) для наочності.
+    _sgmSyncToggle(checkbox) {
+        const modal = document.querySelector('.sgm-modal');
+        if (!modal) return;
+        if (checkbox.id === 'sg-cansub' && checkbox.checked) { modal.style.setProperty('--em', '#10b981'); return; }
+        if (checkbox.id === 'sg-needsub' && checkbox.checked) { modal.style.setProperty('--em', '#ef4444'); return; }
+        // Знято прапорець — повертаємо колір активного типу зміни
+        const activeType = modal.querySelector('.sg-stype.active');
+        const color = activeType ? getComputedStyle(activeType).getPropertyValue('--sc').trim() : '';
+        modal.style.setProperty('--em', color || 'var(--primary)');
     },
 
     _pickType(type, btn) {
@@ -6096,8 +6273,12 @@ ${this._manCss()}
                 data.notes = '__sub_confirmed__';
                 ScheduleGraphEmployee._entries[date] = data;
                 await ScheduleGraphEmployee._resolveManagerHelp(
-                    date, mgrInfo.entryId, mgrInfo.managerId, mgrInfo.locName
+                    date, mgrInfo.entryId, mgrInfo.managerId, mgrInfo.locName, mgrInfo.locId
                 );
+            } else if (oldEnt) {
+                // Співробітник змінив УЖЕ ІСНУЮЧИЙ запис — попереджали в модалці,
+                // що керівник отримає сповіщення, тож надсилаємо його.
+                ScheduleGraphEmployee._notifyManagersOfChange(date, getShiftTypes()[type]?.label || type);
             }
             ScheduleGraphEmployee._render(ScheduleGraphEmployee._container);
         } else if (this._locId === 'all') {
@@ -6110,6 +6291,27 @@ ${this._manCss()}
         if (!isEmployee) this._propagateVacation(userId, date, type, locId);
         document.getElementById('sg-shift-modal')?.remove();
         Toast.success('Збережено');
+    },
+
+    // Підтвердження перед зняттям власної зміни (клік у модалці "Мій робочий
+    // день") — незворотна дія, керівник одразу отримає сповіщення.
+    _confirmRemoveShift(userId, date) {
+        document.getElementById('sg-remove-shift-confirm')?.remove();
+        const el = document.createElement('div');
+        el.id = 'sg-remove-shift-confirm';
+        el.className = 'center-confirm-backdrop';
+        const dateLabel = new Date(date + 'T00:00:00').toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' });
+        el.innerHTML = `
+<div class="center-confirm-box">
+    <h3>Зняти зміну?</h3>
+    <p>Запис на <strong>${Fmt.esc(dateLabel)}</strong> буде видалено, керівник отримає сповіщення про зміну графіка.</p>
+    <div class="center-confirm-actions">
+        <button class="btn btn-ghost" onclick="document.getElementById('sg-remove-shift-confirm').remove()">Скасувати</button>
+        <button class="btn btn-danger" onclick="document.getElementById('sg-remove-shift-confirm').remove();ScheduleGraphPage._deleteEntry('${userId}','${date}','${ScheduleGraphEmployee._locId}',true)">Так, зняти</button>
+    </div>
+</div>`;
+        document.body.appendChild(el);
+        el.addEventListener('click', e => { if (e.target === el) el.remove(); });
     },
 
     // isEmployeeCall — явний прапорець, бо locIdOverride тепер також передається
@@ -6130,9 +6332,22 @@ ${this._manCss()}
                 ? this._allAssignments.find(a => a.user_id === userId)?.profile?.full_name
                 : this._assignments.find(a => a.user_id === userId)?.profile?.full_name) || '';
 
-        await supabase.from('schedule_entries')
+        // .select() після .delete() повертає рядки, що дійсно видалились —
+        // без нього RLS, що заблокував DELETE (0 рядків підпало під USING),
+        // не кине помилку взагалі, і код мовчки вважав би видалення успішним,
+        // хоча запис лишався в БД і "повертався" після оновлення сторінки.
+        const { data: delData, error: delError } = await supabase.from('schedule_entries')
             .delete()
-            .eq('location_id', locId).eq('user_id', userId).eq('date', date);
+            .eq('location_id', locId).eq('user_id', userId).eq('date', date)
+            .select('id');
+        if (delError) {
+            Toast.error('Помилка', delError.message);
+            return;
+        }
+        if (oldEnt && !delData?.length) {
+            Toast.error('Не вдалося видалити', 'Немає прав на видалення цього запису');
+            return;
+        }
 
         await supabase.from('schedule_log').insert({
             location_id: locId, user_id: userId, date, employee_name: empName,
@@ -6154,6 +6369,11 @@ ${this._manCss()}
                 created_by: AppState.user.id,
                 link: `schedule-graph?view=employee`
             });
+        }
+
+        // Попереджали в модалці, що керівник дізнається про зняття зміни — надсилаємо.
+        if (isEmp && oldEnt) {
+            ScheduleGraphEmployee._notifyManagersOfChange(date, 'знято зміну', true);
         }
 
         if (isEmp) {
@@ -6515,7 +6735,7 @@ ${this._manCss()}
 .sg-mgr-help-btn:hover { background:color-mix(in srgb,#ef4444 20%,var(--bg-raised)); }
 
 /* Manager help request modal */
-.sg-mgr-help-box { max-width:420px; }
+.sg-modal.sg-mgr-help-box { max-width:420px;height:auto; }
 .sg-mgr-help-existing {
     margin-top:20px;padding-top:16px;border-top:1px solid var(--border);
 }
@@ -6684,12 +6904,18 @@ ${this._manCss()}
 .sg-loc-item-badge-shop { bottom:-3px;right:-4px;background:#fff;padding:0; }
 .sg-loc-item-badge-shop img { width:11px;height:11px;object-fit:contain;border-radius:50%; }
 .sg-loc-item-badge-currency { top:-3px;right:-4px;background:#059669; }
+.sg-loc-item-badge-coowner { top:-3px;left:-4px;background:#059669;font-size:.5rem; }
+.sg-loc-item-badge-sos { bottom:-3px;left:-4px;background:#ef4444;font-size:.5rem;animation:svcBadgePulse 1.6s ease-in-out infinite; }
 
 .sg-loc-item-code { line-height:1;white-space:nowrap; }
 
-.sg-loc-item-helpdot {
-    position:absolute;top:6px;left:6px;width:6px;height:6px;border-radius:50%;background:#ef4444;
+.sg-loc-item-needdot {
+    position:absolute;top:6px;right:6px;width:6px;height:6px;border-radius:50%;background:#ef4444;
     box-shadow:0 0 0 3px rgba(239,68,68,.18);animation:dotBlink 1.4s ease-in-out infinite;z-index:1;
+}
+.sg-loc-item-cansubdot {
+    position:absolute;top:6px;left:6px;width:6px;height:6px;border-radius:50%;background:#10b981;
+    box-shadow:0 0 0 3px rgba(16,185,129,.18);animation:dotBlink 1.4s ease-in-out infinite;z-index:1;
 }
 
 .sg-loc-drag-handle {
@@ -6791,6 +7017,7 @@ ${this._manCss()}
     50% { box-shadow:0 0 0 4px rgba(16,185,129,0); }
 }
 .sg-v2-loc-name { display:flex;align-items:center;gap:6px;font-weight:600;font-size:.95rem; }
+.sg-loc-name-coowner { display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:rgba(5,150,105,.14);color:#059669;font-size:.72rem;flex-shrink:0; }
 .sg-v2-loc-badges { display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:4px 0 2px; }
 .sg-v2-loc-row { display:flex;align-items:center;gap:8px;font-size:.8rem;color:var(--text-secondary); }
 .sg-v2-loc-val { font-weight:600;color:var(--text-primary); }
@@ -7315,6 +7542,25 @@ body:not(.light-theme) .sg-loc-scope-chips { box-shadow:0 2px 14px rgba(0,0,0,.2
     transition:all .15s;flex-shrink:0;
 }
 .sg-viewers-del:hover { background:#fee2e2;color:#ef4444;border-color:#fca5a5; }
+
+.sg-loc-coowner-picker { position:relative; }
+.sg-loc-coowner-chips { display:flex;flex-wrap:wrap;gap:6px; }
+.sg-loc-coowner-chips:not(:empty) { margin-bottom:8px; }
+.sg-loc-coowner-chip {
+    display:inline-flex;align-items:center;gap:6px;
+    padding:4px 6px 4px 10px;border-radius:20px;font-size:.78rem;font-weight:600;
+    background:color-mix(in srgb,#059669 12%,var(--bg-raised));color:#059669;
+    border:1px solid color-mix(in srgb,#059669 25%,transparent);
+}
+.sg-loc-coowner-chip-x {
+    width:16px;height:16px;border-radius:50%;border:none;cursor:pointer;
+    background:color-mix(in srgb,#059669 20%,transparent);color:#059669;font-size:.6rem;
+    display:flex;align-items:center;justify-content:center;padding:0;
+}
+.sg-loc-coowner-chip-x:hover { background:#059669;color:#fff; }
+.sg-loc-coowner-dropdown.sg-viewer-dropdown {
+    position:absolute;top:calc(100% + 4px);left:0;right:0;width:auto;
+}
 
 
 .sg-lock-btn-icon {
@@ -7913,6 +8159,138 @@ body:not(.light-theme) .sg-emp-warn { color:#f59e0b; }
 .sg-cansub-ico  { font-size:1.1rem; }
 .sg-cansub-txt  { flex:1; }
 
+/* ── "Мій робочий день" (ScheduleGraphEmployee) — окремий, самостійний дизайн,
+   не переплетений з менеджерською модалкою (.sg-modal/.sg-stype лишаються
+   для менеджера незмінними; тут лише функціональні id/класи спільні з
+   _pickType/_onFlagChange/_saveEntry, візуально — повністю новий шар). ──── */
+.sgm-modal {
+    background:var(--bg-surface);border:1px solid var(--border);border-radius:22px;
+    width:100%;max-width:560px;max-height:88vh;overflow:hidden;
+    display:flex;flex-direction:column;
+    box-shadow:0 28px 70px rgba(0,0,0,.4);
+    animation:scaleIn .22s cubic-bezier(.16,1,.3,1);
+}
+.sgm-hero {
+    position:relative;display:flex;align-items:center;gap:14px;flex-shrink:0;
+    padding:22px 22px 20px;
+    background:linear-gradient(135deg,color-mix(in srgb,var(--em) 16%,var(--bg-surface)),color-mix(in srgb,var(--em) 4%,var(--bg-surface)));
+    border-bottom:1px solid var(--border);
+    transition:background .25s ease;
+}
+.sgm-hero-ico {
+    width:46px;height:46px;border-radius:14px;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;
+    font-size:1rem;font-weight:800;color:#fff;background:var(--em);
+    box-shadow:0 6px 16px color-mix(in srgb,var(--em) 45%,transparent);
+    transition:background .25s ease,box-shadow .25s ease;
+}
+.sgm-hero-text { flex:1;min-width:0; }
+.sgm-hero-title { font-size:1.08rem;font-weight:800;color:var(--text-primary); }
+.sgm-hero-sub { font-size:.8rem;color:var(--text-muted);margin-top:2px;text-transform:capitalize; }
+.sgm-close {
+    position:absolute;top:16px;right:16px;width:30px;height:30px;border-radius:50%;
+    border:none;background:var(--bg-surface);color:var(--text-muted);cursor:pointer;
+    display:flex;align-items:center;justify-content:center;font-size:.82rem;
+    box-shadow:0 2px 8px rgba(0,0,0,.1);transition:all .15s;
+}
+.sgm-close:hover { color:var(--text-primary);transform:rotate(90deg); }
+
+.sgm-body { padding:18px 22px 4px;overflow-y:auto;flex:1; }
+.sgm-section-label {
+    font-size:.7rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;
+    color:var(--text-muted);margin:16px 0 8px;
+}
+.sgm-section-label:first-child { margin-top:0; }
+.sgm-section-label-row { display:flex;align-items:center;justify-content:space-between;gap:8px; }
+.sgm-remove-inline {
+    display:inline-flex;align-items:center;gap:7px;
+    border:1.5px solid rgba(239,68,68,.3);background:rgba(239,68,68,.08);
+    color:#ef4444;cursor:pointer;font-family:inherit;
+    font-size:.8rem;font-weight:700;text-transform:none;letter-spacing:0;
+    padding:7px 14px;border-radius:10px;transition:all .15s;
+}
+.sgm-remove-inline:hover { background:rgba(239,68,68,.18);border-color:#ef4444; }
+.sgm-remove-inline i { font-size:.78rem; }
+
+.sgm-warn {
+    display:flex;align-items:flex-start;gap:9px;
+    padding:11px 14px;border-radius:12px;margin-bottom:4px;
+    background:rgba(245,158,11,.1);border:1.5px solid rgba(245,158,11,.3);
+    color:#b45309;font-size:.8rem;font-weight:500;line-height:1.4;
+}
+body:not(.light-theme) .sgm-warn { color:#fbbf24; }
+.sgm-warn i { flex-shrink:0;margin-top:1px; }
+
+.sgm-type-grid { display:grid;grid-template-columns:1fr 1fr;gap:8px; }
+.sgm-type {
+    position:relative;display:flex;align-items:center;gap:10px;padding:11px 12px;
+    border-radius:13px;border:2px solid var(--border);background:var(--bg-raised);
+    color:var(--text-secondary);cursor:pointer;font-size:.85rem;font-weight:600;
+    transition:all .15s;text-align:left;overflow:hidden;
+}
+.sgm-type:hover { border-color:var(--sc,var(--primary));background:var(--sb,var(--bg-hover)); }
+.sgm-type.active { border-color:var(--sc,var(--primary));background:var(--sb);color:var(--sc);box-shadow:0 0 0 3px color-mix(in srgb,var(--sc) 14%,transparent); }
+.sgm-type-ico {
+    width:30px;height:30px;border-radius:9px;font-size:.78rem;font-weight:800;
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.sgm-type-label { flex:1;min-width:0; }
+.sgm-type-check {
+    width:16px;height:16px;border-radius:50%;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;font-size:.55rem;
+    background:var(--sc,var(--primary));color:#fff;opacity:0;transform:scale(.5);
+    transition:all .15s;
+}
+.sgm-type.active .sgm-type-check { opacity:1;transform:scale(1); }
+
+.sgm-toggle-row {
+    display:flex;align-items:center;gap:12px;padding:11px 14px;margin-bottom:8px;
+    border-radius:13px;border:1.5px solid var(--border);background:var(--bg-raised);
+    cursor:pointer;transition:background .15s,border-color .15s;user-select:none;
+}
+.sgm-toggle-green:has(.sgm-toggle-input:checked) { background:rgba(16,185,129,.07);border-color:rgba(16,185,129,.35); }
+.sgm-toggle-red:has(.sgm-toggle-input:checked) { background:rgba(239,68,68,.07);border-color:rgba(239,68,68,.35); }
+.sgm-toggle-ico { font-size:1.15rem;flex-shrink:0; }
+.sgm-toggle-text { flex:1;min-width:0; }
+.sgm-toggle-title { display:block;font-size:.86rem;font-weight:700;color:var(--text-primary); }
+.sgm-toggle-sub { display:block;font-size:.72rem;color:var(--text-muted);margin-top:1px;line-height:1.3; }
+.sgm-toggle-input { position:absolute;opacity:0;width:0;height:0; }
+.sgm-toggle-pill { position:relative;flex-shrink:0;width:40px;height:23px;border-radius:12px;background:var(--border);transition:background .2s; }
+.sgm-toggle-knob { position:absolute;top:2.5px;left:2.5px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.25);transition:transform .2s; }
+.sgm-toggle-green .sgm-toggle-input:checked ~ .sgm-toggle-pill { background:#10b981; }
+.sgm-toggle-red .sgm-toggle-input:checked ~ .sgm-toggle-pill { background:#ef4444; }
+.sgm-toggle-input:checked ~ .sgm-toggle-pill .sgm-toggle-knob { transform:translateX(17px); }
+
+.sgm-field { margin:14px 0 16px; }
+.sgm-label { display:block;font-size:.72rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px; }
+.sgm-textarea {
+    width:100%;min-height:60px;padding:10px 12px;border-radius:11px;box-sizing:border-box;
+    border:1.5px solid var(--border);background:var(--bg-raised);
+    color:var(--text-primary);font-size:.85rem;outline:none;resize:vertical;font-family:inherit;
+    transition:border-color .18s,box-shadow .18s;
+}
+.sgm-textarea:focus { border-color:var(--primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 15%,transparent); }
+
+.sgm-footer {
+    display:flex;gap:8px;align-items:center;flex-shrink:0;
+    padding:16px 22px;border-top:1px solid var(--border);background:var(--bg-hover);
+}
+.sgm-btn-save {
+    flex:1;height:44px;border-radius:12px;border:none;
+    background:linear-gradient(135deg,#10b981,#059669);color:#fff;
+    font-size:.9rem;font-weight:700;cursor:pointer;font-family:inherit;
+    display:flex;align-items:center;justify-content:center;gap:7px;
+    box-shadow:0 4px 14px rgba(16,185,129,.3);transition:transform .15s,box-shadow .15s;
+}
+.sgm-btn-save:hover { transform:translateY(-1px);box-shadow:0 6px 18px rgba(16,185,129,.4); }
+.sgm-btn-save:active { transform:translateY(0); }
+.sgm-btn-cancel {
+    height:44px;padding:0 16px;border-radius:12px;border:1.5px solid var(--border);
+    background:var(--bg-surface);color:var(--text-secondary);font-size:.86rem;font-weight:600;
+    cursor:pointer;font-family:inherit;transition:all .15s;
+}
+.sgm-btn-cancel:hover { border-color:var(--text-muted);color:var(--text-primary); }
+
 /* Flag-only cell (manager table) */
 .sg-flag-cell { font-size:1.1rem;line-height:1; }
 /* Cross-location day_off badge (first 3 chars of other location name) */
@@ -8076,7 +8454,7 @@ body:not(.light-theme) .sg-emp-warn { color:#f59e0b; }
 .sg-loc-hint { margin:0;font-size:.75rem;color:var(--text-muted);line-height:1.4; }
 
 /* Substitution resolve modal */
-.sg-resolve-modal { max-width:420px; }
+.sg-modal.sg-resolve-modal { max-width:420px;height:auto; }
 .sg-resolve-flag-banner {
     display:flex;align-items:flex-start;gap:12px;
     padding:14px 16px;border-radius:14px;margin-bottom:16px;
@@ -8563,13 +8941,20 @@ const ScheduleGraphEmployee = {
         await this._loadMyShiftConfig();
     },
 
+    // Раніше — ланцюжок ДО 7 послідовних await-запитів (кожен чекав попередній,
+    // хоча реально залежав лише від кількох ID, обчислених набагато раніше).
+    // На хмарному Supabase кожен раунд-тріп — це помітна мережева затримка,
+    // тому перемикання локації відчувалось повільним. Перегруповано на 3 рівні
+    // паралельних Promise.all — усе, що не залежить одне від одного, летить
+    // одночасно.
     async _loadEntries() {
         const p = n => String(n).padStart(2, '0');
         const dateFrom = `${this._year}-${p(this._month + 1)}-01`;
         const dateTo   = `${this._year}-${p(this._month + 1)}-${new Date(this._year, this._month + 1, 0).getDate()}`;
+        const myLocIds = this._assignments.map(a => a.locId).filter(Boolean);
 
-        // Load ALL entries for location (to show colleagues)
-        const [myRes, allRes, assignRes] = await Promise.all([
+        // Рівень 1 — нічого з цього не залежить від результатів іншого
+        const [myRes, allRes, assignRes, helpRes] = await Promise.all([
             supabase.from('schedule_entries').select('*')
                 .eq('location_id', this._locId).eq('user_id', AppState.user.id)
                 .gte('date', dateFrom).lte('date', dateTo),
@@ -8578,7 +8963,14 @@ const ScheduleGraphEmployee = {
                 .gte('date', dateFrom).lte('date', dateTo),
             supabase.from('schedule_assignments')
                 .select('id, user_id, employee_name, original_user_id, is_primary, pinned_months')
-                .eq('location_id', this._locId)
+                .eq('location_id', this._locId),
+            myLocIds.length
+                ? supabase.from('schedule_entries')
+                    .select('id, date, location_id, updated_by')
+                    .eq('notes', '__mgr_help__')
+                    .in('location_id', myLocIds)
+                    .gte('date', dateFrom).lte('date', dateTo)
+                : Promise.resolve({ data: [] }),
         ]);
 
         this._entries = {};
@@ -8587,14 +8979,26 @@ const ScheduleGraphEmployee = {
         this._locEntries = {};
         (allRes.data || []).forEach(e => { this._locEntries[`${e.user_id}_${e.date}`] = e; });
 
-        // Load profiles for colleagues
         const assigns = assignRes.data || [];
         const pIds = [...new Set(assigns.map(a => a.user_id).filter(Boolean))];
-        let profiles = {};
-        if (pIds.length) {
-            const { data: pData } = await supabase.from('profiles').select('id, full_name, job_position').in('id', pIds);
-            profiles = Object.fromEntries((pData || []).map(p => [p.id, p]));
-        }
+        const allUserIds = [...new Set(pIds.concat(AppState.user.id))];
+        const helpData = helpRes.data || [];
+        const helpLocIds = [...new Set(helpData.map(e => e.location_id))];
+
+        // Рівень 2 — залежить лише від ID, обчислених на рівні 1, між собою незалежні
+        const [profRes, helpLocsRes, crossAssignRes] = await Promise.all([
+            pIds.length
+                ? supabase.from('profiles').select('id, full_name, job_position').in('id', pIds)
+                : Promise.resolve({ data: [] }),
+            helpLocIds.length
+                ? supabase.from('schedule_locations').select('id, name').in('id', helpLocIds)
+                : Promise.resolve({ data: [] }),
+            allUserIds.length
+                ? supabase.from('schedule_assignments').select('user_id, location_id').in('user_id', allUserIds)
+                : Promise.resolve({ data: [] }),
+        ]);
+
+        const profiles = Object.fromEntries((profRes.data || []).map(pp => [pp.id, pp]));
         const withProfile = assigns.map(a => ({ ...a, profile: profiles[a.user_id] || null }));
 
         // Same visibility rule as the manager's table: primary always shows,
@@ -8615,60 +9019,44 @@ const ScheduleGraphEmployee = {
             return _hasEntries(a);
         });
 
+        const locMap = Object.fromEntries((helpLocsRes.data || []).map(l => [l.id, l.name]));
         this._managerHelpDates = {};
-        const myLocIds = this._assignments.map(a => a.locId).filter(Boolean);
-        if (myLocIds.length) {
-            const { data: helpData } = await supabase.from('schedule_entries')
-                .select('id, date, location_id, updated_by')
-                .eq('notes', '__mgr_help__')
-                .in('location_id', myLocIds)
-                .gte('date', dateFrom)
-                .lte('date', dateTo);
-
-            if ((helpData || []).length) {
-                const helpLocIds = [...new Set(helpData.map(e => e.location_id))];
-                const { data: helpLocs } = await supabase.from('schedule_locations')
-                    .select('id, name').in('id', helpLocIds);
-                const locMap = Object.fromEntries((helpLocs || []).map(l => [l.id, l.name]));
-                helpData.forEach(e => {
-                    if (!this._managerHelpDates[e.date])
-                        this._managerHelpDates[e.date] = {
-                            entryId:   e.id,
-                            locId:     e.location_id,
-                            locName:   locMap[e.location_id] || '',
-                            managerId: e.updated_by
-                        };
-                });
-            }
-        }
+        helpData.forEach(e => {
+            if (!this._managerHelpDates[e.date])
+                this._managerHelpDates[e.date] = {
+                    entryId:   e.id,
+                    locId:     e.location_id,
+                    locName:   locMap[e.location_id] || '',
+                    managerId: e.updated_by
+                };
+        });
 
         // Cross-location entries for all users shown in this table (to display other-loc badges)
         this._crossLocEntries = {};
-        const allUserIds = [...new Set(pIds.concat(AppState.user.id))];
-        if (allUserIds.length) {
-            const { data: crossAssigns } = await supabase.from('schedule_assignments')
-                .select('user_id, location_id').in('user_id', allUserIds);
-            const allLocIds = [...new Set((crossAssigns || []).map(a => a.location_id).filter(Boolean))];
-            const crossLocIds = allLocIds.filter(id => id && id !== this._locId);
-            if (crossLocIds.length) {
-                const { data: crossLocs } = await supabase.from('schedule_locations')
-                    .select('id, name').in('id', crossLocIds);
-                const crossLocMap = Object.fromEntries((crossLocs || []).map(l => [l.id, l.name]));
-                const { data: crossE } = await supabase.from('schedule_entries')
+        const crossAssigns = crossAssignRes.data || [];
+        const allLocIds = [...new Set(crossAssigns.map(a => a.location_id).filter(Boolean))];
+        const crossLocIds = allLocIds.filter(id => id && id !== this._locId);
+
+        if (crossLocIds.length) {
+            // Рівень 3 — залежить від crossLocIds, обчислених на рівні 2
+            const [crossLocsRes, crossERes] = await Promise.all([
+                supabase.from('schedule_locations').select('id, name').in('id', crossLocIds),
+                supabase.from('schedule_entries')
                     .select('user_id, date, location_id, shift_type, notes')
                     .in('user_id', allUserIds)
                     .in('location_id', crossLocIds)
-                    .gte('date', dateFrom).lte('date', dateTo);
-                (crossE || []).forEach(e => {
-                    if (!_isRealShift(e) && e.notes !== '__sub_confirmed__') return;
-                    const key = `${e.user_id}_${e.date}`;
-                    const locName = crossLocMap[e.location_id] || '';
-                    const existing = this._crossLocEntries[key];
-                    if (!existing || e.notes === '__sub_confirmed__') {
-                        this._crossLocEntries[key] = { locName, notes: e.notes, shift_type: e.shift_type };
-                    }
-                });
-            }
+                    .gte('date', dateFrom).lte('date', dateTo),
+            ]);
+            const crossLocMap = Object.fromEntries((crossLocsRes.data || []).map(l => [l.id, l.name]));
+            (crossERes.data || []).forEach(e => {
+                if (!_isRealShift(e) && e.notes !== '__sub_confirmed__') return;
+                const key = `${e.user_id}_${e.date}`;
+                const locName = crossLocMap[e.location_id] || '';
+                const existing = this._crossLocEntries[key];
+                if (!existing || e.notes === '__sub_confirmed__') {
+                    this._crossLocEntries[key] = { locName, notes: e.notes, shift_type: e.shift_type };
+                }
+            });
         }
     },
 
@@ -8716,7 +9104,7 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
             const canSub    = entry?.notes === '__sub__';
             const needSub   = entry?.notes === '__needsub__';
             const isSubConf = entry?.notes === '__sub_confirmed__';
-            const dispShift = isSubConf ? SUB_CONFIRMED : (canSub ? null : shift);
+            const dispShift = isSubConf ? _subConfirmedShift() : (canSub ? null : shift);
             const mgrHelpInfo = this._managerHelpDates[dateStr];
             const mgrHelp    = !!mgrHelpInfo;
             const mgrHelpLoc = mgrHelpInfo?.locName || '';
@@ -8748,13 +9136,16 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
         ${this._assignments.map(a => {
             const isSeller  = (a.node_type || '').endsWith('_seller');
             const hasCurExc = a.has_currency_exchange;
+            const hasHelp   = Object.values(this._managerHelpDates || {}).some(h => h.locId === a.locId);
             return `
         <button class="sg-loc-tab ${a.locId === this._locId ? 'active' : ''}" data-node="${a.node_type || ''}"
             onclick="ScheduleGraphEmployee._switchLoc('${a.locId}')">
+            ${hasHelp ? `<span class="sg-loc-tab-needdot" title="Потрібна підміна"></span>` : ''}
             <span class="sg-loc-tab-ico">
                 <i class="fa-solid fa-shop"></i>
                 ${isSeller ? `<span class="sg-loc-item-badge sg-loc-item-badge-shop"><img src="/icons/logo_tehnoscarb1.png" alt=""></span>` : ''}
                 ${hasCurExc ? `<span class="sg-loc-item-badge sg-loc-item-badge-currency">$</span>` : ''}
+                ${hasHelp ? `<span class="sg-loc-item-badge sg-loc-item-badge-sos" title="Потрібна підміна"><i class="fa-solid fa-bullhorn"></i></span>` : ''}
             </span>
             <span class="sge-tab-body">
                 <span class="sge-tab-name">${Fmt.esc(a.locName)} <span class="sge-tab-status${a.is_primary === false ? ' sge-tab-status-sub' : ''}">${a.is_primary === false ? 'підміна' : 'основний'}</span></span>
@@ -8784,6 +9175,7 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
 <div class="sg-page">
     ${locTabs}
 
+    <div class="sge-schedule-area">
     <div class="sg-controls" style="margin-bottom:16px">
         ${isManager ? `
         <button class="sg-my-sched-btn" onclick="ScheduleGraphPage.init(ScheduleGraphEmployee._container)"><i class="fa-solid fa-angle-left"></i> Керування графіком
@@ -8916,7 +9308,7 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
                         const subConfOther = crossLoc?.notes === '__sub_confirmed__';
                         const dispType = entry && !a.is_primary && entry.shift_type === 'work' ? 'day_off' : entry?.shift_type;
                         const baseShift = (!isSub && !isNeedSub && entry) ? getShiftTypes()[dispType] : null;
-                        const dispShift = isSubConf ? SUB_CONFIRMED : (subConfOther ? null : baseShift);
+                        const dispShift = isSubConf ? _subConfirmedShift() : (subConfOther ? null : baseShift);
                         const showCrossLoc = !dispShift && crossLoc && (!entry || isSub);
                         const cellTitle = isNeedSub ? 'Потрібна підміна'
                             : subConfOther ? `Підміна у «${crossLoc.locName}»`
@@ -8934,10 +9326,12 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
                             : showCrossLoc
                                 ? `<span class="sg-other-loc-badge">${Fmt.esc(crossLoc.locName.slice(0,3))}</span>`
                             : isSub && isMe ? `<span class="sge-sub-marker">✓</span>` : '';
-                        return `<td class="sg-cell${we?' we':''}${isToday?' sge-cell-today':''}${isMe?'':' sge-peer-cell'}${isSub&&isMe?' sge-cansub':''}"
+                        const mgrHelpHere = isMe && !!this._managerHelpDates?.[dateStr];
+                        return `<td class="sg-cell${we?' we':''}${isToday?' sge-cell-today':''}${isMe?'':' sge-peer-cell'}${isSub&&isMe?' sge-cansub':''}${mgrHelpHere?' sge-cell-mgrhelp':''}"
                             ${isMe ? `onclick="ScheduleGraphEmployee._openCell('${dateStr}')"` : ''}
-                            title="${Fmt.esc(cellTitle)}">
+                            title="${Fmt.esc(cellTitle)}${mgrHelpHere ? (cellTitle ? ' · ' : '') + '🆘 Керівник шукає підміну' : ''}">
                             ${badgeHtml}
+                            ${mgrHelpHere ? `<span class="sge-cell-sos-ico">🆘</span>` : ''}
                         </td>`;
                     }).join('')}
                     <td class="sg-td-sum">${totalDays}</td>
@@ -8948,6 +9342,7 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
         </div>
         <p class="sg-v2-hint" style="padding:8px 16px"><i class="fa-solid fa-circle-info"></i> Клікніть на свій рядок щоб додати або змінити запис</p>
     </div>
+    </div>
 </div>
 ${ScheduleGraphPage._styles()}${this._empStyles()}`;
     },
@@ -8956,26 +9351,82 @@ ${ScheduleGraphPage._styles()}${this._empStyles()}`;
         return `<style>
 /* Location switcher tabs (employee view) */
 .sg-loc-bar { display:block; }
+.sge-switch-loading {
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+    padding:4rem 1rem;text-align:center;
+}
+.sge-switch-loading-spinner {
+    width:38px;height:38px;border-radius:50%;
+    border:3px solid var(--border);border-top-color:var(--primary);
+    animation:sgeSwitchSpin .8s linear infinite;
+}
+@keyframes sgeSwitchSpin { to { transform:rotate(360deg); } }
+.sge-switch-loading-text { font-size:.9rem;font-weight:600;color:var(--text-secondary); }
+.sge-switch-loading-bar {
+    width:220px;height:4px;border-radius:4px;background:var(--bg-hover);overflow:hidden;position:relative;
+}
+.sge-switch-loading-bar-fill {
+    position:absolute;top:0;left:0;height:100%;width:40%;border-radius:4px;
+    background:linear-gradient(90deg,var(--primary),#6366f1);
+    animation:sgeSwitchLoadBar 1.1s ease-in-out infinite;
+}
+@keyframes sgeSwitchLoadBar {
+    0%   { transform:translateX(-100%); }
+    100% { transform:translateX(350%); }
+}
 .sg-loc-tabs { display:flex;gap:10px;flex-wrap:wrap; }
 .sg-loc-tab {
-    display:flex;align-items:center;gap:11px;
+    position:relative;display:flex;align-items:center;gap:11px;
     padding:10px 18px 10px 10px;border-radius:16px;
     border:1.5px solid var(--border);background:var(--bg-surface);
     cursor:pointer;transition:all .18s ease;text-align:left;
     box-shadow:0 2px 8px rgba(15,23,42,.04);
 }
 body:not(.light-theme) .sg-loc-tab { box-shadow:0 2px 10px rgba(0,0,0,.15); }
+.sg-loc-tab-needdot {
+    position:absolute;top:8px;right:8px;width:8px;height:8px;border-radius:50%;background:#ef4444;
+    box-shadow:0 0 0 3px rgba(239,68,68,.18);animation:dotBlink 1.4s ease-in-out infinite;z-index:1;
+}
 .sg-loc-tab-ico {
     position:relative;width:36px;height:36px;border-radius:11px;flex-shrink:0;
     display:flex;align-items:center;justify-content:center;font-size:1rem;
     background:var(--bg-hover);color:var(--text-muted);transition:all .18s ease;
 }
 .sg-loc-tab[data-node="technical"] .sg-loc-tab-ico,
-.sg-loc-tab[data-node="technical_seller"] .sg-loc-tab-ico { background:rgba(99,102,241,.16);color:#6366f1; }
-.sg-loc-tab[data-node="gold"] .sg-loc-tab-ico { background:rgba(245,158,11,.18);color:#d97706; }
+.sg-loc-tab[data-node="technical_seller"] .sg-loc-tab-ico {
+    background:linear-gradient(135deg,#4f9bff 0%,#2f6bfd 100%);color:#fff;
+    box-shadow:
+        inset 0 1px 2px rgba(255,255,255,.75),
+        inset 0 -2px 3px rgba(0,0,0,.25),
+        0 3px 10px rgba(47,107,253,.45),
+        0 0 0 1px rgba(255,255,255,.15);
+}
+.sg-loc-tab[data-node="gold"] .sg-loc-tab-ico {
+    background:linear-gradient(135deg,#fcd34d 0%,#d97706 100%);color:#fff;
+    box-shadow:
+        inset 0 1px 2px rgba(255,255,255,.75),
+        inset 0 -2px 3px rgba(0,0,0,.25),
+        0 3px 10px rgba(217,119,6,.45),
+        0 0 0 1px rgba(255,255,255,.15);
+}
 .sg-loc-tab[data-node="universal"] .sg-loc-tab-ico,
 .sg-loc-tab[data-node="universal_seller"] .sg-loc-tab-ico {
-    background:linear-gradient(135deg,#6366f1 0%,#6366f1 50%,#f59e0b 50%,#f59e0b 100%);color:#fff;
+    background:linear-gradient(135deg,#2f7bfd 0%,#4f9bff 38%,#fbbf24 62%,#ffb020 100%);
+    color:#fff;
+    box-shadow:
+        inset 0 1px 2px rgba(255,255,255,.75),
+        inset 0 -2px 3px rgba(0,0,0,.25),
+        0 3px 10px rgba(47,123,253,.5),
+        0 0 0 1px rgba(255,255,255,.15);
+}
+.sg-loc-tab[data-node="technical"] .sg-loc-tab-ico::after,
+.sg-loc-tab[data-node="technical_seller"] .sg-loc-tab-ico::after,
+.sg-loc-tab[data-node="gold"] .sg-loc-tab-ico::after,
+.sg-loc-tab[data-node="universal"] .sg-loc-tab-ico::after,
+.sg-loc-tab[data-node="universal_seller"] .sg-loc-tab-ico::after {
+    content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+    background:linear-gradient(135deg,rgba(255,255,255,.85) 0%,rgba(255,255,255,.3) 30%,rgba(255,255,255,0) 55%);
+    mix-blend-mode:overlay;
 }
 .sge-tab-body { display:flex;flex-direction:column;gap:3px;min-width:0; }
 .sge-tab-name { font-size:.92rem;font-weight:700;color:var(--text-primary); }
@@ -9134,12 +9585,21 @@ td.sge-cansub { background:rgba(99,102,241,.06);border-left:2px solid rgba(99,10
 .sge-day.sge-mgr-help {
     border-color:rgba(239,68,68,.5);
     box-shadow:0 0 0 2px rgba(239,68,68,.12);
+    animation:sgeMgrHelpPulse 1.6s ease-in-out infinite;
+}
+@keyframes sgeMgrHelpPulse {
+    0%,100% { box-shadow:0 0 0 2px rgba(239,68,68,.12); }
+    50%     { box-shadow:0 0 0 5px rgba(239,68,68,0); }
 }
 .sge-flag-badge-mgr {
     flex-direction:column;gap:2px;
     background:rgba(239,68,68,.1);color:#ef4444;
 }
-.sge-mgr-flag-ico { font-size:1.3rem;line-height:1; }
+.sge-mgr-flag-ico { font-size:1.3rem;line-height:1;display:inline-block;animation:sgeMgrIconPulse 1.4s ease-in-out infinite; }
+@keyframes sgeMgrIconPulse {
+    0%,100% { transform:scale(1); opacity:1; }
+    50%     { transform:scale(1.18); opacity:.7; }
+}
 .sge-mgr-flag-loc {
     font-size:.58rem;font-weight:700;color:#ef4444;opacity:.85;
     max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
@@ -9150,6 +9610,14 @@ td.sge-cansub { background:rgba(99,102,241,.06);border-left:2px solid rgba(99,10
     background:rgba(239,68,68,.12);border-radius:4px;
     padding:1px 4px;text-align:center;line-height:1.4;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    animation:sgeMgrHelpPulse 1.6s ease-in-out infinite;
+}
+
+/* SOS-запит керівника в комірці таблиці "мій рядок" */
+.sge-cell-mgrhelp { position:relative;background:rgba(239,68,68,.08) !important; }
+.sge-cell-sos-ico {
+    position:absolute;top:1px;right:1px;font-size:.7rem;line-height:1;
+    animation:sgeMgrIconPulse 1.4s ease-in-out infinite;pointer-events:none;
 }
 
 /* Flag-only badges in employee calendar */
@@ -9523,7 +9991,7 @@ ${ScheduleGraphPage._manCss()}
                 .eq('id', data.id);
             data.notes = '__sub_confirmed__';
             this._entries[date] = data;
-            await this._resolveManagerHelp(date, mgrInfo.entryId, mgrInfo.managerId, mgrInfo.locName);
+            await this._resolveManagerHelp(date, mgrInfo.entryId, mgrInfo.managerId, mgrInfo.locName, mgrInfo.locId);
         }
 
         this._render(this._container);
@@ -9645,6 +10113,27 @@ ${ScheduleGraphPage._manCss()}
         return [...new Set((data || []).map(l => l.created_by).filter(Boolean))];
     },
 
+    // Попереджаємо в модалці, що керівник дізнається про будь-яку зміну своєї
+    // зміни співробітником — тож дійсно надсилаємо сповіщення власнику
+    // ПОТОЧНОЇ (за контекстом дії) локації, а не всіх локацій співробітника.
+    async _notifyManagersOfChange(date, shiftLabel, isRemoval = false) {
+        try {
+            const loc = this._assignments.find(a => a.locId === this._locId);
+            if (!loc?.created_by) return;
+            const empName = AppState.profile?.full_name || 'Співробітник';
+            const dateLabel = new Date(date + 'T00:00:00').toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' });
+            await supabase.from('notifications').insert({
+                user_id: loc.created_by,
+                title: isRemoval ? '🗑️ Зміну знято' : '📅 Співробітник змінив графік',
+                message: isRemoval
+                    ? `${empName} зняв(ла) свою зміну на ${dateLabel} у «${loc.locName}»`
+                    : `${empName} змінив(ла) свій запис на ${dateLabel} (${shiftLabel}) у «${loc.locName}»`,
+                type: 'general', created_by: AppState.user.id,
+                link: `schedule-graph?loc=${this._locId}&date=${date}`
+            });
+        } catch (e) { /* non-critical */ }
+    },
+
     _showMgrHelpResponseModal(date, info, conflictLoc) {
         document.getElementById('sg-mgrhelp-resp-modal')?.remove();
         const dateLabel = new Date(date + 'T00:00:00')
@@ -9687,8 +10176,14 @@ ${ScheduleGraphPage._manCss()}
         el.addEventListener('click', e => { if (e.target === el) el.remove(); });
     },
 
-    async _resolveManagerHelp(date, entryId, managerId, locName) {
-        await supabase.from('schedule_entries').delete().eq('id', entryId);
+    // Видалення вихідного запису __mgr_help__ (належить user_id=КЕРІВНИКА) і
+    // призначення співробітника на локацію (якщо ще не призначений) вимагають
+    // прав власника локації — звичайний співробітник не проходить RLS
+    // ("sched_assign: write" / "sentry_delete"). Обидва кроки виконує
+    // SECURITY DEFINER RPC confirm_mgr_help_substitute (migration_v176).
+    async _resolveManagerHelp(date, entryId, managerId, locName, locId) {
+        const { error } = await supabase.rpc('confirm_mgr_help_substitute', { p_entry_id: entryId });
+        if (error) { Toast.error('Помилка', error.message); return false; }
         const empName   = AppState.profile?.full_name || 'Співробітник';
         const dateLabel = new Date(date + 'T00:00:00')
             .toLocaleDateString('uk-UA', { day:'numeric', month:'long' });
@@ -9698,37 +10193,26 @@ ${ScheduleGraphPage._manCss()}
                 title:      '✅ Підміна підтверджена',
                 message:    `${empName} підтвердив(ла), що може вийти ${dateLabel}${locName ? ' у «'+locName+'»' : ''}. Не забудьте зателефонувати!`,
                 type:       'general',
-                created_by: AppState.user.id
+                created_by: AppState.user.id,
+                link:       locId ? `schedule-graph?loc=${locId}&date=${date}` : 'schedule-graph'
             });
         }
         delete this._managerHelpDates[date];
+        return true;
     },
 
     async _confirmMgrHelp(date, entryId, locId, managerId, locName) {
         document.getElementById('sg-mgrhelp-resp-modal')?.remove();
 
-        // Ensure employee is assigned to the location
-        if (locId) {
-            const { error: ae } = await supabase.from('schedule_assignments')
-                .insert({ location_id: locId, user_id: AppState.user.id, created_by: AppState.user.id });
-            if (ae && ae.code !== '23505') { Toast.error('Помилка', ae.message); return; }
+        const ok = await this._resolveManagerHelp(date, entryId, managerId, locName, locId);
+        if (!ok) return;
 
-            // Set work shift (Р) for this employee — marked as confirmed substitution
-            const { data: newEntry, error: se } = await supabase.from('schedule_entries')
-                .upsert({
-                    location_id: locId, user_id: AppState.user.id, date,
-                    shift_type: 'work', shift_start: null, shift_end: null, notes: '__sub_confirmed__',
-                    updated_by: AppState.user.id, updated_at: new Date().toISOString()
-                }, { onConflict: 'location_id,user_id,date' })
-                .select().single();
-            if (se) { Toast.error('Помилка', se.message); return; }
-
-            if (locId === this._locId && newEntry) {
-                this._entries[date] = newEntry;
-            }
+        if (locId && locId === this._locId) {
+            const { data } = await supabase.from('schedule_entries')
+                .select('*').eq('location_id', locId).eq('user_id', AppState.user.id).eq('date', date).maybeSingle();
+            if (data) this._entries[date] = data;
         }
 
-        await this._resolveManagerHelp(date, entryId, managerId, locName);
         this._render(this._container);
         Toast.success('Відповідь надіслано керівнику');
     },
@@ -9739,8 +10223,25 @@ ${ScheduleGraphPage._manCss()}
     },
 
     _switchLoc(locId) {
+        if (locId === this._locId) return;
         this._locId = locId;
-        Promise.all([this._loadEntries(), this._loadMyShiftConfig()]).then(() => this._render(this._container));
+        this._showSwitchLoading();
+        Promise.all([this._loadEntries(), this._loadMyShiftConfig()])
+            .then(() => this._render(this._container));
+    },
+
+    // Інформативний прогрес перемикання локації прямо під розділом — замість
+    // глобального Loader (кружечок поверх усього екрану без контексту).
+    _showSwitchLoading() {
+        const wrap = this._container?.querySelector('.sge-schedule-area') || this._container;
+        if (!wrap) return;
+        const locName = this._assignments.find(a => a.locId === this._locId)?.locName || '';
+        wrap.innerHTML = `
+<div class="sge-switch-loading">
+    <div class="sge-switch-loading-spinner"></div>
+    <div class="sge-switch-loading-text">Завантажуємо графік${locName ? ` «${Fmt.esc(locName)}»` : ''}…</div>
+    <div class="sge-switch-loading-bar"><div class="sge-switch-loading-bar-fill"></div></div>
+</div>`;
     },
 
     async _loadMyShiftConfig() {

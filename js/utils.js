@@ -223,25 +223,50 @@ const UI = {
                     UI._showScheduleUpdatePopup(n);
                 } else if (n?.title?.includes('Готовий вийти на заміну')) {
                     UI._showSubAvailablePopup(n);
+                } else if (n?.title?.includes('Зміну знято')) {
+                    UI._showShiftRemovedPopup(n);
+                } else if (n?.title?.includes('Підміна підтверджена')) {
+                    UI._showSubConfirmedPopup(n);
+                } else if (n?.title?.includes('Потрібна підміна')) {
+                    UI._showMgrHelpPopup(n);
                 }
             })
             .subscribe();
     },
 
+    // Посилання виду "schedule-graph?loc=X&date=Y" (керівник) або
+    // "schedule-graph?view=employee&loc=X&date=Y" (співробітник) — раніше
+    // код завжди робив Router.go('scheduler'), а це ЗОВСІМ ІНША сторінка
+    // (SchedulerPage, окремий планувальник) — ScheduleGraphPage там навіть не
+    // змонтований, тому вибір локації нічого не робив. ScheduleGraphEmployee
+    // сам вміє прочитати ?loc з params при ініціалізації — керівнику ж
+    // доводиться вибирати локацію імперативно вже після монтування сторінки.
     _openSchedulerRequest(link) {
-        if (!link) { Router.go('scheduler'); return; }
-        const url = new URL('http://x?' + link.replace('scheduler?', ''));
+        const qs = link && link.includes('?') ? link.split('?')[1] : '';
+        const url = new URL('http://x?' + qs);
         const locId = url.searchParams.get('loc');
         const date  = url.searchParams.get('date');
-        Router.go('scheduler');
-        setTimeout(() => {
-            if (locId && typeof ScheduleGraphPage !== 'undefined') {
-                ScheduleGraphPage._selectLocation(locId);
-                if (date) {
-                    setTimeout(() => UI._highlightScheduleCell(date), 800);
+        const isEmployeeView = url.searchParams.get('view') === 'employee';
+
+        const targetParams = new URLSearchParams();
+        if (isEmployeeView) targetParams.set('view', 'employee');
+        if (locId) targetParams.set('loc', locId);
+        if (date) targetParams.set('date', date);
+        const qsStr = targetParams.toString();
+        Router.go('schedule-graph' + (qsStr ? '?' + qsStr : ''));
+
+        if (!isEmployeeView) {
+            setTimeout(() => {
+                if (locId && typeof ScheduleGraphPage !== 'undefined') {
+                    ScheduleGraphPage._selectLocation(locId);
+                    if (date) {
+                        setTimeout(() => UI._highlightScheduleCell(date), 800);
+                    }
                 }
-            }
-        }, 600);
+            }, 600);
+        } else if (date) {
+            setTimeout(() => UI._highlightScheduleCell(date), 900);
+        }
     },
 
     _highlightScheduleCell(date) {
@@ -326,6 +351,184 @@ const UI = {
             </div>`;
         document.body.appendChild(el);
         // No auto-close — persists until manager reads it
+    },
+
+    // Співробітник зняв власну зміну — керівнику показуємо стійке сповіщення
+    // в правому нижньому куті з кнопкою підтвердження (позначає прочитаним і
+    // закриває), окремо від "✕" (просто сховати, не позначаючи прочитаним).
+    _showShiftRemovedPopup(n) {
+        const id = 'sg-rm-popup-' + Date.now();
+        const el = document.createElement('div');
+        el.id = id;
+        el.style.cssText = `
+            position:fixed;bottom:${24 + document.querySelectorAll('[id^=sg-rm-popup]').length * 96}px;right:24px;z-index:9999;
+            background:var(--bg-surface);border:1px solid var(--border);
+            border-left:4px solid #ef4444;border-radius:14px;
+            padding:16px 18px;max-width:360px;
+            box-shadow:0 8px 32px rgba(0,0,0,.18);
+            animation:fadeSlideUp .25s cubic-bezier(.16,1,.3,1);
+        `;
+        el.innerHTML = `
+            <button onclick="document.getElementById('${id}').remove()"
+                title="Закрити"
+                style="position:absolute;top:8px;right:8px;width:22px;height:22px;border-radius:50%;border:none;background:transparent;color:var(--text-muted);font-size:.85rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s,color .15s"
+                onmouseover="this.style.background='var(--bg-hover)';this.style.color='var(--text-primary)'"
+                onmouseout="this.style.background='transparent';this.style.color='var(--text-muted)'">✕</button>
+            <div style="display:flex;align-items:flex-start;gap:10px;padding-right:16px">
+                <div style="width:36px;height:36px;border-radius:50%;background:rgba(239,68,68,.12);color:#ef4444;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0">🗑️</div>
+                <div style="flex:1;min-width:0">
+                    <div style="font-weight:700;font-size:.88rem;color:var(--text-primary);margin-bottom:4px">${Fmt.esc(n.title || '')}</div>
+                    <div style="font-size:.78rem;color:var(--text-muted);line-height:1.4">${Fmt.esc(n.message || '')}</div>
+                    <div style="display:flex;gap:8px;margin-top:10px">
+                        <button onclick="UI._openSchedulerRequest(${JSON.stringify(n.link||'').replace(/"/g,'&quot;')});UI._ackNotifPopup('${n.id}','${id}')"
+                            style="flex:1;padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text-secondary);font-size:.78rem;font-weight:600;cursor:pointer">
+                            Відкрити графік
+                        </button>
+                        <button onclick="UI._ackNotifPopup('${n.id}','${id}')"
+                            style="flex:1;padding:6px 10px;border-radius:8px;border:none;background:#ef4444;color:#fff;font-size:.78rem;font-weight:600;cursor:pointer">
+                            ✓ Підтвердити
+                        </button>
+                    </div>
+                </div>
+            </div>`;
+        document.body.appendChild(el);
+        // No auto-close — persists until manager confirms
+    },
+
+    async _ackNotifPopup(notifId, popupId) {
+        try { await API.notifications.markRead(notifId); } catch (e) { /* non-critical */ }
+        document.getElementById(popupId)?.remove();
+    },
+
+    // Співробітник остаточно підтвердив вихід на підміну (клік "✓ Можу вийти"
+    // у відповідь на активний запит керівника) — без оновлення сторінки
+    // показуємо керівнику стійке сповіщення в правому нижньому куті.
+    _showSubConfirmedPopup(n) {
+        const id = 'sg-subconf-popup-' + Date.now();
+        const el = document.createElement('div');
+        el.id = id;
+        el.style.cssText = `
+            position:fixed;bottom:${24 + document.querySelectorAll('[id^=sg-subconf-popup]').length * 96}px;right:24px;z-index:9999;
+            background:var(--bg-surface);border:1px solid var(--border);
+            border-left:4px solid #10b981;border-radius:14px;
+            padding:16px 18px;max-width:360px;
+            box-shadow:0 8px 32px rgba(0,0,0,.18);
+            animation:fadeSlideUp .25s cubic-bezier(.16,1,.3,1);
+        `;
+        el.innerHTML = `
+            <button onclick="document.getElementById('${id}').remove()"
+                title="Закрити"
+                style="position:absolute;top:8px;right:8px;width:22px;height:22px;border-radius:50%;border:none;background:transparent;color:var(--text-muted);font-size:.85rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s,color .15s"
+                onmouseover="this.style.background='var(--bg-hover)';this.style.color='var(--text-primary)'"
+                onmouseout="this.style.background='transparent';this.style.color='var(--text-muted)'">✕</button>
+            <div style="display:flex;align-items:flex-start;gap:10px;padding-right:16px">
+                <div style="width:36px;height:36px;border-radius:50%;background:rgba(16,185,129,.12);color:#10b981;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0">✅</div>
+                <div style="flex:1;min-width:0">
+                    <div style="font-weight:700;font-size:.88rem;color:var(--text-primary);margin-bottom:4px">${Fmt.esc(n.title || '')}</div>
+                    <div style="font-size:.78rem;color:var(--text-muted);line-height:1.4">${Fmt.esc(n.message || '')}</div>
+                    <div style="display:flex;gap:8px;margin-top:10px">
+                        <button onclick="UI._openSchedulerRequest(${JSON.stringify(n.link||'').replace(/"/g,'&quot;')});UI._ackNotifPopup('${n.id}','${id}')"
+                            style="flex:1;padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text-secondary);font-size:.78rem;font-weight:600;cursor:pointer">
+                            Відкрити графік
+                        </button>
+                        <button onclick="UI._ackNotifPopup('${n.id}','${id}')"
+                            style="flex:1;padding:6px 10px;border-radius:8px;border:none;background:#10b981;color:#fff;font-size:.78rem;font-weight:600;cursor:pointer">
+                            ✓ Підтвердити
+                        </button>
+                    </div>
+                </div>
+            </div>`;
+        document.body.appendChild(el);
+        // No auto-close — persists until manager confirms
+    },
+
+    // Керівник надіслав "🆘 Потрібна підміна" — співробітник бачить це відразу
+    // (без оновлення сторінки/графіка) у правому нижньому куті, з можливістю
+    // або перейти у свій графік, або одразу підтвердити вихід прямо з попапу.
+    _showMgrHelpPopup(n) {
+        const id = 'sg-mgrhelp-popup-' + Date.now();
+        const url = new URL('http://x?' + (n.link && n.link.includes('?') ? n.link.split('?')[1] : ''));
+        const locId = url.searchParams.get('loc');
+        const date  = url.searchParams.get('date');
+        const el = document.createElement('div');
+        el.id = id;
+        el.style.cssText = `
+            position:fixed;bottom:${24 + document.querySelectorAll('[id^=sg-mgrhelp-popup]').length * 106}px;right:24px;z-index:9999;
+            background:var(--bg-surface);border:1px solid var(--border);
+            border-left:4px solid #ef4444;border-radius:14px;
+            padding:16px 18px;max-width:360px;
+            box-shadow:0 8px 32px rgba(0,0,0,.18);
+            animation:fadeSlideUp .25s cubic-bezier(.16,1,.3,1);
+        `;
+        el.innerHTML = `
+            <button onclick="document.getElementById('${id}').remove()"
+                title="Закрити"
+                style="position:absolute;top:8px;right:8px;width:22px;height:22px;border-radius:50%;border:none;background:transparent;color:var(--text-muted);font-size:.85rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s,color .15s"
+                onmouseover="this.style.background='var(--bg-hover)';this.style.color='var(--text-primary)'"
+                onmouseout="this.style.background='transparent';this.style.color='var(--text-muted)'">✕</button>
+            <div style="display:flex;align-items:flex-start;gap:10px;padding-right:16px">
+                <div style="width:36px;height:36px;border-radius:50%;background:rgba(239,68,68,.12);color:#ef4444;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0">🆘</div>
+                <div style="flex:1;min-width:0">
+                    <div style="font-weight:700;font-size:.88rem;color:var(--text-primary);margin-bottom:4px">${Fmt.esc(n.title || '')}</div>
+                    <div style="font-size:.78rem;color:var(--text-muted);line-height:1.4">${Fmt.esc(n.message || '')}</div>
+                    <div id="${id}-status" style="font-size:.76rem;color:#ef4444;margin-top:6px;display:none"></div>
+                    <div style="display:flex;gap:8px;margin-top:10px">
+                        <button onclick="UI._openSchedulerRequest(${JSON.stringify(n.link || '').replace(/"/g, '&quot;')});UI._ackNotifPopup('${n.id}','${id}')"
+                            style="flex:1;padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text-secondary);font-size:.78rem;font-weight:600;cursor:pointer">
+                            Мій графік
+                        </button>
+                        ${locId && date ? `
+                        <button onclick="UI._confirmMgrHelpFromPopup('${locId}','${date}','${n.id}','${id}',this)"
+                            style="flex:1;padding:6px 10px;border-radius:8px;border:none;background:#ef4444;color:#fff;font-size:.78rem;font-weight:600;cursor:pointer">
+                            ✓ Можу вийти
+                        </button>` : ''}
+                    </div>
+                </div>
+            </div>`;
+        document.body.appendChild(el);
+        // No auto-close — persists until the employee reacts
+    },
+
+    // Швидке підтвердження виходу на підміну прямо з попапу — без переходу
+    // на сторінку графіка. Знаходить активний __mgr_help__ запис за
+    // локацією/датою й довіряє SECURITY DEFINER RPC (confirm_mgr_help_substitute,
+    // migration_v176) із самим призначенням/підтвердженням зміни, як і в
+    // ScheduleGraphEmployee._confirmMgrHelp.
+    async _confirmMgrHelpFromPopup(locId, date, notifId, popupId, btn) {
+        const statusEl = document.getElementById(`${popupId}-status`);
+        const showStatus = msg => { if (statusEl) { statusEl.textContent = msg; statusEl.style.display = 'block'; } };
+        if (btn) { btn.disabled = true; btn.style.opacity = '.6'; btn.textContent = '…'; }
+        try {
+            if (typeof ScheduleGraphPage !== 'undefined') {
+                const conflictLoc = await ScheduleGraphPage._getWorkConflictLoc(AppState.user.id, date, locId);
+                if (conflictLoc) {
+                    showStatus(`⚠️ Вже є зміна у «${conflictLoc}» цього дня`);
+                    if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.textContent = '✓ Можу вийти'; }
+                    return;
+                }
+            }
+            const { data: entry } = await supabase.from('schedule_entries')
+                .select('id, updated_by').eq('location_id', locId).eq('date', date).eq('notes', '__mgr_help__').maybeSingle();
+            if (!entry) {
+                showStatus('Запит уже закрито');
+                document.getElementById(popupId)?.remove();
+                return;
+            }
+            const { data: loc } = await supabase.from('schedule_locations').select('name').eq('id', locId).maybeSingle();
+            await ScheduleGraphEmployee._resolveManagerHelp(date, entry.id, entry.updated_by, loc?.name || '', locId);
+
+            // Якщо сторінка "Мій графік" зараз відкрита саме на цій локації — оновлюємо на льоту
+            if (typeof ScheduleGraphEmployee !== 'undefined' && ScheduleGraphEmployee._locId === locId && ScheduleGraphEmployee._container) {
+                await ScheduleGraphEmployee._loadEntries();
+                ScheduleGraphEmployee._render(ScheduleGraphEmployee._container);
+            }
+
+            Toast.success('Підтверджено!', 'Керівник отримає сповіщення');
+            await this._ackNotifPopup(notifId, popupId);
+        } catch (e) {
+            Toast.error('Помилка', e.message);
+            if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.textContent = '✓ Можу вийти'; }
+        }
     },
 
     _showScheduleRequestPopup(n) {

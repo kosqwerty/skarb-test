@@ -103,6 +103,8 @@ const App = {
         AnniversaryModal.check(profile);
         // День народження Скарбниці — 9 листопада
         CompanyBirthdayModal.check();
+        // Огляд дня при вході: справи з календаря, запити на підміну, сповіщення
+        DailyBriefModal.check(profile);
 
         // Розділи закриті для стажерів
         const requireNotIntern = () => {
@@ -1018,6 +1020,177 @@ const AnniversaryModal = {
         document.getElementById('anniversary-modal')?.remove();
         this._show(profile, years);
     }
+};
+
+// ================================================================
+// DailyBriefModal — при вході показує зведення на сьогодні: справи з
+// особистого календаря, активні запити керівника на підміну (для тих, хто
+// призначений на локації графіку) та непрочитані сповіщення. Раз на день,
+// закрити можна лише з додатковим підтвердженням.
+// ================================================================
+const DailyBriefModal = {
+    async check(profile) {
+        if (!profile) return;
+        const today = new Date();
+        const p = n => String(n).padStart(2, '0');
+        const todayStr = `${today.getFullYear()}-${p(today.getMonth() + 1)}-${p(today.getDate())}`;
+        const key = `db_brief_shown_${profile.id}_${todayStr}`;
+        if (localStorage.getItem(key)) return;
+        localStorage.setItem(key, '1');
+        setTimeout(() => this._show(todayStr), 1400);
+    },
+
+    // "🆘 Потрібна підміна" зберігається в schedule_entries під user_id
+    // КЕРІВНИКА (не співробітника) — шукаємо по location_id локацій, до яких
+    // призначений цей користувач (той самий підхід, що й
+    // ScheduleGraphEmployee._managerHelpDates / DashboardPage._loadMgrHelpDates).
+    async _loadMgrHelpRequests(todayStr) {
+        try {
+            const { data: assigns } = await supabase.from('schedule_assignments')
+                .select('location_id').eq('user_id', AppState.user.id);
+            const locIds = [...new Set((assigns || []).map(a => a.location_id).filter(Boolean))];
+            if (!locIds.length) return [];
+            const { data } = await supabase.from('schedule_entries')
+                .select('date, location_id, schedule_locations(name)')
+                .eq('notes', '__mgr_help__')
+                .in('location_id', locIds)
+                .gte('date', todayStr)
+                .order('date');
+            return data || [];
+        } catch (e) { return []; }
+    },
+
+    async _show(todayStr) {
+        const [evRes, helpList, notifRes] = await Promise.all([
+            supabase.from('personal_cal_events')
+                .select('id,title,time,end_time,color,is_important')
+                .eq('user_id', AppState.user.id)
+                .eq('date', todayStr)
+                .order('time', { nullsFirst: true })
+                .then(r => r).catch(() => ({ data: [] })),
+            this._loadMgrHelpRequests(todayStr),
+            supabase.from('notifications')
+                .select('id,title,message,created_at')
+                .eq('user_id', AppState.user.id)
+                .eq('is_read', false)
+                .order('created_at', { ascending: false })
+                .limit(6)
+                .then(r => r).catch(() => ({ data: [] })),
+        ]);
+
+        const evList    = evRes.data || [];
+        const notifList = notifRes.data || [];
+
+        // Якщо на сьогодні взагалі нічого показати — не турбуємо порожньою модалкою
+        if (!evList.length && !helpList.length && !notifList.length) return;
+        // Не показуємо поверх модалок днів народження/річниці — ці вже мають
+        // власний setTimeout і могли з'явитись першими.
+        if (document.getElementById('birthday-modal') || document.getElementById('anniversary-modal')) {
+            setTimeout(() => this._show(todayStr), 2000);
+            return;
+        }
+
+        const fmtTime = t => t ? t.slice(0, 5) : '';
+        const evHtml = evList.length ? evList.map(e => `
+            <div class="dbb-row">
+                <span class="dbb-row-dot" style="background:${e.color || '#6366f1'}"></span>
+                <span class="dbb-row-time">${e.time ? fmtTime(e.time) + (e.end_time ? '–' + fmtTime(e.end_time) : '') : 'Весь день'}</span>
+                <span class="dbb-row-title">${Fmt.esc(e.title)}</span>
+                ${e.is_important ? '<span class="dbb-row-flag">⭐</span>' : ''}
+            </div>`).join('') : `<div class="dbb-empty">Немає запланованих справ на сьогодні</div>`;
+
+        const helpHtml = helpList.length ? helpList.map(h => {
+            const d = new Date(h.date + 'T00:00:00').toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' });
+            return `<div class="dbb-row">
+                <span class="dbb-row-dot" style="background:#ef4444"></span>
+                <span class="dbb-row-time">${d}</span>
+                <span class="dbb-row-title">🆘 Потрібна підміна${h.schedule_locations?.name ? ' · ' + Fmt.esc(h.schedule_locations.name) : ''}</span>
+            </div>`;
+        }).join('') : `<div class="dbb-empty">Немає активних запитів на підміну</div>`;
+
+        const notifHtml = notifList.length ? notifList.map(n => `
+            <div class="dbb-row">
+                <span class="dbb-row-dot" style="background:#6366f1"></span>
+                <span class="dbb-row-title">${Fmt.esc(n.title)}</span>
+            </div>`).join('') : `<div class="dbb-empty">Немає непрочитаних сповіщень</div>`;
+
+        document.getElementById('db-brief-modal')?.remove();
+        const el = document.createElement('div');
+        el.id = 'db-brief-modal';
+        el.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:15000;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(6px);animation:fadeIn .25s ease';
+
+        const firstName = (AppState.profile?.full_name || '').split(' ')[1] || AppState.profile?.full_name || '';
+
+        el.innerHTML = `
+<style>
+.dbb-box{background:var(--bg-surface);border-radius:24px;padding:0;max-width:480px;width:100%;max-height:85vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 32px 100px rgba(0,0,0,.4)}
+.dbb-hero{position:relative;padding:1.6rem 1.6rem 1.2rem;background:linear-gradient(135deg,var(--primary),#6366f1);color:#fff;flex-shrink:0}
+.dbb-hero-title{font-size:1.25rem;font-weight:800}
+.dbb-hero-sub{font-size:.82rem;opacity:.85;margin-top:.2rem;text-transform:capitalize}
+.dbb-close{position:absolute;top:14px;right:14px;width:30px;height:30px;border-radius:50%;border:none;background:rgba(255,255,255,.18);color:#fff;cursor:pointer;font-size:.9rem;display:flex;align-items:center;justify-content:center;transition:background .15s}
+.dbb-close:hover{background:rgba(255,255,255,.32)}
+.dbb-body{padding:1.2rem 1.6rem;overflow-y:auto}
+.dbb-section{margin-bottom:1.1rem}
+.dbb-section:last-child{margin-bottom:0}
+.dbb-section-title{font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);margin-bottom:.5rem}
+.dbb-row{display:flex;align-items:center;gap:.6rem;padding:.5rem 0;border-bottom:1px solid var(--border)}
+.dbb-row:last-child{border-bottom:none}
+.dbb-row-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.dbb-row-time{font-size:.78rem;font-weight:700;color:var(--text-muted);flex-shrink:0;min-width:52px}
+.dbb-row-title{font-size:.86rem;color:var(--text-primary);flex:1;min-width:0}
+.dbb-row-flag{flex-shrink:0}
+.dbb-empty{font-size:.82rem;color:var(--text-muted);padding:.4rem 0}
+.dbb-footer{padding:1rem 1.6rem 1.4rem;border-top:1px solid var(--border);flex-shrink:0}
+</style>
+<div class="dbb-box">
+    <div class="dbb-hero">
+        <button class="dbb-close" onclick="DailyBriefModal._requestClose()" title="Закрити">✕</button>
+        <div class="dbb-hero-title">👋 Доброго дня${firstName ? ', ' + Fmt.esc(firstName) : ''}!</div>
+        <div class="dbb-hero-sub">Ваш огляд на сьогодні, ${new Date().toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' })}</div>
+    </div>
+    <div class="dbb-body">
+        <div class="dbb-section">
+            <div class="dbb-section-title">📅 Справи на сьогодні</div>
+            ${evHtml}
+        </div>
+        <div class="dbb-section">
+            <div class="dbb-section-title">🆘 Запити керівника на підміну</div>
+            ${helpHtml}
+        </div>
+        <div class="dbb-section">
+            <div class="dbb-section-title">🔔 Непрочитані сповіщення${notifList.length ? ` (${notifList.length})` : ''}</div>
+            ${notifHtml}
+        </div>
+    </div>
+    <div class="dbb-footer">
+        <button class="btn btn-primary btn-full" onclick="DailyBriefModal._requestClose()">Зрозуміло, дякую</button>
+    </div>
+</div>`;
+        document.body.appendChild(el);
+    },
+
+    _requestClose() {
+        document.getElementById('db-brief-confirm')?.remove();
+        const el = document.createElement('div');
+        el.id = 'db-brief-confirm';
+        el.className = 'center-confirm-backdrop';
+        el.innerHTML = `
+<div class="center-confirm-box">
+    <h3>Закрити огляд дня?</h3>
+    <p>Підтвердіть, що ви ознайомились зі своїми справами, запитами на підміну та сповіщеннями.</p>
+    <div class="center-confirm-actions">
+        <button class="btn btn-ghost" onclick="document.getElementById('db-brief-confirm').remove()">Скасувати</button>
+        <button class="btn btn-primary" onclick="DailyBriefModal._confirmClose()">Так, закрити</button>
+    </div>
+</div>`;
+        document.body.appendChild(el);
+        el.addEventListener('click', e => { if (e.target === el) e.stopPropagation(); });
+    },
+
+    _confirmClose() {
+        document.getElementById('db-brief-confirm')?.remove();
+        document.getElementById('db-brief-modal')?.remove();
+    },
 };
 
 // ================================================================

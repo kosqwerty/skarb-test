@@ -351,7 +351,7 @@ const DashboardPage = {
         const monthStart = `${_mn.getFullYear()}-${_pad(_mn.getMonth()+1)}-01`;
         const monthEnd   = _fmtLocal(new Date(_mn.getFullYear(), _mn.getMonth() + 1, 0));
 
-        const [enrollments, newsRes, birthdays, recentNotifs, calEvents, scheduleEntries, mgrHelpDates] = await Promise.all([
+        const [enrollments, newsRes, birthdays, recentNotifs, calEvents, scheduleEntries, mgrHelpDates, needSubDates] = await Promise.all([
             API.enrollments.getMyEnrollments().catch(() => []),
             API.news.getAll({ published: true, pageSize: 10 }).catch(() => ({ data: [] })),
             API.birthdays.getToday().catch(() => []),
@@ -369,9 +369,13 @@ const DashboardPage = {
                 .eq('user_id', AppState.user.id)
                 .gte('date', monthStart)
                 .lte('date', monthEnd)
-                .then(r => r.data || [])
+                // .neq('notes','__mgr_help__') НЕ використовуємо — в Postgres notes<>'x' дає
+                // NULL (не true) для звичайних змін, де notes IS NULL, і вони теж випадуть
+                // із вибірки. Фільтруємо в JS.
+                .then(r => (r.data || []).filter(e => e.notes !== '__mgr_help__'))
                 .catch(() => []),
             this._loadMgrHelpDates(monthStart, monthEnd),
+            this._loadNeedSubDates(monthStart, monthEnd),
         ]);
         const unreadCount = recentNotifs.length;
 
@@ -384,7 +388,7 @@ const DashboardPage = {
         ]);
 
         this._renderWelcome(enrollments, testsCount, surveysCount);
-        this._renderCalWidget(calEvents, today, scheduleEntries, mgrHelpDates);
+        this._renderCalWidget(calEvents, today, scheduleEntries, mgrHelpDates, needSubDates);
         this._renderImportantEvents(calEvents, today);
         this._renderAlerts(unackedDocs, recentNotifs);
         UI._setNotificationBadge(recentNotifs.length);
@@ -865,7 +869,7 @@ const DashboardPage = {
         requestAnimationFrame(() => { _sizeRcWrap(); setTimeout(_sizeRcWrap, 200); });
     },
 
-    _renderCalWidget(calEvents, today, scheduleEntries = [], mgrHelpDates = {}) {
+    _renderCalWidget(calEvents, today, scheduleEntries = [], mgrHelpDates = {}, needSubDates = {}) {
         const now = new Date();
         this._calViewYear   = now.getFullYear();
         this._calViewMonth  = now.getMonth();
@@ -874,6 +878,7 @@ const DashboardPage = {
         this._calViewShifts = {};
         scheduleEntries.forEach(e => { this._calViewShifts[e.date] = e; });
         this._calViewMgrHelp = mgrHelpDates || {};
+        this._calViewNeedSub = needSubDates || {};
         this._drawCalWidget();
     },
 
@@ -897,6 +902,99 @@ const DashboardPage = {
                 if (!map[e.date]) map[e.date] = { locId: e.location_id, locName: e.schedule_locations?.name || '', managerId: e.updated_by };
             });
             return map;
+        } catch (e) { return {}; }
+    },
+
+    // Для керівника — які дати в цьому місяці мають хоч одну ЙОГО локацію без
+    // жодної реальної зміни серед видимих співробітників (той самий критерій,
+    // що й ScheduleGraphPage._loadNeedSubLocIds/.sg-cell-no-work, але по
+    // датах, а не по локаціях — для позначки в особистому календарі).
+    //
+    // ВАЖЛИВО: не покладаємось на getShiftTypes()/_cachedShiftTypes зі
+    // schedule-graph.js — це модульний кеш, який заповнюється лише якщо
+    // сторінка графіка вже відкривалась у цій сесії. На дашборді напряму він
+    // порожній, тому кастомні типи змін керівника (напр. "Технік"/"Золотник")
+    // вважались "не реальною зміною" — звідси хибні "потрібна підміна" і
+    // РІЗНІ результати залежно від того, заходили на графік чи ні. Тягнемо
+    // конфіг напряму з schedule_shift_config.
+    async _loadNeedSubDates(dateFrom, dateTo) {
+        if (!AppState.canSchedule?.()) return {};
+        try {
+            const [{ data: locs }, { data: cfgRow }] = await Promise.all([
+                supabase.from('schedule_locations')
+                    .select('id, name').eq('created_by', AppState.user.id).is('deleted_at', null),
+                supabase.from('schedule_shift_config')
+                    .select('config').eq('user_id', AppState.user.id).maybeSingle()
+            ]);
+            const locIds = (locs || []).map(l => l.id);
+            const locNameMap = Object.fromEntries((locs || []).map(l => [l.id, l.name]));
+            if (!locIds.length) return {};
+
+            const customTypes = cfgRow?.config || {};
+            const BUILTIN = ['work', 'day_off', 'vacation', 'sick'];
+            const isRealShiftType = t => {
+                if (!t) return false;
+                if (t === 'work' || t === 'day_off') return true;
+                if (BUILTIN.includes(t)) return false;
+                const ct = customTypes[t];
+                return !!ct && ct.isWork !== false;
+            };
+
+            const [{ data: assigns }, { data: entries }] = await Promise.all([
+                supabase.from('schedule_assignments')
+                    .select('location_id, user_id, original_user_id, is_primary, pinned_months')
+                    .in('location_id', locIds),
+                supabase.from('schedule_entries')
+                    .select('location_id, user_id, date, shift_type, notes')
+                    .in('location_id', locIds).gte('date', dateFrom).lte('date', dateTo)
+            ]);
+
+            const entriesByLoc = {};
+            (entries || []).forEach(e => {
+                if (!entriesByLoc[e.location_id]) entriesByLoc[e.location_id] = {};
+                entriesByLoc[e.location_id][`${e.user_id}_${e.date}`] = e;
+            });
+            const assignsByLoc = {};
+            (assigns || []).forEach(a => (assignsByLoc[a.location_id] = assignsByLoc[a.location_id] || []).push(a));
+
+            const now = new Date();
+            const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+            const isRealShift = e => e && isRealShiftType(e.shift_type) && !['__sub__', '__needsub__'].includes(e.notes);
+
+            const dates = {};
+            const p = n => String(n).padStart(2, '0');
+            const allDates = [];
+            for (let d = new Date(dateFrom); d <= new Date(dateTo); d.setDate(d.getDate() + 1)) {
+                allDates.push(`${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`);
+            }
+
+            locIds.forEach(locId => {
+                const locEntries = entriesByLoc[locId] || {};
+                const _hasEntries = a => {
+                    const lid = a.user_id || a.original_user_id;
+                    return lid && allDates.some(ds => locEntries[`${lid}_${ds}`]);
+                };
+                const visible = (assignsByLoc[locId] || []).filter(a => {
+                    if (!a.user_id) return _hasEntries(a);
+                    if (a.is_primary) return true;
+                    if ((a.pinned_months || []).includes(monthKey)) return true;
+                    return _hasEntries(a);
+                });
+                if (!visible.length) return;
+                const datesWithWork = new Set();
+                visible.forEach(a => {
+                    const lid = a.user_id || a.original_user_id;
+                    if (!lid) return;
+                    allDates.forEach(ds => { if (isRealShift(locEntries[`${lid}_${ds}`])) datesWithWork.add(ds); });
+                });
+                allDates.forEach(ds => {
+                    if (!datesWithWork.has(ds)) {
+                        if (!dates[ds]) dates[ds] = [];
+                        dates[ds].push({ id: locId, name: locNameMap[locId] || '' });
+                    }
+                });
+            });
+            return dates;
         } catch (e) { return {}; }
     },
 
@@ -1001,7 +1099,7 @@ const DashboardPage = {
         const _fl = d => `${d.getFullYear()}-${_p2(d.getMonth()+1)}-${_p2(d.getDate())}`;
         const ms = `${this._calViewYear}-${_p2(this._calViewMonth+1)}-01`;
         const me = _fl(new Date(this._calViewYear, this._calViewMonth + 1, 0));
-        const [{ data }, shiftRes, mgrHelpDates] = await Promise.all([
+        const [{ data }, shiftRes, mgrHelpDates, needSubDates] = await Promise.all([
             supabase.from('personal_cal_events')
                 .select('id,title,date,time,end_time,color,is_important,is_done,acked_date,repeat_type,remind_before_days')
                 .eq('user_id', AppState.user.id)
@@ -1011,13 +1109,15 @@ const DashboardPage = {
                 .select('date,shift_type,notes,location_id,schedule_locations(name)')
                 .eq('user_id', AppState.user.id)
                 .gte('date', ms).lte('date', me)
-                .then(r => r.data || []).catch(() => []),
-            this._loadMgrHelpDates(ms, me)
+                .then(r => (r.data || []).filter(e => e.notes !== '__mgr_help__')).catch(() => []),
+            this._loadMgrHelpDates(ms, me),
+            this._loadNeedSubDates(ms, me)
         ]);
         this._calViewEvents = data || [];
         this._calViewShifts = {};
         (Array.isArray(shiftRes) ? shiftRes : []).forEach(e => { this._calViewShifts[e.date] = e; });
         this._calViewMgrHelp = mgrHelpDates || {};
+        this._calViewNeedSub = needSubDates || {};
         this._drawCalWidget();
     },
 
@@ -1085,8 +1185,9 @@ const DashboardPage = {
         if (!el) return;
         const _prevOpen = { today: document.getElementById('db-cup-today-body')?.classList.contains('open') ?? true, future: document.getElementById('db-cup-future-body')?.classList.contains('open') ?? true };
 
-        const { _calViewYear: year, _calViewMonth: month, _calViewEvents: calEvents, _calViewToday: today, _calViewShifts: shifts = {}, _calViewMgrHelp: mgrHelp = {} } = this;
+        const { _calViewYear: year, _calViewMonth: month, _calViewEvents: calEvents, _calViewToday: today, _calViewShifts: shifts = {}, _calViewMgrHelp: mgrHelp = {}, _calViewNeedSub: needSubMap = {} } = this;
         const now = new Date();
+        const isManager = !!AppState.canSchedule?.();
 
         // Build event map by date
         const evByDate = {};
@@ -1127,10 +1228,20 @@ const DashboardPage = {
             vacation: { color: '#f59e0b', label: 'Відпустка' },
             sick:     { color: '#ef4444', label: 'Лікарняний' },
         };
+        // Керівник може мати власні кастомні типи змін (schedule_shift_config,
+        // напр. "Технік"/"Золотник") — _shiftMeta знає лише 4 вбудовані. Без
+        // фолбеку крапка на дашборді просто зникала для будь-якого кастомного
+        // типу, хоча запис у графіку реально є. Колір беремо узагальнений,
+        // бо точний конфіг конкретного керівника тут недоступний.
+        const shiftMetaFor = t => _shiftMeta[t] || { color: '#6366f1', label: 'Зміна' };
         const gridHtml = cells.map(c => {
             const evs = c.other ? [] : (evByDate[c.date] || []);
             const shift = !c.other ? shifts[c.date] : null;
             const help  = !c.other ? mgrHelp[c.date] : null;
+            // needSub — для керівника: список ЙОГО локацій без покриття цього дня
+            // (авто-виявлено), незалежно від того, чи надсилався запит "🆘".
+            const needSubLocs = !c.other && isManager ? (needSubMap[c.date] || []).filter(Boolean) : [];
+            const needSub = needSubLocs.length > 0;
             const isToday = c.date === today;
             const hasEv = !c.other && (evs.length || shift);
             const cls = ['db-cday',
@@ -1139,16 +1250,30 @@ const DashboardPage = {
                 c.other ? 'db-othm' : ''
             ].filter(Boolean).join(' ');
             const tips = [...evs.map(e => Fmt.esc(e.title))];
-            if (shift && _shiftMeta[shift.shift_type]) tips.push(_shiftMeta[shift.shift_type].label);
+            if (shift) tips.push(shiftMetaFor(shift.shift_type).label);
             if (help) tips.push(`🆘 Потрібна підміна${help.locName ? ' · ' + Fmt.esc(help.locName) : ''}`);
+            if (needSub) tips.push(`🆘 Потрібна підміна: ${needSubLocs.map(l => Fmt.esc(l.name)).join(', ')}`);
             const tipAttr = tips.length ? ` title="${tips.join(', ')}"` : '';
+            // Для співробітника клік на день із запитом керівника відкриває
+            // підтвердження виходу на заміну. Для КЕРІВНИКА той самий сценарій
+            // не має сенсу (він не підміняє сам себе) — замість цього переходимо
+            // одразу в ту локацію, де бракує покриття (help.locId, або перша з
+            // needSubLocs, якщо запиту не було, лише авто-виявлена дірка).
+            const needSubTargetLoc = needSubLocs[0]?.id;
+            const mgrTargetLink = (help?.locId || needSubTargetLoc)
+                ? `schedule-graph?loc=${help?.locId || needSubTargetLoc}&date=${c.date}` : 'schedule-graph';
+            // Router.go('schedule-graph?loc=...') сам собою не переносить в
+            // конкретну локацію — ScheduleGraphPage.init() не читає query
+            // параметри маршруту. UI._openSchedulerRequest вже вміє коректно
+            // перейти й після монтування сторінки викликати _selectLocation.
             const dayOnclick = c.other ? `Router.go('my-calendar')`
-                : help ? `DashboardPage._confirmSubstituteModal('${c.date}')`
+                : (help && !isManager) ? `DashboardPage._confirmSubstituteModal('${c.date}')`
+                : (isManager && (help || needSub)) ? `DashboardPage._showNeedSubDayModal('${c.date}',${JSON.stringify(mgrTargetLink).replace(/"/g, '&quot;')})`
                 : `DashboardPage._calDayClick('${c.date}')`;
-            const shiftDot = shift && _shiftMeta[shift.shift_type]
-                ? `<span style="position:absolute;bottom:2px;left:50%;transform:translateX(-50%);width:5px;height:5px;border-radius:50%;background:${_shiftMeta[shift.shift_type].color}"></span>`
+            const shiftDot = shift
+                ? `<span style="position:absolute;bottom:2px;left:50%;transform:translateX(-50%);width:5px;height:5px;border-radius:50%;background:${shiftMetaFor(shift.shift_type).color}"></span>`
                 : '';
-            const helpDot = help
+            const helpDot = (help || needSub)
                 ? `<span style="position:absolute;top:1px;right:1px;width:6px;height:6px;border-radius:50%;background:#ef4444;box-shadow:0 0 0 2px rgba(239,68,68,.2);animation:dbMgrHelpPulse 1.4s ease-in-out infinite"></span>`
                 : '';
             return `<div class="${cls}" style="position:relative" onclick="${dayOnclick}"${tipAttr}>${c.day}${shiftDot}${helpDot}</div>`;
@@ -1170,8 +1295,7 @@ const DashboardPage = {
 
         // Shift chip helper
         const shiftChipHtml = shift => {
-            const sm = _shiftMeta[shift.shift_type];
-            if (!sm) return '';
+            const sm = shiftMetaFor(shift.shift_type);
             const loc = shift.schedule_locations?.name ? ` · ${Fmt.esc(shift.schedule_locations.name)}` : '';
             return `<span class="db-cup-chip" style="background:${sm.color}22;color:${sm.color}"><span class="db-cup-chip-dot" style="background:${sm.color}"></span>${sm.label}${loc}</span>`;
         };
@@ -1704,6 +1828,31 @@ const DashboardPage = {
             document.head.insertAdjacentHTML('beforeend', MyCalendarPage._styles().replace('<style>', '<style id="mc-styles">'));
         }
         MyCalendarPage._openEventModal(date);
+    },
+
+    // Клік керівника на день із дірою в графіку/активним SOS — замість
+    // одразу переходити в графік, питаємо: додати особисту подію на цей день
+    // (наприклад нагадування) чи одразу відкрити графік і закрити діру.
+    _showNeedSubDayModal(date, link) {
+        document.getElementById('db-needsub-modal')?.remove();
+        const help = this._calViewMgrHelp?.[date];
+        const gapLocs = (this._calViewNeedSub?.[date] || []).filter(Boolean);
+        const locNames = help?.locName ? [help.locName] : gapLocs.map(l => l.name).filter(Boolean);
+        const dLabel = new Date(date + 'T00:00:00').toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' });
+        const el = document.createElement('div');
+        el.id = 'db-needsub-modal';
+        el.className = 'center-confirm-backdrop';
+        el.innerHTML = `
+<div class="center-confirm-box">
+    <h3>🆘 ${Fmt.esc(dLabel)}</h3>
+    <p>${locNames.length ? `Потрібна підміна: <strong>${locNames.map(n => Fmt.esc(n)).join(', ')}</strong>` : 'Цього дня потрібна підміна.'} Що зробити?</p>
+    <div class="center-confirm-actions">
+        <button class="btn btn-ghost" onclick="document.getElementById('db-needsub-modal').remove();DashboardPage._calDayClick('${date}')">Додати подію</button>
+        <button class="btn btn-primary" onclick="document.getElementById('db-needsub-modal').remove();UI._openSchedulerRequest(${JSON.stringify(link).replace(/"/g, '&quot;')})">Відкрити графік</button>
+    </div>
+</div>`;
+        document.body.appendChild(el);
+        el.addEventListener('click', e => { if (e.target === el) el.remove(); });
     },
 
     // Клік на день з активним запитом керівника "🆘 Потрібна підміна" —

@@ -1060,7 +1060,96 @@ const DailyBriefModal = {
         } catch (e) { return []; }
     },
 
+    // Для КЕРІВНИКА _loadMgrHelpRequests завжди порожній — він шукає локації
+    // через schedule_assignments (де користувач співробітник), а керівник
+    // зазвичай не призначений сам собі. Тут — ті самі авто-виявлені "дірки"
+    // без покриття зміни (як DashboardPage._loadNeedSubDates), по локаціях,
+    // які керівник ВЛАСНИК (created_by), на найближчі 14 днів.
+    async _loadCoverageGaps(todayStr) {
+        try {
+            const p = n => String(n).padStart(2, '0');
+            const [{ data: locs }, { data: cfgRow }] = await Promise.all([
+                supabase.from('schedule_locations')
+                    .select('id, name').eq('created_by', AppState.user.id).is('deleted_at', null),
+                supabase.from('schedule_shift_config')
+                    .select('config').eq('user_id', AppState.user.id).maybeSingle()
+            ]);
+            const locIds = (locs || []).map(l => l.id);
+            const locNameMap = Object.fromEntries((locs || []).map(l => [l.id, l.name]));
+            if (!locIds.length) return [];
+
+            const customTypes = cfgRow?.config || {};
+            const BUILTIN = ['work', 'day_off', 'vacation', 'sick'];
+            const isRealShiftType = t => {
+                if (!t) return false;
+                if (t === 'work' || t === 'day_off') return true;
+                if (BUILTIN.includes(t)) return false;
+                const ct = customTypes[t];
+                return !!ct && ct.isWork !== false;
+            };
+            const isRealShift = e => e && isRealShiftType(e.shift_type) && !['__sub__', '__needsub__'].includes(e.notes);
+
+            const start = new Date(todayStr + 'T00:00:00');
+            const end = new Date(start); end.setDate(end.getDate() + 13);
+            const dateTo = `${end.getFullYear()}-${p(end.getMonth() + 1)}-${p(end.getDate())}`;
+
+            const [{ data: assigns }, { data: entries }] = await Promise.all([
+                supabase.from('schedule_assignments')
+                    .select('location_id, user_id, original_user_id, is_primary, pinned_months')
+                    .in('location_id', locIds),
+                supabase.from('schedule_entries')
+                    .select('location_id, user_id, date, shift_type, notes')
+                    .in('location_id', locIds).gte('date', todayStr).lte('date', dateTo)
+            ]);
+
+            const entriesByLoc = {};
+            (entries || []).forEach(e => {
+                if (!entriesByLoc[e.location_id]) entriesByLoc[e.location_id] = {};
+                entriesByLoc[e.location_id][`${e.user_id}_${e.date}`] = e;
+            });
+            const assignsByLoc = {};
+            (assigns || []).forEach(a => (assignsByLoc[a.location_id] = assignsByLoc[a.location_id] || []).push(a));
+
+            const now = new Date();
+            const monthKey = `${now.getFullYear()}-${p(now.getMonth() + 1)}`;
+            const allDates = [];
+            for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+                allDates.push(`${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`);
+            }
+
+            const gaps = [];
+            locIds.forEach(locId => {
+                const locEntries = entriesByLoc[locId] || {};
+                const _hasEntries = a => {
+                    const lid = a.user_id || a.original_user_id;
+                    return lid && allDates.some(ds => locEntries[`${lid}_${ds}`]);
+                };
+                const visible = (assignsByLoc[locId] || []).filter(a => {
+                    if (!a.user_id) return _hasEntries(a);
+                    if (a.is_primary) return true;
+                    if ((a.pinned_months || []).includes(monthKey)) return true;
+                    return _hasEntries(a);
+                });
+                if (!visible.length) return;
+                const datesWithWork = new Set();
+                visible.forEach(a => {
+                    const lid = a.user_id || a.original_user_id;
+                    if (!lid) return;
+                    allDates.forEach(ds => { if (isRealShift(locEntries[`${lid}_${ds}`])) datesWithWork.add(ds); });
+                });
+                allDates.forEach(ds => {
+                    if (!datesWithWork.has(ds)) {
+                        gaps.push({ date: ds, schedule_locations: { name: locNameMap[locId] || '' } });
+                    }
+                });
+            });
+            gaps.sort((a, b) => a.date.localeCompare(b.date));
+            return gaps.slice(0, 10);
+        } catch (e) { return []; }
+    },
+
     async _show(todayStr) {
+        const isManager = !!AppState.canSchedule?.();
         const [evRes, helpList, notifRes] = await Promise.all([
             supabase.from('personal_cal_events')
                 .select('id,title,time,end_time,color,is_important')
@@ -1068,7 +1157,7 @@ const DailyBriefModal = {
                 .eq('date', todayStr)
                 .order('time', { nullsFirst: true })
                 .then(r => r).catch(() => ({ data: [] })),
-            this._loadMgrHelpRequests(todayStr),
+            isManager ? this._loadCoverageGaps(todayStr) : this._loadMgrHelpRequests(todayStr),
             supabase.from('notifications')
                 .select('id,title,message,created_at')
                 .eq('user_id', AppState.user.id)
@@ -1106,7 +1195,7 @@ const DailyBriefModal = {
                 <span class="dbb-row-time">${d}</span>
                 <span class="dbb-row-title">🆘 Потрібна підміна${h.schedule_locations?.name ? ' · ' + Fmt.esc(h.schedule_locations.name) : ''}</span>
             </div>`;
-        }).join('') : `<div class="dbb-empty">Немає активних запитів на підміну</div>`;
+        }).join('') : `<div class="dbb-empty">${isManager ? 'Усі локації покриті' : 'Немає активних запитів на підміну'}</div>`;
 
         const notifHtml = notifList.length ? notifList.map(n => `
             <div class="dbb-row">
@@ -1154,7 +1243,7 @@ const DailyBriefModal = {
             ${evHtml}
         </div>
         <div class="dbb-section">
-            <div class="dbb-section-title">🆘 Запити керівника на підміну</div>
+            <div class="dbb-section-title">🆘 ${isManager ? 'Потрібна підміна у ваших локаціях' : 'Запити керівника на підміну'}</div>
             ${helpHtml}
         </div>
         <div class="dbb-section">

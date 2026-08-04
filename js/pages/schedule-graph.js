@@ -257,6 +257,80 @@ const ScheduleGraphPage = {
         if (this._locations.length && !this._locId) this._locId = this._locations[0].id;
         await this._loadPageData();
         this._render(container);
+        this._subscribeEntriesRealtime();
+    },
+
+    // Будь-яка зміна в schedule_entries (заповнення клітинки співробітником,
+    // редагування менеджером з іншої вкладки/пристрою тощо) — не лише окремі
+    // сповіщення (мовчазне заповнення легендою notifications не шле) —
+    // повинна одразу відображатись у графіку без F5. Підписка одна на весь
+    // час життя сторінки (не знімається — сторінка не має власного destroy()),
+    // фільтрація "чи це моя локація" — на клієнті, бо Realtime-фільтр на
+    // конкретний location_id незручний, коли локацій багато.
+    _subscribeEntriesRealtime() {
+        if (this._entriesChannel) return;
+        this._entriesChannel = supabase
+            .channel('sched-entries-' + AppState.user.id)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'schedule_entries' }, (payload) => {
+                this._handleEntryRealtimeChange(payload);
+            })
+            .subscribe();
+    },
+
+    // Раніше тут вручну патчились кілька окремих кешів (_entries/_allEntries/
+    // _entriesByLoc) точковими значеннями з payload — два незалежні джерела
+    // (ця пряма Realtime-подія й окреме сповіщення через
+    // UI._liveUpdateManagerGrid) могли патчити ту саму клітинку по-різному й
+    // розсинхронізувати кеші (звідси "з'являється у 2 графіках"/"не зникає").
+    // Тепер — єдиний надійний шлях: просто ПЕРЕЗАВАНТАЖИТИ дані поточної
+    // локації через ті самі функції, що й при звичайному відкритті сторінки
+    // (_loadPageData/_loadAllData), і перемалювати. Дебаунс — щоб серія подій
+    // не викликала шквал перезапитів.
+    _handleEntryRealtimeChange(payload) {
+        const row = payload.eventType === 'DELETE' ? payload.old : payload.new;
+        const locId = row?.location_id;
+        if (!locId) return;
+
+        const isOwn     = this._locations.some(l => l.id === locId);
+        const isPartner = (this._partnerLocations || []).some(l => l.id === locId);
+        if (!isOwn && !isPartner) return;
+
+        if (this._locId === locId || this._locId === 'all') this._reloadCurrentView();
+
+        // Бейджі "потрібна підміна"/"можуть підмінити" на іконках локацій та в
+        // шапці розділу рахуються окремими легкими агрегованими запитами —
+        // не входять у _loadPageData()/_loadAllData(), тож оновлюємо окремо.
+        if (isOwn) {
+            clearTimeout(this._locIndicatorsReloadTimer);
+            this._locIndicatorsReloadTimer = setTimeout(() => {
+                Promise.all([this._loadHelpLocIds(), this._loadNeedSubLocIds()])
+                    .then(() => this._render(this._container));
+            }, 400);
+        }
+
+        // Панель "Пошук підміни" (this._substDate) — окрема модалка поверх
+        // сторінки (document.body), _render(container) її не зачіпає. Список
+        // "зайнятий/вільний" — окремий знімок (_substBusyIds), тож перезапитуємо
+        // зайнятість і перемальовуємо панель незалежно.
+        if (this._substDate) {
+            clearTimeout(this._substReloadTimer);
+            this._substReloadTimer = setTimeout(() => {
+                const sd = this._substDate;
+                if (!sd) return;
+                this._fetchSystemBusyIds(sd).then(ids => {
+                    this._substBusyIds = ids;
+                    if (this._substDate === sd) this._openSubstModal(sd);
+                }).catch(() => {});
+            }, 400);
+        }
+    },
+
+    _reloadCurrentView() {
+        clearTimeout(this._viewReloadTimer);
+        this._viewReloadTimer = setTimeout(() => {
+            const p = this._locId === 'all' ? this._loadAllData() : this._loadPageData();
+            p.then(() => this._render(this._container));
+        }, 250);
     },
 
     _switchToEmployee() {
@@ -6069,7 +6143,7 @@ ${this._manCss()}
         <div class="sgm-section-label sgm-section-label-row">
             <span>Тип дня</span>
             ${entry ? `<button class="sgm-remove-inline"
-                onclick="ScheduleGraphPage._confirmRemoveShift('${userId}','${date}')"
+                onclick="ScheduleGraphPage._confirmRemoveShift('${userId}','${date}',${entry.notes === '__sub_confirmed__'})"
                 title="Зняти зміну"><i class="fa-solid fa-trash"></i> Зняти зміну</button>` : ''}
         </div>
         <div class="sgm-type-grid">
@@ -6295,7 +6369,7 @@ ${this._manCss()}
 
     // Підтвердження перед зняттям власної зміни (клік у модалці "Мій робочий
     // день") — незворотна дія, керівник одразу отримає сповіщення.
-    _confirmRemoveShift(userId, date) {
+    _confirmRemoveShift(userId, date, isSubConfirmed = false) {
         document.getElementById('sg-remove-shift-confirm')?.remove();
         const el = document.createElement('div');
         el.id = 'sg-remove-shift-confirm';
@@ -6303,15 +6377,36 @@ ${this._manCss()}
         const dateLabel = new Date(date + 'T00:00:00').toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' });
         el.innerHTML = `
 <div class="center-confirm-box">
-    <h3>Зняти зміну?</h3>
+    <h3>${isSubConfirmed ? 'Зняти прийняту підміну?' : 'Зняти зміну?'}</h3>
     <p>Запис на <strong>${Fmt.esc(dateLabel)}</strong> буде видалено, керівник отримає сповіщення про зміну графіка.</p>
+    ${isSubConfirmed ? `
+    <div style="margin-bottom:14px">
+        <label style="display:block;font-size:.78rem;font-weight:600;color:var(--text-secondary);margin-bottom:6px">Причина зняття (обов'язково) — керівник побачить її в сповіщенні</label>
+        <textarea id="sg-rm-shift-comment" class="sg-notes" rows="3" style="width:100%;box-sizing:border-box" placeholder="Наприклад: захворів, не встигаю доїхати..."></textarea>
+        <div id="sg-rm-shift-comment-err" style="display:none;color:#ef4444;font-size:.78rem;margin-top:4px">Вкажіть причину — керівник вже розраховує на вас на цю зміну</div>
+    </div>` : ''}
     <div class="center-confirm-actions">
         <button class="btn btn-ghost" onclick="document.getElementById('sg-remove-shift-confirm').remove()">Скасувати</button>
-        <button class="btn btn-danger" onclick="document.getElementById('sg-remove-shift-confirm').remove();ScheduleGraphPage._deleteEntry('${userId}','${date}','${ScheduleGraphEmployee._locId}',true)">Так, зняти</button>
+        <button class="btn btn-danger" onclick="ScheduleGraphPage._submitRemoveShift('${userId}','${date}',${isSubConfirmed})">Так, зняти</button>
     </div>
 </div>`;
         document.body.appendChild(el);
         el.addEventListener('click', e => { if (e.target === el) el.remove(); });
+    },
+
+    _submitRemoveShift(userId, date, isSubConfirmed) {
+        let comment = null;
+        if (isSubConfirmed) {
+            const ta = document.getElementById('sg-rm-shift-comment');
+            comment = ta?.value?.trim() || '';
+            if (!comment) {
+                document.getElementById('sg-rm-shift-comment-err').style.display = 'block';
+                ta?.focus();
+                return;
+            }
+        }
+        document.getElementById('sg-remove-shift-confirm')?.remove();
+        this._deleteEntry(userId, date, ScheduleGraphEmployee._locId, true, false, comment);
     },
 
     // isEmployeeCall — явний прапорець, бо locIdOverride тепер також передається
@@ -6320,7 +6415,7 @@ ${this._manCss()}
     // silent — при масовому видаленні (_deleteSelectedCells): пропустити toast і
     // проміжний _render() для кожної клітинки окремо (викликач сам відрендерить
     // і покаже один підсумковий toast після всього циклу).
-    async _deleteEntry(userId, date, locIdOverride, isEmployeeCall = false, silent = false) {
+    async _deleteEntry(userId, date, locIdOverride, isEmployeeCall = false, silent = false, comment = null) {
         const locId  = locIdOverride || (this._locId === 'all' ? this.__allLocId : this._locId);
         const isEmp  = isEmployeeCall;
         const oldEnt = isEmp
@@ -6373,7 +6468,7 @@ ${this._manCss()}
 
         // Попереджали в модалці, що керівник дізнається про зняття зміни — надсилаємо.
         if (isEmp && oldEnt) {
-            ScheduleGraphEmployee._notifyManagersOfChange(date, 'знято зміну', true);
+            ScheduleGraphEmployee._notifyManagersOfChange(date, 'знято зміну', true, comment);
         }
 
         if (isEmp) {
@@ -8898,6 +8993,38 @@ const ScheduleGraphEmployee = {
         this._pendingLocId = params.loc || null;
         await this._loadData();
         this._render(container);
+        this._subscribeEntriesRealtime();
+    },
+
+    // Той самий підхід, що й у ScheduleGraphPage (керівник) — будь-яка зміна в
+    // schedule_entries по локаціях, до яких призначений співробітник (керівник
+    // редагує напряму, підтверджена/скасована підміна тощо), одразу
+    // відображається без F5. На відміну від керівницької версії, тут простіше
+    // й надійніше повністю перезавантажити _loadEntries() (кілька легких
+    // паралельних запитів), а не патчити кожне з 4 окремих джерел
+    // (_entries/_locEntries/_managerHelpDates/_crossLocEntries) вручну.
+    // Дебаунс — щоб пачка подій (масове редагування) не викликала шквал перезавантажень.
+    _subscribeEntriesRealtime() {
+        if (this._entriesChannel) return;
+        this._entriesChannel = supabase
+            .channel('sched-entries-emp-' + AppState.user.id)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'schedule_entries' }, (payload) => {
+                this._handleEntryRealtimeChange(payload);
+            })
+            .subscribe();
+    },
+
+    _handleEntryRealtimeChange(payload) {
+        const row = payload.eventType === 'DELETE' ? payload.old : payload.new;
+        const locId = row?.location_id;
+        if (!locId) return;
+        const myLocIds = this._assignments.map(a => a.locId);
+        if (!myLocIds.includes(locId)) return;
+
+        clearTimeout(this._entriesReloadTimer);
+        this._entriesReloadTimer = setTimeout(() => {
+            this._loadEntries().then(() => this._render(this._container));
+        }, 300);
     },
 
     async _loadData() {
@@ -10116,20 +10243,21 @@ ${ScheduleGraphPage._manCss()}
     // Попереджаємо в модалці, що керівник дізнається про будь-яку зміну своєї
     // зміни співробітником — тож дійсно надсилаємо сповіщення власнику
     // ПОТОЧНОЇ (за контекстом дії) локації, а не всіх локацій співробітника.
-    async _notifyManagersOfChange(date, shiftLabel, isRemoval = false) {
+    async _notifyManagersOfChange(date, shiftLabel, isRemoval = false, comment = null) {
         try {
             const loc = this._assignments.find(a => a.locId === this._locId);
             if (!loc?.created_by) return;
             const empName = AppState.profile?.full_name || 'Співробітник';
             const dateLabel = new Date(date + 'T00:00:00').toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' });
+            const commentSuffix = comment ? ` Причина: «${comment}».` : '';
             await supabase.from('notifications').insert({
                 user_id: loc.created_by,
                 title: isRemoval ? '🗑️ Зміну знято' : '📅 Співробітник змінив графік',
                 message: isRemoval
-                    ? `${empName} зняв(ла) свою зміну на ${dateLabel} у «${loc.locName}»`
+                    ? `${empName} зняв(ла) свою зміну на ${dateLabel} у «${loc.locName}».${commentSuffix}`
                     : `${empName} змінив(ла) свій запис на ${dateLabel} (${shiftLabel}) у «${loc.locName}»`,
                 type: 'general', created_by: AppState.user.id,
-                link: `schedule-graph?loc=${this._locId}&date=${date}`
+                link: `schedule-graph?loc=${this._locId}&date=${date}&uid=${AppState.user.id}`
             });
         } catch (e) { /* non-critical */ }
     },
@@ -10194,7 +10322,7 @@ ${ScheduleGraphPage._manCss()}
                 message:    `${empName} підтвердив(ла), що може вийти ${dateLabel}${locName ? ' у «'+locName+'»' : ''}. Не забудьте зателефонувати!`,
                 type:       'general',
                 created_by: AppState.user.id,
-                link:       locId ? `schedule-graph?loc=${locId}&date=${date}` : 'schedule-graph'
+                link:       locId ? `schedule-graph?loc=${locId}&date=${date}&uid=${AppState.user.id}` : 'schedule-graph'
             });
         }
         delete this._managerHelpDates[date];

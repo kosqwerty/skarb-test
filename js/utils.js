@@ -393,6 +393,7 @@ const UI = {
             </div>`;
         document.body.appendChild(el);
         // No auto-close — persists until manager confirms
+        this._liveUpdateManagerGrid(n.link);
     },
 
     async _ackNotifPopup(notifId, popupId) {
@@ -433,13 +434,37 @@ const UI = {
                         </button>
                         <button onclick="UI._ackNotifPopup('${n.id}','${id}')"
                             style="flex:1;padding:6px 10px;border-radius:8px;border:none;background:#10b981;color:#fff;font-size:.78rem;font-weight:600;cursor:pointer">
-                            ✓ Підтвердити
+                            OK
                         </button>
                     </div>
                 </div>
             </div>`;
         document.body.appendChild(el);
         // No auto-close — persists until manager confirms
+
+        // Живе оновлення графіка керівника — без очікування кліку й без
+        // перезавантаження сторінки, якщо він саме зараз дивиться цю локацію.
+        this._liveUpdateManagerGrid(n.link);
+    },
+
+    // Розбирає loc з посилання сповіщення й, якщо ScheduleGraphPage зараз
+    // відкрита саме на цій локації (або на "Всі локації") — перезавантажує
+    // дані локації тими самими функціями, що й звичайне відкриття сторінки
+    // (_loadPageData/_loadAllData), і перемальовує. НЕ патчимо кеші вручну —
+    // так само робить і пряма Realtime-підписка на schedule_entries
+    // (ScheduleGraphPage._handleEntryRealtimeChange); два незалежні часткові
+    // патчі одного й того ж кеша раніше могли розсинхронізуватись.
+    async _liveUpdateManagerGrid(link) {
+        try {
+            if (typeof ScheduleGraphPage === 'undefined' || !ScheduleGraphPage._container) return;
+            const qs = link && link.includes('?') ? link.split('?')[1] : '';
+            const url = new URL('http://x?' + qs);
+            const locId = url.searchParams.get('loc');
+            if (!locId) return;
+            if (ScheduleGraphPage._locId === locId || ScheduleGraphPage._locId === 'all') {
+                ScheduleGraphPage._reloadCurrentView();
+            }
+        } catch (e) { console.error('[liveUpdateManagerGrid]', e); }
     },
 
     // Керівник надіслав "🆘 Потрібна підміна" — співробітник бачить це відразу

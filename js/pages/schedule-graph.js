@@ -1611,6 +1611,7 @@ ${this._manCss()}
                     }).join('');
 
                     return `<tr draggable="true"
+                        class="${this._isForeignEmployee(a) ? 'sg-row-foreign' : ''}"
                         data-assign-id="${a.id}"
                         ondragstart="ScheduleGraphPage._onEmpDragStart(event,'${a.id}')"
                         ondragover="ScheduleGraphPage._onEmpDragOver(event)"
@@ -2801,7 +2802,7 @@ ${this._manCss()}
                     }).join('');
                     const rowType = sd ? _getEntry(a, sd)?.shift_type : null;
                     const rowClass = sd ? (!rowType ? 'sg-row-free' : 'sg-row-busy') : '';
-                    return `<tr class="${rowClass}${a.isPartner?' sg-row-partner':''}">
+                    return `<tr class="${rowClass}${a.isPartner?' sg-row-partner':''}${this._isForeignEmployee(a)?' sg-row-foreign':''}">
                         ${this._nameCell(a)}
                         ${cells}
                     </tr>`;
@@ -4788,7 +4789,7 @@ ${this._manCss()}
                         const rowType  = sd ? _getEntry(a, sd)?.shift_type : null;
                         const rowClass = sd ? (!rowType ? 'sg-row-free' : 'sg-row-busy') : '';
                         const canDrag  = !a.isPartner && !viewOnlyLoc && a.user_id;
-                        return `<tr class="${rowClass}${a.isPartner?' sg-row-partner':''}"
+                        return `<tr class="${rowClass}${a.isPartner?' sg-row-partner':''}${this._isForeignEmployee(a)?' sg-row-foreign':''}"
                             ${canDrag ? `draggable="true" data-assign-id="${a.id}"
                                 ondragstart="ScheduleGraphPage._onEmpDragStartAll(event,'${a.id}','${locId}')"
                                 ondragover="ScheduleGraphPage._onEmpDragOver(event)"
@@ -5275,14 +5276,21 @@ ${this._manCss()}
             supabase.from('profile_dovirenosti').select('profile_id, dovirenosti(name)'),
             API.directories.getAll('positions').catch(() => [])
         ]);
-        // Без спільного блоку керівник не повинен бачити/додавати чужого співробітника:
-        // дозволені лише власні (manager_id === self), нічиї (manager_id null) та
-        // співробітники block-партнерів (this._partnerIds).
-        const allowedMgrIds = new Set([AppState.user.id, ...(this._partnerIds || [])]);
-        const profiles = (profRes.data || []).filter(p =>
-            !visibleUserIds.has(p.id) && (!p.manager_id || allowedMgrIds.has(p.manager_id)));
+        // Можна додавати БУДЬ-ЯКОГО співробітника, навіть без спільного блоку —
+        // реальне ім'я його керівника показується в списку (p._managerName нижче),
+        // а сам керівник отримує сповіщення постфактум (див. _confirmAddEmployees).
+        // Це навмисне рішення (не потребує погодження) — швидкість важливіша за
+        // формальний контроль, спільна перевірка конфлікту змін все одно
+        // відбувається системно при заповненні реальної зміни (_getWorkConflictLoc).
+        //
+        // Проте за замовчуванням у списку зафіксовані лише СВОЇ + блок-партнерські —
+        // поза блоком доступні лише через явний вибір у фільтрі "Керівники", щоб
+        // не захаращувати список усіма співробітниками системи одразу.
+        const blockAllowedMgrIds = new Set([AppState.user.id, ...(this._partnerIds || [])]);
+        const profiles = (profRes.data || []).filter(p => !visibleUserIds.has(p.id));
         if (!profiles.length) { Toast.info('Всіх доступних вже додано'); return; }
         profiles.forEach(p => {
+            p._outsideBlock = !!p.manager_id && !blockAllowedMgrIds.has(p.manager_id);
             const hiddenA = hiddenAssignments.get(p.id);
             if (hiddenA) { p._pinAssignId = hiddenA.id; p._pinLabel = 'вже в списку, приховано цього місяця'; }
         });
@@ -5308,8 +5316,8 @@ ${this._manCss()}
         });
 
         const managers = Object.entries(mgrMap)
-            .map(([id, name]) => ({ id, name }))
-            .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'uk'));
+            .map(([id, name]) => ({ id, name, outside: !blockAllowedMgrIds.has(id) }))
+            .sort((a, b) => (a.outside === b.outside ? 0 : a.outside ? 1 : -1) || (a.name || '').localeCompare(b.name || '', 'uk'));
 
         this._showEmpPanel(profiles, positions.map(p => p.name), managers);
     },
@@ -5367,7 +5375,7 @@ ${this._manCss()}
     <div class="sg-emp-panel-header-ico"><i class="fa-solid fa-user-plus"></i></div>
     <div style="flex:1;min-width:0">
         <div style="font-size:1.05rem;font-weight:800">Додати співробітників</div>
-        <div style="font-size:.78rem;color:var(--text-muted);margin-top:2px" id="sg-emp-count">${profiles.length} доступних</div>
+        <div style="font-size:.78rem;color:var(--text-muted);margin-top:2px" id="sg-emp-count">${profiles.filter(p => !p._outsideBlock).length} доступних</div>
     </div>
     <button class="sg-mclose" onclick="ScheduleGraphPage._closeEmpPanel()">✕</button>
 </div>
@@ -5398,12 +5406,19 @@ ${this._manCss()}
             <span id="sg-emp-mgr-dd-label">Всі керівники</span>
             <i class="fa-solid fa-chevron-down sg-emp-pos-dd-chev"></i>
         </button>
-        <div class="sg-emp-pos-dd-menu" id="sg-emp-mgr-dd-menu" style="display:none">
-            ${managers.map(m => `
-            <label class="sg-emp-pos-dd-item">
+        <div class="sg-emp-pos-dd-menu sg-emp-mgr-dd-menu" id="sg-emp-mgr-dd-menu" style="display:none">
+            ${(() => {
+                const blockMgrs = managers.filter(m => !m.outside);
+                const outsideMgrs = managers.filter(m => m.outside);
+                const item = m => `
+            <label class="sg-emp-pos-dd-item${m.outside ? ' sg-emp-mgr-outside' : ''}">
                 <input type="checkbox" value="${m.id}" data-name="${Fmt.esc(m.name || '')}" onchange="ScheduleGraphPage._onEmpMgrCheck()">
                 <span>${Fmt.esc(m.name || 'Без імені')}</span>
-            </label>`).join('')}
+            </label>`;
+                return `
+                ${blockMgrs.length ? `<div class="sg-emp-mgr-group-label">Мій блок</div>${blockMgrs.map(item).join('')}` : ''}
+                ${outsideMgrs.length ? `<div class="sg-emp-mgr-group-label sg-emp-mgr-group-label--outside">Інші керівники</div>${outsideMgrs.map(item).join('')}` : ''}`;
+            })()}
         </div>
     </div>` : ''}
 </div>
@@ -5413,7 +5428,8 @@ ${this._manCss()}
         const color = ScheduleGraphPage._avatarColor(p.id);
         const mismatch = ScheduleGraphPage._empNodeMismatch(p.job_position);
         return `
-    <div class="sg-emp-panel-row" data-id="${p.id}" data-name="${(p.full_name||'').toLowerCase()}" data-pos="${(p.job_position||'').toLowerCase()}" data-mgr="${p.manager_id || ''}" data-pin-id="${p._pinAssignId || ''}"
+    <div class="sg-emp-panel-row${p._outsideBlock ? ' sg-emp-row-outside' : ''}" data-id="${p.id}" data-name="${(p.full_name||'').toLowerCase()}" data-pos="${(p.job_position||'').toLowerCase()}" data-mgr="${p.manager_id || ''}" data-outside="${p._outsideBlock ? '1' : ''}" data-pin-id="${p._pinAssignId || ''}"
+        ${p._outsideBlock ? 'style="display:none"' : ''}
         onclick="ScheduleGraphPage._toggleEmpSelection('${p.id}')">
         <div class="sg-emp-panel-check"><i class="fa-solid fa-check" style="font-size:.65rem"></i></div>
         <div class="sg-av sm" style="background:${color}">${initials}</div>
@@ -5557,7 +5573,11 @@ ${this._manCss()}
             const matchName = r.dataset.name.includes(q);
             const matchPos  = posFilter.size === 0 || posFilter.has(r.dataset.pos);
             const matchMgr  = mgrFilter.size === 0 || mgrFilter.has(r.dataset.mgr);
-            const show = matchName && matchPos && matchMgr;
+            // Співробітники поза блоком зафіксовано приховані — з'являються лише
+            // коли їхнього керівника явно обрано у фільтрі "Керівники" (не під
+            // "Всі керівники" за замовчуванням, щоб не захаращувати список).
+            const outsideOk = r.dataset.outside !== '1' || mgrFilter.has(r.dataset.mgr);
+            const show = matchName && matchPos && matchMgr && outsideOk;
             r.style.display = show ? '' : 'none';
             if (show) visible++;
         });
@@ -5609,11 +5629,21 @@ ${this._manCss()}
                 this._assignments.push({ id: data.id, user_id: data.user_id, original_user_id: data.original_user_id, employee_name: data.employee_name, is_primary: isPrimary, pinned_months: data.pinned_months || [], profile: prof });
                 added++;
                 if (isForeign) {
-                    const { error: notifErr } = await supabase.from('notifications').insert({
+                    const notifRecipients = [{
                         user_id: userId, title: '📅 Вас додано до графіку',
                         message: `${AppState.profile?.full_name || 'Керівник'} додав вас до локації «${loc?.name || ''}».`,
                         type: 'general', created_by: AppState.user.id,
-                    });
+                    }];
+                    // Реальний керівник співробітника дізнається постфактум — додавання
+                    // не потребує його погодження (свідоме рішення), але має бути видиме.
+                    if (prof.manager_id) {
+                        notifRecipients.push({
+                            user_id: prof.manager_id, title: '📋 Вашого співробітника додано до графіку',
+                            message: `${AppState.profile?.full_name || 'Керівник'} додав ${prof.full_name || 'співробітника'} до графіку локації «${loc?.name || ''}».`,
+                            type: 'general', created_by: AppState.user.id,
+                        });
+                    }
+                    const { error: notifErr } = await supabase.from('notifications').insert(notifRecipients);
                     if (notifErr) console.error('[sg notify]', notifErr);
                 }
             }
@@ -6503,6 +6533,16 @@ ${this._manCss()}
         });
     },
 
+    // Співробітник, доданий від керівника, який НЕ Я і не блок-партнер —
+    // додано без погодження (свідоме рішення), тож виділяємо візуально, щоб
+    // було очевидно "це не мій штатний працівник".
+    _isForeignEmployee(a) {
+        const mgrId = a.profile?.manager_id;
+        if (!mgrId || mgrId === AppState.user.id) return false;
+        if ((this._partnerIds || []).includes(mgrId)) return false;
+        return true;
+    },
+
     _avatarColor(userId) {
         const palette = ['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6',
                          '#ec4899','#14b8a6','#f97316','#06b6d4','#84cc16'];
@@ -6549,13 +6589,14 @@ ${this._manCss()}
                 <i class="fa-solid fa-circle-info"></i>
             </button>` : '';
 
+        const isForeign = !fired && this._isForeignEmployee(a);
         return `
-<td class="sg-td-name" title="${Fmt.esc(name)}${fired ? ' (звільнений співробітник)' : a.is_primary ? ' — основний' : ' — тимчасовий'}">
+<td class="sg-td-name" title="${Fmt.esc(name)}${fired ? ' (звільнений співробітник)' : a.is_primary ? ' — основний' : ' — тимчасовий'}${isForeign ? ' · співробітник іншого керівника' : ''}">
     <span class="sg-drag-handle" title="Перетягнути">⠿</span>
     <div class="sg-name-full${fired ? ' sg-name-deleted' : ''}">
         ${primaryBtn}<span class="sg-name-text">${Fmt.esc(name)}</span>${mismatchBtn}${fired
         ? ` <span class="sg-deleted-badge">${firedBadge}</span>`
-        : !a.is_primary ? ` <span class="sg-temp-badge">підміна</span>` : ''}
+        : !a.is_primary ? ` <span class="sg-temp-badge">підміна</span>` : ''}${isForeign ? ` <span class="sg-foreign-badge" title="Доданий від іншого керівника (поза блоком)"><i class="fa-solid fa-arrow-right-arrow-left"></i></span>` : ''}
     </div>
     ${rmBtn}
 </td>`;
@@ -6638,16 +6679,17 @@ ${this._manCss()}
             <i class="fa-solid fa-trash"></i>
         </button>` : '';
         const dragHandle = !fired && isOwner ? `<span class="sg-drag-handle" title="Перетягнути">⠿</span>` : '';
+        const isForeign = !fired && this._isForeignEmployee(a);
 
         return `
 <td class="sg-td-name sg-td-name--clickable${isFiltered ? ' sg-td-name--active' : ''}"
-    title="${isFiltered ? 'Натисніть щоб скинути фільтр' : 'Натисніть щоб показати тільки цього співробітника'}"
+    title="${isFiltered ? 'Натисніть щоб скинути фільтр' : 'Натисніть щоб показати тільки цього співробітника'}${isForeign ? ' · співробітник іншого керівника' : ''}"
     onclick="ScheduleGraphPage._filterByEmployee('${uid}')">
     ${dragHandle}
     <div class="sg-name-full${fired ? ' sg-name-deleted' : ''}">
         ${primaryBtn}<span class="sg-name-text">${Fmt.esc(name)}</span>${mismatchBtn}${fired
         ? ` <span class="sg-deleted-badge">${firedBadge}</span>`
-        : !a.is_primary ? ` <span class="sg-temp-badge">підміна</span>` : ''}
+        : !a.is_primary ? ` <span class="sg-temp-badge">підміна</span>` : ''}${isForeign ? ` <span class="sg-foreign-badge" title="Доданий від іншого керівника (поза блоком)"><i class="fa-solid fa-arrow-right-arrow-left"></i></span>` : ''}
         ${isFiltered ? ' <span class="sg-filter-active-badge">✓ фільтр</span>' : ''}
     </div>
     ${rmBtn}
@@ -7443,6 +7485,17 @@ ${this._manCss()}
 .sg-row-partner td { background:rgba(99,102,241,.04); }
 .sg-row-partner td.sg-td-name { border-left:3px solid rgba(99,102,241,.4); }
 .sg-cell-partner { cursor:default !important; }
+
+/* Співробітник, доданий від керівника поза блоком — без погодження, тож
+   виділяємо помітно (жовтогарячий, відмінний від синього партнерського). */
+.sg-row-foreign td { background:rgba(245,158,11,.05); }
+.sg-row-foreign td.sg-td-name { border-left:3px solid rgba(245,158,11,.55); }
+.sg-foreign-badge {
+    display:inline-flex;align-items:center;justify-content:center;
+    width:16px;height:16px;border-radius:5px;font-size:.6rem;
+    background:rgba(245,158,11,.16);color:#d97706;flex-shrink:0;
+    vertical-align:middle;
+}
 .sg-loc-header-partner .sg-loc-group-header {
     background:rgba(99,102,241,.13);color:rgba(99,102,241,.9);
     border-top-color:rgba(99,102,241,.3);border-bottom-color:rgba(99,102,241,.2);
@@ -8125,6 +8178,21 @@ tr:last-child td { border-bottom:none; }
 .sg-emp-pos-dd-item span { white-space:nowrap; }
 .sg-emp-pos-dd-item:hover { background:var(--bg-hover); }
 .sg-emp-pos-dd-item input { width:16px;height:16px;flex-shrink:0;accent-color:var(--primary);cursor:pointer; }
+
+/* Список керівників у "Додати співробітників" — довші імена + позначка
+   "поза блоком" не влазили в один рядок (nowrap обрізав/вилазив за межі),
+   і сам список системних керівників міг бути довшим за 260px. Розширюємо
+   меню й дозволяємо перенос тексту саме тут, не чіпаючи інші дропдауни
+   (позиції/локації), що використовують ті самі базові класи. */
+.sg-emp-mgr-dd-menu { left:auto;right:0;width:320px;max-height:320px; }
+.sg-emp-mgr-dd-menu .sg-emp-pos-dd-item span { white-space:normal;line-height:1.3;word-break:break-word; }
+.sg-emp-mgr-group-label {
+    font-size:.66rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;
+    color:var(--text-muted);padding:8px 8px 4px;
+}
+.sg-emp-mgr-group-label:first-child { padding-top:2px; }
+.sg-emp-mgr-group-label--outside { border-top:1px solid var(--border);margin-top:4px; }
+.sg-emp-mgr-outside span { color:var(--text-secondary); }
 .sg-emp-panel-list {
     flex:1;overflow-y:auto;padding:14px 20px;
     display:grid;grid-template-columns:1fr 1fr;gap:10px;align-content:start;
@@ -8172,6 +8240,7 @@ body:not(.light-theme) .sg-emp-warn { color:#f59e0b; }
     .sg-emp-panel-list { grid-template-columns:1fr; }
     .sg-emp-panel-toolbar { flex-wrap:wrap; }
     .sg-emp-pos-filter { flex:1 1 100%; }
+    .sg-emp-mgr-dd-menu { width:100%;right:0;left:0; }
 }
 
 /* Shift modal */

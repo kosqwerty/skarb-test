@@ -1190,11 +1190,15 @@ document.addEventListener('click', function(e) {
 
     _updatePreview() {
         clearTimeout(this._previewTimer);
-        this._previewTimer = setTimeout(() => {
+        this._previewTimer = setTimeout(async () => {
             const iframe = document.getElementById('live-preview-iframe');
             if (!iframe) return;
-            const html = this._cmHtml ? this._cmHtml.getValue() : (document.getElementById('editor-html')?.value || '');
-            const css  = this._cmCss  ? this._cmCss.getValue()  : (document.getElementById('editor-css')?.value  || '');
+            const rawHtml = this._cmHtml ? this._cmHtml.getValue() : (document.getElementById('editor-html')?.value || '');
+            const css     = this._cmCss  ? this._cmCss.getValue()  : (document.getElementById('editor-css')?.value  || '');
+            // Без цього att:UUID лишався буквальним текстом у src/href — превʼю
+            // ніколи не показувало картинки/файли вкладень до збереження сторінки,
+            // хоча на самій опублікованій сторінці (initView) все резолвиться.
+            const html = await this._resolveAttachmentUrls(rawHtml);
             this._renderIframe(iframe, html, css);
             const isLight = document.body.classList.contains('light-theme');
             iframe.style.filter = isLight ? '' : 'invert(1) hue-rotate(180deg)';

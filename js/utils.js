@@ -107,6 +107,65 @@ const UI = {
         }, { passive: true });
     },
 
+    // Ефект "як у TikTok" — рій емодзі злітає вгору від кнопки реакції з
+    // випадковим розкидом по X, повороту, розміру, прозорості й тривалості.
+    // Керується напряму через Web Animations API (element.animate), а не
+    // CSS @keyframes + custom properties — так кожна частинка гарантовано
+    // програє свою власну унікальну траєкторію без залежності від кешу
+    // стилів чи специфічності CSS-класів. Один спільний fixed-шар на весь
+    // документ, щоб частинки не обрізались overflow:hidden карток/модалок.
+    emojiBurst(originEl, emoji, count = 12) {
+        if (!originEl || !emoji) return;
+        let layer = document.getElementById('emoji-burst-layer');
+        if (!layer) {
+            layer = document.createElement('div');
+            layer.id = 'emoji-burst-layer';
+            layer.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:2147483647;overflow:visible';
+            document.body.appendChild(layer);
+        }
+        const rect = originEl.getBoundingClientRect();
+        const originX = rect.left + rect.width / 2;
+        const originY = rect.top + rect.height / 2;
+        for (let i = 0; i < count; i++) {
+            const dx     = Math.round((Math.random() - 0.5) * 160);
+            const rise   = Math.round(110 + Math.random() * 140);
+            const size   = Math.round(15 + Math.random() * 18);
+            const rot    = Math.round((Math.random() - 0.5) * 70);
+            const dur    = Math.round(750 + Math.random() * 550);
+            const startDelay = Math.round(i * 25 + Math.random() * 60);
+            const peakOp = (0.7 + Math.random() * 0.3).toFixed(2);
+
+            const span = document.createElement('span');
+            span.textContent = emoji;
+            span.style.position = 'fixed';
+            span.style.left = originX + 'px';
+            span.style.top = originY + 'px';
+            span.style.fontSize = size + 'px';
+            span.style.lineHeight = '1';
+            span.style.pointerEvents = 'none';
+            span.style.userSelect = 'none';
+            span.style.opacity = '0';
+            span.style.transform = 'translate(-50%,-50%) scale(.3) rotate(0deg)';
+
+            // Спавнимо частинку заздалегідь схованою (opacity:0), запускаємо
+            // анімацію лише через setTimeout(startDelay) — так під час затримки
+            // між частинками рою нічого не блимає на екрані статичним кадром.
+            layer.appendChild(span);
+            const startTimer = setTimeout(() => {
+                const anim = span.animate([
+                    { transform: 'translate(-50%,-50%) scale(.3) rotate(0deg)', opacity: 0 },
+                    { transform: `translate(calc(-50% + ${(dx * 0.2).toFixed(1)}px), calc(-50% - 18px)) scale(1.25) rotate(${(rot * 0.25).toFixed(1)}deg)`, opacity: peakOp, offset: 0.18 },
+                    { transform: `translate(calc(-50% + ${dx}px), calc(-50% - ${rise}px)) scale(.8) rotate(${rot}deg)`, opacity: 0 }
+                ], { duration: dur, easing: 'cubic-bezier(.19,.82,.34,1)', fill: 'forwards' });
+                const cleanup = () => span.remove();
+                anim.onfinish = cleanup;
+                anim.oncancel = cleanup;
+                setTimeout(cleanup, dur + 150);
+            }, startDelay);
+            span._burstTimer = startTimer;
+        }
+    },
+
     toggleSidebar() {
         if (window.innerWidth <= 1024) {
             const sidebar = document.getElementById('sidebar');

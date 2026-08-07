@@ -393,7 +393,7 @@ const NewsPage = {
         if (btn.disabled) return;
         btn.disabled = true;
         try {
-            await API.news.toggleEmoji(newsId, emoji);
+            const { added } = await API.news.toggleEmoji(newsId, emoji);
             // Перечитуємо реальний стан з БД замість ручної математики cur±1.
             const { counts, myEmojis } = await API.news.getEmojiReactions(newsId);
             const btns = [];
@@ -407,6 +407,7 @@ const NewsPage = {
             this._sortEmojiRow(btns, counts);
             btn.style.transform = 'scale(1.35)';
             setTimeout(() => { btn.style.transform = ''; }, 200);
+            if (added) UI.emojiBurst(btn, emoji);
         } catch(e) { Toast.error('Помилка', e.message); }
         finally { btn.disabled = false; }
     },
@@ -433,12 +434,13 @@ const NewsPage = {
         if (btn.disabled) return;
         btn.disabled = true;
         try {
-            await API.news.toggleEmoji(newsId, emoji);
+            const { added } = await API.news.toggleEmoji(newsId, emoji);
             // Перечитуємо реальний стан з БД замість ручної математики cur±1
             // (заодно й пересортовує ряд емодзі за реальною кількістю).
             await this._loadReactions(newsId);
             btn.style.transform = 'scale(1.4)';
             setTimeout(() => { btn.style.transform = ''; }, 200);
+            if (added) UI.emojiBurst(btn, emoji);
         } catch(e) { Toast.error('Помилка', e.message); }
         finally { btn.disabled = false; }
     },

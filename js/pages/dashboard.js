@@ -549,9 +549,10 @@ const DashboardPage = {
         const key = emoji.codePointAt(0);
         document.querySelectorAll(`[id^="dbf-e-${newsId}-"]`).forEach(b => b.classList.remove('active'));
         try {
-            await API.news.toggleEmoji(newsId, emoji);
+            const { added } = await API.news.toggleEmoji(newsId, emoji);
             if (!wasActive) btn.classList.add('active');
             await this._loadFeedReactions(newsId);
+            if (added) UI.emojiBurst(btn, emoji);
         } catch(e) {
             Toast.error('Помилка', e.message);
         }
@@ -2445,7 +2446,7 @@ const DashboardPage = {
         if (btn.disabled) return;
         btn.disabled = true;
         try {
-            await API.news.toggleEmoji(newsId, emoji);
+            const { added } = await API.news.toggleEmoji(newsId, emoji);
             // Перечитуємо реальний стан з БД замість ручної математики cur±1.
             const { counts, myEmojis } = await API.news.getEmojiReactions(newsId);
             const wrap = btn.closest(`#dnm-reactions-${newsId}`);
@@ -2459,6 +2460,7 @@ const DashboardPage = {
             }
             btn.style.transform = 'scale(1.25)';
             setTimeout(() => { btn.style.transform = ''; }, 200);
+            if (added) UI.emojiBurst(btn, emoji);
         } catch(e) { Toast.error('Помилка', e.message); }
         finally { btn.disabled = false; }
     },

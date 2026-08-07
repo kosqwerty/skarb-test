@@ -532,16 +532,13 @@ const DashboardPage = {
 
     async _loadFeedReactions(newsId) {
         try {
-            const { all, mine } = await API.news.getEmojiReactions(newsId);
-            const counts = {};
-            (all || []).forEach(r => { counts[r.emoji] = (counts[r.emoji] || 0) + 1; });
-            const myEmoji = mine?.emoji;
-            Object.entries(counts).forEach(([emoji, count]) => {
+            const { counts, myEmojis } = await API.news.getEmojiReactions(newsId);
+            ['👍','❤️','😂','😮','😢','🔥'].forEach(emoji => {
                 const key = emoji.codePointAt(0);
                 const countEl = document.getElementById(`dbf-ec-${newsId}-${key}`);
                 const btn = document.getElementById(`dbf-e-${newsId}-${key}`);
-                if (countEl) countEl.textContent = count > 0 ? count : '';
-                if (btn && emoji === myEmoji) btn.classList.add('active');
+                if (countEl) countEl.textContent = counts[emoji] > 0 ? counts[emoji] : '';
+                if (btn) btn.classList.toggle('active', myEmojis.has(emoji));
             });
         } catch(_) {}
     },

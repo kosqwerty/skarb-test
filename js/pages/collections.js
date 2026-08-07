@@ -432,7 +432,13 @@ const CollectionsPage = {
     clearTimeout(collapseTimer);
     sendSize(400);
   });
-  document.addEventListener('click', function() {
+  // 'mouseup' замість 'click' — click вимагає press+release на одному й тому
+  // ж елементі без скасування, тому не спрацьовує надійно при перетягуванні
+  // нативного скролбару (напр. горизонтального скролу таблиці): mousedown
+  // додавав буфер +400px, а click після drag міг не долетіти, і буфер лишався
+  // "приклеєним" назавжди — висота iframe тільки накопичувалась з кожним кліком.
+  // mouseup спливає до document завжди, незалежно від того, де саме відпустили кнопку.
+  document.addEventListener('mouseup', function() {
     clearTimeout(collapseTimer);
     collapseTimer = setTimeout(function() { sendSize(0); }, 600);
   });

@@ -5,6 +5,16 @@
 const NewsPage = {
     _page: 0,
 
+    // network_visibility: 'all' | 'trusted' | 'untrusted' — задає адмін у
+    // формі редагування новини, окремо від групи доступу.
+    _matchesNetwork(n) {
+        const v = n.network_visibility || 'all';
+        if (v === 'all') return true;
+        if (v === 'trusted') return !!AppState.isTrustedNetwork;
+        if (v === 'untrusted') return !AppState.isTrustedNetwork;
+        return true;
+    },
+
     async init(container, params) {
         // Single article view
         if (params.id) {
@@ -58,9 +68,13 @@ const NewsPage = {
             const { data, count } = await API.news.getAll({ published: !AppState.isStaff() || undefined, page: this._page });
 
             // Access group filter for non-staff
-            const filtered = AppState.isStaff()
+            const byAccessGroup = AppState.isStaff()
                 ? data
                 : data.filter(n => !n.access_group || AccessGroupsPage.checkAccess(n.access_group));
+            // Мережева видимість — окремий вимір від ролі/групи доступу (адмін
+            // задає в редагуванні новини), тож застосовується до всіх, включно
+            // зі staff, які так само фізично можуть бути поза довіреною мережею.
+            const filtered = byAccessGroup.filter(n => this._matchesNetwork(n));
 
             // Featured news (is_featured)
             const featured = filtered.filter(n => n.is_featured).slice(0, 1)[0];
@@ -189,6 +203,13 @@ const NewsPage = {
 
         try {
             const news = await API.news.getById(id);
+            // Пряме посилання не повинно обходити мережеве обмеження, задане
+            // адміном у формі редагування новини (окремо від групи доступу).
+            if (!this._matchesNetwork(news)) {
+                Toast.error('Немає доступу', 'Ця новина недоступна з вашої мережі');
+                Router.go(from === 'dashboard' ? 'dashboard' : 'news');
+                return;
+            }
             const { data: latest } = await supabase.from('news')
                     .select('id,slug,title,thumbnail_url,published_at,created_at')
                     .eq('is_published', true)
@@ -217,6 +238,22 @@ const NewsPage = {
                     .nv-hero-actions{position:absolute;top:1rem;left:1rem;display:flex;gap:.5rem;z-index:3}
                     .nv-article{min-width:0;display:grid;grid-template-columns:1fr 280px;gap:1.5rem;column-gap:1.5rem}
                     .nv-article-body{min-width:0}
+                    /* Картка тексту статті — раніше контент "висів" прямо на фоні
+                       сторінки без меж і читабельної ширини, звідси відчуття
+                       відсутності розділювачів. Плюс кольоровий верхній акцент і
+                       обмежена ширина рядка для комфортного читання. */
+                    .nv-article-card{
+                        position:relative;overflow:hidden;
+                        background:var(--bg-surface);border:1px solid var(--border);
+                        border-radius:var(--radius-xl);
+                        padding:2.25rem clamp(1.25rem,4vw,3.5rem);
+                        box-shadow:0 1px 3px rgba(0,0,0,.04);
+                    }
+                    .nv-article-card::before{
+                        content:'';position:absolute;top:0;left:0;right:0;height:4px;
+                        background:linear-gradient(90deg,var(--primary),color-mix(in srgb,var(--primary) 40%,#8b5cf6));
+                    }
+                    @media(max-width:768px){.nv-article-card{padding:1.5rem 1.1rem;border-radius:var(--radius-lg)}}
                     .nv-excerpt{font-size:1.1rem;color:var(--text-secondary);font-style:italic;border-left:3px solid var(--primary);padding-left:1rem;margin-bottom:2rem;line-height:1.7}
                     .nv-reactions{display:flex;align-items:center;gap:.75rem;padding:1.25rem 1.5rem;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);margin-top:2.5rem}
                     .nv-react-label{font-size:.82rem;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-right:.25rem}
@@ -308,7 +345,9 @@ const NewsPage = {
                 <!-- ── Article body ── -->
                 <article class="nv-article">
                     <div class="nv-article-body">
-                        <div class="news-content-body">${this._safeHtml(this._fixImgUrls(news.content))}</div>
+                        <div class="nv-article-card">
+                            <div class="news-content-body">${this._safeHtml(this._fixImgUrls(news.content))}</div>
+                        </div>
                     </div>
                 </article>`;
 
@@ -348,24 +387,28 @@ const NewsPage = {
     },
 
     async _reactEmoji(newsId, emoji, btn) {
+        // Блокуємо кнопку на час запиту — без цього швидкі повторні кліки
+        // летіли паралельно, і локальний лічильник (+1 на кожен клік) не
+        // відповідав реальним даним у БД (можна було "накрутити" число лайків).
+        if (btn.disabled) return;
+        btn.disabled = true;
         try {
-            const { added, prev } = await API.news.toggleEmoji(newsId, emoji);
-            // Deactivate previous reaction if switched
-            if (prev && prev !== emoji) {
-                const prevBtn = document.getElementById(`ce-${newsId}-${prev.codePointAt(0)}`);
-                if (prevBtn) {
-                    prevBtn.classList.remove('active');
-                    const c = prevBtn.querySelector('.nv-react-count');
-                    c.textContent = Math.max(0, (parseInt(c.textContent) || 0) - 1) || '';
-                }
+            await API.news.toggleEmoji(newsId, emoji);
+            // Перечитуємо реальний стан з БД замість ручної математики cur±1.
+            const { counts, myEmojis } = await API.news.getEmojiReactions(newsId);
+            const btns = [];
+            for (const e of ['👍','❤️','😂','😮','👏','🔥']) {
+                const b = document.getElementById(`ce-${newsId}-${e.codePointAt(0)}`);
+                if (!b) continue;
+                b.querySelector('.nv-react-count').textContent = counts[e] || '';
+                b.classList.toggle('active', myEmojis.has(e));
+                btns.push(b);
             }
-            btn.classList.toggle('active', added);
-            const countEl = btn.querySelector('.nv-react-count');
-            const cur = parseInt(countEl.textContent) || 0;
-            countEl.textContent = (added ? cur + 1 : Math.max(0, cur - 1)) || '';
+            this._sortEmojiRow(btns, counts);
             btn.style.transform = 'scale(1.35)';
             setTimeout(() => { btn.style.transform = ''; }, 200);
         } catch(e) { Toast.error('Помилка', e.message); }
+        finally { btn.disabled = false; }
     },
 
     async _loadReactions(newsId) {
@@ -384,31 +427,20 @@ const NewsPage = {
     },
 
     async _reactArticleEmoji(newsId, emoji, btn) {
+        // Блокуємо кнопку на час запиту — без цього швидкі повторні кліки
+        // летіли паралельно, і локальний лічильник (+1 на кожен клік) не
+        // відповідав реальним даним у БД (можна було "накрутити" число лайків).
+        if (btn.disabled) return;
+        btn.disabled = true;
         try {
-            const { added, prev } = await API.news.toggleEmoji(newsId, emoji);
-            if (prev && prev !== emoji) {
-                const prevBtn = document.getElementById(`nv-react-${newsId}-${prev.codePointAt(0)}`);
-                if (prevBtn) {
-                    prevBtn.classList.remove('active');
-                    const c = prevBtn.querySelector('.nv-react-count');
-                    c.textContent = Math.max(0, (parseInt(c.textContent) || 0) - 1) || '';
-                }
-            }
-            btn.classList.toggle('active', added);
-            const countEl = btn.querySelector('.nv-react-count');
-            const cur = parseInt(countEl.textContent) || 0;
-            countEl.textContent = (added ? cur + 1 : Math.max(0, cur - 1)) || '';
+            await API.news.toggleEmoji(newsId, emoji);
+            // Перечитуємо реальний стан з БД замість ручної математики cur±1
+            // (заодно й пересортовує ряд емодзі за реальною кількістю).
+            await this._loadReactions(newsId);
             btn.style.transform = 'scale(1.4)';
             setTimeout(() => { btn.style.transform = ''; }, 200);
-            // re-sort by count
-            const parent = btn.parentElement;
-            if (parent) {
-                const btns = [...parent.querySelectorAll('.nv-emoji-btn')];
-                const counts = {};
-                btns.forEach(b => { counts[b.dataset.emoji] = parseInt(b.querySelector('.nv-react-count').textContent) || 0; });
-                this._sortEmojiRow(btns, counts);
-            }
         } catch(e) { Toast.error('Помилка', e.message); }
+        finally { btn.disabled = false; }
     },
 
     // ── Create / Edit ──────────────────────────────────────────────
@@ -485,18 +517,98 @@ const NewsPage = {
                 .nf-media-file:hover{border-color:var(--primary)}
                 .nf-media-file span{font-size:.55rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:100%;text-align:center}
                 @media(max-width:768px){.nf-layout{grid-template-columns:1fr}}
+
+                /* ── Редизайн: хедер + картки опцій (мова дизайну mc-em-* з
+                   особистого календаря — еталон UI-стилю проєкту) ── */
+                .nfx-header{
+                    display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+                    padding:16px 20px;margin-bottom:1.5rem;border-radius:var(--radius-xl);
+                    background:linear-gradient(135deg,color-mix(in srgb,var(--primary) 10%,var(--bg-surface)),color-mix(in srgb,var(--primary) 3%,var(--bg-surface)));
+                    border:1px solid var(--border);
+                }
+                .nfx-header-icon{
+                    width:44px;height:44px;border-radius:13px;flex-shrink:0;
+                    display:flex;align-items:center;justify-content:center;font-size:1.1rem;
+                    background:var(--primary);color:#fff;
+                    box-shadow:0 6px 16px color-mix(in srgb,var(--primary) 45%,transparent);
+                }
+                .nfx-header-text{flex:1;min-width:160px}
+                .nfx-header-title{font-size:1.15rem;font-weight:800;color:var(--text-primary);line-height:1.2}
+                .nfx-header-sub{display:flex;align-items:center;gap:8px;margin-top:3px}
+                .nfx-status-pill{
+                    display:inline-flex;align-items:center;gap:5px;font-size:.68rem;font-weight:700;
+                    text-transform:uppercase;letter-spacing:.04em;padding:2px 9px;border-radius:20px;
+                }
+                .nfx-status-pill.live{background:rgba(16,185,129,.14);color:#10b981}
+                .nfx-status-pill.draft{background:var(--bg-hover);color:var(--text-muted)}
+                .nfx-header-actions{display:flex;gap:8px;flex-wrap:wrap}
+
+                .nfx-sidebar-title{display:none}
+                .nf-sidebar{background:transparent;border:none;display:flex;flex-direction:column;gap:12px}
+                .nf-sidebar-body{display:contents}
+                .nfx-card{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden}
+                .nfx-card-head{
+                    display:flex;align-items:center;gap:9px;padding:10px 14px;
+                    font-size:.76rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;
+                    color:var(--c,var(--primary));background:color-mix(in srgb,var(--c,var(--primary)) 10%,var(--bg-surface));
+                    border-bottom:1px solid var(--border);
+                }
+                .nfx-card-head i{font-size:.85rem}
+                .nfx-card-body{padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+                .nfx-card-body .nf-field{gap:.3rem}
+                .nfx-card-body .nf-field label{font-size:.68rem}
+                .nfx-card-body select, .nfx-card-body .nf-date{font-size:.82rem}
+
+                .nfx-toggle-row{
+                    display:flex;align-items:center;gap:10px;padding:9px 11px;
+                    border-radius:11px;border:1.5px solid var(--border);background:var(--bg-raised);
+                    cursor:pointer;transition:background .15s,border-color .15s;user-select:none;
+                }
+                .nfx-toggle-row:has(.nfx-toggle-input:checked){border-color:color-mix(in srgb,var(--c,var(--primary)) 45%,var(--border));background:color-mix(in srgb,var(--c,var(--primary)) 7%,var(--bg-raised))}
+                .nfx-toggle-ico{font-size:1rem;flex-shrink:0;width:20px;text-align:center;color:var(--c,var(--text-muted))}
+                .nfx-toggle-text{flex:1;min-width:0;font-size:.84rem;font-weight:700;color:var(--text-primary)}
+                .nfx-toggle-input{position:absolute;opacity:0;width:0;height:0}
+                .nfx-toggle-pill{position:relative;flex-shrink:0;width:38px;height:22px;border-radius:12px;background:var(--border);transition:background .2s}
+                .nfx-toggle-knob{position:absolute;top:2.5px;left:2.5px;width:17px;height:17px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.25);transition:transform .2s}
+                .nfx-toggle-input:checked ~ .nfx-toggle-pill{background:var(--c,var(--primary))}
+                .nfx-toggle-input:checked ~ .nfx-toggle-pill .nfx-toggle-knob{transform:translateX(16px)}
+
+                .nfx-net-opt{display:flex;align-items:center;gap:8px}
+                .nfx-net-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+
+                .nfx-select{
+                    appearance:none;-webkit-appearance:none;
+                    width:100%;box-sizing:border-box;
+                    padding:9px 34px 9px 12px;border-radius:11px;
+                    border:1.5px solid var(--border);background:var(--bg-raised);
+                    color:var(--text-primary);font-size:.82rem;font-weight:600;font-family:inherit;
+                    cursor:pointer;outline:none;transition:border-color .15s,box-shadow .15s;
+                    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23888' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+                    background-repeat:no-repeat;background-position:right 12px center;
+                }
+                .nfx-select:hover{border-color:color-mix(in srgb,var(--c,var(--primary)) 40%,var(--border))}
+                .nfx-select:focus{border-color:var(--c,var(--primary));box-shadow:0 0 0 3px color-mix(in srgb,var(--c,var(--primary)) 16%,transparent)}
+                .nfx-select option{background:var(--bg-surface);color:var(--text-primary)}
             </style>
 
-            <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.5rem">
-                
-                <h2 style="margin:0">${isEdit ? '<i class="fa-solid fa-pen"></i> Редагувати новину' : 'Додати новину'}</h2>
-                <div style="display:flex;gap:.75rem;padding-top:.5rem">
+            <div class="nfx-header">
+                <div class="nfx-header-icon"><i class="fa-solid ${isEdit ? 'fa-pen' : 'fa-newspaper'}"></i></div>
+                <div class="nfx-header-text">
+                    <div class="nfx-header-title">${isEdit ? 'Редагувати новину' : 'Нова новина'}</div>
+                    <div class="nfx-header-sub">
+                        <span class="nfx-status-pill ${news?.is_published ? 'live' : 'draft'}">
+                            <i class="fa-solid ${news?.is_published ? 'fa-circle-check' : 'fa-pen'}" style="font-size:.6rem"></i>
+                            ${news?.is_published ? 'Опубліковано' : 'Чернетка'}
+                        </span>
+                    </div>
+                </div>
+                <div class="nfx-header-actions">
                         <button class="btn btn-secondary" onclick="NewsPage._backToList()">Скасувати</button>
                         <button class="btn btn-ghost" onclick="NewsPage._previewNews()"><i class="fa-solid fa-eye"></i> Перегляд</button>
                         <button class="btn btn-primary" onclick="NewsPage.saveNews('${news?.id || ''}')">
                             ${isEdit ? '<i class="fa-solid fa-floppy-disk" style="font-size:1rem;filter:drop-shadow(0 0 4px rgba(99,102,241,.7))"></i> Зберегти зміни' : '<i class="fa-regular fa-newspaper" style="color:#1e40af"></i> Опублікувати'}
                         </button>
-                    </div>
+                </div>
             </div>
 
             <div class="nf-layout">
@@ -553,50 +665,70 @@ const NewsPage = {
 
                 <!-- ── Права колонка (опції) ── -->
                 <div class="nf-sidebar">
-                    <div class="nf-sidebar-title">опції</div>
                     <div class="nf-sidebar-body">
 
-                        <div class="nf-field">
-                            <label><i class="fa-regular fa-calendar" style="color:var(--primary);margin-right:.3rem"></i>Опубліковано</label>
-                            ${UaDateTime.html('n-published-at', pubDateVal)}
+                        <div class="nfx-card" style="--c:#10b981">
+                            <div class="nfx-card-head"><i class="fa-solid fa-paper-plane"></i>Публікація</div>
+                            <div class="nfx-card-body">
+                                <label class="nfx-toggle-row" style="--c:#10b981">
+                                    <span class="nfx-toggle-ico"><i class="fa-solid fa-circle-check"></i></span>
+                                    <span class="nfx-toggle-text">Опубліковано</span>
+                                    <input type="checkbox" id="n-published" class="nfx-toggle-input" ${news?.is_published ? 'checked' : ''}>
+                                    <span class="nfx-toggle-pill"><span class="nfx-toggle-knob"></span></span>
+                                </label>
+                                <div class="nf-field">
+                                    <label><i class="fa-regular fa-calendar" style="color:var(--primary);margin-right:.3rem"></i>Дата публікації</label>
+                                    ${UaDateTime.html('n-published-at', pubDateVal)}
+                                </div>
+                                <div class="nf-field">
+                                    <label><i class="fa-regular fa-calendar-xmark" style="color:var(--text-muted);margin-right:.3rem"></i>Актуально до</label>
+                                    ${UaDateTime.html('n-expires-at', expDateVal)}
+                                </div>
+                            </div>
                         </div>
 
-                        <div class="nf-field">
-                            <label><i class="fa-regular fa-calendar-xmark" style="color:var(--text-muted);margin-right:.3rem"></i>Актуально до</label>
-                            ${UaDateTime.html('n-expires-at', expDateVal)}
+                        <div class="nfx-card" style="--c:#f59e0b">
+                            <div class="nfx-card-head"><i class="fa-solid fa-star"></i>Показ на порталі</div>
+                            <div class="nfx-card-body">
+                                <label class="nfx-toggle-row" style="--c:#f59e0b">
+                                    <span class="nfx-toggle-ico"><i class="fa-solid fa-star"></i></span>
+                                    <span class="nfx-toggle-text">Головна новина</span>
+                                    <input type="checkbox" id="n-featured" class="nfx-toggle-input" ${news?.is_featured ? 'checked' : ''}>
+                                    <span class="nfx-toggle-pill"><span class="nfx-toggle-knob"></span></span>
+                                </label>
+                                <label class="nfx-toggle-row" style="--c:#f59e0b">
+                                    <span class="nfx-toggle-ico"><i class="fa-regular fa-face-smile"></i></span>
+                                    <span class="nfx-toggle-text">Дозволити реакції</span>
+                                    <input type="checkbox" id="n-reactions" class="nfx-toggle-input" ${news?.allow_reactions !== false ? 'checked' : ''}>
+                                    <span class="nfx-toggle-pill"><span class="nfx-toggle-knob"></span></span>
+                                </label>
+                            </div>
                         </div>
 
-                        <div class="nf-sep"></div>
-
-                        <label class="checkbox-item" style="cursor:pointer">
-                            <input type="checkbox" id="n-published" ${news?.is_published ? 'checked' : ''}>
-                            <span>Опублікувати</span>
-                        </label>
-
-                        <label class="checkbox-item" style="cursor:pointer">
-                            <input type="checkbox" id="n-reactions" ${news?.allow_reactions !== false ? 'checked' : ''}>
-                            <span>Дозволити залишати реакції</span>
-                        </label>
-
-                        <label class="checkbox-item" style="cursor:pointer">
-                            <input type="checkbox" id="n-featured" ${news?.is_featured ? 'checked' : ''}>
-                            <span>Головна новина</span>
-                        </label>
-
-                        <div class="nf-sep"></div>
-
-                        <div class="nf-field">
-                            <label>Група доступу</label>
-                            <select id="n-access-group">
-                                <option value="">— Всі (без обмежень) —</option>
-                            </select>
+                        <div class="nfx-card" style="--c:#8b5cf6">
+                            <div class="nfx-card-head"><i class="fa-solid fa-shield-halved"></i>Доступ і видимість</div>
+                            <div class="nfx-card-body">
+                                <div class="nf-field">
+                                    <label>Група доступу</label>
+                                    <select id="n-access-group" class="nfx-select" style="--c:#8b5cf6">
+                                        <option value="">— Всі (без обмежень) —</option>
+                                    </select>
+                                </div>
+                                <div class="nf-field">
+                                    <label><i class="fa-solid fa-network-wired" style="color:var(--text-muted);margin-right:.3rem"></i>Видимість за мережею</label>
+                                    <select id="n-network-visibility" class="nfx-select" style="--c:#8b5cf6">
+                                        <option value="all" ${(!news?.network_visibility || news.network_visibility === 'all') ? 'selected' : ''}>Всім (незалежно від мережі)</option>
+                                        <option value="trusted" ${news?.network_visibility === 'trusted' ? 'selected' : ''}>Тільки довірена мережа (в магазині)</option>
+                                        <option value="untrusted" ${news?.network_visibility === 'untrusted' ? 'selected' : ''}>Тільки недовірена мережа (поза магазином)</option>
+                                    </select>
+                                </div>
+                            </div>
                         </div>
 
-                        <div class="nf-sep"></div>
-
-                        <div class="nf-field">
-                            <label>Головне зображення</label>
-                            <div style="font-size:.7rem;color:var(--text-muted);line-height:1.5;margin-bottom:.4rem">
+                        <div class="nfx-card" style="--c:#ec4899">
+                            <div class="nfx-card-head"><i class="fa-regular fa-image"></i>Головне зображення</div>
+                            <div class="nfx-card-body">
+                            <div style="font-size:.7rem;color:var(--text-muted);line-height:1.5">
                                 Рекомендований розмір: <strong style="color:var(--text-secondary)">1200 × 630 px</strong><br>
                                 Формат: JPG, PNG · до 5 МБ
                             </div>
@@ -606,22 +738,23 @@ const NewsPage = {
                                 : `<div id="news-img-zone"></div>`}
                             <input id="n-img-input" type="file" accept="image/*" style="display:none"
                                    onchange="NewsPage._onImgChange(this)">
-                        </div>
 
-                        <div class="nf-field">
-                            <label><i class="fa-solid fa-align-center" style="color:var(--primary);margin-right:.3rem"></i>Позиція зображення</label>
-                            <div style="display:flex;gap:.4rem">
-                                ${['left','center','right'].map(pos => {
-                                    const cur = news?.thumbnail_position || 'center';
-                                    const icon = pos === 'left' ? 'fa-align-left' : pos === 'center' ? 'fa-align-center' : 'fa-align-right';
-                                    const label = pos === 'left' ? 'Ліво' : pos === 'center' ? 'Центр' : 'Право';
-                                    return `<button type="button" id="n-pos-${pos}" onclick="NewsPage._setThumbPos('${pos}')"
-                                        class="btn btn-sm ${cur === pos ? 'btn-primary' : 'btn-ghost'}" style="flex:1">
-                                        <i class="fa-solid ${icon}"></i> ${label}
-                                    </button>`;
-                                }).join('')}
+                                <div class="nf-field">
+                                    <label><i class="fa-solid fa-align-center" style="color:var(--primary);margin-right:.3rem"></i>Позиція зображення</label>
+                                    <div style="display:flex;gap:.4rem">
+                                        ${['left','center','right'].map(pos => {
+                                            const cur = news?.thumbnail_position || 'center';
+                                            const icon = pos === 'left' ? 'fa-align-left' : pos === 'center' ? 'fa-align-center' : 'fa-align-right';
+                                            const label = pos === 'left' ? 'Ліво' : pos === 'center' ? 'Центр' : 'Право';
+                                            return `<button type="button" id="n-pos-${pos}" onclick="NewsPage._setThumbPos('${pos}')"
+                                                class="btn btn-sm ${cur === pos ? 'btn-primary' : 'btn-ghost'}" style="flex:1">
+                                                <i class="fa-solid ${icon}"></i> ${label}
+                                            </button>`;
+                                        }).join('')}
+                                    </div>
+                                    <input type="hidden" id="n-thumbnail-position" value="${news?.thumbnail_position || 'center'}">
+                                </div>
                             </div>
-                            <input type="hidden" id="n-thumbnail-position" value="${news?.thumbnail_position || 'center'}">
                         </div>
 
                     </div>
@@ -858,6 +991,7 @@ const NewsPage = {
         const expAt = Dom.val('n-expires-at');
 
         const accessGroupId = Dom.val('n-access-group') || null;
+        const networkVisibility = Dom.val('n-network-visibility') || 'all';
 
         const excerpt = (document.getElementById('n-excerpt')?.value || '').trim().slice(0, 220) || null;
 
@@ -871,6 +1005,7 @@ const NewsPage = {
             published_at:        isPublished ? (pubAt ? new Date(pubAt).toISOString() : new Date().toISOString()) : null,
             expires_at:          expAt ? new Date(expAt).toISOString() : null,
             access_group_id:     accessGroupId,
+            network_visibility:  networkVisibility,
             thumbnail_position:  Dom.val('n-thumbnail-position') || 'center',
         };
 

@@ -1600,14 +1600,26 @@ const API = {
         },
 
         async toggleEmoji(newsId, emoji) {
-            // One reaction per user per news
-            const { data: rows } = await supabase.from('news_reactions')
-                .select('emoji').eq('news_id', newsId).eq('user_id', AppState.user.id).limit(1);
-            const prev = rows?.[0]?.emoji || null;
-            // Delete all existing reactions for this user+news
-            await supabase.from('news_reactions').delete().eq('news_id', newsId).eq('user_id', AppState.user.id);
-            if (prev === emoji) return { added: false, prev };
-            await supabase.from('news_reactions').insert({ news_id: newsId, user_id: AppState.user.id, emoji });
+            // One reaction per user per news (enforced by UNIQUE(news_id,user_id) in DB).
+            // Раніше тут був неатомарний DELETE-потім-INSERT без перевірки помилок —
+            // під швидкими повторними кліками (без блокування кнопки на клієнті) це
+            // не створювало дублікатів у БД (рятував UNIQUE), але функція завжди
+            // повертала {added:true}, навіть якщо INSERT впав — а виклики рахували
+            // видимий лічильник лайків локально (+1 на кожен клік), тому число на
+            // екрані могло рости нескінченно, не відповідаючи реальним даним.
+            const { data: row, error: selErr } = await supabase.from('news_reactions')
+                .select('id, emoji').eq('news_id', newsId).eq('user_id', AppState.user.id).maybeSingle();
+            if (selErr) throw selErr;
+            const prev = row?.emoji || null;
+
+            if (prev === emoji) {
+                const { error } = await supabase.from('news_reactions').delete().eq('id', row.id);
+                if (error) throw error;
+                return { added: false, prev };
+            }
+            const { error } = await supabase.from('news_reactions')
+                .upsert({ news_id: newsId, user_id: AppState.user.id, emoji }, { onConflict: 'news_id,user_id' });
+            if (error) throw error;
             return { added: true, prev };
         },
 

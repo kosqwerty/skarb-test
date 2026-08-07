@@ -403,9 +403,19 @@ const DashboardPage = {
         // setTimeout(() => this._startTour(), 1800);
     },
 
-    async _renderFeed(news) {
+    async _renderFeed(rawNews) {
         const el = document.getElementById('db-feed');
         if (!el) return;
+        // network_visibility ('all'|'trusted'|'untrusted') задається адміном у
+        // редагуванні новини (js/pages/news.js) — той самий критерій тут, щоб
+        // стрічка на дашборді не показувала новини, недоступні з цієї мережі.
+        const news = (rawNews || []).filter(n => {
+            const v = n.network_visibility || 'all';
+            if (v === 'all') return true;
+            if (v === 'trusted') return !!AppState.isTrustedNetwork;
+            if (v === 'untrusted') return !AppState.isTrustedNetwork;
+            return true;
+        });
         if (!news.length) { el.innerHTML = ''; return; }
 
         const EMOJIS = ['👍','❤️','😂','😮','😢','🔥'];
@@ -2432,25 +2442,28 @@ const DashboardPage = {
     _newsCache: {},
 
     async _toggleEmoji(newsId, emoji, btn) {
+        // Блокуємо кнопку на час запиту — без цього швидкі повторні кліки
+        // летіли паралельно, і локальний лічильник (+1 на кожен клік) не
+        // відповідав реальним даним у БД (можна було "накрутити" число лайків).
+        if (btn.disabled) return;
+        btn.disabled = true;
         try {
-            const { added, prev } = await API.news.toggleEmoji(newsId, emoji);
+            await API.news.toggleEmoji(newsId, emoji);
+            // Перечитуємо реальний стан з БД замість ручної математики cur±1.
+            const { counts, myEmojis } = await API.news.getEmojiReactions(newsId);
             const wrap = btn.closest(`#dnm-reactions-${newsId}`);
-            // Deactivate previous reaction if switched
-            if (prev && prev !== emoji && wrap) {
-                const prevBtn = wrap.querySelector(`[data-emoji="${prev}"]`);
-                if (prevBtn) {
-                    prevBtn.classList.remove('active');
-                    const c = prevBtn.querySelector('.dnm-r-count');
-                    c.textContent = Math.max(0, (parseInt(c.textContent) || 0) - 1) || '';
-                }
+            if (wrap) {
+                wrap.querySelectorAll('.dnm-reaction').forEach(b => {
+                    const e = b.dataset.emoji;
+                    b.classList.toggle('active', myEmojis.has(e));
+                    const c = b.querySelector('.dnm-r-count');
+                    if (c) c.textContent = counts[e] || '';
+                });
             }
-            btn.classList.toggle('active', added);
-            const countEl = btn.querySelector('.dnm-r-count');
-            let count = parseInt(countEl.textContent) || 0;
-            countEl.textContent = (added ? count + 1 : Math.max(0, count - 1)) || '';
             btn.style.transform = 'scale(1.25)';
             setTimeout(() => { btn.style.transform = ''; }, 200);
         } catch(e) { Toast.error('Помилка', e.message); }
+        finally { btn.disabled = false; }
     },
 
     async _toggleNewsBm(id, title, btn) {

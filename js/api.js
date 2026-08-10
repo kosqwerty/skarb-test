@@ -1350,7 +1350,7 @@ const API = {
         async getAll() {
             const { data, error } = await supabase
                 .from('custom_pages')
-                .select('id, title, is_published, is_home, allowed_labels, created_at, updated_at')
+                .select('id, title, is_published, is_home, allowed_labels, network_visibility, created_at, updated_at')
                 .order('created_at', { ascending: false });
             if (error) throw error;
             const pages = data || [];
@@ -1361,7 +1361,7 @@ const API = {
                 p.is_published && (
                     !p.allowed_labels?.length ||
                     (userLabel && p.allowed_labels.includes(userLabel))
-                )
+                ) && (p.network_visibility !== 'trusted' || AppState.isTrustedNetwork)
             );
         },
 

@@ -78,6 +78,7 @@ const CollectionsPage = {
                 }
                 visible = pages.filter(p => {
                     if (!p.is_published) return false;
+                    if (p.network_visibility === 'trusted' && !AppState.isTrustedNetwork) return false;
                     if (p.allowed_labels?.length) {
                         if (!userLabel || !p.allowed_labels.includes(userLabel)) return false;
                     }
@@ -177,6 +178,16 @@ const CollectionsPage = {
             if (!page.is_published && !AppState.isStaff()) {
                 Toast.error('Доступ заборонено');
                 Router.go('collections');
+                return;
+            }
+            if (page.network_visibility === 'trusted' && !AppState.isTrustedNetwork && !AppState.isStaff()) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">🔒</div>
+                        <h3>Доступ обмежено</h3>
+                        <p style="color:var(--text-muted)">Ця сторінка доступна лише з довіреної мережі</p>
+                        <button class="btn-back" style="margin-top:1rem" onclick="Router.back()"><i class="fa-solid fa-arrow-left"></i> Назад</button>
+                    </div>`;
                 return;
             }
             // Label-based and dovirenost-based access check
@@ -419,29 +430,23 @@ const CollectionsPage = {
     document.documentElement.classList.toggle('lms-dark', !e.data.isLight);
   });
   function sendSize(buffer) {
+    // Навмисно НЕ включаємо document.documentElement.scrollHeight/offsetHeight:
+    // для кореневого <html> браузери повертають max(висота контенту, висота
+    // viewport), а viewport iframe — це і є та висота, яку йому щойно
+    // виставив батько. Це створює петлю зворотного зв'язку (кожен клік додає
+    // +400px до вже "забрудненого" попереднім циклом значення). document.body
+    // — звичайний елемент, такому розтягуванню під viewport не підлягає.
     var h = Math.max(
       document.body.scrollHeight,
-      document.body.offsetHeight,
-      document.documentElement.scrollHeight,
-      document.documentElement.offsetHeight
+      document.body.offsetHeight
     ) + (buffer || 0);
     if (h > 0) window.parent.postMessage({ type: 'lms-resize', height: h }, '*');
   }
-  var collapseTimer;
-  document.addEventListener('mousedown', function() {
-    clearTimeout(collapseTimer);
-    sendSize(400);
-  });
-  // 'mouseup' замість 'click' — click вимагає press+release на одному й тому
-  // ж елементі без скасування, тому не спрацьовує надійно при перетягуванні
-  // нативного скролбару (напр. горизонтального скролу таблиці): mousedown
-  // додавав буфер +400px, а click після drag міг не долетіти, і буфер лишався
-  // "приклеєним" назавжди — висота iframe тільки накопичувалась з кожним кліком.
-  // mouseup спливає до document завжди, незалежно від того, де саме відпустили кнопку.
-  document.addEventListener('mouseup', function() {
-    clearTimeout(collapseTimer);
-    collapseTimer = setTimeout(function() { sendSize(0); }, 600);
-  });
+  // Раніше тут був буфер +400px на mousedown "про всяк випадок" (якщо клік
+  // відкриє щось високе), який зменшувався назад із затримкою — але саме
+  // це давало видимий стрибок висоти на кожному кліку. ResizeObserver нижче
+  // реагує на будь-яку реальну зміну висоти контенту миттєво й точно, тож
+  // спекулятивний буфер на клік більше не потрібен.
   document.addEventListener('DOMContentLoaded', function() {
     sendSize(0);
     if (typeof ResizeObserver !== 'undefined') {
@@ -607,253 +612,263 @@ document.addEventListener('click', function(e) {
         const isPublished = page?.is_published || false;
         const hasLabels = (page?.allowed_labels?.length || 0) > 0;
         const hasDovs   = selectedDovIds.length > 0;
-        const accessSummary = (hasLabels || hasDovs) ? 'Обмежений доступ' : 'Усі користувачі';
+        const hasNetwork = page?.network_visibility === 'trusted';
+        const accessSummary = (hasLabels || hasDovs || hasNetwork) ? 'Обмежений доступ' : 'Усі користувачі';
         const savedAt = page?.updated_at ? new Date(page.updated_at) : null;
 
         return `
-        <div style="display:flex;flex-direction:column;height:calc(100vh - 120px);gap:0">
+        <div class="col-page">
 
-            <!-- Top bar -->
-            <div style="padding:.65rem 1rem;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);margin-bottom:.75rem">
-
-                <!-- Row 1: back | icon+title | spacer | timestamp | save-split | publish | more -->
-                <div style="display:flex;align-items:center;gap:.6rem">
-
-                    <button class="btn-back" style="flex-shrink:0" onclick="Router.back()">
-                        <i class="fa-solid fa-arrow-left"></i> Назад
-                    </button>
-
-                    <div style="width:32px;height:32px;border-radius:9px;background:rgba(99,102,241,.12);border:1px solid rgba(99,102,241,.2);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-                        <i class="fa-regular fa-file-lines" style="color:var(--primary);font-size:.9rem"></i>
+            <!-- Header, як у "Редагувати новину" -->
+            <div class="col-hdr">
+                <div class="col-hdr-icon"><i class="fa-solid ${page?.id ? 'fa-pen' : 'fa-file-circle-plus'}"></i></div>
+                <div class="col-hdr-text">
+                    <div class="col-hdr-title">${page?.id ? 'Редагувати сторінку' : 'Нова сторінка'}</div>
+                    <div class="col-hdr-sub">
+                        <span id="col-status-pill" class="col-status-pill ${isPublished ? 'live' : 'draft'}">
+                            <i class="fa-solid ${isPublished ? 'fa-circle-check' : 'fa-pen'}" style="font-size:.6rem"></i>
+                            <span id="col-status-label">${isPublished ? 'Опубліковано' : 'Чернетка'}</span>
+                        </span>
+                        <span id="col-saved-badge" class="col-tb-saved-badge" style="display:${page?.id ? 'inline-flex' : 'none'}">
+                            <i class="fa-solid fa-check"></i> Збережено
+                        </span>
+                        <span id="col-last-saved" class="col-tb-timestamp">${savedAt ? 'Останнє збереження: ' + CollectionsPage._fmtAgo(savedAt) : ''}</span>
                     </div>
+                </div>
+                <div class="col-hdr-actions">
+                    <button class="btn btn-secondary" onclick="Router.back()">Скасувати</button>
+                    <div style="position:relative;flex-shrink:0">
+                        <div class="col-tb-save-split">
+                            <button id="col-save-btn" class="col-tb-save-btn"
+                                    onclick="CollectionsPage.savePage('${page?.id || ''}', true)">
+                                <i class="fa-solid fa-check"></i> Зберегти
+                            </button>
+                            <button class="col-tb-save-caret" onclick="CollectionsPage._toggleSaveMenu(this)">
+                                <i class="fa-solid fa-chevron-down"></i>
+                            </button>
+                        </div>
+                        <div id="col-save-menu" class="col-tb-menu">
+                            <button class="col-tb-menu-item" onclick="CollectionsPage._selectSaveOption('${page?.id || ''}', false, 'Зберегти та закрити', 'fa-solid fa-floppy-disk')">
+                                <i class="fa-solid fa-floppy-disk" style="color:var(--text-muted);width:14px"></i> Зберегти та закрити
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <!-- Hidden inputs for savePage() compatibility -->
+                <input type="hidden" id="page-published" value="${isPublished ? '1' : ''}">
+            </div>
 
-                    <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px">
-                        <span style="font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);line-height:1">Назва сторінки</span>
-                        <div style="display:flex;align-items:center;gap:.5rem">
-                            <input id="page-title-input" type="text" value="${Fmt.esc(page?.title || '')}" placeholder="Введіть назву…"
-                                   style="font-size:.97rem;font-weight:600;border:none;background:transparent;color:var(--text-primary);outline:none;padding:0;min-width:0;flex:1"
+            <div class="col-layout">
+
+                <!-- ── Ліва колонка ── -->
+                <div class="col-main">
+
+                    <div class="col-hero-card">
+                        <div class="col-field">
+                            <label>Назва сторінки *</label>
+                            <input id="page-title-input" class="col-title-input" type="text" value="${Fmt.esc(page?.title || '')}" placeholder="Введіть назву сторінки…"
                                    oninput="CollectionsPage._markDirty()">
-                            <span id="col-saved-badge" style="display:${page?.id ? 'inline-flex' : 'none'};align-items:center;gap:.25rem;font-size:.7rem;font-weight:600;background:rgba(16,185,129,.12);color:#10b981;border:1px solid rgba(16,185,129,.25);border-radius:20px;padding:1px 8px;white-space:nowrap;flex-shrink:0">
-                                <i class="fa-solid fa-check" style="font-size:.55rem"></i> Збережено
-                            </span>
                         </div>
                     </div>
 
-                    <span id="col-last-saved" style="font-size:.78rem;color:var(--text-muted);white-space:nowrap;flex-shrink:0">${savedAt ? 'Останнє збереження: ' + CollectionsPage._fmtAgo(savedAt) : ''}</span>
-
-                    <!-- Save split button -->
-                    <div style="display:flex;border-radius:var(--radius-md);flex-shrink:0;box-shadow:0 2px 6px rgba(99,102,241,.22);position:relative">
-                        <button id="col-save-btn"
-                                onclick="CollectionsPage.savePage('${page?.id || ''}', true)"
-                                style="display:inline-flex;align-items:center;gap:.35rem;padding:.38rem .75rem;background:var(--primary);color:#fff;border:none;font-size:.83rem;font-weight:600;cursor:pointer;font-family:inherit;transition:filter .15s;border-radius:var(--radius-md) 0 0 var(--radius-md)"
-                                onmouseenter="this.style.filter='brightness(1.1)'" onmouseleave="this.style.filter=''">
-                            <i class="fa-solid fa-check"></i> Зберегти
-                        </button>
-                        <div style="position:relative;display:flex">
-                            <button onclick="CollectionsPage._toggleSaveMenu(this)"
-                                    style="padding:.38rem .45rem;background:var(--primary);color:rgba(255,255,255,.8);border:none;border-left:1px solid rgba(255,255,255,.18);cursor:pointer;font-size:.7rem;transition:filter .15s;border-radius:0 var(--radius-md) var(--radius-md) 0"
-                                    onmouseenter="this.style.filter='brightness(1.1)'" onmouseleave="this.style.filter=''">
-                                <i class="fa-solid fa-chevron-down"></i>
+                    <div class="col-card">
+                        <div class="col-card-head col-content-head">
+                            <div style="display:flex">
+                                <button id="tab-html" onclick="CollectionsPage._switchTab('html')"
+                                        style="padding:.5rem 1.25rem;font-size:.8rem;font-weight:600;letter-spacing:.05em;border:none;cursor:pointer;background:var(--bg-surface);color:var(--text-primary);border-right:1px solid var(--border);border-bottom:2px solid var(--primary)">HTML</button>
+                                <button id="tab-css" onclick="CollectionsPage._switchTab('css')"
+                                        style="padding:.5rem 1.25rem;font-size:.8rem;font-weight:600;letter-spacing:.05em;border:none;cursor:pointer;background:var(--bg-raised);color:var(--text-muted);border-right:1px solid var(--border);border-bottom:2px solid transparent">CSS</button>
+                            </div>
+                            <button type="button" class="btn btn-ghost btn-sm" id="col-preview-toggle" onclick="CollectionsPage._toggleColPreview(this)">
+                                <i class="fa-regular fa-eye-slash"></i> Сховати прев'ю
                             </button>
-                            <div id="col-save-menu" style="display:none;position:absolute;top:calc(100% + 5px);right:0;z-index:300;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-lg);min-width:200px;overflow:hidden">
-                                <button onclick="CollectionsPage.savePage('${page?.id || ''}', 'preview')"
-                                        style="width:100%;display:flex;align-items:center;gap:.5rem;padding:.55rem .85rem;background:transparent;border:none;font-size:.84rem;color:var(--text-primary);cursor:pointer;font-family:inherit;text-align:left;transition:background .12s"
-                                        onmouseenter="this.style.background='var(--bg-hover)'" onmouseleave="this.style.background=''">
-                                    <i class="fa-solid fa-eye" style="color:var(--primary);width:14px"></i> Зберегти та переглянути
-                                </button>
-                                <div style="height:1px;background:var(--border);margin:0 .5rem"></div>
-                                <button onclick="CollectionsPage.savePage('${page?.id || ''}', false)"
-                                        style="width:100%;display:flex;align-items:center;gap:.5rem;padding:.55rem .85rem;background:transparent;border:none;font-size:.84rem;color:var(--text-primary);cursor:pointer;font-family:inherit;text-align:left;transition:background .12s"
-                                        onmouseenter="this.style.background='var(--bg-hover)'" onmouseleave="this.style.background=''">
-                                    <i class="fa-solid fa-floppy-disk" style="color:var(--text-muted);width:14px"></i> Зберегти та закрити
-                                </button>
+                        </div>
+                        <div class="col-card-body" style="padding:0">
+                            <!-- Split: code left + resize handle + live preview right -->
+                            <div id="col-split" style="display:flex;gap:0;height:600px">
+
+                                <!-- Code panel -->
+                                <div id="col-code-panel" style="display:flex;flex-direction:column;width:50%;min-width:180px;border-right:1px solid var(--border);overflow:hidden">
+                                    <textarea id="editor-html" spellcheck="false">${this._esc(page?.html_content || this._defaultHtml())}</textarea>
+                                    <textarea id="editor-css" spellcheck="false" style="display:none">${this._esc((page?.css_content || this._defaultCss()).replace(/'Play'/g, "'Inter'").replace(/'Fixel Display'/g, "'Inter'"))}</textarea>
+                                </div>
+
+                                <!-- Resize handle -->
+                                <div id="col-split-handle" onmousedown="CollectionsPage._startResize(event)"></div>
+
+                                <!-- Live preview -->
+                                <div id="col-preview-panel" style="display:flex;flex-direction:column;flex:1;min-width:180px;overflow:hidden">
+                                    <iframe id="live-preview-iframe" style="flex:1;border:none;background:#fff;width:100%"
+                                            sandbox="allow-scripts allow-forms allow-popups allow-same-origin"></iframe>
+                                </div>
+
                             </div>
                         </div>
                     </div>
 
-                    <!-- Publish button -->
-                    <button id="col-publish-btn" onclick="CollectionsPage._togglePublishBtn(this)"
-                            data-pub="${isPublished ? '1' : '0'}"
-                            style="display:inline-flex;align-items:center;gap:.35rem;padding:.38rem .75rem;border-radius:var(--radius-md);flex-shrink:0;border:1px solid ${isPublished ? 'rgba(16,185,129,.4)' : 'var(--border)'};background:${isPublished ? 'rgba(16,185,129,.1)' : 'var(--bg-surface)'};color:${isPublished ? '#10b981' : 'var(--text-secondary)'};font-size:.83rem;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s">
-                        <i class="fa-${isPublished ? 'solid' : 'regular'} fa-circle-check"></i>
-                        ${isPublished ? 'Опубліковано' : 'Опублікувати'}
-                    </button>
+                    <div class="col-card">
+                        <div class="col-card-head col-card-head-split">
+                            <span><i class="fa-solid fa-paperclip"></i> Прикріплені файли</span>
+                            <span style="display:flex;align-items:center;gap:.5rem">
+                                <span id="col-insert-counter" style="display:none;font-size:.72rem;font-weight:600;background:rgba(16,185,129,.15);color:#10b981;border:1px solid rgba(16,185,129,.3);border-radius:20px;padding:1px 8px"></span>
+                                ${page?.id ? `
+                                <label id="col-attach-add" style="cursor:pointer">
+                                    <span class="btn btn-ghost btn-sm" style="pointer-events:none">+ Додати</span>
+                                    <input type="file" multiple style="display:none" onchange="CollectionsPage._onAttachFiles(this)">
+                                </label>` : `
+                                <label id="col-attach-add" style="cursor:pointer">
+                                    <span class="btn btn-ghost btn-sm" style="pointer-events:none">+ Додати</span>
+                                    <input type="file" multiple style="display:none" onchange="CollectionsPage._onAttachFilesNew(this)">
+                                </label>`}
+                            </span>
+                        </div>
+                        <div id="attachment-panel" class="col-card-body" style="padding:0">
+                            <div id="attachment-grid"
+                                 style="display:flex;flex-wrap:wrap;gap:.5rem;padding:.75rem .875rem;min-height:96px;align-items:flex-start">
+                                ${page?.id ? '' : '<span style="font-size:.8rem;color:var(--text-muted);align-self:center">—</span>'}
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-                    <!-- More button -->
-                    <div style="position:relative;flex-shrink:0">
-                        <button onclick="CollectionsPage._toggleMoreMenu(this)"
-                                style="width:32px;height:32px;border-radius:var(--radius-md);border:1px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1rem;transition:background .15s"
-                                onmouseenter="this.style.background='var(--bg-hover)'" onmouseleave="this.style.background='var(--bg-surface)'">
-                            <i class="fa-solid fa-ellipsis-vertical"></i>
-                        </button>
-                        <div id="col-more-menu" style="display:none;position:absolute;top:calc(100% + 5px);right:0;z-index:300;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-lg);min-width:200px;overflow:hidden">
-                            <label style="display:flex;align-items:center;gap:.5rem;padding:.55rem .85rem;cursor:pointer;font-size:.84rem;color:var(--text-primary);transition:background .12s"
-                                   onmouseenter="this.style.background='var(--bg-hover)'" onmouseleave="this.style.background=''">
-                                <input type="checkbox" id="page-search-enabled" ${page?.search_enabled ? 'checked' : ''}>
-                                <i class="fa-solid fa-magnifying-glass" style="color:var(--primary);width:14px;font-size:.8rem"></i> Пошук на сторінці
+                <!-- ── Права колонка (опції) ── -->
+                <div class="col-sidebar">
+
+                    <div class="col-card" style="--c:#10b981">
+                        <div class="col-card-head"><i class="fa-solid fa-paper-plane"></i>Публікація</div>
+                        <div class="col-card-body">
+                            <label class="col-tb-toggle-row" style="--c:#10b981">
+                                <span class="col-tb-toggle-ico"><i class="fa-solid fa-circle-check"></i></span>
+                                <span class="col-tb-toggle-text">Опубліковано</span>
+                                <input type="checkbox" id="page-published-toggle" class="col-tb-toggle-input" ${isPublished ? 'checked' : ''} onchange="CollectionsPage._onPublishToggle(this)">
+                                <span class="col-tb-toggle-pill"><span class="col-tb-toggle-knob"></span></span>
+                            </label>
+                            <label class="col-tb-toggle-row" style="--c:#10b981">
+                                <span class="col-tb-toggle-ico"><i class="fa-solid fa-magnifying-glass"></i></span>
+                                <span class="col-tb-toggle-text">Пошук на сторінці</span>
+                                <input type="checkbox" id="page-search-enabled" class="col-tb-toggle-input" ${page?.search_enabled ? 'checked' : ''}>
+                                <span class="col-tb-toggle-pill"><span class="col-tb-toggle-knob"></span></span>
                             </label>
                         </div>
                     </div>
 
-                    <!-- Hidden inputs for savePage() compatibility -->
-                    <input type="hidden" id="page-published" value="${isPublished ? '1' : ''}">
-                </div>
-
-                <!-- Row 2: access | template | spacer | resources -->
-                <div style="display:flex;align-items:center;gap:.5rem;border-top:1px solid var(--border);padding-top:.5rem;margin-top:.55rem;flex-wrap:wrap">
-
-                    <!-- Unified access picker -->
-                    <div style="position:relative;flex-shrink:0">
-                        <button onclick="CollectionsPage._toggleAccessDropdown()"
-                                style="display:inline-flex;align-items:center;gap:.4rem;padding:.3rem .65rem;border-radius:var(--radius-md);border:1px solid var(--border);background:var(--bg-raised);color:var(--text-secondary);font-size:.82rem;font-weight:500;cursor:pointer;font-family:inherit;transition:background .15s"
-                                onmouseenter="this.style.background='var(--bg-hover)'" onmouseleave="this.style.background='var(--bg-raised)'">
-                            <i class="fa-solid fa-globe" style="color:var(--primary);font-size:.75rem"></i>
-                            Доступ: <span id="col-access-summary" style="font-weight:600">${accessSummary}</span>
-                            <i class="fa-solid fa-chevron-down" style="font-size:.6rem;opacity:.6"></i>
-                        </button>
-                        <div id="col-access-dropdown" style="display:none;position:absolute;top:calc(100% + 6px);left:0;z-index:200;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);padding:.85rem;min-width:280px">
-                            <div style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:.4rem">Мітки груп</div>
-                            <div style="max-height:130px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-raised);padding:.2rem .4rem">
-                                ${!groupNames.length
-                                    ? `<div style="font-size:.8rem;color:var(--text-muted);padding:.3rem .25rem">Групи не знайдено</div>`
-                                    : groupNames.map(name => `
-                                    <label style="display:flex;align-items:center;gap:.5rem;padding:.3rem .35rem;border-radius:5px;cursor:pointer;font-size:.84rem"
-                                           onmouseenter="this.style.background='var(--bg-hover)'" onmouseleave="this.style.background=''">
-                                        <input type="checkbox" name="col-group" value="${name.replace(/"/g,'&quot;')}"
-                                               ${selectedLabels.includes(name) ? 'checked' : ''}
-                                               onchange="CollectionsPage._onTagChange()">
-                                        <span>${Fmt.esc(name)}</span>
-                                    </label>`).join('')}
-                                <label style="display:flex;align-items:center;gap:.5rem;padding:.3rem .35rem;border-radius:5px;cursor:pointer;font-size:.8rem;color:var(--text-muted);border-top:1px solid var(--border);margin-top:.2rem"
-                                       onmouseenter="this.style.background='var(--bg-hover)'" onmouseleave="this.style.background=''">
-                                    <input type="checkbox" id="col-group-all" ${!selectedLabels.length ? 'checked' : ''} onchange="CollectionsPage._clearAllTags()">
-                                    <span>Всі користувачі (без обмежень)</span>
-                                </label>
+                    <div class="col-card" style="--c:#8b5cf6">
+                        <div class="col-card-head"><i class="fa-solid fa-shield-halved"></i>Доступ і видимість</div>
+                        <div class="col-card-body">
+                            <div class="col-field">
+                                <label>Мережа доступу</label>
+                                <select id="page-network-visibility" class="col-tb-select" onchange="CollectionsPage._markDirty()">
+                                    <option value="all" ${(!page?.network_visibility || page.network_visibility === 'all') ? 'selected' : ''}>Видно з будь-якої мережі</option>
+                                    <option value="trusted" ${page?.network_visibility === 'trusted' ? 'selected' : ''}>Тільки довірена мережа</option>
+                                </select>
                             </div>
-                            <div style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin:.65rem 0 .4rem">Довіреності</div>
-                            <div style="max-height:130px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-raised);padding:.2rem .4rem">
-                                ${!dovNames.length
-                                    ? `<div style="font-size:.8rem;color:var(--text-muted);padding:.3rem .25rem">Довіреності не знайдено</div>`
-                                    : dovNames.map(d => `
-                                    <label style="display:flex;align-items:center;gap:.5rem;padding:.3rem .35rem;border-radius:5px;cursor:pointer;font-size:.84rem"
-                                           onmouseenter="this.style.background='var(--bg-hover)'" onmouseleave="this.style.background=''">
-                                        <input type="checkbox" name="col-dov" value="${d.id}"
-                                               ${selectedDovIds.includes(d.id) ? 'checked' : ''}
-                                               onchange="CollectionsPage._onDovChange()">
-                                        <span>${Fmt.esc(d.name)}</span>
-                                    </label>`).join('')}
-                                <label style="display:flex;align-items:center;gap:.5rem;padding:.3rem .35rem;border-radius:5px;cursor:pointer;font-size:.8rem;color:var(--text-muted);border-top:1px solid var(--border);margin-top:.2rem"
-                                       onmouseenter="this.style.background='var(--bg-hover)'" onmouseleave="this.style.background=''">
-                                    <input type="checkbox" id="col-dov-all" ${!selectedDovIds.length ? 'checked' : ''} onchange="CollectionsPage._clearAllDovs()">
-                                    <span>Без обмежень (всі)</span>
-                                </label>
+                            <div class="col-field">
+                                <label>Мітки груп</label>
+                                <div class="col-tb-list">
+                                    ${!groupNames.length
+                                        ? `<div class="col-tb-list-empty">Групи не знайдено</div>`
+                                        : groupNames.map(name => `
+                                        <label class="col-tb-check-row">
+                                            <input type="checkbox" name="col-group" value="${name.replace(/"/g,'&quot;')}"
+                                                   ${selectedLabels.includes(name) ? 'checked' : ''}
+                                                   onchange="CollectionsPage._onTagChange()">
+                                            <span>${Fmt.esc(name)}</span>
+                                        </label>`).join('')}
+                                    <label class="col-tb-check-row is-all">
+                                        <input type="checkbox" id="col-group-all" ${!selectedLabels.length ? 'checked' : ''} onchange="CollectionsPage._clearAllTags()">
+                                        <span>Всі користувачі (без обмежень)</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-field">
+                                <label>Довіреності</label>
+                                <div class="col-tb-list">
+                                    ${!dovNames.length
+                                        ? `<div class="col-tb-list-empty">Довіреності не знайдено</div>`
+                                        : dovNames.map(d => `
+                                        <label class="col-tb-check-row">
+                                            <input type="checkbox" name="col-dov" value="${d.id}"
+                                                   ${selectedDovIds.includes(d.id) ? 'checked' : ''}
+                                                   onchange="CollectionsPage._onDovChange()">
+                                            <span>${Fmt.esc(d.name)}</span>
+                                        </label>`).join('')}
+                                    <label class="col-tb-check-row is-all">
+                                        <input type="checkbox" id="col-dov-all" ${!selectedDovIds.length ? 'checked' : ''} onchange="CollectionsPage._clearAllDovs()">
+                                        <span>Без обмежень (всі)</span>
+                                    </label>
+                                </div>
                             </div>
                         </div>
                     </div>
-
-
-                    <div style="flex:1"></div>
-
-                    <!-- Resources -->
-                    <button class="btn btn-ghost btn-sm" onclick="CollectionsPage._insertResourceLink()" style="display:inline-flex;align-items:center;gap:.35rem;flex-shrink:0">
-                        <i class="fa-solid fa-paperclip" style="font-size:.8rem"></i> Ресурси
-                    </button>
                 </div>
             </div>
+        </div>
 
-            <style>
-                #col-code-panel .CodeMirror { height:100%!important; font-family:'Courier New',monospace!important; font-size:.88rem!important; line-height:1.6!important; }
-                #col-code-panel .CodeMirror-scroll { height:100%; }
-                #col-split-handle { width:5px;background:var(--border);cursor:col-resize;flex-shrink:0;transition:background .15s; }
-                #col-split-handle:hover { background:var(--primary); }
-                .btn-warning { background:var(--warning,#f59e0b)!important; border-color:var(--warning,#f59e0b)!important; color:#fff!important; }
-            </style>
-
-            <!-- Split: code left + resize handle + live preview right -->
-            <div id="col-split" style="display:flex;gap:0;flex:1;min-height:600px;margin-bottom:.75rem">
-
-                <!-- Code panel -->
-                <div id="col-code-panel" style="display:flex;flex-direction:column;width:50%;min-width:180px;border:1px solid var(--border);border-radius:var(--radius-lg) 0 0 var(--radius-lg);overflow:hidden">
-                    <div style="display:flex;background:var(--bg-raised);border-bottom:1px solid var(--border);flex-shrink:0">
-                        <button id="tab-html" onclick="CollectionsPage._switchTab('html')"
-                                style="padding:.5rem 1.25rem;font-size:.8rem;font-weight:600;letter-spacing:.05em;border:none;cursor:pointer;background:var(--bg-surface);color:var(--text-primary);border-right:1px solid var(--border);border-bottom:2px solid var(--primary)">HTML</button>
-                        <button id="tab-css" onclick="CollectionsPage._switchTab('css')"
-                                style="padding:.5rem 1.25rem;font-size:.8rem;font-weight:600;letter-spacing:.05em;border:none;cursor:pointer;background:var(--bg-raised);color:var(--text-muted);border-right:1px solid var(--border);border-bottom:2px solid transparent">CSS</button>
-                    </div>
-                    <textarea id="editor-html" spellcheck="false">${this._esc(page?.html_content || this._defaultHtml())}</textarea>
-                    <textarea id="editor-css" spellcheck="false" style="display:none">${this._esc((page?.css_content || this._defaultCss()).replace(/'Play'/g, "'Inter'").replace(/'Fixel Display'/g, "'Inter'"))}</textarea>
-                </div>
-
-                <!-- Resize handle -->
-                <div id="col-split-handle" onmousedown="CollectionsPage._startResize(event)"></div>
-
-                <!-- Live preview -->
-                <div id="col-preview-panel" style="display:flex;flex-direction:column;flex:1;min-width:180px;border:1px solid var(--border);border-left:none;border-radius:0 var(--radius-lg) var(--radius-lg) 0;overflow:hidden">
-                    <div style="padding:.45rem .875rem;background:var(--bg-raised);border-bottom:1px solid var(--border);font-size:.8rem;font-weight:600;color:var(--text-muted);flex-shrink:0">
-                        <i class="fa-solid fa-eye" style="margin-right:.4rem"></i>Перегляд
-                    </div>
-                    <iframe id="live-preview-iframe" style="flex:1;border:none;background:#fff;width:100%"
-                            sandbox="allow-scripts allow-forms allow-popups allow-same-origin"></iframe>
-                </div>
-
-            </div>
-
-            <!-- Attachment panel -->
-            <div id="attachment-panel"
-                 style="flex-shrink:0;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--bg-surface);overflow-y:auto;display:flex;flex-direction:column">
-                <div style="display:flex;align-items:center;justify-content:space-between;padding:.45rem .875rem;background:var(--bg-raised);border-bottom:1px solid var(--border)">
-                    <span style="display:flex;align-items:center;gap:.5rem">
-                        <span style="font-size:.8rem;font-weight:600;color:var(--text-muted);letter-spacing:.03em">📎 Прикріплені файли</span>
-                        <span id="col-insert-counter" style="display:none;font-size:.72rem;font-weight:600;background:rgba(16,185,129,.15);color:#10b981;border:1px solid rgba(16,185,129,.3);border-radius:20px;padding:1px 8px"></span>
-                    </span>
-                    ${page?.id ? `
-                    <label style="cursor:pointer">
-                        <span class="btn btn-ghost btn-sm" style="pointer-events:none">+ Додати</span>
-                        <input type="file" multiple style="display:none" onchange="CollectionsPage._onAttachFiles(this)">
-                    </label>` : `
-                    <label style="cursor:pointer">
-                        <span class="btn btn-ghost btn-sm" style="pointer-events:none">+ Додати</span>
-                        <input type="file" multiple style="display:none" onchange="CollectionsPage._onAttachFilesNew(this)">
-                    </label>`}
-                </div>
-                <div id="attachment-grid"
-                     style="display:flex;flex-wrap:wrap;gap:.5rem;padding:.625rem .875rem;min-height:96px;align-items:flex-start;overflow-y:auto;flex:1">
-                    ${page?.id ? '' : '<span style="font-size:.8rem;color:var(--text-muted);align-self:center">—</span>'}
-                </div>
-            </div>
-        </div>`;
-    },
-
-    async _openPreviewModal() {
-        const rawHtml = this._cmHtml ? this._cmHtml.getValue() : (document.getElementById('editor-html')?.value || '');
-        const css     = this._cmCss  ? this._cmCss.getValue()  : (document.getElementById('editor-css')?.value  || '');
-        const html    = await this._resolveAttachmentUrls(rawHtml);
-
-        const backdrop = document.createElement('div');
-        backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;display:flex;align-items:center;justify-content:center;padding:2rem';
-        backdrop.id = 'preview-modal';
-
-        const box = document.createElement('div');
-        box.style.cssText = 'background:var(--bg-surface);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);width:100%;max-width:900px;height:85vh;display:flex;flex-direction:column;overflow:hidden';
-
-        box.innerHTML = `
-            <div style="display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.25rem;border-bottom:1px solid var(--border);background:var(--bg-raised);flex-shrink:0">
-                <span style="font-weight:600;font-size:.95rem"><i class="fa-solid fa-eye"></i> Попередній перегляд</span>
-                <button onclick="document.getElementById('preview-modal').remove()"
-                        style="width:32px;height:32px;border-radius:50%;border:1px solid var(--border);background:var(--bg-surface);color:var(--text-primary);cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center">✕</button>
-            </div>
-            <iframe id="preview-modal-iframe" style="flex:1;border:none;background:#fff"
-                    sandbox="allow-scripts allow-forms allow-popups allow-top-navigation-by-user-activation allow-same-origin"></iframe>`;
-
-        backdrop.appendChild(box);
-        backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.remove(); });
-        document.addEventListener('keydown', function esc(e) {
-            if (e.key === 'Escape') { backdrop.remove(); document.removeEventListener('keydown', esc); }
-        });
-        document.body.appendChild(backdrop);
-
-        const iframe = box.querySelector('#preview-modal-iframe');
-        this._renderIframe(iframe, html, css);
+        <style>
+            .col-hdr { display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:16px 20px;margin-bottom:1.25rem;border-radius:var(--radius-xl);background:linear-gradient(135deg,color-mix(in srgb,var(--primary) 10%,var(--bg-surface)),color-mix(in srgb,var(--primary) 3%,var(--bg-surface)));border:1px solid var(--border); }
+            .col-hdr-icon { width:44px;height:44px;border-radius:13px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:1.1rem;background:var(--primary);color:#fff;box-shadow:0 6px 16px color-mix(in srgb,var(--primary) 45%,transparent); }
+            .col-hdr-text { flex:1;min-width:160px; }
+            .col-hdr-title { font-size:1.15rem;font-weight:800;color:var(--text-primary);line-height:1.2; }
+            .col-hdr-sub { display:flex;align-items:center;gap:8px;margin-top:3px;flex-wrap:wrap; }
+            .col-status-pill { display:inline-flex;align-items:center;gap:5px;font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:2px 9px;border-radius:20px; }
+            .col-status-pill.live { background:rgba(16,185,129,.14);color:#10b981; }
+            .col-status-pill.draft { background:var(--bg-hover);color:var(--text-muted); }
+            .col-hdr-actions { display:flex;gap:8px;flex-wrap:wrap;align-items:center; }
+            .col-tb-saved-badge { display:inline-flex;align-items:center;gap:.25rem;font-size:.7rem;font-weight:600;background:color-mix(in srgb,#10b981 14%,var(--bg-surface));color:#10b981;border:1px solid color-mix(in srgb,#10b981 30%,transparent);border-radius:20px;padding:2px 9px;white-space:nowrap;flex-shrink:0; }
+            .col-tb-timestamp { font-size:.76rem;color:var(--text-muted);white-space:nowrap;flex-shrink:0; }
+            .col-tb-save-split { display:flex;border-radius:10px;flex-shrink:0;box-shadow:0 3px 10px color-mix(in srgb,var(--primary) 30%,transparent);overflow:hidden; }
+            .col-tb-save-btn { display:inline-flex;align-items:center;gap:.4rem;padding:.5rem .9rem;background:var(--primary);color:#fff;border:none;font-size:.84rem;font-weight:600;cursor:pointer;font-family:inherit;transition:filter .15s; }
+            .col-tb-save-btn:hover { filter:brightness(1.08); }
+            .col-tb-save-caret { padding:.5rem .5rem;background:color-mix(in srgb,var(--primary) 88%,#000 8%);color:rgba(255,255,255,.85);border:none;border-left:1px solid rgba(255,255,255,.2);cursor:pointer;font-size:.7rem;transition:filter .15s;height:100%; }
+            .col-tb-save-caret:hover { filter:brightness(1.1); }
+            .col-tb-menu { display:none;position:absolute;top:calc(100% + 6px);right:0;z-index:300;background:var(--bg-surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-lg);min-width:210px;overflow:hidden;padding:.3rem; }
+            .col-tb-menu-item { width:100%;display:flex;align-items:center;gap:.55rem;padding:.6rem .7rem;background:transparent;border:none;border-radius:8px;font-size:.84rem;color:var(--text-primary);cursor:pointer;font-family:inherit;text-align:left;transition:background .12s; }
+            .col-tb-menu-item:hover { background:var(--bg-hover); }
+            .col-tb-menu-divider { height:1px;background:var(--border);margin:.25rem .3rem; }
+            .col-layout { display:grid;grid-template-columns:1fr 300px;gap:1.25rem;align-items:start; }
+            .col-main { display:flex;flex-direction:column;gap:1rem;min-width:0; }
+            .col-sidebar { display:flex;flex-direction:column;gap:12px;position:sticky;top:1rem; }
+            @media(max-width:900px) { .col-layout{grid-template-columns:1fr} }
+            .col-hero-card { background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1.1rem 1.35rem;box-shadow:0 1px 3px rgba(0,0,0,.04); }
+            .col-field { display:flex;flex-direction:column;gap:.35rem; }
+            .col-field label { font-size:.68rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em; }
+            .col-title-input { background:transparent;border:none;border-bottom:2px solid var(--border);padding:.5rem 0;font-size:1.35rem;font-weight:700;color:var(--text-primary);width:100%;outline:none;transition:border-color .2s;font-family:inherit; }
+            .col-title-input:focus { border-bottom-color:var(--primary); }
+            .col-title-input::placeholder { color:var(--text-muted);font-weight:600; }
+            .col-card { background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden; }
+            .col-card-head { display:flex;align-items:center;justify-content:flex-start;text-align:left;gap:9px;padding:10px 14px;font-size:.76rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--c,var(--primary));background:color-mix(in srgb,var(--c,var(--primary)) 7%,var(--bg-raised));border-bottom:1px solid var(--border); }
+            .col-card-head.col-content-head, .col-card-head.col-card-head-split { justify-content:space-between; }
+            .col-card-body { padding:12px 14px;display:flex;flex-direction:column;gap:10px; }
+            .col-content-head { padding:0;background:var(--bg-raised);text-transform:none;font-weight:400;color:inherit; }
+            .col-content-head .btn { font-size:.72rem;padding:.3rem .6rem;margin-right:.5rem;background:var(--bg-surface);border-color:color-mix(in srgb,var(--primary) 45%,var(--border));color:var(--primary); }
+            .col-content-head .btn:hover { background:color-mix(in srgb,var(--primary) 12%,var(--bg-surface));border-color:var(--primary); }
+            .col-tb-toggle-row { display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-hover);cursor:pointer;transition:border-color .15s,background .15s; }
+            .col-tb-toggle-row:has(.col-tb-toggle-input:checked) { border-color:color-mix(in srgb,var(--c,#10b981) 45%,var(--border));background:color-mix(in srgb,var(--c,#10b981) 7%,var(--bg-hover)); }
+            .col-tb-toggle-ico { font-size:.95rem;flex-shrink:0;width:18px;text-align:center;color:var(--text-muted); }
+            .col-tb-toggle-row:has(.col-tb-toggle-input:checked) .col-tb-toggle-ico { color:var(--c,#10b981); }
+            .col-tb-toggle-text { flex:1;min-width:0;font-size:.82rem;font-weight:700;color:var(--text-primary); }
+            .col-tb-toggle-input { position:absolute;opacity:0;width:0;height:0; }
+            .col-tb-toggle-pill { position:relative;flex-shrink:0;width:36px;height:21px;border-radius:11px;background:var(--border);transition:background .2s; }
+            .col-tb-toggle-knob { position:absolute;top:2.5px;left:2.5px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.25);transition:transform .2s; }
+            .col-tb-toggle-input:checked ~ .col-tb-toggle-pill { background:var(--c,#10b981); }
+            .col-tb-toggle-input:checked ~ .col-tb-toggle-pill .col-tb-toggle-knob { transform:translateX(15px); }
+            .col-tb-select { width:100%;box-sizing:border-box;padding:.45rem .6rem;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-hover);color:var(--text-primary);font-family:inherit;font-size:.82rem;outline:none;cursor:pointer;transition:border-color .15s,box-shadow .15s; }
+            .col-tb-select:hover { border-color:color-mix(in srgb,var(--primary) 40%,var(--border)); }
+            .col-tb-select:focus { border-color:var(--primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 16%,transparent); }
+            .col-tb-list { border:1px solid var(--border);border-radius:10px;background:var(--bg-hover);padding:.25rem .4rem; }
+            .col-tb-list-empty { font-size:.8rem;color:var(--text-muted);padding:.3rem .25rem; }
+            .col-tb-check-row { display:flex;align-items:center;gap:.5rem;padding:.32rem .35rem;border-radius:7px;cursor:pointer;font-size:.84rem;transition:background .12s; }
+            .col-tb-check-row:hover { background:var(--bg-hover); }
+            .col-tb-check-row.is-all { color:var(--text-muted);font-size:.8rem;border-top:1px solid var(--border);margin-top:.2rem;padding-top:.4rem; }
+            #col-code-panel .CodeMirror { height:100%!important; font-family:'Courier New',monospace!important; font-size:.88rem!important; line-height:1.6!important; }
+            #col-code-panel .CodeMirror-scroll { height:100%; }
+            #col-split-handle { width:5px;background:var(--border);cursor:col-resize;flex-shrink:0;transition:background .15s; }
+            #col-split-handle:hover { background:var(--primary); }
+            #col-split.col-preview-hidden #col-preview-panel { display:none!important; }
+            #col-split.col-preview-hidden #col-split-handle { display:none; }
+            #col-split.col-preview-hidden #col-code-panel { width:100%!important; }
+            .btn-warning { background:var(--warning,#f59e0b)!important; border-color:var(--warning,#f59e0b)!important; color:#fff!important; }
+        </style>`;
     },
 
     // ── Formatting toolbar ────────────────────────────────────────
@@ -1133,7 +1148,7 @@ document.addEventListener('click', function(e) {
         const cmTheme = document.body.classList.contains('light-theme') ? 'default' : 'dracula';
         const saveCmd = () => this.savePage(this._editingPageId || '');
         const cmBase  = { theme: cmTheme, lineNumbers: true, tabSize: 2, indentWithTabs: false,
-                          lineWrapping: false,
+                          lineWrapping: true,
                           extraKeys: { Tab: cm => cm.replaceSelection('  '), 'Ctrl-S': saveCmd, 'Cmd-S': saveCmd } };
         if (taHtml && typeof CodeMirror !== 'undefined') {
             this._cmHtml = CodeMirror.fromTextArea(taHtml, { ...cmBase, mode: 'htmlmixed' });
@@ -1192,6 +1207,17 @@ document.addEventListener('click', function(e) {
             this._cmCss?.refresh();
             this._updatePreview();
         }, 50);
+    },
+
+    _toggleColPreview(btn) {
+        const split = document.getElementById('col-split');
+        if (!split) return;
+        const hidden = split.classList.toggle('col-preview-hidden');
+        btn.innerHTML = hidden
+            ? '<i class="fa-regular fa-eye"></i> Показати прев\'ю'
+            : '<i class="fa-regular fa-eye-slash"></i> Сховати прев\'ю';
+        this._cmHtml?.refresh();
+        this._cmCss?.refresh();
     },
 
     _updatePreview() {
@@ -1362,54 +1388,41 @@ tr:hover td { background: #f8fafc; }
     },
 
     // ── Topbar controls ───────────────────────────────────────────
-    _togglePublishBtn(btn) {
-        const isNow = btn.dataset.pub === '1';
-        const next = !isNow;
-        btn.dataset.pub = next ? '1' : '0';
+    _onPublishToggle(cb) {
+        const next = cb.checked;
         const inp = document.getElementById('page-published');
         if (inp) inp.value = next ? '1' : '';
-        btn.style.borderColor = next ? 'rgba(16,185,129,.4)' : 'var(--border)';
-        btn.style.background  = next ? 'rgba(16,185,129,.1)'  : 'var(--bg-surface)';
-        btn.style.color       = next ? '#10b981' : 'var(--text-secondary)';
-        btn.innerHTML = `<i class="fa-${next ? 'solid' : 'regular'} fa-circle-check"></i> ${next ? 'Опубліковано' : 'Опублікувати'}`;
+        const pill = document.getElementById('col-status-pill');
+        if (pill) {
+            pill.classList.toggle('live', next);
+            pill.classList.toggle('draft', !next);
+            const icon = pill.querySelector('i');
+            if (icon) icon.className = `fa-solid ${next ? 'fa-circle-check' : 'fa-pen'}`;
+            const label = document.getElementById('col-status-label');
+            if (label) label.textContent = next ? 'Опубліковано' : 'Чернетка';
+        }
         CollectionsPage._markDirty();
+    },
+
+    _selectSaveOption(id, inPlace, label, iconClass) {
+        const btn = document.getElementById('col-save-btn');
+        if (btn) {
+            btn.innerHTML = `<i class="${iconClass}"></i> ${label}`;
+            btn.setAttribute('onclick', `CollectionsPage.savePage('${id}', ${JSON.stringify(inPlace)})`);
+        }
+        const m = document.getElementById('col-save-menu');
+        if (m) m.style.display = 'none';
+        this.savePage(id, inPlace);
     },
 
     _toggleSaveMenu(btn) {
         const m = document.getElementById('col-save-menu');
         if (!m) return;
-        const open = m.style.display !== 'none';
+        const open = getComputedStyle(m).display !== 'none';
         m.style.display = open ? 'none' : 'block';
         if (!open) {
             setTimeout(() => document.addEventListener('click', function h(e) {
                 if (!e.target.closest('#col-save-menu')) { m.style.display = 'none'; document.removeEventListener('click', h); }
-            }), 0);
-        }
-    },
-
-    _toggleMoreMenu(btn) {
-        const m = document.getElementById('col-more-menu');
-        if (!m) return;
-        const open = m.style.display !== 'none';
-        m.style.display = open ? 'none' : 'block';
-        if (!open) {
-            setTimeout(() => document.addEventListener('click', function h(e) {
-                if (!e.target.closest('#col-more-menu') && !e.target.closest('[onclick*="_toggleMoreMenu"]')) { m.style.display = 'none'; document.removeEventListener('click', h); }
-            }), 0);
-        }
-    },
-
-    _toggleAccessDropdown() {
-        const dd = document.getElementById('col-access-dropdown');
-        if (!dd) return;
-        const open = dd.style.display !== 'none';
-        dd.style.display = open ? 'none' : 'block';
-        if (!open) {
-            setTimeout(() => document.addEventListener('click', function h(e) {
-                if (!e.target.closest('#col-access-dropdown') && !e.target.closest('[onclick*="_toggleAccessDropdown"]')) {
-                    dd.style.display = 'none';
-                    document.removeEventListener('click', h);
-                }
             }), 0);
         }
     },
@@ -1523,6 +1536,7 @@ tr:hover td { background: #f8fafc; }
             css_content:  this._cmCss  ? this._cmCss.getValue()  : (document.getElementById('editor-css')?.value  || ''),
             is_published: isPublished,
             search_enabled: document.getElementById('page-search-enabled')?.checked || false,
+            network_visibility: document.getElementById('page-network-visibility')?.value || 'all',
             allowed_labels
         };
         Loader.show();
@@ -1533,11 +1547,7 @@ tr:hover td { background: #f8fafc; }
                 Loader.hide();
                 this._markClean();
                 this._lastSavedAt = new Date();
-                if (inPlace === 'preview') {
-                    this._updateSavedStatus();
-                    Toast.success('Збережено');
-                    Router.go(`collections/${id}`);
-                } else if (inPlace) {
+                if (inPlace) {
                     this._updateSavedStatus();
                     Toast.success('Збережено');
                 } else {
@@ -1684,6 +1694,7 @@ tr:hover td { background: #f8fafc; }
             css_content:  this._cmCss  ? this._cmCss.getValue()  : (document.getElementById('editor-css')?.value  || ''),
             is_published: document.getElementById('page-published')?.checked || false,
             search_enabled: document.getElementById('page-search-enabled')?.checked || false,
+            network_visibility: document.getElementById('page-network-visibility')?.value || 'all',
             allowed_labels
         };
         Loader.show();
@@ -1695,18 +1706,12 @@ tr:hover td { background: #f8fafc; }
             const saveBtn = document.getElementById('col-save-btn');
             if (saveBtn) saveBtn.setAttribute('onclick', `CollectionsPage.savePage('${created.id}')`);
             // Show the "+ Додати" file input instead of the auto-save one
-            const panel = document.getElementById('attachment-panel');
-            if (panel) {
-                const hdr = panel.querySelector('div');
-                if (hdr) {
-                    const placeholder = hdr.querySelector('label');
-                    if (placeholder) placeholder.outerHTML = `
-                        <label style="cursor:pointer">
-                            <span class="btn btn-ghost btn-sm" style="pointer-events:none">+ Додати</span>
-                            <input type="file" multiple style="display:none" onchange="CollectionsPage._onAttachFiles(this)">
-                        </label>`;
-                }
-            }
+            const placeholder = document.getElementById('col-attach-add');
+            if (placeholder) placeholder.outerHTML = `
+                <label id="col-attach-add" style="cursor:pointer">
+                    <span class="btn btn-ghost btn-sm" style="pointer-events:none">+ Додати</span>
+                    <input type="file" multiple style="display:none" onchange="CollectionsPage._onAttachFiles(this)">
+                </label>`;
             this._markClean();
             Loader.hide();
             Toast.success('Сторінку збережено — завантажуємо файли');

@@ -213,6 +213,20 @@ const App = {
                 await CollectionsPage.initView(container, params);
             },
 
+            'collections/new': async ({ container }) => {
+                if (!requireNotIntern()) return;
+                if (!requireTrusted(true)) return;
+                if (!AppState.isAdmin()) { Router.go('collections'); return; }
+                await CollectionsPage.openEditor();
+            },
+
+            'collections/:id/edit': async ({ container, params }) => {
+                if (!requireNotIntern()) return;
+                if (!requireTrusted(true)) return;
+                if (!AppState.isAdmin()) { Router.go('collections'); return; }
+                await CollectionsPage.openEditor(params.id);
+            },
+
             'resource/:id': async ({ container, params }) => {
                 if (!requireTrusted(true)) return;
                 await ResourceViewPage.init(container, params);

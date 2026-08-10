@@ -418,7 +418,7 @@ const DashboardPage = {
         });
         if (!news.length) { el.innerHTML = ''; return; }
 
-        const EMOJIS = ['👍','❤️','😂','😮','😢','🔥'];
+        const EMOJIS = ['👍','❤️','😂','😮','👏','🔥'];
         const _timeAgo = iso => {
             const diff = (Date.now() - new Date(iso)) / 1000;
             if (diff < 60)   return 'щойно';
@@ -533,7 +533,7 @@ const DashboardPage = {
     async _loadFeedReactions(newsId) {
         try {
             const { counts, myEmojis } = await API.news.getEmojiReactions(newsId);
-            ['👍','❤️','😂','😮','😢','🔥'].forEach(emoji => {
+            ['👍','❤️','😂','😮','👏','🔥'].forEach(emoji => {
                 const key = emoji.codePointAt(0);
                 const countEl = document.getElementById(`dbf-ec-${newsId}-${key}`);
                 const btn = document.getElementById(`dbf-e-${newsId}-${key}`);
@@ -2604,13 +2604,12 @@ const DashboardPage = {
             const wrap = document.getElementById(`dnm-reactions-${n.id}`);
             if (!wrap) return;
             const btns = [...wrap.querySelectorAll('.dnm-reaction')];
+            // Позиція емодзі фіксована — не сортуємо за кількістю.
             btns.forEach(btn => {
                 const e = btn.dataset.emoji;
                 btn.querySelector('.dnm-r-count').textContent = counts[e] || '';
                 if (myEmojis.has(e)) btn.classList.add('active');
             });
-            const sorted = [...btns].sort((a, b) => (counts[b.dataset.emoji] || 0) - (counts[a.dataset.emoji] || 0));
-            sorted.forEach(btn => wrap.appendChild(btn));
         }).catch(() => {});
 
         // вау-анімація появи модального вікна

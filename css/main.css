@@ -3189,7 +3189,8 @@ select {
 .nv-emoji-btn:hover { border-color: var(--primary); background: rgba(99,102,241,.1); transform: scale(1.15); }
 .nv-emoji-btn.active { border-color: var(--primary); background: rgba(99,102,241,.18); }
 .nv-emoji-btn .nv-react-count { font-size: .72rem; font-weight: 600; min-width: 1ch; text-align: left; }
-.nv-emoji-hero { background: rgba(0,0,0,.35); border-color: rgba(255,255,255,.25); color: #fff; backdrop-filter: blur(6px); }
+.nv-emoji-hero { background: rgba(0,0,0,.35); border-color: rgba(255,255,255,.25); color: #fff; backdrop-filter: blur(6px); font-size: 1.48rem; padding: .32rem .58rem; min-width: 3.42rem; gap: .27rem; }
+.nv-emoji-hero .nv-react-count { font-size: .95rem; }
 .nv-emoji-hero:hover { background: rgba(0,0,0,.5); border-color: rgba(255,255,255,.5); }
 .nv-emoji-hero.active { background: rgba(99,102,241,.55); border-color: var(--primary); }
 
@@ -3304,6 +3305,31 @@ select {
     margin: 2.5rem 0;
     border-radius: 1px;
     opacity: .3;
+}
+
+/* Готові кольорові блоки для тексту новин — вставляти в HTML-редакторі як
+   <div class="news-callout news-callout-info">текст</div> замість підбору
+   хексів вручну. Фон і текст задані РАЗОМ через color-mix() від однієї
+   семантичної змінної, тож завжди узгоджені між собою незалежно від теми
+   (light/dark) — на відміну від хардкоджених inline-кольорів, які "не
+   знають", що під ними, і можуть злитися з фоном на іншій темі. */
+.news-content-body .news-callout {
+    padding: 1rem 1.25rem;
+    border-radius: var(--radius-md);
+    border-left: 3px solid var(--cs-color);
+    background: color-mix(in srgb, var(--cs-color) 12%, var(--bg-surface));
+    color: var(--text-primary);
+    margin: 1.25rem 0;
+}
+.news-content-body .news-callout-info    { --cs-color: var(--primary); }
+.news-content-body .news-callout-success { --cs-color: #10b981; }
+.news-content-body .news-callout-warning { --cs-color: #f59e0b; }
+.news-content-body .news-callout-danger  { --cs-color: #ef4444; }
+.news-content-body .news-divider {
+    height: 4px;
+    border-radius: 2px;
+    margin: 2rem 0;
+    background: color-mix(in srgb, var(--primary) 55%, transparent);
 }
 
 /* ── Resource List ──────────────────────────────────────────────── */

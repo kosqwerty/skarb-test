@@ -116,6 +116,11 @@ const UI = {
     // документ, щоб частинки не обрізались overflow:hidden карток/модалок.
     emojiBurst(originEl, emoji, count = 12) {
         if (!originEl || !emoji) return;
+        try {
+            const audio = new Audio('/sound/pop_click_emodji.mp3');
+            audio.volume = 0.5;
+            audio.play().catch(() => {});
+        } catch(e) {}
         let layer = document.getElementById('emoji-burst-layer');
         if (!layer) {
             layer = document.createElement('div');
@@ -127,8 +132,8 @@ const UI = {
         const originX = rect.left + rect.width / 2;
         const originY = rect.top + rect.height / 2;
         for (let i = 0; i < count; i++) {
-            const dx     = Math.round((Math.random() - 0.5) * 160);
-            const rise   = Math.round(110 + Math.random() * 140);
+            const dx     = Math.round((Math.random() - 0.5) * 80);
+            const rise   = Math.round(55 + Math.random() * 70);
             const size   = Math.round(15 + Math.random() * 18);
             const rot    = Math.round((Math.random() - 0.5) * 70);
             const dur    = Math.round(750 + Math.random() * 550);

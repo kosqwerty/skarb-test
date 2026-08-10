@@ -536,6 +536,7 @@ document.addEventListener('click', function(e) {
     _cmHtml:              null,
     _cmCss:               null,
     _isDirty:             false,
+    _saving:              false,
     _ctrlSHandler:        null,
     _beforeUnloadHandler: null,
     _cmThemeHandler:      null,
@@ -640,7 +641,7 @@ document.addEventListener('click', function(e) {
                     <div style="position:relative;flex-shrink:0">
                         <div class="col-tb-save-split">
                             <button id="col-save-btn" class="col-tb-save-btn"
-                                    onclick="CollectionsPage.savePage('${page?.id || ''}', true)">
+                                    onclick="CollectionsPage.savePage(CollectionsPage._editingPageId || '', true)">
                                 <i class="fa-solid fa-check"></i> Зберегти
                             </button>
                             <button class="col-tb-save-caret" onclick="CollectionsPage._toggleSaveMenu(this)">
@@ -648,7 +649,7 @@ document.addEventListener('click', function(e) {
                             </button>
                         </div>
                         <div id="col-save-menu" class="col-tb-menu">
-                            <button class="col-tb-menu-item" onclick="CollectionsPage._selectSaveOption('${page?.id || ''}', false, 'Зберегти та закрити', 'fa-solid fa-floppy-disk')">
+                            <button class="col-tb-menu-item" onclick="CollectionsPage._selectSaveOption(CollectionsPage._editingPageId || '', false, 'Зберегти та закрити', 'fa-solid fa-floppy-disk')">
                                 <i class="fa-solid fa-floppy-disk" style="color:var(--text-muted);width:14px"></i> Зберегти та закрити
                             </button>
                         </div>
@@ -818,6 +819,7 @@ document.addEventListener('click', function(e) {
             .col-tb-timestamp { font-size:.76rem;color:var(--text-muted);white-space:nowrap;flex-shrink:0; }
             .col-tb-save-split { display:flex;border-radius:10px;flex-shrink:0;box-shadow:0 3px 10px color-mix(in srgb,var(--primary) 30%,transparent);overflow:hidden; }
             .col-tb-save-btn { display:inline-flex;align-items:center;gap:.4rem;padding:.5rem .9rem;background:var(--primary);color:#fff;border:none;font-size:.84rem;font-weight:600;cursor:pointer;font-family:inherit;transition:filter .15s; }
+            .col-tb-save-btn:disabled { opacity:.6;cursor:not-allowed;filter:none; }
             .col-tb-save-btn:hover { filter:brightness(1.08); }
             .col-tb-save-caret { padding:.5rem .5rem;background:color-mix(in srgb,var(--primary) 88%,#000 8%);color:rgba(255,255,255,.85);border:none;border-left:1px solid rgba(255,255,255,.2);cursor:pointer;font-size:.7rem;transition:filter .15s;height:100%; }
             .col-tb-save-caret:hover { filter:brightness(1.1); }
@@ -1163,7 +1165,7 @@ document.addEventListener('click', function(e) {
         this._ctrlSHandler = e => {
             if ((e.ctrlKey || e.metaKey) && e.key === 's') {
                 e.preventDefault();
-                this.savePage(this._editingPageId || '');
+                this.savePage(this._editingPageId || '', true);
             }
         };
         document.addEventListener('keydown', this._ctrlSHandler);
@@ -1408,7 +1410,10 @@ tr:hover td { background: #f8fafc; }
         const btn = document.getElementById('col-save-btn');
         if (btn) {
             btn.innerHTML = `<i class="${iconClass}"></i> ${label}`;
-            btn.setAttribute('onclick', `CollectionsPage.savePage('${id}', ${JSON.stringify(inPlace)})`);
+            // Читаємо id динамічно (не запікаємо '${id}' літералом) — інакше після
+            // авто-створення сторінки (_onAttachFilesNew) ця кнопка знову лишиться
+            // зі старим порожнім id і при наступному кліку створить дубль сторінки.
+            btn.setAttribute('onclick', `CollectionsPage.savePage(CollectionsPage._editingPageId || '', ${JSON.stringify(inPlace)})`);
         }
         const m = document.getElementById('col-save-menu');
         if (m) m.style.display = 'none';
@@ -1524,8 +1529,17 @@ tr:hover td { background: #f8fafc; }
 
     // ── Save ──────────────────────────────────────────────────────
     async savePage(id, inPlace = false) {
+        if (this._saving) return; // захист від повторних кліків, поки триває збереження
         const title = document.getElementById('page-title-input')?.value.trim();
         if (!title) { Toast.error('Помилка', 'Вкажіть назву сторінки'); return; }
+
+        // Існуюча сторінка без змін — нема що зберігати
+        if (id && !this._isDirty) {
+            if (inPlace) Toast.info('Немає змін', 'Сторінку вже збережено');
+            else Router.back();
+            return;
+        }
+
         const allowed_labels = this._getSelectedLabels();
         const dovIds = this._getSelectedDovIds();
         const pubInput = document.getElementById('page-published');
@@ -1539,6 +1553,9 @@ tr:hover td { background: #f8fafc; }
             network_visibility: document.getElementById('page-network-visibility')?.value || 'all',
             allowed_labels
         };
+        this._saving = true;
+        const saveBtn = document.getElementById('col-save-btn');
+        if (saveBtn) saveBtn.disabled = true;
         Loader.show();
         try {
             if (id) {
@@ -1563,6 +1580,9 @@ tr:hover td { background: #f8fafc; }
         } catch (e) {
             Toast.error('Помилка', e.message);
             Loader.hide();
+        } finally {
+            this._saving = false;
+            if (saveBtn) saveBtn.disabled = false;
         }
     },
 
@@ -1592,14 +1612,29 @@ tr:hover td { background: #f8fafc; }
         }
     },
 
-    async deletePage(id) {
-        const ok = await Modal.confirm({
-            title: 'Видалити сторінку?',
-            message: 'Всі прикріплені файли також будуть видалені назавжди.',
-            confirmText: 'Видалити',
-            danger: true
-        });
-        if (!ok) return;
+    // Центрована модалка (не глобальний Modal.confirm — той є боковою
+    // панеллю на весь екран праворуч, для такого маленького підтвердження
+    // це виглядає незручно).
+    deletePage(id) {
+        document.getElementById('col-delete-confirm')?.remove();
+        const el = document.createElement('div');
+        el.id = 'col-delete-confirm';
+        el.className = 'center-confirm-backdrop';
+        el.innerHTML = `
+            <div class="center-confirm-box">
+                <h3>Видалити сторінку?</h3>
+                <p>Всі прикріплені файли також будуть видалені назавжди.</p>
+                <div class="center-confirm-actions">
+                    <button class="btn btn-ghost" onclick="document.getElementById('col-delete-confirm').remove()">Скасувати</button>
+                    <button class="btn btn-danger" onclick="CollectionsPage._submitDeletePage('${id}')">Видалити</button>
+                </div>
+            </div>`;
+        document.body.appendChild(el);
+        el.addEventListener('click', e => { if (e.target === el) el.remove(); });
+    },
+
+    async _submitDeletePage(id) {
+        document.getElementById('col-delete-confirm')?.remove();
         Loader.show();
         try {
             await API.pageAttachments.deleteAllForPage(id);
@@ -1701,10 +1736,8 @@ tr:hover td { background: #f8fafc; }
         try {
             const created = await API.pages.create(fields);
             await API.pageDovirenosti.set(created.id, dovIds);
+            // col-save-btn/col-save-menu читають id динамічно з _editingPageId — окремо патчити onclick не треба
             this._editingPageId = created.id;
-            // Update save button to use the new id
-            const saveBtn = document.getElementById('col-save-btn');
-            if (saveBtn) saveBtn.setAttribute('onclick', `CollectionsPage.savePage('${created.id}')`);
             // Show the "+ Додати" file input instead of the auto-save one
             const placeholder = document.getElementById('col-attach-add');
             if (placeholder) placeholder.outerHTML = `

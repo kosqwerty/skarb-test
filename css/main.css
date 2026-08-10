@@ -97,7 +97,7 @@
 
     /* Sidebar */
     --sidebar-w:     235px;
-    --sidebar-w-col: 70px;
+    --sidebar-w-col: 80px;
 
     /* Spacing */
     --radius-sm:  6px;
@@ -1885,23 +1885,25 @@ body.light-theme .logo-icon .logo-dark  { display: none; }
     box-shadow: 0 2px 8px rgba(0,0,0,.08);
 }
 .nav-label { font-size: 0.875rem; flex: 1; transition: opacity var(--transition); }
-.sidebar.collapsed .nav-label { opacity: 0; width: 0; overflow: hidden; }
-.sidebar.collapsed .nav-item { justify-content: center; position: relative; }
-.sidebar.collapsed .nav-item:hover::after {
-    content: attr(data-label);
-    position: absolute;
-    left: calc(100% + 8px);
-    top: 50%;
-    transform: translateY(-50%);
-    background: var(--bg-tooltip, #1e293b);
-    color: #fff;
-    padding: 4px 10px;
-    border-radius: 6px;
-    font-size: .75rem;
-    white-space: nowrap;
-    pointer-events: none;
-    z-index: 999;
-    box-shadow: 0 2px 8px rgba(0,0,0,.3);
+/* Згорнутий сайдбар: замість ховати назву пункту — переносимо .nav-item у
+   стовпчик (іконка зверху, назва дрібним текстом знизу), а не показуємо
+   тултипом при наведенні (він тепер зайвий). */
+.sidebar.collapsed .nav-item {
+    flex-direction: column;
+    justify-content: center;
+    gap: .2rem;
+    padding: .5rem .2rem .4rem;
+    position: relative;
+}
+.sidebar.collapsed .nav-label {
+    opacity: 1;
+    width: auto;
+    overflow: visible;
+    font-size: .52rem;
+    line-height: 1.1;
+    text-align: center;
+    white-space: normal;
+    word-break: break-word;
 }
 
 /* Bookmark star button (resources, news, collections) */

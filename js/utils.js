@@ -888,28 +888,30 @@ const UI = {
             .filter(s => s.items.length > 0);
     },
     _getNavItems(role) {
-        const expertItem   = { icon: '<i class="fa-solid fa-book-open" style="color:#a78bfa"></i>', label: 'Моє навчання', route: 'expert-path', badgeId: 'nav-learn-badge' };
+        const sbIcon = file => `<img src="/icons/sidebar/${file}" style="width:26px;height:26px;object-fit:contain;display:inline-block;vertical-align:middle">`;
+        const expertItem   = { icon: sbIcon('expert-path.webp'), label: 'Моє навчання', route: 'expert-path', badgeId: 'nav-learn-badge' };
         const common = [
-            { icon: '<i class="fa-solid fa-house"     style="color:#C9A227"></i>', label: 'Головна', route: 'dashboard', impBadgeId: 'nav-imp-bolt' },
+            { icon: sbIcon('main.webp'), label: 'Головна', route: 'dashboard', impBadgeId: 'nav-imp-bolt' },
             expertItem,
             // { icon: '<img src="/news.png" style="width:18px;height:18px;object-fit:contain;display:inline-block;vertical-align:middle;filter:none">', label: 'Новини',  route: 'news' }
         ];
         const collectionsItem = { icon: '<i class="fa-solid fa-wand-magic-sparkles" style="background:linear-gradient(135deg,#818cf8,#c084fc);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-size:1rem"></i>', label: 'Сторінки', route: 'collections' };
         const contentItems = [
             ...common,
-            { icon: '<i class="fa-solid fa-folder-open"   style="color:#C9A227"></i>',  label: 'База знань',        route: 'knowledge-base' },
-            { icon: '<i class="fa-solid fa-file-lines"    style="color:#f87171"></i>',  label: 'Документи',         route: 'documents', badgeId: 'nav-doc-badge' },
+            { icon: sbIcon('knowledge.webp'),  label: 'База знань',        route: 'knowledge-base' },
+            { icon: sbIcon('documents.webp'),  label: 'Документи',         route: 'documents', badgeId: 'nav-doc-badge' },
+            { icon: sbIcon('metoda_ico.webp'), label: 'Методики та довідники', route: 'collections' },
         ];
         const ntfItem      = { icon: '<i class="fa-solid fa-bell"         style="color:#C9A227"></i>', label: 'Сповіщення', route: 'notifications', badgeId: 'nav-ntf-badge' };
         const contactsItem = { icon: '<i class="fa-solid fa-address-book" style="color:#059669"></i>', label: 'Контакти',   route: 'contacts' };
         const bmItem       = { icon: '<i class="fa-solid fa-bookmark"     style="color:#FBBF24"></i>', label: 'Закладки',   route: 'bookmarks', noStar: true };
-        const analyticsItem   = { icon: '<i class="fa-solid fa-chart-bar"    style="color:#34d399"></i>', label: 'Аналітика',        route: 'analytics' };
-        const schedulerItem   = { icon: '<i class="fa-solid fa-calendar-days" style="color:#60a5fa"></i>', label: 'Розділ планування', route: 'scheduler' };
-        const schedulerItemNs = { icon: '<i class="fa-solid fa-calendar-days" style="color:#60a5fa"></i>', label: 'Розділ планування', route: 'scheduler', noStar: true };
-        const adminItem       = { icon: '<i class="fa-solid fa-gear"          style="color:#f87171"></i>', label: 'Адміністрування',   route: 'admin' };
-        const contentAdmItem  = { icon: '<i class="fa-solid fa-gear"          style="color:#f87171"></i>', label: 'Контент',           route: 'admin' };
+        const analyticsItem   = { icon: sbIcon('statistics.webp'), label: 'Аналітика',        route: 'analytics' };
+        const schedulerItem   = { icon: sbIcon('plan.webp'), label: 'Розділ планування', route: 'scheduler' };
+        const schedulerItemNs = { icon: sbIcon('plan.webp'), label: 'Розділ планування', route: 'scheduler', noStar: true };
+        const adminItem       = { icon: sbIcon('admin.webp'), label: 'Адміністрування',   route: 'admin' };
+        const contentAdmItem  = { icon: sbIcon('admin.webp'), label: 'Контент',           route: 'admin' };
         const myCalendarItem  = { icon: '<i class="fa-solid fa-calendar-check" style="color:#60a5fa"></i>', label: 'Мій календар',     route: 'my-calendar', noStar: true };
-        const internsItem     = { icon: '<i class="fa-solid fa-user-graduate"  style="color:#8b5cf6"></i>', label: 'Стажери',          route: 'interns' };
+        const internsItem     = { icon: sbIcon('interns.webp'), label: 'Стажери',          route: 'interns' };
 
         if (role === 'ceo') {
             return this._applyNavRestriction([
@@ -943,7 +945,7 @@ const UI = {
         if (AppState.isIntern()) {
             const internContentItems = [
                 ...common,
-                { icon: '<i class="fa-solid fa-folder-open" style="color:#C9A227"></i>', label: 'База знань', route: 'knowledge-base' },
+                { icon: sbIcon('knowledge.webp'), label: 'База знань', route: 'knowledge-base' },
             ];
             return [
                 { title: 'Навчання',  items: internContentItems },

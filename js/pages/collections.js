@@ -55,6 +55,10 @@ const CollectionsPage = {
         await this._loadList();
     },
 
+    _pagesAll:   [],
+    _sortField:  'updated_at',
+    _sortDir:    -1,
+
     async _loadList() {
         const el = document.getElementById('pages-list');
         if (!el) return;
@@ -89,6 +93,7 @@ const CollectionsPage = {
                     return true;
                 });
             }
+            this._pagesAll = visible;
             if (!visible.length) {
                 el.innerHTML = `
                     <div class="empty-state">
@@ -98,71 +103,253 @@ const CollectionsPage = {
                     </div>`;
                 return;
             }
-            el.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1.25rem">
-                ${visible.map(p => this._renderCard(p)).join('')}
-            </div>`;
+            el.innerHTML = this._tableHtml();
+            this._renderTableRows();
         } catch (e) {
             el.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>${e.message}</h3></div>`;
         }
     },
 
-    _renderCard(p) {
-        const badge = p.is_published
-            ? `<span style="font-size:.7rem;padding:2px 8px;border-radius:20px;background:rgba(16,185,129,.15);color:#10b981;border:1px solid rgba(16,185,129,.3)">опубліковано</span>`
-            : `<span style="font-size:.7rem;padding:2px 8px;border-radius:20px;background:var(--bg-raised);color:var(--text-muted);border:1px solid var(--border)">чернетка</span>`;
+    // Дефолтна ширина колонок (px) — користувацькі зміни зберігаються в
+    // localStorage і мержаться поверх при кожному рендері таблиці.
+    _colDefaults: { title: 320, is_published: 140, tags: 240, updated_at: 150, actions: 150 },
 
-        const homeBadge = p.is_home
-            ? `<span style="font-size:.7rem;padding:2px 8px;border-radius:20px;background:rgba(99,102,241,.15);color:var(--primary);border:1px solid rgba(99,102,241,.3)">🏠 Головна</span>`
-            : '';
+    _loadColWidths() {
+        try {
+            const saved = JSON.parse(localStorage.getItem('col_tbl_widths') || '{}');
+            return { ...this._colDefaults, ...saved };
+        } catch { return { ...this._colDefaults }; }
+    },
 
-        const adminBtns = AppState.isStaff() && AppState.canMutate() ? `
-            <div style="display:flex;gap:.4rem" onclick="event.stopPropagation()">
-                ${!p.is_home && AppState.isSuperAdmin() ? `<button onclick="CollectionsPage.setHome('${p.id}')"
-                        style="width:30px;height:30px;border-radius:50%;border:1.5px solid var(--border);background:var(--bg-raised);color:var(--text-secondary);font-size:.85rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:border-color var(--transition)"
-                        onmouseenter="this.style.borderColor='var(--primary)'"
-                        onmouseleave="this.style.borderColor='var(--border)'"
-                        title="Зробити головною">🏠</button>` : ''}
-                <button onclick="CollectionsPage.openEditor('${p.id}')"
-                        style="width:30px;height:30px;border-radius:50%;border:1.5px solid var(--border);background:var(--bg-raised);color:var(--text-secondary);font-size:.85rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:border-color var(--transition)"
-                        onmouseenter="this.style.borderColor='var(--primary)'"
-                        onmouseleave="this.style.borderColor='var(--border)'"
-                        title="Редагувати"><i class="fa-solid fa-pen"></i></button>
-                <button onclick="CollectionsPage.deletePage('${p.id}')"
-                        style="width:30px;height:30px;border-radius:50%;border:1.5px solid var(--border);background:var(--bg-raised);color:var(--text-secondary);font-size:.85rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:border-color var(--transition)"
-                        onmouseenter="this.style.borderColor='var(--danger)'"
-                        onmouseleave="this.style.borderColor='var(--border)'"
-                        title="Видалити"><i class="fa-solid fa-trash"></i></button>
-            </div>` : '';
+    _saveColWidth(field, width) {
+        try {
+            const saved = JSON.parse(localStorage.getItem('col_tbl_widths') || '{}');
+            saved[field] = width;
+            localStorage.setItem('col_tbl_widths', JSON.stringify(saved));
+        } catch {}
+    },
+
+    _startColResize(e, field) {
+        e.preventDefault();
+        e.stopPropagation();
+        const th = e.currentTarget.closest('th');
+        const col = document.querySelector(`#pages-list col[data-field="${field}"]`);
+        if (!th || !col) return;
+        const startX = e.clientX;
+        const startWidth = th.getBoundingClientRect().width;
+        const onMove = ev => {
+            const w = Math.max(70, Math.round(startWidth + (ev.clientX - startX)));
+            col.style.width = w + 'px';
+        };
+        const onUp = () => {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            this._saveColWidth(field, parseInt(col.style.width, 10));
+            // Клік, що йде одразу за mouseup, потрапляє на <th> і викликав би
+            // сортування — знімаємо прапорець із затримкою через setTimeout(0),
+            // щоб він встиг заблокувати саме цей click (спрацьовує синхронно
+            // одразу після mouseup, до будь-якого macrotask).
+            setTimeout(() => { this._resizingCol = false; }, 0);
+        };
+        this._resizingCol = true;
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    },
+
+    _tableHtml() {
+        const widths = this._loadColWidths();
+        const resizer = field => `<span class="col-tbl-resizer" onmousedown="CollectionsPage._startColResize(event,'${field}')" onclick="event.stopPropagation()"></span>`;
+        const col = (field, label) => {
+            const active = this._sortField === field;
+            return `<th class="col-tbl-th" onclick="CollectionsPage._sortBy('${field}')">
+                <span class="col-tbl-th-inner">${label}
+                    <span class="sort-btns" data-field="${field}">
+                        <button class="sort-arrow sort-up${active && this._sortDir === 1 ? ' active' : ''}" onclick="event.stopPropagation();CollectionsPage._sortBy('${field}',1)" title="За зростанням">▲</button>
+                        <button class="sort-arrow sort-down${active && this._sortDir === -1 ? ' active' : ''}" onclick="event.stopPropagation();CollectionsPage._sortBy('${field}',-1)" title="За спаданням">▼</button>
+                    </span>
+                </span>
+                ${resizer(field)}
+            </th>`;
+        };
+        return `
+            <style>
+                .col-tbl-toolbar{display:flex;align-items:center;gap:.6rem;margin-bottom:.85rem;flex-wrap:wrap}
+                .col-tbl-search{position:relative;flex:1;min-width:220px}
+                .col-tbl-search input{width:100%;height:36px;padding:0 12px 0 34px;border-radius:var(--radius-md);
+                    border:1px solid var(--border);background:var(--bg-surface);color:var(--text-primary);
+                    font-size:.85rem;outline:none;box-sizing:border-box;transition:border-color .15s}
+                .col-tbl-search input:focus{border-color:var(--primary)}
+                .col-tbl-search i{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:.8rem;pointer-events:none}
+                .col-tbl-fselect{height:36px;padding:0 10px;font-size:.85rem;background:var(--bg-surface);
+                    border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text-primary);
+                    outline:none;cursor:pointer}
+                .col-tbl-fselect:focus{border-color:var(--primary)}
+                .col-tbl-count{font-size:.78rem;color:var(--text-muted);white-space:nowrap;margin-left:auto}
+                .col-tbl-wrap{width:100%;overflow-x:auto;border-radius:var(--radius-lg);border:1px solid var(--border)}
+                .col-tbl{border-collapse:collapse;font-size:.85rem;table-layout:fixed}
+                .col-tbl-th{position:sticky;top:0;z-index:5;background:var(--bg-raised);color:var(--text-muted);
+                    font-weight:600;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;
+                    padding:.65rem .85rem;text-align:left;border-bottom:1px solid var(--border);
+                    white-space:nowrap;cursor:pointer;user-select:none;transition:background .15s,color .15s}
+                .col-tbl-th:hover{background:var(--bg-hover);color:var(--text-primary)}
+                .col-tbl-th-inner{display:flex;align-items:center;gap:.35rem;overflow:hidden}
+                .col-tbl-th-nc{cursor:default}
+                .col-tbl-th-nc:hover{background:var(--bg-raised);color:var(--text-muted)}
+                .col-tbl-resizer{position:absolute;top:0;right:0;bottom:0;width:6px;cursor:col-resize;z-index:6}
+                .col-tbl-resizer:hover,.col-tbl-resizer:active{background:var(--primary)}
+                .col-tbl tbody tr{border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s}
+                .col-tbl tbody tr:last-child{border-bottom:none}
+                .col-tbl tbody tr:hover{background:var(--bg-raised)}
+                .col-tbl tbody tr.is-home{background:color-mix(in srgb, var(--primary) 5%, var(--bg-surface))}
+                .col-tbl tbody tr.is-home:hover{background:color-mix(in srgb, var(--primary) 9%, var(--bg-surface))}
+                .col-tbl td{padding:.7rem .85rem;vertical-align:middle;overflow:hidden}
+                .col-tbl-title{font-weight:600;color:var(--text-primary);display:flex;align-items:center;gap:.4rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+                .col-tbl-tags{display:flex;flex-wrap:wrap;gap:.25rem}
+                .col-tbl-tag{font-size:.68rem;padding:1px 7px;border-radius:20px;background:rgba(99,102,241,.1);color:var(--primary);border:1px solid rgba(99,102,241,.2)}
+                .col-tbl-actions{display:flex;gap:.35rem;justify-content:flex-end}
+                .col-tbl-abtn{width:28px;height:28px;border-radius:50%;border:1.5px solid var(--border);background:var(--bg-raised);
+                    color:var(--text-secondary);font-size:.78rem;cursor:pointer;display:flex;align-items:center;justify-content:center;
+                    transition:border-color .15s,color .15s}
+                .col-tbl-abtn:hover{border-color:var(--primary);color:var(--primary)}
+                .col-tbl-abtn.danger:hover{border-color:var(--danger);color:var(--danger)}
+                .col-tbl-abtn.active{color:var(--primary);border-color:var(--primary)}
+                .col-tbl-empty{padding:2.5rem;text-align:center;color:var(--text-muted)}
+            </style>
+            <div class="col-tbl-toolbar">
+                <div class="col-tbl-search">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input type="text" id="col-tbl-search-input" placeholder="Пошук за назвою…" autocomplete="off" oninput="CollectionsPage._applyTableFilters()">
+                </div>
+                <select id="col-tbl-status-filter" class="col-tbl-fselect" onchange="CollectionsPage._applyTableFilters()">
+                    <option value="">Усі статуси</option>
+                    <option value="published">Опубліковано</option>
+                    <option value="draft">Чернетка</option>
+                </select>
+                <select id="col-tbl-home-filter" class="col-tbl-fselect" onchange="CollectionsPage._applyTableFilters()">
+                    <option value="">Усі сторінки</option>
+                    <option value="home">Лише головна</option>
+                </select>
+                <span class="col-tbl-count" id="col-tbl-count"></span>
+            </div>
+            <div class="col-tbl-wrap">
+                <table class="col-tbl">
+                    <colgroup>
+                        <col data-field="title" style="width:${widths.title}px">
+                        <col data-field="is_published" style="width:${widths.is_published}px">
+                        <col data-field="tags" style="width:${widths.tags}px">
+                        <col data-field="updated_at" style="width:${widths.updated_at}px">
+                        <col data-field="actions" style="width:${widths.actions}px">
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            ${col('title', 'Назва')}
+                            ${col('is_published', 'Статус')}
+                            <th class="col-tbl-th col-tbl-th-nc">Мітки / доступ${resizer('tags')}</th>
+                            ${col('updated_at', 'Оновлено')}
+                            <th class="col-tbl-th col-tbl-th-nc" style="text-align:right">Дії${resizer('actions')}</th>
+                        </tr>
+                    </thead>
+                    <tbody id="col-tbl-body"></tbody>
+                </table>
+            </div>`;
+    },
+
+    _sortBy(field, dir) {
+        if (this._resizingCol) return; // клік по заголовку одразу після resize — ігноруємо
+        if (dir === undefined) {
+            dir = (this._sortField === field) ? -this._sortDir : 1;
+        }
+        this._sortField = field;
+        this._sortDir = dir;
+        this._renderTableRows();
+    },
+
+    _applyTableFilters() {
+        this._renderTableRows();
+    },
+
+    _renderTableRows() {
+        const tbody = document.getElementById('col-tbl-body');
+        if (!tbody) return;
+
+        const q = (document.getElementById('col-tbl-search-input')?.value || '').trim().toLowerCase();
+        const statusF = document.getElementById('col-tbl-status-filter')?.value || '';
+        const homeF = document.getElementById('col-tbl-home-filter')?.value || '';
+
+        let rows = this._pagesAll.filter(p => {
+            if (q && !(p.title || '').toLowerCase().includes(q)) return false;
+            if (statusF === 'published' && !p.is_published) return false;
+            if (statusF === 'draft' && p.is_published) return false;
+            if (homeF === 'home' && !p.is_home) return false;
+            return true;
+        });
+
+        const field = this._sortField, dir = this._sortDir;
+        rows = [...rows].sort((a, b) => {
+            let av = a[field], bv = b[field];
+            if (field === 'title') { av = (av || '').toLowerCase(); bv = (bv || '').toLowerCase(); return av.localeCompare(bv, 'uk') * dir; }
+            if (field === 'is_published') { return ((a.is_published ? 1 : 0) - (b.is_published ? 1 : 0)) * dir; }
+            av = av || ''; bv = bv || '';
+            return (av < bv ? -1 : av > bv ? 1 : 0) * dir;
+        });
+
+        document.querySelectorAll('.col-tbl-th .sort-arrow').forEach(el => el.classList.remove('active'));
+        const activeSpan = document.querySelector(`.sort-btns[data-field="${field}"]`);
+        const activeBtn = activeSpan?.querySelector(dir === 1 ? '.sort-up' : '.sort-down');
+        if (activeBtn) activeBtn.classList.add('active');
+
+        document.getElementById('col-tbl-count').textContent = `${rows.length} з ${this._pagesAll.length}`;
+
+        if (!rows.length) {
+            tbody.innerHTML = `<tr><td colspan="5" class="col-tbl-empty">Нічого не знайдено</td></tr>`;
+            return;
+        }
+        tbody.innerHTML = rows.map(p => this._renderTableRow(p)).join('');
+    },
+
+    _renderTableRow(p) {
+        const canManage = AppState.isStaff() && AppState.canMutate();
+        const statusBadge = p.is_published
+            ? `<span class="badge badge-success">опубліковано</span>`
+            : `<span class="badge badge-muted">чернетка</span>`;
+        const tags = [
+            p.is_home ? `<span class="col-tbl-tag" style="background:rgba(16,185,129,.12);color:#10b981;border-color:rgba(16,185,129,.25)">🏠 Головна</span>` : '',
+            ...(p.allowed_labels || []).map(l => `<span class="col-tbl-tag">🏷 ${Fmt.esc(l)}</span>`)
+        ].filter(Boolean).join('');
+
+        const actions = canManage ? `
+            ${!p.is_home && AppState.isSuperAdmin() ? `<button class="col-tbl-abtn" onclick="event.stopPropagation();CollectionsPage.setHome('${p.id}')" title="Зробити головною"><i class="fa-solid fa-house"></i></button>` : ''}
+            <button class="col-tbl-abtn" onclick="event.stopPropagation();CollectionsPage.openEditor('${p.id}')" title="Редагувати"><i class="fa-solid fa-pen"></i></button>
+            <button class="col-tbl-abtn danger" onclick="event.stopPropagation();CollectionsPage.deletePage('${p.id}')" title="Видалити"><i class="fa-solid fa-trash"></i></button>
+        ` : '';
+        const bmActive = Bookmarks.isBookmarked('collections/' + p.id);
 
         return `
-            <div onclick="Router.go('collections/${p.id}')"
-                 style="background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1.25rem;cursor:pointer;transition:border-color var(--transition),box-shadow var(--transition)"
-                 onmouseenter="this.style.borderColor='var(--primary)';this.style.boxShadow='var(--shadow-md)'"
-                 onmouseleave="this.style.borderColor='var(--border)';this.style.boxShadow='none'">
-                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:.5rem;margin-bottom:.75rem">
-                    <div style="display:flex;gap:4px;flex-shrink:0">
-                        <span style="font-size:.62rem;font-weight:700;padding:3px 6px;border-radius:4px;background:rgba(249,115,22,.12);color:#f97316;border:1px solid rgba(249,115,22,.25);font-family:'Courier New',monospace;letter-spacing:.01em">HTML</span>
-                        <span style="font-size:.62rem;font-weight:700;padding:3px 6px;border-radius:4px;background:rgba(59,130,246,.12);color:#3b82f6;border:1px solid rgba(59,130,246,.25);font-family:'Courier New',monospace;letter-spacing:.01em">CSS</span>
+            <tr class="${p.is_home ? 'is-home' : ''}" onclick="Router.go('collections/${p.id}')">
+                <td>
+                    <div class="col-tbl-title">
+                        ${p.is_home ? '<i class="fa-solid fa-house" style="color:var(--primary);font-size:.78rem"></i>' : ''}
+                        ${Fmt.esc(p.title)}
                     </div>
-                    <div style="display:flex;align-items:center;gap:.4rem" onclick="event.stopPropagation()">
-                        <button class="res-star-btn${Bookmarks.isBookmarked('collections/'+p.id) ? ' active' : ''}"
-                            data-bm-route="collections/${p.id}"
-                            title="${Bookmarks.isBookmarked('collections/'+p.id) ? 'Видалити з закладок' : 'Зберегти в закладки'}"
-                            onclick="Bookmarks.toggleCollection('${p.id}',${JSON.stringify(p.title||'').replace(/"/g,'&quot;')})">${Bookmarks.isBookmarked('collections/'+p.id) ? '<i class="fa-solid fa-bookmark"></i>' : '<i class="fa-regular fa-bookmark"></i>'}</button>
-                        ${adminBtns}
+                </td>
+                <td>${statusBadge}</td>
+                <td><div class="col-tbl-tags">${tags || '<span style="color:var(--text-muted);font-size:.78rem">—</span>'}</div></td>
+                <td style="color:var(--text-muted);white-space:nowrap">${Fmt.date(p.updated_at || p.created_at)}</td>
+                <td onclick="event.stopPropagation()">
+                    <div class="col-tbl-actions">
+                        <button class="col-tbl-abtn${bmActive ? ' active' : ''}" data-bm-route="collections/${p.id}"
+                            title="${bmActive ? 'Видалити з закладок' : 'Зберегти в закладки'}"
+                            onclick="Bookmarks.toggleCollection('${p.id}',${JSON.stringify(p.title||'').replace(/"/g,'&quot;')})">
+                            <i class="fa-${bmActive ? 'solid' : 'regular'} fa-bookmark"></i>
+                        </button>
+                        ${actions}
                     </div>
-                </div>
-                <div style="font-weight:600;font-size:.95rem;margin-bottom:.4rem">${p.title}</div>
-                ${p.allowed_labels?.length ? `
-                <div style="display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.5rem">
-                    ${p.allowed_labels.map(l => `<span style="font-size:.7rem;padding:2px 7px;border-radius:20px;background:rgba(99,102,241,.1);color:var(--primary);border:1px solid rgba(99,102,241,.2)">🏷 ${l}</span>`).join('')}
-                </div>` : ''}
-                <div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin-top:.75rem">
-                    ${badge}
-                    ${homeBadge}
-                    <span style="font-size:.75rem;color:var(--text-muted);margin-left:auto">${Fmt.date(p.updated_at || p.created_at)}</span>
-                </div>
-            </div>`;
+                </td>
+            </tr>`;
     },
 
     // ── View ──────────────────────────────────────────────────────
@@ -395,8 +582,15 @@ const CollectionsPage = {
         if (this._themeHandler) {
             window.removeEventListener('lms-theme-change', this._themeHandler);
         }
+        // Якщо автор сторінки сам обробляє html.lms-dark у своєму CSS/HTML (власна
+        // світла/темна тема), платформний "фейковий dark mode" (invert+hue-rotate
+        // на весь iframe) більше НЕ накладаємо — інакше авторські темні кольори
+        // ще раз інвертуються поверх і виглядають як рентген. Клас html.lms-dark
+        // все одно передається через postMessage нижче — сторінка сама вирішує,
+        // як виглядати.
+        const hasCustomDarkTheme = /lms-dark/.test((page.css_content || '') + (page.html_content || ''));
         const applyIframeTheme = (iframe, isLight) => {
-            iframe.style.filter = isLight ? '' : 'invert(1) hue-rotate(180deg)';
+            iframe.style.filter = (isLight || hasCustomDarkTheme) ? '' : 'invert(1) hue-rotate(180deg)';
             if (iframe.contentWindow) {
                 iframe.contentWindow.postMessage({ type: 'lms-theme-change', isLight }, '*');
             }
@@ -474,15 +668,30 @@ document.addEventListener('click', function(e) {
 });
 <\/script>` : '';
 
-        const doc = `<!DOCTYPE html><html><head><meta charset="UTF-8"><base href="${location.origin}/"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">${iframeScript}
-<style>
-  body { margin: 0; padding: 0; font-family: 'Inter', sans-serif; font-weight: 400; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
-  b, strong { font-weight: 700; }
-  img, video, canvas, picture, svg { max-width: 100%; }
+        const isLight = document.body.classList.contains('light-theme');
+        // Сторінки з власною обробкою html.lms-dark (свої кольори/картинки під
+        // кожну тему) платформа більше НЕ інвертує зовні (див. applyIframeTheme
+        // в initView) — тому й правило "відкрутити картинку назад" тут шкідливе:
+        // компенсувати вже нічого, і без зовнішньої інверсії воно просто інвертує
+        // картинку по-справжньому. Вмикаємо його лише для "звичайних" сторінок,
+        // які покладаються на платформний фейковий dark mode.
+        const hasCustomDarkTheme = /lms-dark/.test((css || '') + (html || ''));
+        const reInvertMediaCss = hasCustomDarkTheme ? '' : `
   /* Re-invert media in dark mode so photos look natural under the iframe filter */
   html.lms-dark img, html.lms-dark video, html.lms-dark canvas, html.lms-dark picture {
     filter: invert(1) hue-rotate(180deg);
-  }
+  }`;
+        // Клас теми вшиваємо синхронно в саму розмітку (замість того, щоб
+        // покладатись лише на postMessage) — інакше перше повідомлення
+        // lms-theme-change летить одразу після встановлення srcdoc, коли
+        // новий документ (і його слухач message) ще не встиг завантажитись,
+        // і губиться: сторінка "не знає" тему при першому відкритті, доки
+        // користувач вручну не перемкне тему застосунку.
+        const doc = `<!DOCTYPE html><html${isLight ? '' : ' class="lms-dark"'}><head><meta charset="UTF-8"><base href="${location.origin}/"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">${iframeScript}
+<style>
+  body { margin: 0; padding: 0; font-family: 'Inter', sans-serif; font-weight: 400; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+  b, strong { font-weight: 700; }
+  img, video, canvas, picture, svg { max-width: 100%; }${reInvertMediaCss}
   ${css || ''}
 </style></head><body>${html || ''}${linkScript}</body></html>`;
         iframe.srcdoc = doc;
@@ -1235,7 +1444,12 @@ document.addEventListener('click', function(e) {
             const html = await this._resolveAttachmentUrls(rawHtml);
             this._renderIframe(iframe, html, css);
             const isLight = document.body.classList.contains('light-theme');
-            iframe.style.filter = isLight ? '' : 'invert(1) hue-rotate(180deg)';
+            const hasCustomDarkTheme = /lms-dark/.test(css + html);
+            iframe.style.filter = (isLight || hasCustomDarkTheme) ? '' : 'invert(1) hue-rotate(180deg)';
+            iframe.onload = (orig => function() {
+                orig?.call(this);
+                iframe.contentWindow?.postMessage({ type: 'lms-theme-change', isLight }, '*');
+            })(iframe.onload);
         }, 400);
     },
 
@@ -1594,15 +1808,29 @@ tr:hover td { background: #f8fafc; }
         Router.go(`collections/${target.id}`);
     },
 
-    async setHome(id) {
-        const ok = await Modal.confirm({
-            title: 'Зробити головною?',
-            message: 'Ця сторінка стане головною для всіх користувачів. Попередня головна сторінка втратить цей статус.',
-            confirmText: 'Так, зробити головною',
-            cancelText: 'Скасувати',
-            danger: false
-        });
-        if (!ok) return;
+    // Центрована модалка (не глобальний Modal.confirm — той є боковою
+    // панеллю на весь екран праворуч, для такого маленького підтвердження
+    // це виглядає незручно).
+    setHome(id) {
+        document.getElementById('col-sethome-confirm')?.remove();
+        const el = document.createElement('div');
+        el.id = 'col-sethome-confirm';
+        el.className = 'center-confirm-backdrop';
+        el.innerHTML = `
+            <div class="center-confirm-box">
+                <h3>Зробити головною?</h3>
+                <p>Ця сторінка стане головною для всіх користувачів. Попередня головна сторінка втратить цей статус.</p>
+                <div class="center-confirm-actions">
+                    <button class="btn btn-ghost" onclick="document.getElementById('col-sethome-confirm').remove()">Скасувати</button>
+                    <button class="btn btn-primary" onclick="CollectionsPage._submitSetHome('${id}')">Так, зробити головною</button>
+                </div>
+            </div>`;
+        document.body.appendChild(el);
+        el.addEventListener('click', e => { if (e.target === el) el.remove(); });
+    },
+
+    async _submitSetHome(id) {
+        document.getElementById('col-sethome-confirm')?.remove();
         try {
             await API.pages.setHome(id);
             Toast.success('Головну сторінку встановлено');

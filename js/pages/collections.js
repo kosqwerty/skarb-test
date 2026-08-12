@@ -2058,8 +2058,12 @@ tr:hover td { background: #f8fafc; }
         }
         if (this._cmHtml) {
             const doc = this._cmHtml.getDoc();
-            const last = doc.lastLine();
-            doc.replaceRange('\n' + snippet, { line: last, ch: doc.getLine(last).length });
+            // CodeMirror зберігає позицію курсора навіть після втрати фокусу
+            // (клік по вкладенню в панелі збоку не рухає її) — вставляємо саме туди,
+            // а не завжди в кінець документа.
+            const pos = doc.getCursor();
+            doc.replaceRange(snippet, pos);
+            this._cmHtml.focus();
             this._cmHtml.scrollIntoView(null);
             this._markDirty();
             this._updatePreview();
@@ -2068,9 +2072,12 @@ tr:hover td { background: #f8fafc; }
         } else {
             const ta = document.getElementById('editor-html');
             if (ta) {
-                ta.value = ta.value.trimEnd() + '\n' + snippet;
-                ta.selectionStart = ta.selectionEnd = ta.value.length;
-                this._savedCursor = { ta, start: ta.value.length, end: ta.value.length };
+                const { start: s, end: e } = this._getCursor(ta);
+                ta.value = ta.value.slice(0, s) + snippet + ta.value.slice(e);
+                const newPos = s + snippet.length;
+                ta.selectionStart = ta.selectionEnd = newPos;
+                this._savedCursor = { ta, start: newPos, end: newPos };
+                ta.focus();
                 this._updatePreview();
             }
         }

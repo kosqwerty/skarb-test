@@ -2126,6 +2126,23 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
             return;
         }
 
+        // Попередження про дублікат — лише при створенні нового ресурсу
+        // (при редагуванні існуючого перевіряти нема сенсу).
+        if (!resourceId) {
+            try {
+                const dupes = await API.resources.findByTitle(title);
+                if (dupes.length) {
+                    const ok = await Modal.confirm({
+                        title: 'Схожий файл вже існує',
+                        message: `Ресурс із назвою «${Fmt.esc(title)}» вже є в базі (${dupes.length}). Додати ще один?`,
+                        confirmText: 'Так, додати',
+                        danger: false
+                    });
+                    if (!ok) return;
+                }
+            } catch (_) {}
+        }
+
         Loader.show();
         try {
             if (this._resourceFile) {

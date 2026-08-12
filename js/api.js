@@ -407,6 +407,18 @@ const API = {
             return data;
         },
 
+        // Пошук ресурсів з такою самою назвою (без урахування регістру) — для
+        // попередження про дублікат перед створенням нового файлу.
+        async findByTitle(title) {
+            const { data, error } = await supabase.from('resources')
+                .select('id,title,updated_at')
+                .is('deleted_at', null)
+                .ilike('title', title.trim())
+                .limit(5);
+            if (error) throw error;
+            return data || [];
+        },
+
         async update(id, fields) {
             const { data, error } = await supabase.from('resources')
                 .update(fields).eq('id', id).select().single();

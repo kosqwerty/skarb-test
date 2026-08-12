@@ -22,6 +22,7 @@ const ResourcesPage = {
     _docsViewMode: localStorage.getItem('docs_view') || 'list',
     _kbSort: 'newest',
     _kbTypeFilter: 'all',
+    _kbCatFilter: 'all',
     _kbAllItems: [],
     _docsSort: 'priority',
     _docsTreeStatus: '',
@@ -174,6 +175,7 @@ const ResourcesPage = {
 
         UI.setBreadcrumb([{ label: 'База знань' }]);
         this._kbTypeFilter = 'all';
+        this._kbCatFilter = 'all';
         this._kbSort = 'newest';
 
         container.innerHTML = `
@@ -369,6 +371,9 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
         ${this._kbTypeChips()}
     </div>
     <div class="kb-toolbar-right">
+        <select class="kb-sort-select" id="kb-cat-filter" onchange="ResourcesPage._kbSetCat(this.value)">
+            <option value="all">Всі категорії</option>
+        </select>
         <select class="kb-sort-select" id="kb-sort" onchange="ResourcesPage._kbSetSort(this.value)">
             <option value="newest">↓ Новіші</option>
             <option value="oldest">↑ Старіші</option>
@@ -1149,6 +1154,12 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
         this._kbRerender();
     },
 
+    _kbSetCat(val) {
+        this._kbCatFilter = val;
+        this._page = 0;
+        this._kbRerender();
+    },
+
     _kbSetView(mode, btn) {
         this._kbViewMode = mode;
         localStorage.setItem('kb_view', mode);
@@ -1163,6 +1174,9 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
         let items = this._kbAllItems;
         if (this._kbTypeFilter !== 'all') {
             items = items.filter(r => this._kbTypeKey(r) === this._kbTypeFilter);
+        }
+        if (this._kbCatFilter !== 'all') {
+            items = items.filter(r => r.category === this._kbCatFilter);
         }
         const sorts = {
             newest:  (a,b) => new Date(b.created_at) - new Date(a.created_at),
@@ -1367,6 +1381,14 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
 
             if (this._view === 'kb') {
                 this._kbAllItems = filtered;
+                // категорії будуються з повного невідфільтрованого списку — так само як у Документах
+                const cats = [...new Set(filtered.map(r => r.category).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'uk'));
+                const catSelect = document.getElementById('kb-cat-filter');
+                if (catSelect) {
+                    if (this._kbCatFilter !== 'all' && !cats.includes(this._kbCatFilter)) this._kbCatFilter = 'all';
+                    catSelect.innerHTML = `<option value="all">Всі категорії</option>` +
+                        cats.map(c => `<option value="${Fmt.esc(c)}"${this._kbCatFilter === c ? ' selected' : ''}>${Fmt.esc(c)}</option>`).join('');
+                }
                 this._kbRerender();
                 this._renderPagination(filtered.length);
                 return;

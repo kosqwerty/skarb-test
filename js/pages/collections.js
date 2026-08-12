@@ -661,9 +661,27 @@ document.addEventListener('click', function(e) {
   var a = e.target.closest('a[href]');
   if (!a) return;
   var href = a.getAttribute('href');
-  if (href && href.startsWith('#')) {
+  if (!href) return;
+  var route = null;
+  if (href.startsWith('#')) {
+    // Відносне посилання, вставлене через "Ресурси" в редакторі: #resource/ID
+    route = href.slice(1);
+  } else {
+    // Автор міг вставити повне посилання, скопійоване з адресного рядка
+    // (https://сайт/#/resource/ID) — без цього iframe сторінки Collections
+    // сам перейшов би за ним і завантажив увесь застосунок ЗАНОВО всередині
+    // себе (бо allow-same-origin), замість переходу на верхньому рівні.
+    try {
+      var resolved = new URL(href, location.href);
+      if (resolved.origin === location.origin && resolved.hash) {
+        route = resolved.hash.slice(1);
+      }
+    } catch (err) {}
+  }
+  if (route !== null) {
     e.preventDefault();
-    window.parent.postMessage({ type: 'lms-navigate', route: href.slice(1) }, '*');
+    route = route.replace(/^\\//, ''); // на випадок #/resource/x замість #resource/x
+    window.parent.postMessage({ type: 'lms-navigate', route: route }, '*');
   }
 });
 <\/script>` : '';

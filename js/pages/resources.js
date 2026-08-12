@@ -23,6 +23,7 @@ const ResourcesPage = {
     _kbSort: 'newest',
     _kbTypeFilter: 'all',
     _kbCatFilter: 'all',
+    _kbPageSize: 10,
     _kbAllItems: [],
     _docsSort: 'priority',
     _docsTreeStatus: '',
@@ -224,7 +225,8 @@ body:not(.light-theme) .kb-type-chips{box-shadow:0 2px 14px rgba(0,0,0,.2)}
     font-size:.85rem;background:var(--bg-hover);color:var(--text-muted);transition:all .18s ease}
 
 .kb-toolbar-right{display:flex;align-items:center;gap:8px}
-.kb-sort-select{height:44px;padding:0 14px;border-radius:14px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);font-size:.82rem;cursor:pointer;outline:none}
+.kb-sort-select{width:auto;height:44px;padding:0 19px;border-radius:14px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);font-size:.82rem;cursor:pointer;outline:none}
+#kb-cat-filter{padding:0 24px}
 .kb-view-toggle{display:flex;gap:4px;background:var(--bg-raised);border:1.5px solid var(--border);border-radius:14px;padding:3px}
 .kb-view-btn{display:flex;align-items:center;justify-content:center;width:36px;height:36px;background:transparent;border:none;cursor:pointer;color:var(--text-muted);font-size:.9rem;border-radius:10px;transition:background .15s,color .15s,box-shadow .15s}
 .kb-view-btn:hover{background:var(--bg-hover);color:var(--text-primary)}
@@ -1151,6 +1153,7 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
 
     _kbSetSort(val) {
         this._kbSort = val;
+        this._page = 0;
         this._kbRerender();
     },
 
@@ -1195,10 +1198,44 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
             newEl.textContent = this._kbAllItems.filter(r => new Date(r.created_at).getTime() > weekAgo).length;
         }
 
+        const totalPages = Math.max(1, Math.ceil(items.length / this._kbPageSize));
+        if (this._page >= totalPages) this._page = totalPages - 1;
+        if (this._page < 0) this._page = 0;
+        const start = this._page * this._kbPageSize;
+        const pageItems = items.slice(start, start + this._kbPageSize);
+
         list.className = this._kbViewMode === 'list' ? 'kb-list' : 'kb-grid';
-        list.innerHTML = items.length
-            ? items.map(r => this._renderResourceItem(r)).join('')
+        list.innerHTML = pageItems.length
+            ? pageItems.map(r => this._renderResourceItem(r)).join('')
             : `<div class="kb-empty"><div class="kb-empty-ico">🔍</div><div class="kb-empty-head">Нічого не знайдено</div><div class="kb-empty-txt">Спробуйте інший фільтр або пошуковий запит</div></div>`;
+
+        this._kbRenderPagination(items.length);
+    },
+
+    _kbSetPage(page) {
+        this._page = page;
+        this._kbRerender();
+        document.getElementById('resource-list')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    },
+
+    _kbRenderPagination(total) {
+        const container = document.getElementById('resources-pagination');
+        if (!container) return;
+        const pages = Math.ceil(total / this._kbPageSize);
+        if (pages <= 1) { container.innerHTML = ''; return; }
+        const cur = this._page;
+        const btn = (i) => `<button class="btn ${i === cur ? 'btn-primary' : 'btn-ghost'} btn-sm" onclick="ResourcesPage._kbSetPage(${i})">${i + 1}</button>`;
+        const dot = `<span style="align-self:center;color:var(--text-muted);padding:0 .1rem">…</span>`;
+        const indices = new Set([0, 1, pages - 2, pages - 1, cur - 1, cur, cur + 1].filter(i => i >= 0 && i < pages));
+        const sorted = [...indices].sort((a, b) => a - b);
+        let html = '';
+        let prev = -1;
+        for (const i of sorted) {
+            if (prev !== -1 && i > prev + 1) html += dot;
+            html += btn(i);
+            prev = i;
+        }
+        container.innerHTML = html;
     },
 
     _kbCardHtml(resource, icon) {
@@ -1390,7 +1427,6 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
                         cats.map(c => `<option value="${Fmt.esc(c)}"${this._kbCatFilter === c ? ' selected' : ''}>${Fmt.esc(c)}</option>`).join('');
                 }
                 this._kbRerender();
-                this._renderPagination(filtered.length);
                 return;
             }
 

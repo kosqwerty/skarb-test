@@ -2378,32 +2378,19 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
 
 const ResourceViewPage = {
 
-    _from: null, _tab: null, _cat: null,
-
+    // Завжди справжній перехід назад в історії браузера (як натискання
+    // кнопки "Назад" у самому браузері) — незалежно від того, звідки
+    // відкрили ресурс. Раніше тут була "розумна" навігація на фіксовану
+    // сторінку (documents/knowledge-base/admin) залежно від `from`, але це
+    // не відповідало реальній історії переходів користувача.
     _goBack() {
-        const f = this._from;
-        if (f === 'documents') {
-            let route = 'documents';
-            if (this._tab) route += `?tab=${this._tab}`;
-            if (this._cat) route += `${this._tab ? '&' : '?'}cat=${encodeURIComponent(this._cat)}`;
-            Router.go(route);
-        } else if (f === 'resources') {
-            Router.go('admin?tab=resources');
-        } else if (f === 'knowledge-base') {
-            Router.go('knowledge-base');
-        } else {
-            Router.back();
-        }
+        Router.back();
     },
 
-    async init(container, { id, from, tab, cat } = {}) {
+    async init(container, { id, from } = {}) {
         if (!id) { Router.back(); return; }
-        this._from = from || null;
-        this._tab  = tab  || null;
-        this._cat  = cat  || null;
 
-        const backLabel = from === 'documents' ? 'Документи' : from === 'knowledge-base' ? 'База знань' : from === 'resources' ? 'Адміністрування' : 'Назад';
-        UI.setBreadcrumb([{ label: backLabel, onClick: () => ResourceViewPage._goBack() }, { label: 'Перегляд' }]);
+        UI.setBreadcrumb([{ label: 'Назад', onClick: () => ResourceViewPage._goBack() }, { label: 'Перегляд' }]);
 
         container.innerHTML = `
             <div style="display:flex;align-items:center;justify-content:center;min-height:300px">

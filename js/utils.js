@@ -2001,14 +2001,22 @@ const CreatableMultiSelect = (() => {
         if (!list) return;
         const ql = q.toLowerCase();
         const selIds = new Set(s.selected.map(x => x.id));
-        const filtered = s.options.filter(o => !selIds.has(o.id) && (!ql || o.name.toLowerCase().includes(ql)));
+        // Список чекбоксів — показуємо ВСІ варіанти (і обрані теж), клік по рядку
+        // перемикає позначку, не ховаючи опцію і не закриваючи список.
+        // Обрані підіймаємо наверх (стабільне сортування — порядок всередині
+        // кожної групи лишається як у options).
+        const filtered = s.options
+            .filter(o => !ql || o.name.toLowerCase().includes(ql))
+            .sort((a, b) => (selIds.has(b.id) ? 1 : 0) - (selIds.has(a.id) ? 1 : 0));
         list.innerHTML = filtered.length
-            ? filtered.map(o => `<div class="cs-opt cms-opt" data-cms="${id}" data-iid="${o.id}" data-iname="${o.name.replace(/"/g,'&quot;')}">${o.name}</div>`).join('')
-            : `<div class="cs-opt" style="color:var(--text-muted);pointer-events:none">${ql ? 'Нічого не знайдено' : 'Всі варіанти обрані'}</div>`;
+            ? filtered.map(o => `<div class="cs-opt cms-opt${selIds.has(o.id) ? ' cms-opt-checked' : ''}" data-cms="${id}" data-iid="${o.id}" data-iname="${o.name.replace(/"/g,'&quot;')}">
+                <span class="cms-opt-check"><i class="fa-solid fa-check"></i></span><span class="cms-opt-name">${o.name}</span>
+              </div>`).join('')
+            : `<div class="cs-opt" style="color:var(--text-muted);pointer-events:none">Нічого не знайдено</div>`;
 
         const addRow = document.getElementById(`cms-add-row-${id}`);
         if (addRow) {
-            const canCreate = ['superadmin', 'admin'].includes(AppState.profile?.role);
+            const canCreate = s.allowCreate !== false && ['superadmin', 'admin'].includes(AppState.profile?.role);
             const exact = s.options.some(o => o.name.toLowerCase() === ql);
             const show = canCreate && ql.length > 0 && !exact;
             addRow.hidden = !show;
@@ -2028,16 +2036,17 @@ const CreatableMultiSelect = (() => {
         if (dd) dd.hidden = true;
     }
 
-    function _pick(id, optId, optName) {
+    // Перемикає позначку (додає/знімає), список лишається відкритим і
+    // фільтр пошуку не скидається — можна тикати кілька опцій підряд.
+    function _toggle(id, optId, optName) {
         const s = _st(id);
-        if (!s.selected.find(x => x.id === optId)) {
-            s.selected.push({ id: optId, name: optName });
-            _renderChips(id);
-            _updateHidden(id);
-        }
+        const idx = s.selected.findIndex(x => x.id === optId);
+        if (idx >= 0) s.selected.splice(idx, 1);
+        else s.selected.push({ id: optId, name: optName });
+        _renderChips(id);
+        _updateHidden(id);
         const input = document.getElementById(`cms-input-${id}`);
-        if (input) { input.value = ''; input.focus(); }
-        _renderList(id, '');
+        _renderList(id, input?.value || '');
     }
 
     let _gb = false;
@@ -2053,9 +2062,9 @@ const CreatableMultiSelect = (() => {
                 _renderChips(id); _renderList(id, ''); _updateHidden(id);
                 return;
             }
-            // option pick
+            // option toggle
             const opt = e.target.closest('.cms-opt[data-cms]');
-            if (opt) { e.preventDefault(); _pick(opt.dataset.cms, opt.dataset.iid, opt.dataset.iname); return; }
+            if (opt) { e.preventDefault(); _toggle(opt.dataset.cms, opt.dataset.iid, opt.dataset.iname); return; }
             // close outside
             Object.keys(_s).forEach(id => {
                 const wrap = document.getElementById(`cms-wrap-${id}`);
@@ -2065,9 +2074,10 @@ const CreatableMultiSelect = (() => {
     }
 
     return {
-        html(id) {
+        html(id, allowCreate = true) {
             _bindGlobal();
-            const canCreate = ['superadmin', 'admin'].includes(AppState.profile?.role);
+            _st(id).allowCreate = allowCreate;
+            const canCreate = allowCreate && ['superadmin', 'admin'].includes(AppState.profile?.role);
             return `
 <div class="cms-wrap" id="cms-wrap-${id}">
     <div class="cms-field">
@@ -2120,13 +2130,13 @@ const CreatableMultiSelect = (() => {
             // застарілого кешу options.
             const norm = s => s.trim().replace(/\s+/g, ' ').toLowerCase();
             const existing = _st(id).options.find(o => norm(o.name) === norm(name));
-            if (existing) { _pick(id, existing.id, existing.name); _closeDrop(id); return; }
+            if (existing) { _toggle(id, existing.id, existing.name); _closeDrop(id); return; }
             const btn = document.getElementById(`cms-add-btn-${id}`);
             if (btn) btn.disabled = true;
             try {
                 const rec = await API.dovirenosti.create(name);
                 _st(id).options.push({ id: rec.id, name: rec.name });
-                _pick(id, rec.id, rec.name);
+                _toggle(id, rec.id, rec.name);
                 _closeDrop(id);
                 Toast.success('Створено', rec.name);
             } catch(e) {

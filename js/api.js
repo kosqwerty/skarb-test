@@ -556,6 +556,50 @@ const API = {
             };
         },
 
+        // Той самий upload, але через сирий XHR до Storage REST API — supabase-js
+        // не віддає прогрес завантаження (fetch-based), а XHR дає upload.onprogress
+        // для реального відсотка (потрібно для фонового завантаження з прогрес-баром).
+        async uploadToStorageWithProgress(file, onProgress) {
+            const ext = file.name.split('.').pop().toLowerCase();
+            const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+            const path = `resources/${Date.now()}_${safeName}`;
+            const { data: { session } } = await supabase.auth.getSession();
+            const token = session?.access_token || APP_CONFIG.anonKey;
+            const url = `${APP_CONFIG.supabaseUrl}/storage/v1/object/${APP_CONFIG.buckets.resources}/${path}`;
+
+            await new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', url, true);
+                xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+                xhr.setRequestHeader('apikey', APP_CONFIG.anonKey);
+                xhr.setRequestHeader('x-upsert', 'true');
+                xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+                xhr.upload.onprogress = (e) => {
+                    if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
+                };
+                xhr.onload = () => {
+                    if (xhr.status >= 200 && xhr.status < 300) { resolve(); return; }
+                    let msg = `Помилка завантаження файлу (${xhr.status})`;
+                    try {
+                        const body = JSON.parse(xhr.responseText);
+                        if (body?.message) msg += `: ${body.message}`;
+                    } catch (_) {}
+                    console.error('[uploadToStorageWithProgress] response:', xhr.status, xhr.responseText);
+                    reject(new Error(msg));
+                };
+                xhr.onerror = () => reject(new Error('Помилка мережі під час завантаження файлу'));
+                xhr.send(file);
+            });
+
+            return {
+                storage_path: path,
+                original_name: file.name,
+                file_type: file.type || this._mimeTypeByExt(ext),
+                type: this._resourceTypeByExt(ext),
+                file_url: null
+            };
+        },
+
         async createWithFile(file, fields) {
             const upload = await this.uploadToStorage(file);
             return this.create({ ...fields, ...upload });

@@ -534,6 +534,7 @@ h4 { font-size: 1.125rem; font-weight: 500; }
     background: var(--primary); color: #fff;
     font-size: .72rem; font-weight: 500; white-space: nowrap;
     line-height: 1.4;
+    cursor: default; /* батьківський .cms-field/.ms-wrap має cursor:text для поля вводу — тут не потрібно */
 }
 .ms-chip-x {
     cursor: pointer; opacity: .8; font-size: .7rem; line-height: 1;
@@ -837,6 +838,19 @@ select option { background: var(--bg-raised); }
 }
 .cs-opt-empty { color: var(--text-muted); }
 .cs-opt:hover { background: var(--bg-hover); }
+
+/* CreatableMultiSelect — список-чекбокс (замість "вибрав і зник") */
+.cms-opt { display: flex; align-items: center; gap: 0.6rem; }
+.cms-opt-check {
+    width: 16px; height: 16px; border-radius: 4px; flex-shrink: 0;
+    border: 1.5px solid var(--border); background: var(--bg-surface);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.62rem; color: transparent;
+    transition: background var(--transition), border-color var(--transition), color var(--transition);
+}
+.cms-opt.cms-opt-checked .cms-opt-check { background: var(--primary); border-color: var(--primary); color: #fff; }
+.cms-opt-name { overflow: hidden; text-overflow: ellipsis; }
+.cms-opt-checked + .cms-opt:not(.cms-opt-checked) { border-top: 1px solid var(--border); margin-top: 2px; padding-top: calc(0.5rem + 1px); }
 .cs-add-row {
     display: flex;
     align-items: center;

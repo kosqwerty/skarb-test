@@ -25,6 +25,7 @@ const ResourcesPage = {
     _kbCatFilter: 'all',
     _kbPageSize: 10,
     _kbAllItems: [],
+    _uploadQueue: [],
     _docsSort: 'priority',
     _docsTreeStatus: '',
     _docsTreeTov: '',
@@ -1189,10 +1190,14 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
         };
         items = [...items].sort(sorts[this._kbSort] || sorts.newest);
 
-        // Заповнити hero-stats
+        // Заповнити hero-stats. Якщо активний фільтр типу/категорії — показуємо
+        // кількість ВІДФІЛЬТРОВАНИХ матеріалів (саме її й ділить на сторінки
+        // пагінація нижче), інакше цифра "Матеріалів" не збігалась би з тим,
+        // скільки сторінок реально показано, і виглядало це як баг пагінації.
         const totalEl = document.getElementById('kb-stat-total');
         const newEl   = document.getElementById('kb-stat-new');
-        if (totalEl) totalEl.textContent = this._kbAllItems.length;
+        const hasFilter = this._kbTypeFilter !== 'all' || this._kbCatFilter !== 'all';
+        if (totalEl) totalEl.textContent = hasFilter ? items.length : this._kbAllItems.length;
         if (newEl) {
             const weekAgo = Date.now() - 7 * 86400000;
             newEl.textContent = this._kbAllItems.filter(r => new Date(r.created_at).getTime() > weekAgo).length;
@@ -2041,97 +2046,199 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
             : 'Оберіть файл для завантаження';
         const courseOptions = this._courses.map(c => `<option value="${c.id}" ${resource?.course_id === c.id ? 'selected' : ''}>${c.title}</option>`).join('');
 
+        // Тумблер (checkbox під капотом — читається так само через .checked)
+        const toggle = (id, checked, onchange = '') => `
+            <label class="rf-switch">
+                <input type="checkbox" id="${id}" ${checked ? 'checked' : ''} ${onchange ? `onchange="${onchange}"` : ''}>
+                <span class="rf-switch-track"></span>
+            </label>`;
+
         Modal.open({
             title: isEdit ? '<i class="fa-solid fa-pen"></i> Редагувати ресурс' : '<i class="fa-solid fa-plus"></i> Додати ресурс',
             size: 'lg',
             body: `
                 <style>
-                    #rfg .form-group { margin-bottom: 0; }
-                    #rfg label:not(.checkbox-item) { font-size: .8rem; margin-bottom: .2rem; }
-                    #rfg textarea { height: 54px; resize: none; }
-                    #rfg .file-upload-area { min-height: 66px; padding: 8px 16px; gap: 5px; }
-                    #rfg .file-upload-icon { width: 32px; height: 32px; border-radius: 9px; box-shadow: none; }
-                    #rfg .file-upload-icon i { font-size: .9rem; }
-                    #rfg .file-upload-label { font-size: .78rem; }
-                    #rfg .file-upload-hint { font-size: .68rem; }
-                    #rfg .file-upload-area::before { display: none; }
+                    #rfg{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+                    #rfg > .rf-sec.rf-span2{grid-column:1/-1}
+                    #rfg .rf-sec{
+                        display:flex;flex-direction:column;
+                        border:1px solid var(--border);border-radius:14px;background:var(--bg-surface);
+                        transition:border-color .15s,box-shadow .15s;
+
+                        .rf-toggle-row{display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem;
+                            padding:.4rem 0;border-bottom:1px solid var(--border)}
+                        .rf-sec-body.rf-col1 .rf-toggle-row:last-child,
+                        .rf-sub-panel .rf-toggle-row{border-bottom:none;padding-bottom:0}
+                        .rf-sec-body.rf-col1 .rf-toggle-row:first-child{padding-top:0}
+                        .rf-toggle-row > .rf-switch{margin-top:1px}
+                        .rf-toggle-label{display:flex;align-items:center;gap:.5rem;font-size:.83rem;color:var(--text-primary);font-weight:500;line-height:1.3}
+                        .rf-toggle-label i{color:var(--sec-accent);width:16px;text-align:center;font-size:.82rem;flex-shrink:0}
+                        .rf-toggle-desc{font-size:.7rem;color:var(--text-muted);margin-top:2px;line-height:1.35}
+
+                        .rf-switch{position:relative;display:inline-flex;width:36px;height:20px;flex-shrink:0;cursor:pointer}
+                        .rf-switch input{position:absolute;opacity:0;width:0;height:0}
+                        .rf-switch-track{position:absolute;inset:0;background:var(--border);border-radius:20px;transition:background .2s}
+                        .rf-switch-track::before{content:'';position:absolute;width:14px;height:14px;left:3px;top:3px;
+                            background:#fff;border-radius:50%;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+                        .rf-switch input:checked + .rf-switch-track{background:var(--sec-accent, var(--primary))}
+                        .rf-switch input:checked + .rf-switch-track::before{transform:translateX(16px)}
+                    }
+                    #rfg .rf-sec-head{display:flex;align-items:center;gap:.5rem;padding:.5rem .9rem;
+                        border-radius:13px 13px 0 0;
+                        background:color-mix(in srgb, var(--sec-accent) 7%, var(--bg-raised));border-bottom:1px solid var(--border)}
+                    #rfg .rf-sec-ic{width:23px;height:23px;border-radius:7px;display:flex;align-items:center;justify-content:center;
+                        background:var(--sec-accent);color:#fff;font-size:.7rem;flex-shrink:0;
+                        box-shadow:0 2px 8px color-mix(in srgb, var(--sec-accent) 45%, transparent)}
+                    #rfg .rf-sec-title{font-size:.82rem;font-weight:700;color:var(--text-primary)}
+                    #rfg .rf-sec-sub{font-size:.7rem;color:var(--text-muted);margin-left:auto}
+                    #rfg .rf-sec-body{flex:1;align-content:start;padding:.55rem .9rem;display:grid;grid-template-columns:1fr 1fr;gap:.45rem .8rem}
+                    #rfg .rf-sec-body.rf-col1{grid-template-columns:1fr;gap:.4rem}
+                    #rfg .rf-sec:hover{border-color:color-mix(in srgb, var(--sec-accent) 35%, var(--border));
+                        box-shadow:0 2px 12px color-mix(in srgb, var(--sec-accent) 10%, transparent)}
+                    #rfg .rf-field{display:flex;flex-direction:column;gap:.25rem;min-width:0}
+                    #rfg .rf-field.full{grid-column:1/-1}
+                    #rfg .rf-field label{font-size:.76rem;font-weight:500;color:var(--text-secondary)}
+                    #rfg .rf-hint{font-size:.7rem;color:var(--text-muted)}
+                    #rfg textarea{height:32px;min-height:32px;resize:none;padding-top:.5rem;padding-bottom:.5rem}
+
+                    #rfg .rf-sub-panel{margin-top:.4rem;padding:.55rem .7rem;border-radius:10px;
+                        background:color-mix(in srgb, var(--sec-accent) 6%, var(--bg-raised));
+                        border:1px solid color-mix(in srgb, var(--sec-accent) 25%, var(--border));
+                        display:flex;flex-direction:column;gap:.4rem}
+
+                    /* Базовий .file-upload-* — спільний глобальний компонент (фіксовані
+                       180×150px під квадратні мініатюри в інших розділах). У широкій секції
+                       "Файл" він губився маленькою коробкою, тож тут повністю переозначений:
+                       на всю ширину, пунктирна рамка в тон акценту секції (зелений). */
+                    #rfg .file-upload-frame{width:100%;padding:0;border-radius:14px;background:none}
+                    #rfg .file-upload-area{
+                        width:100%;height:auto;min-height:96px;padding:1.1rem 1rem;gap:.3rem;
+                        border:1.5px dashed color-mix(in srgb, var(--sec-accent) 40%, var(--border));
+                        border-radius:14px;background:color-mix(in srgb, var(--sec-accent) 4%, var(--bg-raised))}
+                    #rfg .file-upload-area::before{display:none}
+                    #rfg .file-upload-area:hover,
+                    #rfg .file-upload-area.drag-over{
+                        border-color:var(--sec-accent);
+                        background:color-mix(in srgb, var(--sec-accent) 8%, var(--bg-raised))}
+                    #rfg .file-upload-icon{width:38px;height:38px;border-radius:11px;box-shadow:none;
+                        background:color-mix(in srgb, var(--sec-accent) 16%, transparent);
+                        border:1.5px solid color-mix(in srgb, var(--sec-accent) 30%, transparent)}
+                    #rfg .file-upload-icon i{font-size:1rem;color:var(--sec-accent)}
+                    #rfg .file-upload-area:hover .file-upload-icon,
+                    #rfg .file-upload-area.drag-over .file-upload-icon{
+                        transform:translateY(-2px) scale(1.04);
+                        box-shadow:0 6px 16px color-mix(in srgb, var(--sec-accent) 30%, transparent)}
+                    #rfg .file-upload-label{font-size:.82rem}
+                    #rfg .file-upload-hint{font-size:.7rem}
                 </style>
-                <div id="rfg" style="display:grid;grid-template-columns:1fr 1fr;gap:.625rem .875rem">
+                <div id="rfg">
 
-                    <div class="form-group">
-                        <label>Назва *</label>
-                        <input id="res-title" type="text" value="${(resource?.title || '').replace(/"/g, '&quot;')}" placeholder="Назва ресурсу">
-                    </div>
-                    <div class="form-group">
-                        <label>Категорія</label>
-                        <input id="res-category" type="text" value="${(resource?.category || '').replace(/"/g, '&quot;')}" placeholder="Наприклад: Документація">
-                    </div>
-
-                    <div class="form-group" style="grid-column:1/-1">
-                        <label>Опис</label>
-                        <textarea id="res-desc" placeholder="Короткий опис ресурсу" lang="uk" spellcheck="true">${resource?.description || ''}</textarea>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Група доступу</label>
-                        <select id="res-access-group">
-                            <option value="">🌐 Публічний (без обмежень)</option>
-                            ${(this._accessGroups || []).map(g =>
-                                `<option value="${g.id}" ${resource?.access_group_id === g.id ? 'selected' : ''}>${g.is_public ? '🌐' : '🔐'} ${g.name}</option>`
-                            ).join('')}
-                        </select>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Доступ по довіреності</label>
-                        ${CreatableMultiSelect.html('res-dovirenosti')}
-                        <div style="font-size:.72rem;color:var(--text-muted);margin-top:.2rem">Без тегу — видний всім</div>
-                    </div>
-                    <div style="display:flex;flex-direction:column;gap:.45rem">
-                        <div style="font-size:.8rem;font-weight:500;color:var(--text-secondary)">Параметри</div>
-                        <label class="checkbox-item" style="cursor:pointer;user-select:none">
-                            <input type="checkbox" id="res-download" ${resource?.download_allowed !== false ? 'checked' : ''}>
-                            <span>Дозволити завантаження</span>
-                        </label>
-                        <label class="checkbox-item" style="cursor:pointer;user-select:none">
-                            <input type="checkbox" id="res-tracked" ${resource?.is_tracked_download ? 'checked' : ''}
-                                onchange="ResourcesPage._toggleDeadlineRow(this.checked)">
-                            <span>📋 Відстежуваний документ</span>
-                        </label>
-                        <div id="res-deadline-row" style="display:${resource?.is_tracked_download ? 'flex' : 'none'};flex-direction:column;gap:.35rem;padding-top:.1rem">
-                            <label class="checkbox-item" style="cursor:pointer;user-select:none">
-                                <input type="checkbox" id="res-has-deadline" ${resource?.deadline_days ? 'checked' : ''}
-                                    onchange="ResourcesPage._toggleDeadlineDays(this.checked)">
-                                <span>Встановити дедлайн</span>
-                            </label>
-                            <div id="res-deadline-days-wrap" style="display:${resource?.deadline_days ? 'flex' : 'none'};align-items:center;gap:.4rem">
-                                <input type="number" id="res-deadline-days" min="1" max="90" value="${resource?.deadline_days || 3}"
-                                    style="width:58px;padding:3px 7px;border-radius:7px;border:1.5px solid var(--border);background:var(--bg-raised);color:var(--text-primary);font-size:.8rem">
-                                <span style="font-size:.78rem;color:var(--text-muted)">днів після публікації</span>
+                    <!-- Основна інформація -->
+                    <div class="rf-sec rf-span2" style="--sec-accent:#3b82f6">
+                        <div class="rf-sec-head">
+                            <span class="rf-sec-ic"><i class="fa-solid fa-file-lines"></i></span>
+                            <span class="rf-sec-title">Основна інформація</span>
+                        </div>
+                        <div class="rf-sec-body">
+                            <div class="rf-field">
+                                <label>Назва *</label>
+                                <input id="res-title" type="text" value="${(resource?.title || '').replace(/"/g, '&quot;')}" placeholder="Назва ресурсу">
                             </div>
-                            ${resource?.doc_version ? `<div style="display:flex;align-items:center;gap:.35rem">
-                                <span style="font-size:.78rem;color:var(--text-muted)">Версія: <b id="res-version-label">${resource.doc_version}</b></span>
-                                <button type="button" onclick="ResourcesPage._bumpVersion()"
-                                    style="padding:2px 7px;border-radius:7px;border:1.5px solid var(--border);background:var(--bg-raised);font-size:.73rem;cursor:pointer;color:var(--text-muted)">
-                                    ↑ нова версія
-                                </button>
-                            </div>` : ''}
-                            <input type="hidden" id="res-bump-version" value="0">
+                            <div class="rf-field">
+                                <label>Категорія</label>
+                                <input id="res-category" type="text" value="${(resource?.category || '').replace(/"/g, '&quot;')}" placeholder="Наприклад: Документація">
+                            </div>
+                            <div class="rf-field full">
+                                <label>Опис</label>
+                                <textarea id="res-desc" placeholder="Короткий опис ресурсу" lang="uk" spellcheck="true">${resource?.description || ''}</textarea>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="form-group" style="grid-column:1/-1">
-                        <label>Файл</label>
-                        <div id="resource-file-upload"></div>
-                        <div style="margin-top:.3rem;color:var(--text-muted);font-size:.78rem">${fileHint}</div>
+                    <!-- Доступ -->
+                    <div class="rf-sec" style="--sec-accent:#8b5cf6">
+                        <div class="rf-sec-head">
+                            <span class="rf-sec-ic"><i class="fa-solid fa-lock"></i></span>
+                            <span class="rf-sec-title">Доступ</span>
+                        </div>
+                        <div class="rf-sec-body rf-col1">
+                            <div class="rf-field">
+                                <label>Група доступу</label>
+                                <select id="res-access-group">
+                                    <option value="">🌐 Публічний (без обмежень)</option>
+                                    ${(this._accessGroups || []).map(g =>
+                                        `<option value="${g.id}" ${resource?.access_group_id === g.id ? 'selected' : ''}>${g.is_public ? '🌐' : '🔐'} ${g.name}</option>`
+                                    ).join('')}
+                                </select>
+                            </div>
+                            <div class="rf-field">
+                                <label>Доступ по довіреності</label>
+                                ${CreatableMultiSelect.html('res-dovirenosti', false)}
+                                <span class="rf-hint">Без тегу — видний всім</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Параметри -->
+                    <div class="rf-sec" style="--sec-accent:#f59e0b">
+                        <div class="rf-sec-head">
+                            <span class="rf-sec-ic"><i class="fa-solid fa-sliders"></i></span>
+                            <span class="rf-sec-title">Параметри</span>
+                        </div>
+                        <div class="rf-sec-body rf-col1">
+                            <div class="rf-toggle-row">
+                                <span class="rf-toggle-label"><i class="fa-solid fa-download"></i> Дозволити завантаження</span>
+                                ${toggle('res-download', resource?.download_allowed !== false)}
+                            </div>
+                            <div class="rf-toggle-row">
+                                <span class="rf-toggle-label"><i class="fa-regular fa-bell"></i> Надіслати сповіщення</span>
+                                ${toggle('res-notify', !isEdit)}
+                            </div>
+                            <div class="rf-toggle-row">
+                                <div>
+                                    <span class="rf-toggle-label"><i class="fa-regular fa-clipboard"></i> Відстежуваний документ</span>
+                                    <div class="rf-toggle-desc">Фіксує ознайомлення користувачів, показує в бейджі "непрочитане"</div>
+                                </div>
+                                ${toggle('res-tracked', !!resource?.is_tracked_download, 'ResourcesPage._toggleDeadlineRow(this.checked)')}
+                            </div>
+
+                            <div id="res-deadline-row" class="rf-sub-panel" style="display:${resource?.is_tracked_download ? 'flex' : 'none'}">
+                                <div class="rf-toggle-row">
+                                    <span class="rf-toggle-label"><i class="fa-regular fa-calendar-days"></i> Встановити дедлайн</span>
+                                    ${toggle('res-has-deadline', !!resource?.deadline_days, 'ResourcesPage._toggleDeadlineDays(this.checked)')}
+                                </div>
+                                <div id="res-deadline-days-wrap" style="display:${resource?.deadline_days ? 'flex' : 'none'};align-items:center;gap:.4rem">
+                                    <input type="number" id="res-deadline-days" min="1" max="90" value="${resource?.deadline_days || 3}"
+                                        style="width:58px;padding:3px 7px;border-radius:7px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.8rem">
+                                    <span class="rf-hint">днів після публікації</span>
+                                </div>
+                                ${resource?.doc_version ? `<div style="display:flex;align-items:center;gap:.35rem">
+                                    <span class="rf-hint">Версія: <b id="res-version-label" style="color:var(--text-primary)">${resource.doc_version}</b></span>
+                                    <button type="button" onclick="ResourcesPage._bumpVersion()"
+                                        style="padding:2px 7px;border-radius:7px;border:1.5px solid var(--border);background:var(--bg-surface);font-size:.73rem;cursor:pointer;color:var(--text-muted)">
+                                        ↑ нова версія
+                                    </button>
+                                </div>` : ''}
+                                <input type="hidden" id="res-bump-version" value="0">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Файл -->
+                    <div class="rf-sec rf-span2" style="--sec-accent:#10b981">
+                        <div class="rf-sec-head">
+                            <span class="rf-sec-ic"><i class="fa-solid fa-cloud-arrow-up"></i></span>
+                            <span class="rf-sec-title">Файл</span>
+                            <span class="rf-sec-sub">до ${Fmt.fileSize(APP_CONFIG.resourceMaxSizeMb * 1024 * 1024)}</span>
+                        </div>
+                        <div class="rf-sec-body rf-col1">
+                            <div id="resource-file-upload"></div>
+                            <span class="rf-hint">${fileHint}</span>
+                        </div>
                     </div>
 
                 </div>`,
             footer: `
-                <label class="checkbox-item" style="margin-right:auto;cursor:pointer;font-size:.82rem;color:var(--text-secondary)">
-                    <input type="checkbox" id="res-notify" ${!isEdit ? 'checked' : ''}>
-                    <span><i class="fa-regular fa-bell" style="color:var(--primary)"></i> Надіслати сповіщення</span>
-                </label>
                 <button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
                 <button class="btn btn-primary" onclick="ResourcesPage.saveResource(${resource ? `'${resource.id}'` : ''})">${isEdit ? '<i class="fa-regular fa-floppy-disk"></i> Зберегти' : '<i class="fa-solid fa-plus"></i> Додати'}</button>`
         });
@@ -2155,6 +2262,13 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
             input.addEventListener('change', () => {
                 const file = input.files[0];
                 if (!file) return;
+                const maxBytes = APP_CONFIG.resourceMaxSizeMb * 1024 * 1024;
+                if (file.size > maxBytes) {
+                    Toast.error('Файл занадто великий', `«${file.name}» — ${Fmt.fileSize(file.size)}, максимум ${Fmt.fileSize(maxBytes)}`);
+                    input.value = '';
+                    this._resourceFile = null;
+                    return;
+                }
                 this._resourceFile = file;
                 const titleInput = document.getElementById('res-title');
                 if (titleInput && !titleInput.value.trim()) {
@@ -2178,6 +2292,94 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
         const el = document.getElementById('res-bump-version');
         if (el) el.value = '1';
         Toast.info('Нова версія', 'При збереженні версія буде збільшена — всі ознайомлення скинуться');
+    },
+
+    // ── Фонова черга завантажень ────────────────────────────────────
+    // Панель монтується напряму в document.body (а не в container сторінки),
+    // тож переживає навігацію по SPA й перерендери container.innerHTML —
+    // завантаження триває у фоні, поки користувач працює з іншими розділами
+    // або відкриває нову форму додавання ресурсу.
+
+    _uqEnsureStyles() {
+        if (document.getElementById('res-uq-styles')) return;
+        const style = document.createElement('style');
+        style.id = 'res-uq-styles';
+        style.textContent = `
+            .res-uq-panel{position:fixed;bottom:20px;right:20px;z-index:9998;width:300px;max-height:70vh;overflow-y:auto;
+                background:var(--bg-surface);border:1px solid var(--border);border-radius:16px;
+                box-shadow:0 12px 40px rgba(0,0,0,.18);animation:res-uq-in .25s ease}
+            @keyframes res-uq-in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+            .res-uq-head{display:flex;align-items:center;gap:.5rem;padding:.7rem .9rem;font-size:.82rem;font-weight:600;
+                color:var(--text-primary);border-bottom:1px solid var(--border)}
+            .res-uq-head i{color:var(--primary)}
+            .res-uq-list{display:flex;flex-direction:column}
+            .res-uq-item{padding:.6rem .9rem;border-bottom:1px solid var(--border)}
+            .res-uq-item:last-child{border-bottom:none}
+            .res-uq-row{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-bottom:.35rem}
+            .res-uq-title{font-size:.8rem;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
+            .res-uq-pct{font-size:.74rem;color:var(--text-muted);flex-shrink:0}
+            .res-uq-item.res-uq-done .res-uq-pct{color:#10b981}
+            .res-uq-close{background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:.8rem;padding:2px;flex-shrink:0}
+            .res-uq-close:hover{color:var(--danger)}
+            .res-uq-bar{height:5px;border-radius:20px;background:var(--bg-raised);overflow:hidden}
+            .res-uq-fill{height:100%;background:var(--primary);border-radius:20px;transition:width .2s ease}
+            .res-uq-item.res-uq-done .res-uq-fill{background:#10b981}
+            .res-uq-item.res-uq-error .res-uq-fill{background:var(--danger)}
+            .res-uq-status{margin-top:.25rem;font-size:.7rem;color:var(--text-muted)}
+            .res-uq-item.res-uq-error .res-uq-status{color:var(--danger)}
+        `;
+        document.head.appendChild(style);
+    },
+
+    _uqAdd(title) {
+        this._uqEnsureStyles();
+        const id = 'uq_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+        this._uploadQueue.push({ id, title, progress: 0, status: 'uploading', error: '' });
+        this._uqRender();
+        return id;
+    },
+
+    _uqUpdate(id, patch) {
+        const item = this._uploadQueue.find(q => q.id === id);
+        if (!item) return;
+        Object.assign(item, patch);
+        this._uqRender();
+    },
+
+    _uqRemove(id) {
+        this._uploadQueue = this._uploadQueue.filter(q => q.id !== id);
+        this._uqRender();
+    },
+
+    _uqRender() {
+        let panel = document.getElementById('res-upload-queue');
+        if (!this._uploadQueue.length) {
+            panel?.remove();
+            return;
+        }
+        if (!panel) {
+            panel = document.createElement('div');
+            panel.id = 'res-upload-queue';
+            panel.className = 'res-uq-panel';
+            document.body.appendChild(panel);
+        }
+        const statusLabel = { uploading: 'Завантаження…', saving: 'Збереження…', done: 'Готово', error: 'Помилка' };
+        panel.innerHTML = `
+            <div class="res-uq-head"><i class="fa-solid fa-cloud-arrow-up"></i> Завантаження файлів (${this._uploadQueue.length})</div>
+            <div class="res-uq-list">
+                ${this._uploadQueue.map(q => `
+                    <div class="res-uq-item res-uq-${q.status}">
+                        <div class="res-uq-row">
+                            <span class="res-uq-title" title="${Fmt.esc(q.title)}">${Fmt.esc(q.title)}</span>
+                            ${q.status === 'error'
+                                ? `<button class="res-uq-close" onclick="ResourcesPage._uqRemove('${q.id}')" title="Закрити"><i class="fa-solid fa-xmark"></i></button>`
+                                : `<span class="res-uq-pct">${q.status === 'done' ? '<i class="fa-solid fa-check"></i>' : q.progress + '%'}</span>`}
+                        </div>
+                        <div class="res-uq-bar"><div class="res-uq-fill" style="width:${q.status === 'done' ? 100 : q.progress}%"></div></div>
+                        <div class="res-uq-status">${q.status === 'error' ? Fmt.esc(q.error || 'Помилка') : statusLabel[q.status]}</div>
+                    </div>
+                `).join('')}
+            </div>`;
     },
 
     async saveResource(resourceId) {
@@ -2224,68 +2426,99 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
             } catch (_) {}
         }
 
-        Loader.show();
+        // Читаємо все з DOM ДО закриття модалки — вона може закритись одразу
+        // (фоновий шлях завантаження файлу), тож поля треба захопити зараз.
+        const file = this._resourceFile;
+        const dovIds = CreatableMultiSelect.getValues('res-dovirenosti');
+        const sendNotify = document.getElementById('res-notify')?.checked === true;
+        const notifyLink = this._view === 'docs' ? 'documents' : 'knowledge-base';
+        const ctx = { resourceId, fields, dovIds, sendNotify, notifyLink };
+
+        if (!file) {
+            // Без файлу зберігати швидко — блокуючий Loader як і раніше.
+            Loader.show();
+            try {
+                await this._persistResource(ctx);
+                Modal.close();
+                await this._afterSaveResource();
+            } catch (e) {
+                Toast.error('Помилка', e.message);
+            } finally {
+                Loader.hide();
+            }
+            return;
+        }
+
+        // З файлом — вантажимо у фоні: модалку закриваємо одразу, прогрес
+        // показуємо у плаваючій панелі, користувач може відкрити нову форму
+        // й запустити ще одне завантаження паралельно.
+        Modal.close();
+        const qid = this._uqAdd(title);
         try {
-            if (this._resourceFile) {
-                const upload = await API.resources.uploadToStorage(this._resourceFile);
-                Object.assign(fields, upload);
-            }
-
-            const dovIds = CreatableMultiSelect.getValues('res-dovirenosti');
-            let savedId = resourceId;
-
-            const notifyLink = this._view === 'docs' ? 'documents' : 'knowledge-base';
-            if (resourceId) {
-                // Bump doc_version if file changed or manually requested
-                if (fields._bump_version || this._resourceFile) {
-                    const current = await API.resources.getById(resourceId).catch(() => null);
-                    if (current) fields.doc_version = (current.doc_version || 1) + 1;
-                }
-                delete fields._bump_version;
-                await API.resources.update(resourceId, fields);
-                await API.resources.setDovirenosti(resourceId, dovIds).catch(() => {});
-                if (document.getElementById('res-notify')?.checked) {
-                    if (fields.is_tracked_download) {
-                        API.documentDownloads.notifyOnPublish({ ...fields, id: resourceId }, true).catch(e => console.error('[notify] notifyOnPublish error:', e));
-                    } else {
-                        API.notifications.notifyResourcePublished({ ...fields, id: resourceId }, notifyLink, true).catch(e => console.error('[notify] notifyResourcePublished error:', e));
-                    }
-                }
-                Toast.success('Збережено', 'Ресурс оновлено' + (fields.doc_version ? ` (версія ${fields.doc_version})` : ''));
-            } else {
-                fields.doc_version = 1;
-                const created = await API.resources.create(fields);
-                savedId = created.id;
-                const sendNotify = document.getElementById('res-notify')?.checked;
-                // Save dovirenosti first so notify functions can query them
-                await API.resources.setDovirenosti(savedId, dovIds).catch(() => {});
-                if (sendNotify && created) {
-                    if (fields.is_tracked_download) {
-                        API.documentDownloads.notifyOnPublish({ ...fields, id: created.id }).catch(e => console.error('[notify] notifyOnPublish error:', e));
-                    } else {
-                        API.notifications.notifyResourcePublished({ ...fields, id: created.id }, notifyLink).catch(e => console.error('[notify] notifyResourcePublished error:', e));
-                    }
-                }
-                Toast.success('Додано', 'Новий ресурс успішно створено');
-            }
-
-            Modal.close();
-            await Promise.all([this.load(), this._loadFilters()]);
-            if (AppState.isAdmin()) this._loadDbSize();
-            // If editing from resource view page (no list in DOM), refresh the viewer
-            if (!document.getElementById('resource-list')) {
-                const hash = window.location.hash;
-                const match = hash.match(/#\/resource\/([^?]+)/);
-                if (match) {
-                    const from = new URLSearchParams(hash.split('?')[1] || '').get('from') || '';
-                    const container = document.getElementById('page-content');
-                    if (container) await ResourceViewPage.init(container, { id: match[1], from });
-                }
-            }
+            const upload = await API.resources.uploadToStorageWithProgress(file, pct => this._uqUpdate(qid, { progress: pct }));
+            Object.assign(fields, upload);
+            this._uqUpdate(qid, { status: 'saving', progress: 100 });
+            await this._persistResource(ctx);
+            this._uqUpdate(qid, { status: 'done' });
+            setTimeout(() => this._uqRemove(qid), 3000);
+            await this._afterSaveResource();
         } catch (e) {
-            Toast.error('Помилка', e.message);
-        } finally {
-            Loader.hide();
+            this._uqUpdate(qid, { status: 'error', error: e.message });
+            Toast.error('Помилка завантаження', `«${title}»: ${e.message}`);
+        }
+    },
+
+    // DB-частина збереження (виклик storage upload уже завершено, якщо був файл).
+    async _persistResource({ resourceId, fields, dovIds, sendNotify, notifyLink }) {
+        let savedId = resourceId;
+        if (resourceId) {
+            // Bump doc_version if file changed or manually requested
+            if (fields._bump_version || fields.storage_path) {
+                const current = await API.resources.getById(resourceId).catch(() => null);
+                if (current) fields.doc_version = (current.doc_version || 1) + 1;
+            }
+            delete fields._bump_version;
+            await API.resources.update(resourceId, fields);
+            await API.resources.setDovirenosti(resourceId, dovIds).catch(() => {});
+            if (sendNotify) {
+                if (fields.is_tracked_download) {
+                    API.documentDownloads.notifyOnPublish({ ...fields, id: resourceId }, true).catch(e => console.error('[notify] notifyOnPublish error:', e));
+                } else {
+                    API.notifications.notifyResourcePublished({ ...fields, id: resourceId }, notifyLink, true).catch(e => console.error('[notify] notifyResourcePublished error:', e));
+                }
+            }
+            Toast.success('Збережено', 'Ресурс оновлено' + (fields.doc_version ? ` (версія ${fields.doc_version})` : ''));
+        } else {
+            delete fields._bump_version;
+            fields.doc_version = 1;
+            const created = await API.resources.create(fields);
+            savedId = created.id;
+            // Save dovirenosti first so notify functions can query them
+            await API.resources.setDovirenosti(savedId, dovIds).catch(() => {});
+            if (sendNotify && created) {
+                if (fields.is_tracked_download) {
+                    API.documentDownloads.notifyOnPublish({ ...fields, id: created.id }).catch(e => console.error('[notify] notifyOnPublish error:', e));
+                } else {
+                    API.notifications.notifyResourcePublished({ ...fields, id: created.id }, notifyLink).catch(e => console.error('[notify] notifyResourcePublished error:', e));
+                }
+            }
+            Toast.success('Додано', 'Новий ресурс успішно створено');
+        }
+        return savedId;
+    },
+
+    async _afterSaveResource() {
+        await Promise.all([this.load(), this._loadFilters()]);
+        if (AppState.isAdmin()) this._loadDbSize();
+        // If editing from resource view page (no list in DOM), refresh the viewer
+        if (!document.getElementById('resource-list')) {
+            const hash = window.location.hash;
+            const match = hash.match(/#\/resource\/([^?]+)/);
+            if (match) {
+                const from = new URLSearchParams(hash.split('?')[1] || '').get('from') || '';
+                const container = document.getElementById('page-content');
+                if (container) await ResourceViewPage.init(container, { id: match[1], from });
+            }
         }
     },
 
@@ -2567,6 +2800,22 @@ const ResourceViewPage = {
         throw new Error('Файл не знайдено');
     },
 
+    // Викликається роутером при переході з цього роуту (js/app.js, resource/:id).
+    // Без цього: якщо відео відкрите в нативному Picture-in-Picture і користувач
+    // переходить в інший розділ SPA, router одразу перезаписує #page-content
+    // (innerHTML) — <video> знищується, але браузер не зупиняє відтворення
+    // detached-елемента, тож звук продовжує грати без картинки, а кнопка
+    // "повернутись у вкладку" на PiP-вікні просто перемикає фокус вкладки, не
+    // повертаючи SPA-роут. Тому явно закриваємо PiP і ставимо на паузу.
+    destroy() {
+        const video = document.getElementById('rv-video');
+        if (!video) return;
+        if (document.pictureInPictureElement === video) {
+            document.exitPictureInPicture().catch(() => {});
+        }
+        video.pause();
+    },
+
     _render(container, resource, url, from, dlStatus) {
         const ext = resource.storage_path
             ? resource.storage_path.split('.').pop().toLowerCase()
@@ -2595,7 +2844,7 @@ const ResourceViewPage = {
             const noDownload = resource.download_allowed === false ? 'controlsList="nodownload"' : '';
             viewerHtml = `
                 <div style="background:#000;border-radius:var(--radius-lg);overflow:hidden">
-                    <video controls ${noDownload} src="${url}" style="width:100%;max-height:calc(100vh - 240px);display:block"></video>
+                    <video id="rv-video" controls ${noDownload} src="${url}" style="width:100%;max-height:calc(100vh - 240px);display:block"></video>
                 </div>`;
 
         } else if (isImage) {

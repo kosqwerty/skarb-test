@@ -46,6 +46,7 @@ const APP_CONFIG = {
     // Supabase Storage
     storagePublicUrl: `${SUPABASE_URL}/storage/v1/object/public`,
     signedUrlExpiry:  900, // seconds (15 minutes)
+    resourceMaxSizeMb: 3072, // ліміт lesson-resources у Supabase Storage (file_size_limit), зараз 3 GB
 
     buckets: {
         thumbnails: 'course-thumbnails',
@@ -74,8 +75,8 @@ const APP_CONFIG = {
     // Pagination
     pageSize: 12,
 
-    // Supabase plan DB quota in GB (Pro = 8, Free = 0.5)
-    dbQuotaGb: 8
+    // Supabase Storage quota in GB (Pro included = 100, Free = 1)
+    dbQuotaGb: 100
 };
 
 // ── Global App State ───────────────────────────────────────────────

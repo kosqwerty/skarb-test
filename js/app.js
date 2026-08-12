@@ -230,6 +230,7 @@ const App = {
             'resource/:id': async ({ container, params }) => {
                 if (!requireTrusted(true)) return;
                 await ResourceViewPage.init(container, params);
+                return () => ResourceViewPage.destroy?.();
             },
 
             'news': async ({ container, params }) => {

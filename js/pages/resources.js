@@ -1208,6 +1208,7 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
     <div class="kb-card-footer" onclick="event.stopPropagation()">
         <div class="kb-card-actions">
             <button class="kb-btn-open" onclick="ResourcesPage.openViewer('${resource.id}')"><i class="fa-solid fa-eye"></i> Відкрити</button>
+            <button class="kb-btn-dl" title="Відкрити в новому вікні" onclick="ResourcesPage.openInNewTab('${resource.id}')"><i class="fa-solid fa-up-right-from-square"></i></button>
             ${resource.download_allowed ? `<button class="kb-btn-dl" title="Завантажити" onclick="ResourcesPage.downloadResource('${resource.id}')"><i class="fa-solid fa-download"></i></button>` : ''}
             ${AppState.isStaff() && AppState.canMutate() ? `<button class="kb-btn-edit" title="Редагувати" onclick="ResourcesPage.openEdit('${resource.id}')"><i class="fa-solid fa-pen"></i></button><button class="kb-btn-del" title="Видалити" onclick="ResourcesPage.deleteResource('${resource.id}',${safeTitle})"><i class="fa-solid fa-trash"></i></button>` : ''}
         </div>
@@ -1240,6 +1241,7 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
     </div>
     <div class="kb-row-actions" onclick="event.stopPropagation()">
         <button class="kb-btn-open" onclick="ResourcesPage.openViewer('${resource.id}')"><i class="fa-solid fa-eye"></i> Відкрити</button>
+        <button class="kb-btn-dl" title="Відкрити в новому вікні" onclick="ResourcesPage.openInNewTab('${resource.id}')"><i class="fa-solid fa-up-right-from-square"></i></button>
         ${resource.download_allowed ? `<button class="kb-btn-dl" title="Завантажити" onclick="ResourcesPage.downloadResource('${resource.id}')"><i class="fa-solid fa-download"></i></button>` : ''}
         ${AppState.isStaff() && AppState.canMutate() ? `<button class="kb-btn-edit" title="Редагувати" onclick="ResourcesPage.openEdit('${resource.id}')"><i class="fa-solid fa-pen"></i></button><button class="kb-btn-del" title="Видалити" onclick="ResourcesPage.deleteResource('${resource.id}',${safeTitle})"><i class="fa-solid fa-trash"></i></button>` : ''}
         <button class="kb-star res-star-btn${isBm?' active':''}"
@@ -1568,6 +1570,30 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
             if (this._category) route += `&cat=${encodeURIComponent(this._category)}`;
         }
         Router.go(route);
+    },
+
+    // Відкриває файл у новій вкладці, минаючи внутрішній перегляд. Вікно
+    // відкриваємо СИНХРОННО (порожнім) одразу на клік — інакше після await
+    // для резолву підписаного URL браузер втрачає зв'язок з жестом
+    // користувача і блокує window.open як спливаюче вікно.
+    openInNewTab(id) {
+        const newTab = window.open('', '_blank', 'noopener,noreferrer');
+        this._resolveAndOpenInNewTab(id, newTab);
+    },
+
+    async _resolveAndOpenInNewTab(id, newTab) {
+        try {
+            const resource = await API.resources.getById(id);
+            const url = resource.file_url
+                || (resource.storage_path ? await API.resources.getSignedUrl(resource.storage_path) : null);
+            if (!url) throw new Error('Файл не знайдено');
+            const safeUrl = Fmt.safeUrl(url);
+            if (newTab) newTab.location.href = safeUrl;
+            else window.open(safeUrl, '_blank', 'noopener,noreferrer');
+        } catch (e) {
+            if (newTab) newTab.close();
+            Toast.error('Помилка', e.message);
+        }
     },
 
     async _openPdfDrawer(resource) {

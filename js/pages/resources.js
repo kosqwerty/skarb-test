@@ -277,13 +277,21 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
 
 /* ── List ── */
 .kb-list{display:flex;flex-direction:column;gap:8px;animation:kb-in .3s ease}
-.kb-row{background:var(--bg-surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:14px;transition:box-shadow .15s,border-color .15s,transform .15s;cursor:pointer}
+.kb-row{position:relative;background:var(--bg-surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:14px;transition:box-shadow .15s,border-color .15s,transform .15s;cursor:pointer}
 .kb-row:hover{box-shadow:0 4px 16px rgba(0,0,0,.08);border-color:var(--border-light);transform:translateX(2px)}
-.kb-row-icon{width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.3rem;flex-shrink:0}
-.kb-row-info{flex:1;min-width:0}
+/* "Розтягнуте посилання" — невидимий <a>, що покриває весь рядок, аби
+   правий клік/клік колесом миші працювали в будь-якій точці рядка (не
+   лише на кнопці "Відкрити"). Флекс-елементи (icon/info) фарбуються як
+   позиціоновані по порядку в DOM, тож без додаткових заходів вони лежали б
+   поверх абсолютного посилання і блокували клік — тому їм задано
+   pointer-events:none (клік проходить наскрізь до посилання під ними), а
+   .kb-row-actions отримує вищий z-index, щоб кнопки лишались клікабельними. */
+.kb-row-stretched-link{position:absolute;inset:0;border-radius:inherit}
+.kb-row-icon{width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.3rem;flex-shrink:0;pointer-events:none}
+.kb-row-info{flex:1;min-width:0;pointer-events:none}
 .kb-row-title{font-weight:600;font-size:.92rem;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .kb-row-meta{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:3px}
-.kb-row-actions{display:flex;gap:6px;align-items:center;flex-shrink:0}
+.kb-row-actions{position:relative;z-index:1;display:flex;gap:6px;align-items:center;flex-shrink:0}
 
 /* ── Type colors ── */
 .kb-t-pdf   .kb-card-accent,.kb-t-pdf   .kb-row-left-bar{background:linear-gradient(90deg,#f97316,#fb923c)}
@@ -1207,8 +1215,8 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
     </div>
     <div class="kb-card-footer" onclick="event.stopPropagation()">
         <div class="kb-card-actions">
-            <button class="kb-btn-open" onclick="ResourcesPage.openViewer('${resource.id}')"><i class="fa-solid fa-eye"></i> Відкрити</button>
-            <button class="kb-btn-dl" title="Відкрити в новому вікні" onclick="ResourcesPage.openInNewTab('${resource.id}')"><i class="fa-solid fa-up-right-from-square"></i></button>
+            <a class="kb-btn-open" href="#/resource/${resource.id}?from=${this._view === 'docs' ? 'documents' : 'knowledge-base'}" onclick="return ResourcesPage._onOpenClick(event,'${resource.id}')"><i class="fa-solid fa-eye"></i> Відкрити</a>
+            <a class="kb-btn-dl" href="#/resource/${resource.id}?from=${this._view === 'docs' ? 'documents' : 'knowledge-base'}" target="_blank" rel="noopener noreferrer" title="Відкрити в новому вікні"><i class="fa-solid fa-up-right-from-square"></i></a>
             ${resource.download_allowed ? `<button class="kb-btn-dl" title="Завантажити" onclick="ResourcesPage.downloadResource('${resource.id}')"><i class="fa-solid fa-download"></i></button>` : ''}
             ${AppState.isStaff() && AppState.canMutate() ? `<button class="kb-btn-edit" title="Редагувати" onclick="ResourcesPage.openEdit('${resource.id}')"><i class="fa-solid fa-pen"></i></button><button class="kb-btn-del" title="Видалити" onclick="ResourcesPage.deleteResource('${resource.id}',${safeTitle})"><i class="fa-solid fa-trash"></i></button>` : ''}
         </div>
@@ -1228,7 +1236,8 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
         const safeIcon = JSON.stringify(icon||'').replace(/"/g,'&quot;');
         const safeCat = JSON.stringify(resource.category||'').replace(/"/g,'&quot;');
         return `
-<div class="kb-row kb-t-${tkey}" onclick="ResourcesPage.openViewer('${resource.id}')">
+<div class="kb-row kb-t-${tkey}">
+    <a class="kb-row-stretched-link" href="#/resource/${resource.id}?from=${this._view === 'docs' ? 'documents' : 'knowledge-base'}" onclick="return ResourcesPage._onOpenClick(event,'${resource.id}')" aria-label="${Fmt.esc(resource.title || 'Відкрити')}"></a>
     <div class="kb-row-icon">${this._kbTypeIcon(tkey)}</div>
     <div class="kb-row-info">
         <div class="kb-row-title">${this._highlight(resource.title, this._search)}</div>
@@ -1240,8 +1249,8 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
         </div>
     </div>
     <div class="kb-row-actions" onclick="event.stopPropagation()">
-        <button class="kb-btn-open" onclick="ResourcesPage.openViewer('${resource.id}')"><i class="fa-solid fa-eye"></i> Відкрити</button>
-        <button class="kb-btn-dl" title="Відкрити в новому вікні" onclick="ResourcesPage.openInNewTab('${resource.id}')"><i class="fa-solid fa-up-right-from-square"></i></button>
+        <a class="kb-btn-open" href="#/resource/${resource.id}?from=${this._view === 'docs' ? 'documents' : 'knowledge-base'}" onclick="return ResourcesPage._onOpenClick(event,'${resource.id}')"><i class="fa-solid fa-eye"></i> Відкрити</a>
+        <a class="kb-btn-dl" href="#/resource/${resource.id}?from=${this._view === 'docs' ? 'documents' : 'knowledge-base'}" target="_blank" rel="noopener noreferrer" title="Відкрити в новому вікні"><i class="fa-solid fa-up-right-from-square"></i></a>
         ${resource.download_allowed ? `<button class="kb-btn-dl" title="Завантажити" onclick="ResourcesPage.downloadResource('${resource.id}')"><i class="fa-solid fa-download"></i></button>` : ''}
         ${AppState.isStaff() && AppState.canMutate() ? `<button class="kb-btn-edit" title="Редагувати" onclick="ResourcesPage.openEdit('${resource.id}')"><i class="fa-solid fa-pen"></i></button><button class="kb-btn-del" title="Видалити" onclick="ResourcesPage.deleteResource('${resource.id}',${safeTitle})"><i class="fa-solid fa-trash"></i></button>` : ''}
         <button class="kb-star res-star-btn${isBm?' active':''}"
@@ -1473,7 +1482,8 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
                         </div>
                     </div>
                     <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center" onclick="event.stopPropagation()">
-                        <button class="btn btn-ghost btn-sm" onclick="ResourcesPage.openViewer('${resource.id}')"><i class="fa-solid fa-eye"></i> Відкрити</button>
+                        <a class="btn btn-ghost btn-sm" href="#/resource/${resource.id}?from=documents" onclick="return ResourcesPage._onOpenClick(event,'${resource.id}')"><i class="fa-solid fa-eye"></i> Відкрити</a>
+                        <a class="btn btn-ghost btn-sm" href="#/resource/${resource.id}?from=documents" target="_blank" rel="noopener noreferrer" title="Відкрити в новому вікні"><i class="fa-solid fa-up-right-from-square"></i></a>
                         ${AppState.isStaff() && AppState.canMutate() ? `<button class="btn btn-ghost btn-sm" onclick="ResourcesPage.openEdit('${resource.id}')"><i class="fa-solid fa-pen"></i></button><button class="btn btn-ghost btn-sm res-del-btn" title="Видалити" onclick="ResourcesPage.deleteResource('${resource.id}',${JSON.stringify(resource.title||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-trash"></i></button>` : ''}
                     </div>
                 </div>`;
@@ -1544,6 +1554,17 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
         }
     },
 
+    // "Відкрити" зроблено справжнім <a href> (не тільки <button onclick>),
+    // щоб правий клік давав нативний пункт браузера "Відкрити посилання в
+    // новій вкладці/вікні" — на звичайній кнопці без href браузер показує
+    // лише загальне меню сторінки. Лівий клік і далі йде через openViewer()
+    // з усією особливою логікою (PDF-шухляда, трекінг перегляду тощо).
+    _onOpenClick(e, id) {
+        e.preventDefault();
+        this.openViewer(id);
+        return false;
+    },
+
     openViewer(id) {
         if (this._view === 'docs') {
             const resource = (this._docsCache || []).find(r => r.id === id);
@@ -1570,30 +1591,6 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
             if (this._category) route += `&cat=${encodeURIComponent(this._category)}`;
         }
         Router.go(route);
-    },
-
-    // Відкриває файл у новій вкладці, минаючи внутрішній перегляд. Вікно
-    // відкриваємо СИНХРОННО (порожнім) одразу на клік — інакше після await
-    // для резолву підписаного URL браузер втрачає зв'язок з жестом
-    // користувача і блокує window.open як спливаюче вікно.
-    openInNewTab(id) {
-        const newTab = window.open('', '_blank', 'noopener,noreferrer');
-        this._resolveAndOpenInNewTab(id, newTab);
-    },
-
-    async _resolveAndOpenInNewTab(id, newTab) {
-        try {
-            const resource = await API.resources.getById(id);
-            const url = resource.file_url
-                || (resource.storage_path ? await API.resources.getSignedUrl(resource.storage_path) : null);
-            if (!url) throw new Error('Файл не знайдено');
-            const safeUrl = Fmt.safeUrl(url);
-            if (newTab) newTab.location.href = safeUrl;
-            else window.open(safeUrl, '_blank', 'noopener,noreferrer');
-        } catch (e) {
-            if (newTab) newTab.close();
-            Toast.error('Помилка', e.message);
-        }
     },
 
     async _openPdfDrawer(resource) {

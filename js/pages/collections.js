@@ -201,7 +201,9 @@ const CollectionsPage = {
                 .col-tbl-th-nc:hover{background:var(--bg-raised);color:var(--text-muted)}
                 .col-tbl-resizer{position:absolute;top:0;right:0;bottom:0;width:6px;cursor:col-resize;z-index:6}
                 .col-tbl-resizer:hover,.col-tbl-resizer:active{background:var(--primary)}
-                .col-tbl tbody tr{border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s}
+                .col-tbl tbody tr{position:relative;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s}
+                .col-tbl-row-link{position:absolute;inset:0;z-index:1}
+                .col-tbl td:last-child{position:relative;z-index:2}
                 .col-tbl tbody tr:last-child{border-bottom:none}
                 .col-tbl tbody tr:hover{background:var(--bg-raised)}
                 .col-tbl tbody tr.is-home{background:color-mix(in srgb, var(--primary) 5%, var(--bg-surface))}
@@ -329,8 +331,9 @@ const CollectionsPage = {
         const bmActive = Bookmarks.isBookmarked('collections/' + p.id);
 
         return `
-            <tr class="${p.is_home ? 'is-home' : ''}" onclick="Router.go('collections/${p.id}')">
+            <tr class="${p.is_home ? 'is-home' : ''}">
                 <td>
+                    <a class="col-tbl-row-link" href="#/collections/${p.id}" aria-label="${Fmt.esc(p.title || 'Відкрити')}"></a>
                     <div class="col-tbl-title">
                         ${p.is_home ? '<i class="fa-solid fa-house" style="color:var(--primary);font-size:.78rem"></i>' : ''}
                         ${Fmt.esc(p.title)}

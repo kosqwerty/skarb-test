@@ -696,6 +696,13 @@ const API = {
             return data;
         },
 
+        async updatePackage(id, fields) {
+            const { data, error } = await supabase.from('scorm_packages')
+                .update(fields).eq('id', id).select().single();
+            if (error) throw error;
+            return data;
+        },
+
         async getProgress(scormPackageId) {
             const { data, error } = await supabase.from('scorm_progress')
                 .select('*')
@@ -727,6 +734,26 @@ const API = {
                 .order('updated_at', { ascending: false });
             if (error) throw error;
             return data;
+        },
+
+        // Хто, з яким статусом і скільки часу проходив SCORM-курс.
+        // RPC — лише admin/superadmin (перевіряється всередині is_admin()).
+        async getProgressStats(resourceId) {
+            const { data, error } = await supabase.rpc('get_scorm_progress_stats', { p_resource_id: resourceId });
+            if (error) throw error;
+            return data || [];
+        },
+
+        // Ручна зміна статусу проходження — на випадок, коли сам пакет
+        // технічно не репортує completion_status (погане авторське
+        // налаштування критерію завершення).
+        async adminSetStatus(userId, scormPackageId, completionStatus) {
+            const { error } = await supabase.rpc('admin_set_scorm_status', {
+                p_user_id: userId,
+                p_scorm_package_id: scormPackageId,
+                p_completion_status: completionStatus
+            });
+            if (error) throw error;
         }
     },
 

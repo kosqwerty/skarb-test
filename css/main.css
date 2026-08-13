@@ -3057,6 +3057,34 @@ select {
     background: #fff;
 }
 
+/* SCORM, вбудований прямо в сторінку ресурсу (не глобальний оверлей —
+   не перекриває сайдбар/топбар) */
+.rv-scorm-wrap {
+    display: flex; flex-direction: column;
+    height: calc(100vh - 240px); min-height: 480px;
+    border: 1px solid var(--border); border-radius: var(--radius-lg);
+    overflow: hidden; background: var(--bg-surface);
+}
+.rv-scorm-wrap:fullscreen { height: 100vh; border-radius: 0; }
+.rv-scorm-toolbar {
+    display: flex; align-items: center; justify-content: space-between; gap: .75rem;
+    padding: .5rem .75rem; background: var(--bg-raised); border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.rv-scorm-status { font-size: .78rem; padding: .25rem .6rem; border-radius: var(--radius-full); background: var(--bg-surface); color: var(--text-muted); }
+.rv-scorm-frame { flex: 1; border: none; width: 100%; background: #fff; }
+
+/* "Ворота" перед стартом курсу — контент у iframe взагалі не завантажується,
+   поки користувач явно не натисне "Почати проходження" */
+.rv-scorm-gate {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .75rem;
+    padding: 2rem; text-align: center; background: var(--bg-surface);
+}
+.rv-scorm-gate-ico {
+    width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    background: var(--bg-raised); color: var(--primary); font-size: 1.6rem;
+}
+.rv-scorm-gate-text { color: var(--text-muted); font-size: .9rem; }
+
 /* ── File Upload ────────────────────────────────────────────────── */
 .file-upload-frame { width: 180px;padding: 2px; border-radius: 16px; background: var(--border-light, #CBD5E1); }
 .file-upload-area {

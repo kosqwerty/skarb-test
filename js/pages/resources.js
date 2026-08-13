@@ -1273,8 +1273,9 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
         <div class="kb-card-actions">
             <a class="kb-btn-open" href="#/resource/${resource.id}?from=${this._view === 'docs' ? 'documents' : 'knowledge-base'}" onclick="return ResourcesPage._onOpenClick(event,'${resource.id}')"><i class="fa-solid fa-eye"></i> Відкрити</a>
             <a class="kb-btn-dl" href="#/resource/${resource.id}?from=${this._view === 'docs' ? 'documents' : 'knowledge-base'}" target="_blank" rel="noopener noreferrer" title="Відкрити в новому вікні"><i class="fa-solid fa-up-right-from-square"></i></a>
-            ${resource.download_allowed ? `<button class="kb-btn-dl" title="Завантажити" onclick="ResourcesPage.downloadResource('${resource.id}')"><i class="fa-solid fa-download"></i></button>` : ''}
+            ${resource.download_allowed && resource.type !== 'scorm' ? `<button class="kb-btn-dl" title="Завантажити" onclick="ResourcesPage.downloadResource('${resource.id}')"><i class="fa-solid fa-download"></i></button>` : ''}
             ${AppState.isAdmin() || AppState.isManager() ? `<button class="kb-btn-dl" title="Статистика перегляду" onclick="ResourcesPage.openViewStats('${resource.id}',${safeTitle})"><i class="fa-solid fa-chart-simple"></i></button>` : ''}
+            ${AppState.isAdmin() && resource.type === 'scorm' ? `<button class="kb-btn-dl" title="Статистика проходження курсу" onclick="ResourcesPage.openScormStats('${resource.id}',${safeTitle})"><i class="fa-solid fa-graduation-cap"></i></button>` : ''}
             ${AppState.isStaff() && AppState.canMutate() ? `<button class="kb-btn-edit" title="Редагувати" onclick="ResourcesPage.openEdit('${resource.id}')"><i class="fa-solid fa-pen"></i></button><button class="kb-btn-del" title="Видалити" onclick="ResourcesPage.deleteResource('${resource.id}',${safeTitle})"><i class="fa-solid fa-trash"></i></button>` : ''}
         </div>
         <button class="kb-star res-star-btn${isBm?' active':''}"
@@ -1308,8 +1309,9 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
     <div class="kb-row-actions" onclick="event.stopPropagation()">
         <a class="kb-btn-open" href="#/resource/${resource.id}?from=${this._view === 'docs' ? 'documents' : 'knowledge-base'}" onclick="return ResourcesPage._onOpenClick(event,'${resource.id}')"><i class="fa-solid fa-eye"></i> Відкрити</a>
         <a class="kb-btn-dl" href="#/resource/${resource.id}?from=${this._view === 'docs' ? 'documents' : 'knowledge-base'}" target="_blank" rel="noopener noreferrer" title="Відкрити в новому вікні"><i class="fa-solid fa-up-right-from-square"></i></a>
-        ${resource.download_allowed ? `<button class="kb-btn-dl" title="Завантажити" onclick="ResourcesPage.downloadResource('${resource.id}')"><i class="fa-solid fa-download"></i></button>` : ''}
+        ${resource.download_allowed && resource.type !== 'scorm' ? `<button class="kb-btn-dl" title="Завантажити" onclick="ResourcesPage.downloadResource('${resource.id}')"><i class="fa-solid fa-download"></i></button>` : ''}
         ${AppState.isAdmin() || AppState.isManager() ? `<button class="kb-btn-dl" title="Статистика перегляду" onclick="ResourcesPage.openViewStats('${resource.id}',${safeTitle})"><i class="fa-solid fa-chart-simple"></i></button>` : ''}
+            ${AppState.isAdmin() && resource.type === 'scorm' ? `<button class="kb-btn-dl" title="Статистика проходження курсу" onclick="ResourcesPage.openScormStats('${resource.id}',${safeTitle})"><i class="fa-solid fa-graduation-cap"></i></button>` : ''}
         ${AppState.isStaff() && AppState.canMutate() ? `<button class="kb-btn-edit" title="Редагувати" onclick="ResourcesPage.openEdit('${resource.id}')"><i class="fa-solid fa-pen"></i></button><button class="kb-btn-del" title="Видалити" onclick="ResourcesPage.deleteResource('${resource.id}',${safeTitle})"><i class="fa-solid fa-trash"></i></button>` : ''}
         <button class="kb-star res-star-btn${isBm?' active':''}"
             data-bm-route="resource/${resource.id}"
@@ -1964,6 +1966,122 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
         if (body) body.innerHTML = this._buildViewStatsBody();
     },
 
+    // Статистика проходження SCORM-курсу: статус, оцінка, час, коли востаннє
+    // оновлювалось + ручна зміна статусу (для пакетів, які самі технічно
+    // не репортують completion_status через погане авторське налаштування).
+    // RPC — лише admin/superadmin.
+    async openScormStats(id, title) {
+        if (!AppState.isAdmin()) return;
+        Loader.show();
+        let rows;
+        try {
+            rows = await API.scorm.getProgressStats(id);
+        } catch (e) {
+            Loader.hide();
+            Toast.error('Помилка', e.message);
+            return;
+        }
+        Loader.hide();
+        this._scormStatsAll = rows;
+        this._scormStatsSearch = '';
+        this._scormStatsTitle = title || '';
+        Modal.open({
+            title: `<i class="fa-solid fa-graduation-cap"></i> Статистика проходження курсу`,
+            size: 'lg',
+            body: this._buildScormStatsBody()
+        });
+    },
+
+    _scormStatusLabel(status) {
+        return { completed: 'Завершено', incomplete: 'В процесі', 'not attempted': 'Не розпочато' }[status] || status || '—';
+    },
+
+    _buildScormStatsBody() {
+        const q = (this._scormStatsSearch || '').toLowerCase();
+        const rows = (this._scormStatsAll || []).filter(r =>
+            !q || (r.full_name || '').toLowerCase().includes(q) || (r.job_position || '').toLowerCase().includes(q));
+
+        const statusMeta = {
+            completed:       { label: 'Завершено',   color: '#10b981' },
+            incomplete:      { label: 'В процесі',    color: '#f59e0b' },
+            'not attempted': { label: 'Не розпочато', color: 'var(--text-muted)' }
+        };
+        const statuses = ['not attempted', 'incomplete', 'completed'];
+
+        const rowsHtml = rows.length ? rows.map(r => {
+            const meta = statusMeta[r.completion_status] || statusMeta['not attempted'];
+            return `
+            <div class="scorm-stat-row">
+                <div class="scorm-stat-info">
+                    <div class="scorm-stat-name">${Fmt.esc(r.full_name || 'Без імені')}</div>
+                    <div class="scorm-stat-meta">${Fmt.esc([r.job_position, r.city, r.subdivision].filter(Boolean).join(' · ') || '—')}</div>
+                </div>
+                <div class="scorm-stat-fact">
+                    <span class="scorm-stat-fact-label">Бал</span>
+                    <span class="scorm-stat-fact-val">${r.score_raw != null ? Fmt.esc(String(r.score_raw)) : '—'}</span>
+                </div>
+                <div class="scorm-stat-fact">
+                    <span class="scorm-stat-fact-label">Час</span>
+                    <span class="scorm-stat-fact-val">${Fmt.duration(Math.round((r.total_time_seconds || 0) / 60)) || '0хв'}</span>
+                </div>
+                <div class="scorm-stat-fact">
+                    <span class="scorm-stat-fact-label">Оновлено</span>
+                    <span class="scorm-stat-fact-val">${Fmt.dateShort(r.updated_at)}</span>
+                </div>
+                <div class="scorm-stat-status-wrap">
+                    <span class="scorm-stat-dot" style="background:${meta.color}"></span>
+                    <select class="scorm-stat-select" style="color:${meta.color}"
+                        onchange="ResourcesPage._scormStatsSetStatus('${r.user_id}','${r.scorm_package_id}',this.value)">
+                        ${statuses.map(s => `<option value="${s}" ${r.completion_status === s ? 'selected' : ''}>${Fmt.esc(statusMeta[s].label)}</option>`).join('')}
+                    </select>
+                </div>
+            </div>`;
+        }).join('')
+            : `<div style="padding:1.5rem;text-align:center;color:var(--text-muted)">
+                ${(this._scormStatsAll || []).length ? 'Нічого не знайдено' : 'Ще ніхто не розпочинав цей курс'}
+              </div>`;
+
+        return `
+            <style>
+                .scorm-stat-row{display:flex;align-items:center;gap:.7rem;padding:.65rem .25rem;border-bottom:1px solid var(--border)}
+                .scorm-stat-row:last-child{border-bottom:none}
+                .scorm-stat-info{flex:1;min-width:0}
+                .scorm-stat-name{font-size:.9rem;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+                .scorm-stat-meta{font-size:.75rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+                .scorm-stat-fact{display:flex;flex-direction:column;align-items:center;min-width:58px;flex-shrink:0}
+                .scorm-stat-fact-label{font-size:.63rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.03em}
+                .scorm-stat-fact-val{font-size:.8rem;color:var(--text-secondary);font-weight:600;margin-top:2px;white-space:nowrap}
+                .scorm-stat-status-wrap{display:flex;align-items:center;gap:.4rem;flex-shrink:0;min-width:150px}
+                .scorm-stat-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+                .scorm-stat-select{border:1px solid var(--border);background:var(--bg-raised);border-radius:8px;
+                    padding:.3rem .5rem;font-size:.78rem;font-weight:600;cursor:pointer;flex:1;min-width:0}
+            </style>
+            <div style="display:flex;flex-direction:column;gap:.875rem">
+                <div style="font-size:.85rem;color:var(--text-muted)">${Fmt.esc(this._scormStatsTitle || '')}</div>
+                <input type="text" placeholder="Пошук за іменем або посадою…" value="${Fmt.esc(this._scormStatsSearch || '')}"
+                    style="width:100%" oninput="ResourcesPage._scormStatsSetSearch(this.value)">
+                <div style="max-height:440px;overflow-y:auto">
+                    ${rowsHtml}
+                </div>
+            </div>`;
+    },
+
+    _scormStatsSetSearch(val) {
+        this._scormStatsSearch = val;
+        const body = document.getElementById('modal-body');
+        if (body) body.innerHTML = this._buildScormStatsBody();
+    },
+
+    async _scormStatsSetStatus(userId, scormPackageId, status) {
+        try {
+            await API.scorm.adminSetStatus(userId, scormPackageId, status);
+            const row = (this._scormStatsAll || []).find(r => r.user_id === userId && r.scorm_package_id === scormPackageId);
+            if (row) row.completion_status = status;
+        } catch (e) {
+            Toast.error('Помилка', e.message);
+        }
+    },
+
     async downloadTracked(id) {
         await this._trackedAction(id, true);
     },
@@ -2522,10 +2640,23 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
         Modal.close();
         const qid = this._uqAdd(title);
         try {
-            const upload = await API.resources.uploadToStorageWithProgress(file, pct => this._uqUpdate(qid, { progress: pct }));
+            // .zip з imsmanifest.xml всередині — це SCORM-курс, вантажимо в
+            // окремий бакет scorm-packages і після збереження ресурсу створюємо
+            // (чи оновлюємо) запис у scorm_packages. Звичайний .zip без
+            // маніфесту — просто файл, як і раніше.
+            const scormMeta = await ScormUpload.parseAndUpload(file, pct => this._uqUpdate(qid, { progress: pct }));
+            const upload = scormMeta
+                ? { storage_path: scormMeta.storage_path, original_name: scormMeta.original_name, file_type: 'application/zip', type: 'scorm', file_url: null }
+                : await API.resources.uploadToStorageWithProgress(file, pct => this._uqUpdate(qid, { progress: pct }));
             Object.assign(fields, upload);
             this._uqUpdate(qid, { status: 'saving', progress: 100 });
-            await this._persistResource(ctx);
+            const savedId = await this._persistResource(ctx);
+            if (scormMeta) {
+                const pkgFields = { manifest_path: 'imsmanifest.xml', entry_point: scormMeta.entryPoint, scorm_version: scormMeta.version, title: scormMeta.title };
+                const existingPkg = resourceId ? await API.scorm.getPackage(resourceId).catch(() => null) : null;
+                if (existingPkg) await API.scorm.updatePackage(existingPkg.id, pkgFields);
+                else await API.scorm.createPackage({ ...pkgFields, resource_id: savedId });
+            }
             this._uqUpdate(qid, { status: 'done' });
             setTimeout(() => this._uqRemove(qid), 3000);
             await this._afterSaveResource();
@@ -2614,23 +2745,26 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
         container.innerHTML = html;
     },
 
-    async deleteResource(id, title) {
-        Modal.open({
-            title: '',
-            size: 'sm',
-            body: `
-                <div style="text-align:center;padding:.5rem 0 .25rem">
-                    <div style="width:64px;height:64px;border-radius:50%;background:rgba(239,68,68,.1);border:2px solid rgba(239,68,68,.2);display:flex;align-items:center;justify-content:center;font-size:2rem;margin:0 auto 1rem"><i class="fa-solid fa-trash"></i></div>
-                    <div style="font-size:1.05rem;font-weight:700;color:var(--text-primary);margin-bottom:.5rem">Видалити файл?</div>
-                    <div style="color:var(--text-muted);font-size:.875rem;line-height:1.5">
-                        «<strong style="color:var(--text-primary)">${title}</strong>» буде переміщено до кошика.<br>
-                        Власник може відновити або видалити назавжди.
-                    </div>
-                </div>`,
-            footer: `
-                <button class="btn btn-ghost" onclick="Modal.close()">Скасувати</button>
-                <button class="btn btn-danger" id="confirm-del-btn" onclick="ResourcesPage._confirmDelete('${id}')">Видалити</button>`
-        });
+    // Центрована модалка (не глобальний Modal.open — той відкривається
+    // боковою панеллю на весь екран праворуч, для такого маленького
+    // підтвердження це виглядає незручно).
+    deleteResource(id, title) {
+        document.getElementById('res-delete-confirm')?.remove();
+        const el = document.createElement('div');
+        el.id = 'res-delete-confirm';
+        el.className = 'center-confirm-backdrop';
+        el.innerHTML = `
+            <div class="center-confirm-box">
+                <h3>Видалити файл?</h3>
+                <p>«<strong style="color:var(--text-primary)">${Fmt.esc(title)}</strong>» буде переміщено до кошика.<br>
+                    Власник може відновити або видалити назавжди.</p>
+                <div class="center-confirm-actions">
+                    <button class="btn btn-ghost" onclick="document.getElementById('res-delete-confirm').remove()">Скасувати</button>
+                    <button class="btn btn-danger" id="confirm-del-btn" onclick="ResourcesPage._confirmDelete('${id}')">Видалити</button>
+                </div>
+            </div>`;
+        document.body.appendChild(el);
+        el.addEventListener('click', e => { if (e.target === el) el.remove(); });
     },
 
     async _confirmDelete(id) {
@@ -2639,7 +2773,7 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
         try {
             await API.resources.softDelete(id);
             API.notifications.deleteByLink(`resource/${id}`).catch(() => {});
-            Modal.close();
+            document.getElementById('res-delete-confirm')?.remove();
             Toast.success('Переміщено до кошика');
             await this.load();
             if (AppState.isAdmin()) this._loadDbSize();
@@ -2862,6 +2996,10 @@ const ResourceViewPage = {
     },
 
     async _getUrl(resource) {
+        // SCORM-файл лежить в окремому бакеті scorm-packages (не lesson-resources),
+        // і сам _render() для isScorm цей url не використовує — програвач
+        // (ScormPlayer) сам створює підписане посилання в потрібному бакеті.
+        if (resource.type === 'scorm') return null;
         if (resource.file_url)    return resource.file_url;
         if (resource.storage_path) return await API.resources.getSignedUrl(resource.storage_path);
         throw new Error('Файл не знайдено');
@@ -2876,11 +3014,20 @@ const ResourceViewPage = {
     // повертаючи SPA-роут. Тому явно закриваємо PiP і ставимо на паузу.
     destroy() {
         const video = document.getElementById('rv-video');
-        if (!video) return;
-        if (document.pictureInPictureElement === video) {
-            document.exitPictureInPicture().catch(() => {});
+        if (video) {
+            if (document.pictureInPictureElement === video) {
+                document.exitPictureInPicture().catch(() => {});
+            }
+            video.pause();
         }
-        video.pause();
+        if (document.getElementById('rv-scorm-frame')) ScormPlayer.closeInline();
+    },
+
+    _scormFullscreen() {
+        const el = document.getElementById('rv-scorm-wrap');
+        if (!el) return;
+        if (document.fullscreenElement) document.exitFullscreen();
+        else el.requestFullscreen?.();
     },
 
     _render(container, resource, url, from, dlStatus) {
@@ -2892,6 +3039,7 @@ const ResourceViewPage = {
         const isVideo = resource.type === 'video' || ['mp4','webm','ogg'].includes(ext);
         const isImage = resource.type === 'image' || ['jpg','jpeg','png','gif','svg','webp'].includes(ext);
         const isDoc   = ['doc','docx','xls','xlsx','ppt','pptx','txt','csv'].includes(ext);
+        const isScorm = resource.type === 'scorm';
 
         const categoryBadge = resource.category
             ? `<span class="badge" style="background:var(--bg-raised);color:var(--text-secondary);font-size:.75rem;padding:3px 10px;border-radius:20px;border:1px solid var(--border)">${resource.category}</span>`
@@ -2918,6 +3066,21 @@ const ResourceViewPage = {
             viewerHtml = `
                 <div style="background:var(--bg-raised);border-radius:var(--radius-lg);padding:1.5rem;text-align:center;border:1px solid var(--border)">
                     <img src="${url}" style="max-width:100%;max-height:calc(100vh - 280px);object-fit:contain;border-radius:var(--radius-md)">
+                </div>`;
+
+        } else if (isScorm) {
+            viewerHtml = `
+                <div class="rv-scorm-wrap" id="rv-scorm-wrap">
+                    <div class="rv-scorm-toolbar">
+                        <span class="rv-scorm-status" id="rv-scorm-status"></span>
+                        <button class="btn btn-ghost btn-sm" onclick="ResourceViewPage._scormFullscreen()"><i class="fa-solid fa-expand"></i> На весь екран</button>
+                    </div>
+                    <div class="rv-scorm-gate" id="rv-scorm-gate" style="display:none">
+                        <div class="rv-scorm-gate-ico"><i class="fa-solid fa-graduation-cap"></i></div>
+                        <div class="rv-scorm-gate-text">Курс ще не розпочато</div>
+                        <button class="btn btn-primary" data-scorm-start><i class="fa-solid fa-play"></i> Почати проходження</button>
+                    </div>
+                    <iframe id="rv-scorm-frame" class="rv-scorm-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-top-navigation-by-user-activation"></iframe>
                 </div>`;
 
         } else if (isDoc) {
@@ -3003,7 +3166,7 @@ const ResourceViewPage = {
                 </div>
 
                 <!-- Download bar (above viewer, hidden for PDF — viewer has its own download button) -->
-                ${resource.download_allowed !== false && !isPdf
+                ${resource.download_allowed !== false && !isPdf && !isScorm
                     ? `<div style="display:flex;justify-content:center;padding:.25rem 0">
                         <a href="${Fmt.safeUrl(url)}" download="${Fmt.esc(ResourcesPage._buildFilename(resource))}"
                             style="display:inline-flex;align-items:center;gap:8px;padding:10px 32px;background:var(--primary);color:#fff;border-radius:24px;font-size:.95rem;font-weight:600;text-decoration:none;box-shadow:0 2px 8px rgba(0,0,0,.15);transition:background var(--transition)"
@@ -3021,6 +3184,7 @@ const ResourceViewPage = {
 
         this._setupUnlockListeners(resource, from, dlStatus, isPdf, isVideo, isImage, isDoc);
         if (isDoc) this._startDocTimeout(url);
+        if (isScorm) ScormPlayer.openInline(resource.id, resource.title);
         // Браузер може скролити до iframe автоматично — скидаємо після рендеру
         requestAnimationFrame(() => {
             document.documentElement.scrollTop = 0;

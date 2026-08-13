@@ -344,7 +344,12 @@
             <button onclick="ScormPlayer.close()" class="btn btn-sm btn-ghost">✕ Закрити</button>
         </div>
     </div>
-    <iframe id="scorm-frame" class="scorm-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-top-navigation"></iframe>
+    <div class="rv-scorm-gate" id="scorm-gate" style="display:none">
+        <div class="rv-scorm-gate-ico"><i class="fa-solid fa-graduation-cap"></i></div>
+        <div class="rv-scorm-gate-text">Курс ще не розпочато</div>
+        <button class="btn btn-primary" data-scorm-start><i class="fa-solid fa-play"></i> Почати проходження</button>
+    </div>
+    <iframe id="scorm-frame" class="scorm-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-top-navigation-by-user-activation"></iframe>
 </div>
 
 <!-- СКРИПТИ -->

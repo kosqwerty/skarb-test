@@ -151,35 +151,34 @@ class SCORM2004Runtime {
 const ScormPlayer = {
     _api: null,
     _packageId: null,
+    _statusElId: 'scorm-status',
+    _entryBlobUrl: null,
 
     async open(resourceId, title = '') {
         Loader.show();
         try {
-            // Get SCORM package info
             const pkg = await API.scorm.getPackage(resourceId);
-            if (!pkg) { Toast.error('Ошибка', 'SCORM пакет не найден'); return; }
+            if (!pkg) { Toast.error('Ошибка', 'SCORM пакет не найден'); Loader.hide(); return; }
 
             this._packageId = pkg.id;
+            this._statusElId = 'scorm-status';
 
-            // Get existing progress
             const progress = await API.scorm.getProgress(pkg.id);
-
-            // Create SCORM API
             this._api = new SCORM2004Runtime(pkg.id, progress || {}, async (data) => {
+                this._updateStatusBadge(data);
                 try { await API.scorm.saveProgress(pkg.id, data); } catch(e) { console.error('[SCORM] Save error:', e); }
             });
 
-            // Show overlay
             const overlay = document.getElementById('scorm-overlay');
             const frame   = document.getElementById('scorm-frame');
+            const gate    = document.getElementById('scorm-gate');
             document.getElementById('scorm-title').textContent = title || pkg.title || 'SCORM';
             this._updateStatusBadge(progress);
 
             overlay.classList.remove('hidden');
             Loader.hide();
 
-            // Load content
-            await this._loadContent(pkg, frame);
+            this._gateOrLoad(pkg, frame, gate, progress);
 
         } catch(e) {
             Loader.hide();
@@ -187,9 +186,87 @@ const ScormPlayer = {
         }
     },
 
+    // Той самий програвач, але вбудований прямо в сторінку ресурсу (не
+    // перекриває сайдбар/топбар глобальним оверлеєм) — для перегляду SCORM
+    // з Бази знань. Очікує, що виклик вже вставив у DOM
+    // #rv-scorm-frame + #rv-scorm-gate (+ опційно #rv-scorm-status).
+    async openInline(resourceId, title = '') {
+        const frame = document.getElementById('rv-scorm-frame');
+        const gate  = document.getElementById('rv-scorm-gate');
+        if (!frame) return;
+        Loader.show();
+        try {
+            const pkg = await API.scorm.getPackage(resourceId);
+            if (!pkg) { Toast.error('Помилка', 'SCORM пакет не знайдено'); Loader.hide(); return; }
+
+            this._packageId = pkg.id;
+            this._statusElId = 'rv-scorm-status';
+
+            const progress = await API.scorm.getProgress(pkg.id);
+            this._api = new SCORM2004Runtime(pkg.id, progress || {}, async (data) => {
+                this._updateStatusBadge(data);
+                try { await API.scorm.saveProgress(pkg.id, data); } catch(e) { console.error('[SCORM] Save error:', e); }
+            });
+            this._updateStatusBadge(progress);
+            Loader.hide();
+
+            this._gateOrLoad(pkg, frame, gate, progress);
+        } catch(e) {
+            Loader.hide();
+            Toast.error('Помилка SCORM', e.message);
+        }
+    },
+
+    // Якщо курс ще не розпочато — показує "ворота" з кнопкою "Почати" й НЕ
+    // завантажує контент в iframe взагалі (щоб не можна було проходити курс
+    // повз явний старт). Якщо прогрес уже є — одразу продовжує з того місця.
+    _gateOrLoad(pkg, frame, gate, progress) {
+        const started = progress && progress.completion_status && progress.completion_status !== 'not attempted';
+        if (started || !gate) {
+            if (gate) gate.style.display = 'none';
+            frame.style.display = '';
+            this._loadContent(pkg, frame);
+            return;
+        }
+        gate.style.display = 'flex';
+        frame.style.display = 'none';
+        const btn = gate.querySelector('[data-scorm-start]');
+        if (btn) btn.onclick = () => this._beginCourse(pkg, frame, gate);
+    },
+
+    async _beginCourse(pkg, frame, gate) {
+        try {
+            await API.scorm.saveProgress(pkg.id, { completion_status: 'incomplete' });
+        } catch (e) {
+            Toast.error('Помилка', e.message);
+            return;
+        }
+        if (this._api) this._api.data['cmi.completion_status'] = 'incomplete';
+        this._updateStatusBadge({ completion_status: 'incomplete' });
+        gate.style.display = 'none';
+        frame.style.display = '';
+        Loader.show();
+        await this._loadContent(pkg, frame);
+        Loader.hide();
+    },
+
     async _loadContent(pkg, frame) {
         try {
-            // Get signed URL for zip file
+            // Пакет розпаковується один раз при ЗАВАНТАЖЕННІ (ScormUpload —
+            // кожен файл заливається в Storage окремо, під реальним шляхом).
+            // Але Supabase Storage навмисно НЕ віддає завантажений HTML із
+            // Content-Type: text/html через публічний URL (захист від
+            // збереженого XSS — інакше будь-який залитий HTML виконувався б
+            // як повноцінна сторінка з того ж домену) — тому просте
+            // `frame.src = entryUrl` не працює, браузер показує сирий текст.
+            //
+            // Тому саму точку входу качаємо через fetch() і обгортаємо в
+            // blob з явним text/html (це обходить серверний Content-Type —
+            // тип blob визначає клієнт). Усередину додаємо <base href> на
+            // реальну публічну папку пакета — це змушує браузer правильно
+            // резолвити ВСІ відносні посилання (і статичні src/href, і
+            // динамічні fetch()/XHR усередині курсу) відносно реальних
+            // файлів, без розпаковки чи переписування решти пакета.
             const resource = await supabase.from('resources')
                 .select('storage_path').eq('id', pkg.resource_id).single();
 
@@ -197,49 +274,33 @@ const ScormPlayer = {
                 throw new Error('Storage path not found');
             }
 
-            const { data: urlData } = await supabase.storage
-                .from(APP_CONFIG.buckets.scorm)
-                .createSignedUrl(resource.data.storage_path, APP_CONFIG.signedUrlExpiry);
+            const folder = resource.data.storage_path.replace(/\/?$/, '/'); // гарантуємо кінцевий "/"
+            const folderUrl = `${APP_CONFIG.storagePublicUrl}/${APP_CONFIG.buckets.scorm}/${folder}`;
+            const entryPath = folder + pkg.entry_point.split('/').map(encodeURIComponent).join('/');
+            const entryUrl = `${APP_CONFIG.storagePublicUrl}/${APP_CONFIG.buckets.scorm}/${entryPath}`;
 
-            // Fetch and extract ZIP
-            Toast.info('Загрузка SCORM', 'Извлечение пакета...');
-            const response = await fetch(urlData.signedUrl);
-            const blob     = await response.blob();
-            const zip      = await JSZip.loadAsync(blob);
+            const entryDir = pkg.entry_point.includes('/')
+                ? pkg.entry_point.slice(0, pkg.entry_point.lastIndexOf('/') + 1)
+                : '';
+            const baseUrl = folderUrl + entryDir.split('/').filter(Boolean).map(encodeURIComponent).join('/') + (entryDir ? '/' : '');
 
-            // Build blob URL map
-            const fileMap = {};
-            const promises = [];
-            zip.forEach((relativePath, zipEntry) => {
-                if (!zipEntry.dir) {
-                    promises.push(
-                        zipEntry.async('blob').then(b => {
-                            const mime = this._getMimeType(relativePath);
-                            fileMap[relativePath] = URL.createObjectURL(new Blob([b], { type: mime }));
-                        })
-                    );
-                }
-            });
-            await Promise.all(promises);
+            const response = await fetch(entryUrl);
+            if (!response.ok) throw new Error(`Не вдалося завантажити точку входу (${response.status})`);
+            let html = await response.text();
+            html = /<head[^>]*>/i.test(html)
+                ? html.replace(/<head([^>]*)>/i, `<head$1><base href="${baseUrl}">`)
+                : `<base href="${baseUrl}">` + html;
 
-            // Inject SCORM API into iframe via postMessage bridge
             this._setupFrameBridge(frame);
-
-            // Load entry point
-            const entryUrl = fileMap[pkg.entry_point];
-            if (!entryUrl) throw new Error(`Entry point not found: ${pkg.entry_point}`);
-
-            frame.src = entryUrl;
-            this._fileMap = fileMap;
+            this._entryBlobUrl = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+            frame.src = this._entryBlobUrl;
 
         } catch(e) {
             console.error('[SCORM] Load error:', e);
-            // Fallback: try loading directly from storage
             frame.src = `about:blank`;
             frame.srcdoc = `<html><body style="font-family:sans-serif;padding:2rem;color:#333">
                 <h2>SCORM Player</h2>
-                <p>Не удалось извлечь пакет: ${e.message}</p>
-                <p>Убедитесь, что SCORM пакет в формате ZIP загружен корректно.</p>
+                <p>Не удалось загрузить пакет: ${e.message}</p>
             </body></html>`;
         }
     },
@@ -299,7 +360,7 @@ const ScormPlayer = {
     },
 
     _updateStatusBadge(data) {
-        const el = document.getElementById('scorm-status');
+        const el = document.getElementById(this._statusElId);
         if (!el) return;
         const status = data?.completion_status || data?.['cmi.completion_status'] || 'not attempted';
         el.textContent = Fmt.completionStatus(status);
@@ -311,16 +372,24 @@ const ScormPlayer = {
     },
 
     close() {
+        this._teardown();
+        const frame = document.getElementById('scorm-frame');
+        if (frame) frame.src = 'about:blank';
+        document.getElementById('scorm-overlay')?.classList.add('hidden');
+    },
+
+    // Викликається при переході зі сторінки ресурсу (ResourceViewPage.destroy) —
+    // фіксує прогрес, прибирає слухачі й звільняє blob-URL точки входу.
+    // Сам iframe #rv-scorm-frame знищиться разом з рештою контейнера сторінки.
+    closeInline() {
+        this._teardown();
+    },
+
+    _teardown() {
         // Final commit
         if (this._api) {
             this._api.Commit('');
             this._api = null;
-        }
-
-        // Clean up blob URLs
-        if (this._fileMap) {
-            Object.values(this._fileMap).forEach(url => URL.revokeObjectURL(url));
-            this._fileMap = null;
         }
 
         // Remove message listener
@@ -329,10 +398,11 @@ const ScormPlayer = {
             window._scormMessageHandler = null;
         }
 
-        const frame = document.getElementById('scorm-frame');
-        frame.src   = 'about:blank';
+        if (this._entryBlobUrl) {
+            URL.revokeObjectURL(this._entryBlobUrl);
+            this._entryBlobUrl = null;
+        }
 
-        document.getElementById('scorm-overlay').classList.add('hidden');
         this._packageId = null;
     },
 
@@ -390,30 +460,82 @@ const ScormUpload = {
         return { title, entryPoint, version };
     },
 
+    // Заливає КОЖЕН файл архіву окремо в Storage під folderPrefix, зберігаючи
+    // внутрішню структуру директорій пакета — так плеєр (ScormPlayer) потім
+    // просто відкриває реальний URL точки входу, і браузер сам довантажує
+    // решту файлів по мірі потреби (замість розпаковки всього zip у пам'яті
+    // на кожен запуск курсу — так було раніше, і це було дуже повільно для
+    // важких пакетів).
+    async _uploadExtracted(zip, folderPrefix, onProgress) {
+        const paths = [];
+        zip.forEach((relativePath, zipEntry) => { if (!zipEntry.dir) paths.push(relativePath); });
+        if (!paths.length) throw new Error('Архів порожній');
+
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) {
+            // Тихий фолбек на anonKey тут раніше давав незрозуміле
+            // "violates RLS policy" замість чіткої помилки про сесію.
+            throw new Error('Сесію не знайдено — перезайдіть у систему й спробуйте ще раз');
+        }
+        const token = session.access_token;
+
+        let done = 0;
+        const uploadOne = async (relativePath) => {
+            const bytes = await zip.file(relativePath).async('arraybuffer');
+            const dest = (folderPrefix + relativePath).split('/').map(encodeURIComponent).join('/');
+            const url = `${APP_CONFIG.supabaseUrl}/storage/v1/object/${APP_CONFIG.buckets.scorm}/${dest}`;
+            await new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', url, true);
+                xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+                xhr.setRequestHeader('apikey', APP_CONFIG.anonKey);
+                xhr.setRequestHeader('Content-Type', ScormPlayer._getMimeType(relativePath));
+                xhr.onload = () => {
+                    if (xhr.status >= 200 && xhr.status < 300) { resolve(); return; }
+                    let msg = `Не вдалось завантажити ${relativePath} (${xhr.status})`;
+                    try { const body = JSON.parse(xhr.responseText); if (body?.message) msg += `: ${body.message}`; } catch (_) {}
+                    console.error('[ScormUpload._uploadExtracted] response:', xhr.status, xhr.responseText);
+                    reject(new Error(msg));
+                };
+                xhr.onerror = () => reject(new Error(`Помилка мережі під час завантаження ${relativePath}`));
+                xhr.send(bytes);
+            });
+            done++;
+            if (onProgress) onProgress(Math.round((done / paths.length) * 100));
+        };
+
+        // Пул конкурентності — по кілька файлів одночасно, а не по одному
+        // й не всі разом (сотні паралельних запитів на великий пакет).
+        const CONCURRENCY = 5;
+        let idx = 0;
+        const workers = Array.from({ length: Math.min(CONCURRENCY, paths.length) }, async () => {
+            while (idx < paths.length) {
+                await uploadOne(paths[idx++]);
+            }
+        });
+        await Promise.all(workers);
+    },
+
     // Upload SCORM zip to storage and create DB record
     async upload(lessonId, file) {
         if (!file.name.endsWith('.zip')) throw new Error('Файл должен быть в формате ZIP');
 
         Loader.show();
         try {
-            // Parse manifest first
             const zipData = await file.arrayBuffer();
             const zip     = await JSZip.loadAsync(zipData);
             const { title, entryPoint, version } = await this.parseManifest(zip);
 
-            // Upload zip to storage
-            const path = `${lessonId}/${Date.now()}_${file.name}`;
-            const { error: uploadErr } = await supabase.storage
-                .from(APP_CONFIG.buckets.scorm)
-                .upload(path, file, { contentType: 'application/zip' });
-            if (uploadErr) throw uploadErr;
+            const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_').replace(/\.zip$/i, '');
+            const folder = `${lessonId}/${Date.now()}_${safeName}/`;
+            await this._uploadExtracted(zip, folder);
 
             // Create resource record
             const resource = await API.resources.create({
                 lesson_id:    lessonId,
                 title:        title || file.name.replace('.zip', ''),
                 type:         'scorm',
-                storage_path: path,
+                storage_path: folder,
                 file_size:    file.size
             });
 
@@ -431,5 +553,29 @@ const ScormUpload = {
         } finally {
             Loader.hide();
         }
+    },
+
+    // Чи є в архіві imsmanifest.xml — швидка перевірка "це взагалі SCORM?"
+    // без прив'язки до lessonId, для звичайної форми "Додати ресурс" у Базі
+    // знань (там немає уроку, resource створюється саме через saveResource()).
+    async parseAndUpload(file, onProgress) {
+        if (!file.name.toLowerCase().endsWith('.zip')) return null;
+        const zipData = await file.arrayBuffer();
+        const zip = await JSZip.loadAsync(zipData);
+        if (!zip.file('imsmanifest.xml')) return null; // звичайний zip, не SCORM
+
+        const { title, entryPoint, version } = await this.parseManifest(zip);
+        const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_').replace(/\.zip$/i, '');
+        const folder = `resources/${Date.now()}_${safeName}/`;
+
+        await this._uploadExtracted(zip, folder, onProgress);
+
+        return {
+            storage_path: folder,
+            original_name: file.name,
+            title,
+            entryPoint,
+            version
+        };
     }
 };

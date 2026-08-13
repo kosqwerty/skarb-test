@@ -39,6 +39,12 @@ window.supabase.auth.onAuthStateChange((event) => {
 const APP_CONFIG = {
     name: 'LMS Скарбниця',
     version: 'бета',
+    // Хеш останнього коміту, включеного в цей пуш — оновлюється вручну
+    // перед кожним "git push" (для адмінів, звірити, яка версія реально
+    // задеплоєна). Тому це хеш ПОПЕРЕДНЬОГО коміту відносно того, що
+    // фактично містить цю правку — не сам "поточний", а найближчий орієнтир.
+    buildCommit: 'b1d8177',
+    buildDate: '2026-08-13T13:57:49+03:00',
 
     supabaseUrl: SUPABASE_URL,
     anonKey:     SUPABASE_ANON_KEY,

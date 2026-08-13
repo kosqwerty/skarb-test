@@ -2334,6 +2334,10 @@ const DashboardPage = {
                                <button id="db-req-ip-btn" onclick="DashboardPage._requestIpAccess()" style="display:inline-flex;align-items:center;gap:.3rem;font-size:.72rem;font-weight:600;color:#6366f1;background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.25);border-radius:20px;padding:.15rem .7rem;cursor:pointer;font-family:inherit;transition:all .18s" onmouseover="this.style.background='rgba(99,102,241,.2)'" onmouseout="this.style.background='rgba(99,102,241,.1)'"><i class="fa-solid fa-paper-plane"></i> Запросити доступ</button>
                            </span>`
                     }
+                    ${AppState.isAdmin() && APP_CONFIG.buildCommit ? `
+                        <span title="${Fmt.esc(APP_CONFIG.buildDate || '')}" style="display:inline-block;margin-left:.5rem;font-size:.68rem;font-family:monospace;color:var(--text-muted);background:var(--bg-raised);border:1px solid var(--border);border-radius:20px;padding:.1rem .55rem">
+                            <i class="fa-solid fa-code-commit"></i> ${Fmt.esc(APP_CONFIG.buildCommit)}
+                        </span>` : ''}
                 </div>
             </div>
             ${AppState.isTrustedNetwork ? courseHtml : ''}

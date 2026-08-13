@@ -402,9 +402,29 @@ const NotificationsPage = {
         }
     },
 
-    async _deleteAll() {
-        const ok = await Modal.confirm({ title: 'Очистити всі сповіщення?', message: 'Всі сповіщення будуть видалені.', confirmText: 'Очистити', danger: true });
-        if (!ok) return;
+    // Центрована модалка (не глобальний Modal.confirm — той є боковою
+    // панеллю на весь екран праворуч, для такого маленького підтвердження
+    // це виглядає незручно).
+    _deleteAll() {
+        document.getElementById('ntf-deleteall-confirm')?.remove();
+        const el = document.createElement('div');
+        el.id = 'ntf-deleteall-confirm';
+        el.className = 'center-confirm-backdrop';
+        el.innerHTML = `
+            <div class="center-confirm-box">
+                <h3>Очистити всі сповіщення?</h3>
+                <p>Всі сповіщення будуть видалені.</p>
+                <div class="center-confirm-actions">
+                    <button class="btn btn-ghost" onclick="document.getElementById('ntf-deleteall-confirm').remove()">Скасувати</button>
+                    <button class="btn btn-danger" onclick="NotificationsPage._submitDeleteAll()">Очистити</button>
+                </div>
+            </div>`;
+        document.body.appendChild(el);
+        el.addEventListener('click', e => { if (e.target === el) el.remove(); });
+    },
+
+    async _submitDeleteAll() {
+        document.getElementById('ntf-deleteall-confirm')?.remove();
         await supabase.from('notifications').delete().eq('user_id', AppState.user.id);
         document.getElementById('ntf-list').innerHTML = this._emptyHtml();
         UI.updateNotificationBadge(0, true);

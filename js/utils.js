@@ -895,7 +895,6 @@ const UI = {
             expertItem,
             // { icon: '<img src="/news.png" style="width:18px;height:18px;object-fit:contain;display:inline-block;vertical-align:middle;filter:none">', label: 'Новини',  route: 'news' }
         ];
-        const collectionsItem = { icon: '<i class="fa-solid fa-wand-magic-sparkles" style="background:linear-gradient(135deg,#818cf8,#c084fc);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-size:1rem"></i>', label: 'Сторінки', route: 'collections' };
         const contentItems = [
             ...common,
             { icon: sbIcon('knowledge.webp'),  label: 'База знань',        route: 'knowledge-base' },
@@ -923,7 +922,7 @@ const UI = {
         if (role === 'superadmin' || role === 'admin') {
             return this._applyNavRestriction([
                 { title: 'Навчання',    items: contentItems },
-                { title: 'Управління',  items: [ analyticsItem, collectionsItem, schedulerItem, internsItem, adminItem ] },
+                { title: 'Управління',  items: [ analyticsItem, schedulerItem, internsItem, adminItem ] },
                 { title: 'Особисте',    items: [ contactsItem, bmItem ] }
             ]);
         }

@@ -2824,6 +2824,29 @@ const API = {
         },
     },
 
+    // ── Коментарі до новин ──────────────────────────────────────────
+    newsComments: {
+        async getByNewsId(newsId) {
+            const { data, error } = await supabase.from('news_comments')
+                .select('id, content, created_at, user:profiles(id, full_name, avatar_url, job_position)')
+                .eq('news_id', newsId).order('created_at', { ascending: true });
+            if (error) throw error;
+            return data || [];
+        },
+        async add(newsId, content) {
+            const { data, error } = await supabase.from('news_comments')
+                .insert({ news_id: newsId, user_id: AppState.user.id, content: content.trim() })
+                .select('id, content, created_at, user:profiles(id, full_name, avatar_url, job_position)')
+                .single();
+            if (error) throw error;
+            return data;
+        },
+        async remove(id) {
+            const { error } = await supabase.from('news_comments').delete().eq('id', id);
+            if (error) throw error;
+        }
+    },
+
     userSessions: {
         // Register / refresh current session
         async upsert(token, userAgent) {

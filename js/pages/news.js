@@ -496,6 +496,43 @@ const NewsPage = {
                     .nv-excerpt{font-size:1.1rem;color:var(--text-secondary);font-style:italic;border-left:3px solid var(--primary);padding-left:1rem;margin-bottom:2rem;line-height:1.7}
                     .nv-reactions{display:flex;align-items:center;gap:.75rem;padding:1.25rem 1.5rem;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);margin-top:2.5rem}
                     .nv-react-label{font-size:.82rem;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-right:.25rem}
+
+                    /* ── Коментарі ── */
+                    .nv-comments{margin-top:1.5rem;padding:1.5rem clamp(1.25rem,4vw,2rem);background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl)}
+                    .nv-comments-head{font-size:1rem;font-weight:700;color:var(--text-primary);margin-bottom:1rem;display:flex;align-items:center;gap:.5rem}
+                    .nv-comments-head i{color:var(--primary)}
+                    .nv-comments-head span{font-weight:400;color:var(--text-muted);font-size:.85rem}
+                    .nv-comment-form{position:relative;margin-bottom:1.25rem}
+                    .nv-comment-input{display:block;box-sizing:border-box;width:100%;resize:vertical;min-height:52px;font-family:inherit;font-size:.9rem;line-height:1.5;
+                        padding:.7rem .85rem;border-radius:var(--radius-md);border:1px solid var(--border);background:var(--bg-raised);color:var(--text-primary)}
+                    .nv-comment-input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-glow)}
+                    .nv-comment-toolbar{display:flex;align-items:center;justify-content:space-between;gap:.6rem;margin-top:.6rem}
+                    .nv-emoji-wrap{position:relative;flex-shrink:0}
+                    .nv-emoji-btn{width:34px;height:34px;border-radius:50%;border:1px solid var(--border);background:var(--bg-raised);
+                        color:var(--text-secondary);cursor:pointer;font-size:.95rem;padding:0;display:flex;align-items:center;justify-content:center;transition:background .15s,border-color .15s}
+                    .nv-emoji-btn:hover{background:var(--bg-hover);border-color:var(--primary);color:var(--primary)}
+                    /* Відкриваємо ВНИЗ (не вгору) — інакше палітра накладається на
+                       саму textarea, яка стоїть прямо над тулбаром, і виглядає як
+                       "поламаний" оверлей поверх поля вводу. */
+                    .nv-emoji-picker{position:absolute;top:calc(100% + 8px);left:0;z-index:30;width:272px;box-sizing:border-box;
+                        background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);
+                        box-shadow:0 12px 32px rgba(0,0,0,.18);padding:.6rem;display:grid;grid-template-columns:repeat(8,34px);gap:.2rem}
+                    .nv-emoji-picker[hidden]{display:none}
+                    .nv-emoji-opt{width:34px;height:34px;border:none;background:none;font-size:1.1rem;line-height:1;
+                        display:flex;align-items:center;justify-content:center;border-radius:8px;cursor:pointer;transition:background .12s}
+                    .nv-emoji-opt:hover{background:var(--bg-hover)}
+                    .nv-comments-list{display:flex;flex-direction:column;gap:1rem}
+                    .nv-comment{display:flex;gap:.7rem}
+                    .nv-comment-ava{width:36px;height:36px;border-radius:50%;flex-shrink:0;object-fit:cover;
+                        display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700;color:#fff;
+                        background:linear-gradient(135deg,var(--primary),#8b5cf6)}
+                    .nv-comment-body{flex:1;min-width:0}
+                    .nv-comment-head{display:flex;align-items:baseline;gap:.5rem;flex-wrap:wrap}
+                    .nv-comment-name{font-size:.85rem;font-weight:700;color:var(--text-primary)}
+                    .nv-comment-time{font-size:.72rem;color:var(--text-muted)}
+                    .nv-comment-text{font-size:.9rem;color:var(--text-secondary);line-height:1.55;margin-top:.15rem;white-space:pre-wrap;word-break:break-word}
+                    .nv-comment-del{margin-left:auto;background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:.78rem;padding:.15rem .3rem;opacity:.6;transition:opacity .15s,color .15s}
+                    .nv-comment-del:hover{opacity:1;color:var(--danger)}
                     .nv-sidebar{position:sticky;top:1rem;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden}
                     .nv-sidebar-head{padding:.75rem 1rem;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--primary);border-bottom:1px solid var(--border);background:rgba(99,102,241,.05)}
                     .nv-sidebar-body{padding:.5rem}
@@ -582,10 +619,29 @@ const NewsPage = {
                         <div class="nv-article-card">
                             <div class="news-content-body">${this._safeHtml(this._fixImgUrls(news.content))}</div>
                         </div>
+
+                        <div class="nv-comments" id="nv-comments">
+                            <div class="nv-comments-head"><i class="fa-regular fa-comments"></i> Коментарі <span id="nv-comments-count"></span></div>
+                            <div class="nv-comment-form">
+                                <textarea id="nv-comment-input" class="nv-comment-input" placeholder="Написати коментар… (Ctrl+Enter — надіслати)" rows="2" maxlength="2000"
+                                    onkeydown="if((event.ctrlKey||event.metaKey)&&event.key==='Enter'){event.preventDefault();NewsPage._submitComment('${news.id}');}"></textarea>
+                                <div class="nv-comment-toolbar">
+                                    <div class="nv-emoji-wrap">
+                                        <button type="button" class="nv-emoji-btn" title="Емодзі" onclick="NewsPage._toggleEmojiPicker()"><i class="fa-regular fa-face-smile"></i></button>
+                                        <div class="nv-emoji-picker" id="nv-emoji-picker" hidden></div>
+                                    </div>
+                                    <button type="button" class="btn btn-primary btn-sm" onclick="NewsPage._submitComment('${news.id}')"><i class="fa-solid fa-paper-plane"></i> Надіслати</button>
+                                </div>
+                            </div>
+                            <div class="nv-comments-list" id="nv-comments-list">
+                                <div style="padding:1rem;text-align:center;color:var(--text-muted);font-size:.85rem">Завантаження…</div>
+                            </div>
+                        </div>
                     </div>
                 </article>`;
 
             if (news.allow_reactions !== false) this._loadReactions(news.id);
+            this._loadComments(news.id);
         } catch(e) {
             container.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>Новину не знайдено</h3><button class="btn-back" onclick="Router.go('news')"><i class="fa-solid fa-arrow-left"></i> Назад</button></div>`;
         }
@@ -665,6 +721,107 @@ const NewsPage = {
             if (added) UI.emojiBurst(btn, emoji);
         } catch(e) { Toast.error('Помилка', e.message); }
         finally { btn.disabled = false; }
+    },
+
+    // ── Коментарі ────────────────────────────────────────────────────
+    _commentEmojis: ['😀','😂','😍','😘','🥰','😎','🤔','😢','😭','😡','👍','👎','👏','🙏','🔥','❤️','💯','🎉','🚀','✅','⭐','😴','🤝','🙌','😅','🤗','😉','🥳','😮','🤯'],
+
+    async _loadComments(newsId) {
+        const list = document.getElementById('nv-comments-list');
+        try {
+            const comments = await API.newsComments.getByNewsId(newsId);
+            this._comments = comments;
+            this._commentsNewsId = newsId;
+            const countEl = document.getElementById('nv-comments-count');
+            if (countEl) countEl.textContent = comments.length ? `(${comments.length})` : '';
+            if (!list) return;
+            list.innerHTML = comments.length ? comments.map(c => this._commentHtml(c)).join('') :
+                `<div style="padding:1rem;text-align:center;color:var(--text-muted);font-size:.85rem">Ще немає коментарів — будьте першим</div>`;
+        } catch (e) {
+            if (list) list.innerHTML = `<div style="padding:1rem;text-align:center;color:var(--text-muted);font-size:.85rem">Не вдалося завантажити коментарі</div>`;
+        }
+    },
+
+    _commentHtml(c) {
+        const u = c.user || {};
+        const isMine = u.id === AppState.user?.id;
+        const canDelete = isMine || AppState.isAdmin();
+        const avatar = u.avatar_url
+            ? `<img class="nv-comment-ava" src="${Fmt.safeUrl(u.avatar_url)}" alt="">`
+            : `<div class="nv-comment-ava">${Fmt.esc(Fmt.initials(u.full_name || '?'))}</div>`;
+        return `
+            <div class="nv-comment" id="nv-comment-${c.id}">
+                ${avatar}
+                <div class="nv-comment-body">
+                    <div class="nv-comment-head">
+                        <span class="nv-comment-name">${Fmt.esc(u.full_name || 'Користувач')}</span>
+                        <span class="nv-comment-time">${Fmt.datetime(c.created_at)}</span>
+                        ${canDelete ? `<button type="button" class="nv-comment-del" title="Видалити" onclick="NewsPage._deleteComment('${c.id}')"><i class="fa-solid fa-trash"></i></button>` : ''}
+                    </div>
+                    <div class="nv-comment-text">${Fmt.esc(c.content)}</div>
+                </div>
+            </div>`;
+    },
+
+    async _submitComment(newsId) {
+        const input = document.getElementById('nv-comment-input');
+        const content = input?.value.trim();
+        if (!content) return;
+        try {
+            await API.newsComments.add(newsId, content);
+            input.value = '';
+            document.getElementById('nv-emoji-picker')?.setAttribute('hidden', '');
+            await this._loadComments(newsId);
+            document.getElementById(`nv-comment-${(this._comments[this._comments.length - 1] || {}).id}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        } catch (e) {
+            Toast.error('Помилка', e.message);
+        }
+    },
+
+    async _deleteComment(id) {
+        try {
+            await API.newsComments.remove(id);
+            document.getElementById(`nv-comment-${id}`)?.remove();
+            this._comments = (this._comments || []).filter(c => c.id !== id);
+            const countEl = document.getElementById('nv-comments-count');
+            if (countEl) countEl.textContent = this._comments.length ? `(${this._comments.length})` : '';
+            if (!this._comments.length) {
+                const list = document.getElementById('nv-comments-list');
+                if (list) list.innerHTML = `<div style="padding:1rem;text-align:center;color:var(--text-muted);font-size:.85rem">Ще немає коментарів — будьте першим</div>`;
+            }
+        } catch (e) {
+            Toast.error('Помилка', e.message);
+        }
+    },
+
+    _toggleEmojiPicker() {
+        const picker = document.getElementById('nv-emoji-picker');
+        if (!picker) return;
+        const show = picker.hasAttribute('hidden');
+        if (show) {
+            picker.innerHTML = this._commentEmojis.map(e => `<button type="button" class="nv-emoji-opt" onclick="NewsPage._insertCommentEmoji('${e}')">${e}</button>`).join('');
+            picker.removeAttribute('hidden');
+            if (!this._emojiOutsideHandler) {
+                this._emojiOutsideHandler = (ev) => {
+                    const wrap = document.querySelector('.nv-emoji-wrap');
+                    if (wrap && !wrap.contains(ev.target)) document.getElementById('nv-emoji-picker')?.setAttribute('hidden', '');
+                };
+                document.addEventListener('mousedown', this._emojiOutsideHandler);
+            }
+        } else {
+            picker.setAttribute('hidden', '');
+        }
+    },
+
+    _insertCommentEmoji(emoji) {
+        const input = document.getElementById('nv-comment-input');
+        if (!input) return;
+        const start = input.selectionStart ?? input.value.length;
+        const end = input.selectionEnd ?? input.value.length;
+        input.value = input.value.slice(0, start) + emoji + input.value.slice(end);
+        input.focus();
+        const pos = start + emoji.length;
+        input.setSelectionRange(pos, pos);
     },
 
     // ── Create / Edit ──────────────────────────────────────────────

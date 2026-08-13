@@ -325,6 +325,7 @@ const CollectionsPage = {
 
         const actions = canManage ? `
             ${!p.is_home && AppState.isSuperAdmin() ? `<button class="col-tbl-abtn" onclick="event.stopPropagation();CollectionsPage.setHome('${p.id}')" title="Зробити головною"><i class="fa-solid fa-house"></i></button>` : ''}
+            ${AppState.isAdmin() && p.track_visits ? `<button class="col-tbl-abtn" onclick="event.stopPropagation();CollectionsPage.openPageViewStats('${p.id}',${JSON.stringify(p.title || '').replace(/"/g, '&quot;')})" title="Статистика відвідувань"><i class="fa-solid fa-chart-simple"></i></button>` : ''}
             <button class="col-tbl-abtn" onclick="event.stopPropagation();CollectionsPage.openEditor('${p.id}')" title="Редагувати"><i class="fa-solid fa-pen"></i></button>
             <button class="col-tbl-abtn danger" onclick="event.stopPropagation();CollectionsPage.deletePage('${p.id}')" title="Видалити"><i class="fa-solid fa-trash"></i></button>
         ` : '';
@@ -419,6 +420,9 @@ const CollectionsPage = {
                 );
                 parts.push(`<span class="current">${page.title}</span>`);
                 breadcrumbEl.innerHTML = parts.join('');
+            }
+            if (page.track_visits) {
+                ActivityTracker.track('page_view', { entity_type: 'page', entity_id: page.id, entity_title: page.title, page: `collections/${page.id}` });
             }
             const resolvedHtml = await this._resolveAttachmentUrls(page.html_content || '');
             this._renderView(container, { ...page, html_content: resolvedHtml });
@@ -817,6 +821,7 @@ document.addEventListener('click', function(e) {
             groups      = results[0];
             allDov      = results[1];
             if (id) { page = results[2]; attachments = results[3]; selectedDovIds = results[4]; }
+            this._editingPageData = page;
         }
         catch (e) { Toast.error('Помилка', e.message); Loader.hide(); return; }
         finally { Loader.hide(); }
@@ -980,6 +985,15 @@ document.addEventListener('click', function(e) {
                                 <input type="checkbox" id="page-search-enabled" class="col-tb-toggle-input" ${page?.search_enabled ? 'checked' : ''}>
                                 <span class="col-tb-toggle-pill"><span class="col-tb-toggle-knob"></span></span>
                             </label>
+                            ${AppState.isAdmin() ? `
+                            <label class="col-tb-toggle-row" style="--c:#10b981">
+                                <span class="col-tb-toggle-ico"><i class="fa-solid fa-chart-simple"></i></span>
+                                <span class="col-tb-toggle-text">Облік відвідувань</span>
+                                <input type="checkbox" id="page-track-visits" class="col-tb-toggle-input" ${page?.track_visits ? 'checked' : ''} onchange="CollectionsPage._markDirty()">
+                                <span class="col-tb-toggle-pill"><span class="col-tb-toggle-knob"></span></span>
+                            </label>
+                            ${page?.id ? `<button type="button" class="btn btn-ghost btn-sm" style="align-self:flex-start" onclick="CollectionsPage.openPageViewStats('${page.id}',${JSON.stringify(page?.title || '').replace(/"/g, '&quot;')})"><i class="fa-solid fa-list"></i> Переглянути статистику</button>` : ''}
+                            ` : ''}
                         </div>
                     </div>
 
@@ -1786,6 +1800,11 @@ tr:hover td { background: #f8fafc; }
             is_published: isPublished,
             search_enabled: document.getElementById('page-search-enabled')?.checked || false,
             network_visibility: document.getElementById('page-network-visibility')?.value || 'all',
+            // Тумблер видимий лише admin — для решти зберігаємо поточне значення,
+            // щоб збереження форми не-адміном не скидало облік відвідувань.
+            track_visits: document.getElementById('page-track-visits')
+                ? document.getElementById('page-track-visits').checked
+                : (this._editingPageData?.track_visits ?? false),
             allowed_labels
         };
         this._saving = true;
@@ -1859,6 +1878,70 @@ tr:hover td { background: #f8fafc; }
         } catch(e) {
             Toast.error('Помилка', e.message);
         }
+    },
+
+    // Статистика відвідувань сторінки: хто, скільки разів, коли востаннє.
+    // RPC — лише admin/superadmin (перевіряється всередині is_admin()).
+    async openPageViewStats(id, title) {
+        if (!AppState.isAdmin()) return;
+        Loader.show();
+        let rows;
+        try {
+            rows = await API.pages.getViewStats(id);
+        } catch (e) {
+            Loader.hide();
+            Toast.error('Помилка', e.message);
+            return;
+        }
+        Loader.hide();
+        this._pvsAll = rows;
+        this._pvsSearch = '';
+        this._pvsTitle = title || '';
+        Modal.open({
+            title: `<i class="fa-solid fa-chart-simple"></i> Статистика відвідувань`,
+            size: 'lg',
+            body: this._buildPageViewStatsBody()
+        });
+    },
+
+    _buildPageViewStatsBody() {
+        const q = (this._pvsSearch || '').toLowerCase();
+        const rows = (this._pvsAll || []).filter(r =>
+            !q || (r.full_name || '').toLowerCase().includes(q) || (r.job_position || '').toLowerCase().includes(q));
+
+        const rowsHtml = rows.length ? rows.map(r => `
+            <div style="display:flex;align-items:center;padding:.55rem .25rem;border-bottom:1px solid var(--border);gap:.75rem">
+                <div style="flex:1;min-width:0">
+                    <div style="font-size:.875rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Fmt.esc(r.full_name || '—')}</div>
+                    <div style="font-size:.75rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Fmt.esc([r.job_position, r.city, r.subdivision].filter(Boolean).join(' · ') || '—')}</div>
+                </div>
+                <span style="font-size:.8rem;color:var(--text-secondary);white-space:nowrap">×${r.views_count}</span>
+                <span style="font-size:.8rem;color:var(--text-muted);white-space:nowrap;min-width:110px;text-align:right">${Fmt.datetime(r.last_viewed_at)}</span>
+            </div>`).join('')
+            : `<div style="padding:1.5rem;text-align:center;color:var(--text-muted)">
+                ${(this._pvsAll || []).length ? 'Нічого не знайдено' : 'Ще ніхто не відвідував цю сторінку'}
+              </div>`;
+
+        return `
+            <div style="display:flex;flex-direction:column;gap:.875rem">
+                <div style="font-size:.85rem;color:var(--text-muted)">${Fmt.esc(this._pvsTitle || '')}</div>
+                <input type="text" placeholder="Пошук за іменем або посадою…" value="${Fmt.esc(this._pvsSearch || '')}"
+                    style="width:100%" oninput="CollectionsPage._pvsSetSearch(this.value)">
+                <div style="display:flex;align-items:center;padding:0 .25rem .4rem;gap:.75rem;border-bottom:1px solid var(--border);color:var(--text-muted);font-size:.72rem;font-weight:600;text-transform:uppercase">
+                    <div style="flex:1">Співробітник</div>
+                    <span>Переглядів</span>
+                    <span style="min-width:110px;text-align:right">Востаннє</span>
+                </div>
+                <div style="max-height:420px;overflow-y:auto">
+                    ${rowsHtml}
+                </div>
+            </div>`;
+    },
+
+    _pvsSetSearch(val) {
+        this._pvsSearch = val;
+        const body = document.getElementById('modal-body');
+        if (body) body.innerHTML = this._buildPageViewStatsBody();
     },
 
     // Центрована модалка (не глобальний Modal.confirm — той є боковою

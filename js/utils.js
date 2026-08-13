@@ -900,7 +900,7 @@ const UI = {
             ...common,
             { icon: sbIcon('knowledge.webp'),  label: 'База знань',        route: 'knowledge-base' },
             { icon: sbIcon('documents.webp'),  label: 'Документи',         route: 'documents', badgeId: 'nav-doc-badge' },
-            { icon: sbIcon('metoda_ico.webp'), label: 'Методики та довідники', route: 'collections' },
+            { icon: sbIcon('metoda_ico.webp'), label: 'Методики та інструкції', route: 'collections' },
         ];
         const ntfItem      = { icon: '<i class="fa-solid fa-bell"         style="color:#C9A227"></i>', label: 'Сповіщення', route: 'notifications', badgeId: 'nav-ntf-badge' };
         const contactsItem = { icon: '<i class="fa-solid fa-address-book" style="color:#059669"></i>', label: 'Контакти',   route: 'contacts' };

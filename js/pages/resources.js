@@ -1274,6 +1274,7 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
             <a class="kb-btn-open" href="#/resource/${resource.id}?from=${this._view === 'docs' ? 'documents' : 'knowledge-base'}" onclick="return ResourcesPage._onOpenClick(event,'${resource.id}')"><i class="fa-solid fa-eye"></i> Відкрити</a>
             <a class="kb-btn-dl" href="#/resource/${resource.id}?from=${this._view === 'docs' ? 'documents' : 'knowledge-base'}" target="_blank" rel="noopener noreferrer" title="Відкрити в новому вікні"><i class="fa-solid fa-up-right-from-square"></i></a>
             ${resource.download_allowed ? `<button class="kb-btn-dl" title="Завантажити" onclick="ResourcesPage.downloadResource('${resource.id}')"><i class="fa-solid fa-download"></i></button>` : ''}
+            ${AppState.isAdmin() || AppState.isManager() ? `<button class="kb-btn-dl" title="Статистика перегляду" onclick="ResourcesPage.openViewStats('${resource.id}',${safeTitle})"><i class="fa-solid fa-chart-simple"></i></button>` : ''}
             ${AppState.isStaff() && AppState.canMutate() ? `<button class="kb-btn-edit" title="Редагувати" onclick="ResourcesPage.openEdit('${resource.id}')"><i class="fa-solid fa-pen"></i></button><button class="kb-btn-del" title="Видалити" onclick="ResourcesPage.deleteResource('${resource.id}',${safeTitle})"><i class="fa-solid fa-trash"></i></button>` : ''}
         </div>
         <button class="kb-star res-star-btn${isBm?' active':''}"
@@ -1308,6 +1309,7 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
         <a class="kb-btn-open" href="#/resource/${resource.id}?from=${this._view === 'docs' ? 'documents' : 'knowledge-base'}" onclick="return ResourcesPage._onOpenClick(event,'${resource.id}')"><i class="fa-solid fa-eye"></i> Відкрити</a>
         <a class="kb-btn-dl" href="#/resource/${resource.id}?from=${this._view === 'docs' ? 'documents' : 'knowledge-base'}" target="_blank" rel="noopener noreferrer" title="Відкрити в новому вікні"><i class="fa-solid fa-up-right-from-square"></i></a>
         ${resource.download_allowed ? `<button class="kb-btn-dl" title="Завантажити" onclick="ResourcesPage.downloadResource('${resource.id}')"><i class="fa-solid fa-download"></i></button>` : ''}
+        ${AppState.isAdmin() || AppState.isManager() ? `<button class="kb-btn-dl" title="Статистика перегляду" onclick="ResourcesPage.openViewStats('${resource.id}',${safeTitle})"><i class="fa-solid fa-chart-simple"></i></button>` : ''}
         ${AppState.isStaff() && AppState.canMutate() ? `<button class="kb-btn-edit" title="Редагувати" onclick="ResourcesPage.openEdit('${resource.id}')"><i class="fa-solid fa-pen"></i></button><button class="kb-btn-del" title="Видалити" onclick="ResourcesPage.deleteResource('${resource.id}',${safeTitle})"><i class="fa-solid fa-trash"></i></button>` : ''}
         <button class="kb-star res-star-btn${isBm?' active':''}"
             data-bm-route="resource/${resource.id}"
@@ -1895,6 +1897,71 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
         } finally {
             Loader.hide();
         }
+    },
+
+    // Статистика перегляду ресурсу: хто, скільки разів, коли востаннє.
+    // RPC сама обмежує вибірку за роллю — admin/superadmin бачать усіх,
+    // manager лише своїх підлеглих (profiles.manager_id = auth.uid()).
+    async openViewStats(id, title) {
+        if (!AppState.isAdmin() && !AppState.isManager()) return;
+        Loader.show();
+        let rows;
+        try {
+            rows = await API.resources.getViewStats(id);
+        } catch (e) {
+            Loader.hide();
+            Toast.error('Помилка', e.message);
+            return;
+        }
+        Loader.hide();
+        this._viewStatsAll = rows;
+        this._viewStatsSearch = '';
+        this._viewStatsTitle = title || '';
+        Modal.open({
+            title: `<i class="fa-solid fa-chart-simple"></i> Статистика перегляду`,
+            size: 'lg',
+            body: this._buildViewStatsBody()
+        });
+    },
+
+    _buildViewStatsBody() {
+        const q = (this._viewStatsSearch || '').toLowerCase();
+        const rows = (this._viewStatsAll || []).filter(r =>
+            !q || (r.full_name || '').toLowerCase().includes(q) || (r.job_position || '').toLowerCase().includes(q));
+
+        const rowsHtml = rows.length ? rows.map(r => `
+            <div style="display:flex;align-items:center;padding:.55rem .25rem;border-bottom:1px solid var(--border);gap:.75rem">
+                <div style="flex:1;min-width:0">
+                    <div style="font-size:.875rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Fmt.esc(r.full_name || '—')}</div>
+                    <div style="font-size:.75rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Fmt.esc([r.job_position, r.city, r.subdivision].filter(Boolean).join(' · ') || '—')}</div>
+                </div>
+                <span style="font-size:.8rem;color:var(--text-secondary);white-space:nowrap">×${r.views_count}</span>
+                <span style="font-size:.8rem;color:var(--text-muted);white-space:nowrap;min-width:110px;text-align:right">${Fmt.datetime(r.last_viewed_at)}</span>
+            </div>`).join('')
+            : `<div style="padding:1.5rem;text-align:center;color:var(--text-muted)">
+                ${(this._viewStatsAll || []).length ? 'Нічого не знайдено' : `Ще ніхто не переглядав${AppState.isManager() && !AppState.isAdmin() ? ' серед ваших підлеглих' : ''}`}
+              </div>`;
+
+        return `
+            <div style="display:flex;flex-direction:column;gap:.875rem">
+                <div style="font-size:.85rem;color:var(--text-muted)">${Fmt.esc(this._viewStatsTitle || '')}</div>
+                <input type="text" placeholder="Пошук за іменем або посадою…" value="${Fmt.esc(this._viewStatsSearch || '')}"
+                    style="width:100%" oninput="ResourcesPage._viewStatsSetSearch(this.value)">
+                <div style="display:flex;align-items:center;padding:0 .25rem .4rem;gap:.75rem;border-bottom:1px solid var(--border);color:var(--text-muted);font-size:.72rem;font-weight:600;text-transform:uppercase">
+                    <div style="flex:1">Співробітник</div>
+                    <span>Переглядів</span>
+                    <span style="min-width:110px;text-align:right">Востаннє</span>
+                </div>
+                <div style="max-height:420px;overflow-y:auto">
+                    ${rowsHtml}
+                </div>
+            </div>`;
+    },
+
+    _viewStatsSetSearch(val) {
+        this._viewStatsSearch = val;
+        const body = document.getElementById('modal-body');
+        if (body) body.innerHTML = this._buildViewStatsBody();
     },
 
     async downloadTracked(id) {

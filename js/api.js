@@ -419,6 +419,15 @@ const API = {
             return data || [];
         },
 
+        // Хто, скільки разів і коли востаннє переглядав ресурс.
+        // RPC сама фільтрує за роллю виклику: admin/superadmin — всі,
+        // manager — лише підлеглі (profiles.manager_id = свій auth.uid()).
+        async getViewStats(resourceId) {
+            const { data, error } = await supabase.rpc('get_resource_view_stats', { p_resource_id: resourceId });
+            if (error) throw error;
+            return data || [];
+        },
+
         async update(id, fields) {
             const { data, error } = await supabase.from('resources')
                 .update(fields).eq('id', id).select().single();
@@ -1406,7 +1415,7 @@ const API = {
         async getAll() {
             const { data, error } = await supabase
                 .from('custom_pages')
-                .select('id, title, is_published, is_home, allowed_labels, network_visibility, created_at, updated_at')
+                .select('id, title, is_published, is_home, allowed_labels, network_visibility, track_visits, created_at, updated_at')
                 .order('created_at', { ascending: false });
             if (error) throw error;
             const pages = data || [];
@@ -1457,6 +1466,14 @@ const API = {
         async delete(id) {
             const { error } = await supabase.from('custom_pages').delete().eq('id', id);
             if (error) throw error;
+        },
+
+        // Хто, скільки разів і коли востаннє відкривав сторінку.
+        // RPC — admin/superadmin only (перевіряється всередині is_admin()).
+        async getViewStats(pageId) {
+            const { data, error } = await supabase.rpc('get_page_view_stats', { p_page_id: pageId });
+            if (error) throw error;
+            return data || [];
         }
     },
 

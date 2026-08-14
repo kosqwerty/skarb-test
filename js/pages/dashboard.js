@@ -216,8 +216,6 @@ const DashboardPage = {
             .db-alc-doc-item:last-child{border-bottom:none}
             .db-alc-doc-icon{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:.8rem;flex-shrink:0;background:rgba(239,68,68,.1);color:#ef4444}
             .db-alc-doc-name{font-size:.82rem;font-weight:500;color:var(--text-primary);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-            .db-alc-doc-more{padding:.5rem 1rem;font-size:.75rem;color:var(--primary);cursor:pointer;text-align:center;border-top:1px solid var(--border)}
-            .db-alc-doc-more:hover{background:var(--bg-raised)}
             .db-alc-more-row{padding:.45rem 1rem;font-size:.75rem;color:var(--primary);cursor:pointer;text-align:center;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:center;gap:.35rem;transition:background .12s}
             .db-alc-more-row:hover{background:var(--bg-raised)}
             .db-alc-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:.4rem;padding:2rem;text-align:center}
@@ -1676,8 +1674,7 @@ const DashboardPage = {
                 : `<span class="db-alc-badge" style="background:rgba(16,185,129,.12);color:#10b981"><i class="fa-solid fa-check"></i></span>`;
 
             const docsVisible = unackedDocs.slice(0, 3);
-            const docsHidden  = unackedDocs.slice(3, 9);
-            const docsExtra   = unackedDocs.length > 9 ? unackedDocs.length - 9 : 0;
+            const docsHidden  = unackedDocs.slice(3);
             const body = hasIssue
                 ? `${docsVisible.map(d => `
                     <div class="db-alc-doc-item" onclick="Router.go('resource/${d.id}?from=documents')">
@@ -1695,8 +1692,7 @@ const DashboardPage = {
                     </div>
                     <div class="db-alc-more-row" id="db-alc-docs-more-btn" onclick="DashboardPage._toggleDocMore()">
                         <i class="fa-solid fa-chevron-down"></i> Ще ${docsHidden.length} документ${docsHidden.length > 1 ? 'и' : ''}
-                    </div>` : ''}
-                  ${docsExtra > 0 ? `<div class="db-alc-doc-more" onclick="Router.go('documents')">ще ${docsExtra} документів <i class="fa-solid fa-arrow-right"></i></div>` : ''}`
+                    </div>` : ''}`
                 : `<div class="db-alc-empty">
                     <div class="db-alc-empty-bubble" style="background:rgba(16,185,129,.1);color:#10b981">
                         <i class="fa-solid fa-shield-check"></i>

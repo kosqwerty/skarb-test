@@ -192,7 +192,7 @@ const NotificationsPage = {
     <div class="ntf-header">
         <div>
             <h1 class="ntf-title">🔔 Мої сповіщення</h1>
-            <p class="ntf-subtitle">Всі прочитано</p>
+            <p class="ntf-subtitle">${sorted.some(n => !n.is_read) ? `<span class="ntf-unread-count">${sorted.filter(n => !n.is_read).length}</span> непрочитаних` : 'Всі прочитано'}</p>
         </div>
         <div style="display:flex;gap:8px">
             <button class="ntf-btn-outline" onclick="NotificationsPage._markAllRead()"><i class="fa-solid fa-check-double"></i> Прочитати всі</button>
@@ -251,6 +251,9 @@ const NotificationsPage = {
 .ntf-item:hover .ntf-actions { opacity:1; }
 .ntf-act { width:28px;height:28px;border:none;border-radius:8px;background:var(--bg-raised);color:var(--text-muted);cursor:pointer;font-size:.8rem;display:flex;align-items:center;justify-content:center;transition:all .12s; }
 .ntf-act:hover { background:var(--bg-hover);color:var(--text-primary); }
+.sch-type-general { background:rgba(99,102,241,.12);color:#6366f1; }
+.sch-type-gold    { background:rgba(245,158,11,.12);color:#f59e0b; }
+.sch-type-tech    { background:rgba(16,185,129,.12);color:#10b981; }
 </style>`;
     },
 
@@ -329,7 +332,7 @@ const NotificationsPage = {
                         const ip = (n.message.match(/з IP:\s*([\d.:\w]+)/) || [])[1] || '';
                         if (ip) {
                             const before = Fmt.esc(n.message.replace(`з IP: ${ip}`, '').trim());
-                            return `${before} з IP: <span style="font-family:monospace;font-weight:700;color:var(--text-primary)">${Fmt.esc(ip)}</span><button title="Скопіювати IP" data-ip="${Fmt.esc(ip)}" onclick="event.stopPropagation();navigator.clipboard.writeText(this.dataset.ip).then(()=>{this.innerHTML='<i class=\\'fa-solid fa-check\\' style=\\'color:#10b981\\'></i> Скопійовано';setTimeout(()=>this.innerHTML='<i class=\\'fa-regular fa-copy\\'></i> Копіювати',1500)})" style="display:inline-flex;align-items:center;gap:.4rem;background:var(--bg-raised);border:1.5px solid var(--border);cursor:pointer;color:var(--text-secondary);font-size:.8rem;font-weight:600;padding:.4rem .75rem;border-radius:var(--radius-md);vertical-align:middle;line-height:1;margin-left:.5rem;transition:border-color .15s,color .15s,background .15s" onmouseover="this.style.borderColor='var(--primary)';this.style.color='var(--primary)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-secondary)'"><i class="fa-regular fa-copy"></i> Копіювати</button>`;
+                            return `${before} з IP: <span style="font-family:monospace;font-weight:700;color:var(--text-primary)">${Fmt.esc(ip)}</span><button title="Скопіювати IP" data-ip="${Fmt.esc(ip)}" onclick="event.stopPropagation();navigator.clipboard.writeText(this.dataset.ip).then(()=>{this.innerHTML='<i class=\\'fa-solid fa-check\\' style=\\'color:#10b981\\'></i> Скопійовано';setTimeout(()=>this.innerHTML='<i class=\\'fa-regular fa-copy\\'></i> Копіювати',1500)}).catch(()=>Toast.error('Помилка','Не вдалося скопіювати — немає доступу до буфера обміну'))" style="display:inline-flex;align-items:center;gap:.4rem;background:var(--bg-raised);border:1.5px solid var(--border);cursor:pointer;color:var(--text-secondary);font-size:.8rem;font-weight:600;padding:.4rem .75rem;border-radius:var(--radius-md);vertical-align:middle;line-height:1;margin-left:.5rem;transition:border-color .15s,color .15s,background .15s" onmouseover="this.style.borderColor='var(--primary)';this.style.color='var(--primary)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-secondary)'"><i class="fa-regular fa-copy"></i> Копіювати</button>`;
                         }
                     }
                     return Fmt.esc(n.message || '');
@@ -359,16 +362,18 @@ const NotificationsPage = {
     // ── Actions ──────────────────────────────────────────────────
 
     async _markAllRead() {
-        await supabase.from('notifications')
+        const { error } = await supabase.from('notifications')
             .update({ is_read: true })
             .eq('user_id', AppState.user.id)
-            .eq('is_read', false)
-            .catch(() => {});
+            .eq('is_read', false);
+        if (error) { Toast.error('Помилка', 'Не вдалося позначити сповіщення прочитаними'); return; }
         UI.updateNotificationBadge(0, true);
         this.stopReminder();
         // Оновлюємо UI — прибираємо точки непрочитаних
         document.querySelectorAll('.ntf-unread-badge').forEach(el => el.remove());
         document.querySelectorAll('.ntf-item').forEach(el => el.classList.remove('unread'));
+        const sub = document.querySelector('.ntf-subtitle');
+        if (sub) sub.textContent = 'Всі прочитано';
         Toast.success('Готово', 'Всі сповіщення позначено як прочитані');
     },
 
@@ -395,7 +400,9 @@ const NotificationsPage = {
     },
 
     async _deleteOne(id, el) {
-        await supabase.from('notifications').delete().eq('id', id);
+        const { error } = await supabase.from('notifications').delete().eq('id', id);
+        if (error) { Toast.error('Помилка', 'Не вдалося видалити сповіщення'); return; }
+        if (el?.classList.contains('unread')) UI.updateNotificationBadge(-1);
         el?.remove();
         if (!document.querySelector('.ntf-item')) {
             document.getElementById('ntf-list').innerHTML = this._emptyHtml();
@@ -425,7 +432,8 @@ const NotificationsPage = {
 
     async _submitDeleteAll() {
         document.getElementById('ntf-deleteall-confirm')?.remove();
-        await supabase.from('notifications').delete().eq('user_id', AppState.user.id);
+        const { error } = await supabase.from('notifications').delete().eq('user_id', AppState.user.id);
+        if (error) { Toast.error('Помилка', 'Не вдалося очистити сповіщення'); return; }
         document.getElementById('ntf-list').innerHTML = this._emptyHtml();
         UI.updateNotificationBadge(0, true);
         this.stopReminder();

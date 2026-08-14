@@ -647,7 +647,7 @@ const AdminPage = {
                         <!-- Рядок 2: фільтри -->
                         <tr class="uf-filter-row">
                             <th class="uf-th uf-th-cb uf-th-nc uf-fth"></th>
-                            <th class="uf-th uf-th-pib uf-fth"><input type="text" id="uf-name" class="uf-finput" placeholder="Пошук..." oninput="AdminPage._applyUserFilters()"></th>
+                            <th class="uf-th uf-th-pib uf-fth"><div class="search-clear-wrap" style="width:100%"><input type="text" id="uf-name" class="uf-finput" placeholder="Пошук..." oninput="AdminPage._applyUserFilters()"><button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button></div></th>
                             <th class="uf-th uf-fth uf-col-job">${MultiSelect.html('uf-job', 'Всі...')}</th>
                             <th class="uf-th uf-fth uf-col-city">${MultiSelect.html('uf-city', 'Всі...')}</th>
                             <th class="uf-th uf-fth uf-col-subdivision">${MultiSelect.html('uf-subdivision', 'Всі...')}</th>
@@ -3357,7 +3357,10 @@ const AdminPage = {
 
         el.innerHTML = `
             <div style="display:flex;gap:1rem;margin-bottom:1rem">
-                <input type="text" placeholder="Пошук..." style="flex:1" onkeyup="AdminPage._filterTable('courses-tbody', event)">
+                <div class="search-clear-wrap" style="flex:1">
+                    <input type="text" placeholder="Пошук..." style="width:100%" onkeyup="AdminPage._filterTable('courses-tbody', event)">
+                    <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
+                </div>
                 ${AppState.canMutate() ? `<button class="btn btn-primary" onclick="AdminPage._openCourseForm()">+ Створити курс</button>` : ''}
             </div>
             <div class="table-wrapper">
@@ -4122,7 +4125,10 @@ const AdminPage = {
 
         el.innerHTML = `
             <div style="display:flex;gap:1rem;margin-bottom:1rem">
-                <input type="text" placeholder="Пошук новин..." style="flex:1" onkeyup="AdminPage._filterTable('news-tbody', event)">
+                <div class="search-clear-wrap" style="flex:1">
+                    <input type="text" placeholder="Пошук новин..." style="width:100%" onkeyup="AdminPage._filterTable('news-tbody', event)">
+                    <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
+                </div>
                 ${AppState.canMutate() ? `<button class="btn btn-primary" onclick="NewsPage.openCreate()">+ Створити новину</button>` : ''}
             </div>
             <div class="table-wrapper">
@@ -4701,8 +4707,11 @@ const AdminPage = {
         </style>
         <div class="ss-wrap">
             <div class="ss-bar">
-                <input class="ss-input" id="ss-input" placeholder="Пошук по всьому проекту..." autocomplete="off"
-                       oninput="AdminPage._ssSearch()" onkeydown="if(event.key==='Escape')this.value=AdminPage._ssClear()">
+                <div class="search-clear-wrap" style="flex:1;min-width:220px">
+                    <input class="ss-input" id="ss-input" placeholder="Пошук по всьому проекту..." autocomplete="off" style="width:100%"
+                           oninput="AdminPage._ssSearch()" onkeydown="if(event.key==='Escape')this.value=AdminPage._ssClear()">
+                    <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
+                </div>
                 <div class="ss-type-btns">
                     <button class="ss-type-btn active" data-type="all"       onclick="AdminPage._ssType('all',this)">Все</button>
                     <button class="ss-type-btn"         data-type="documents" onclick="AdminPage._ssType('documents',this)"><i class="fa-solid fa-file-lines"></i> Документи</button>
@@ -5976,9 +5985,10 @@ ${item?.is_deleted ? `
             </div>
             <div class="atp-layout">
                 <div class="atp-list-col">
-                    <div class="atp-search">
+                    <div class="atp-search search-clear-wrap">
                         <i class="fa-solid fa-magnifying-glass"></i>
                         <input type="text" placeholder="Пошук адміна..." oninput="AdminPage._permFilterList(this.value)">
+                        <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
                     </div>
                     <div id="atp-admin-list" class="atp-admin-list">${this._permRenderList()}</div>
                 </div>

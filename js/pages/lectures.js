@@ -327,11 +327,12 @@ const LecturesPage = {
                 <option value="course">Курс</option>
                 <option value="resource">Файл бази знань</option>
             </select>
-            <div class="lece-mat-search-wrap" style="flex:1">
+            <div class="lece-mat-search-wrap search-clear-wrap" style="flex:1">
                 <input type="text" class="lece-inp" id="lece-mat-search" placeholder="Пошук за назвою..." autocomplete="off"
                     oninput="LecturesPage._filterMatOptions(this.value)"
                     onfocus="LecturesPage._filterMatOptions(this.value)"
                     onblur="setTimeout(() => LecturesPage._closeMatDropdown(), 150)">
+                <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
                 <div class="lece-mat-dropdown" id="lece-mat-dropdown"></div>
             </div>
             <button type="button" class="lece-mat-add-btn" onclick="LecturesPage._addMaterial()"><i class="fa-solid fa-plus"></i></button>

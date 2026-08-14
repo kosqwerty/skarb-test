@@ -73,9 +73,10 @@ const ContactsPage = {
         </div>
         <p class="ct-subtitle">Контактна інформація співробітників</p>
         <div class="ct-search-row">
-            <div class="ct-search-wrap">
+            <div class="ct-search-wrap search-clear-wrap">
                 <input id="ct-search" class="ct-search" type="search" placeholder="Пошук за ім'ям, посадою, містом, телефоном…"
                        oninput="ContactsPage._search(this.value)">
+                <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div id="ct-count" class="ct-count">${this._users.length} співробітників</div>
         </div>

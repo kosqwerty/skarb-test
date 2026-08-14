@@ -20,8 +20,11 @@ const CoursesPage = {
                 </div>
                 <div class="page-actions">
                     <div style="display:flex;gap:.5rem;align-items:center">
-                        <input type="text" id="course-search" placeholder="Пошук курсів..." value="${this._search}"
-                               style="width:220px" onkeyup="CoursesPage.onSearch(event)">
+                        <div class="search-clear-wrap" style="width:220px">
+                            <input type="text" id="course-search" placeholder="Пошук курсів..." value="${this._search}"
+                                   style="width:100%;box-sizing:border-box" onkeyup="CoursesPage.onSearch(event)">
+                            <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
+                        </div>
                         <select id="level-filter" onchange="CoursesPage.load()" style="width:auto">
                             <option value="">Всі рівні</option>
                             <option value="beginner">Початковий</option>

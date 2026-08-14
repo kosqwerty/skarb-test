@@ -946,9 +946,10 @@ const BranchDocsPage = {
                         </div>
                         <div class="bdm-sub">Позначте сторінки-колекції, до яких належить цей документ</div>
                         <div>
-                            <div class="bdm-search">
+                            <div class="bdm-search search-clear-wrap">
                                 <i class="fa-solid fa-magnifying-glass"></i>
                                 <input type="text" placeholder="Пошук сторінок-колекцій" oninput="BranchDocsPage._filterPages(this.value)">
+                                <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
                             </div>
                             <div class="bdm-chk-list" id="bd-chk-list">
                                 ${pageCheckboxes}

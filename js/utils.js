@@ -94,6 +94,26 @@ const Loader = {
 };
 
 const UI = {
+    // Кнопка "✕ очистити" для пошукових полів (глобальний паттерн, css/main.css
+    // → .search-clear-wrap/.search-clear-btn). Розмітка на кожній сторінці:
+    //   <span class="search-clear-wrap" style="...">
+    //       <input placeholder="Пошук..." oninput="...">
+    //       <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)">
+    //           <i class="fa-solid fa-xmark"></i></button>
+    //   </span>
+    // Видимість кнопки — чисто CSS (:has(input:not(:placeholder-shown))), JS
+    // відповідає лише за сам клік: очищає поле і диспатчить справжні input/keyup/change
+    // події — спрацьовує вже прив'язаний oninput/onkeyup з розмітки без окремого колбека.
+    clearSearchInput(btn) {
+        const input = btn.parentElement?.querySelector('input');
+        if (!input) return;
+        input.value = '';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('keyup', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        input.focus();
+    },
+
     // Кнопка "нагору" — з'являється після прокрутки на SCROLL_TOP_THRESHOLD px.
     // Слухач на window/document, бо сторінка скролиться самим документом
     // (.top-bar position:fixed, внутрішнього overflow-контейнера немає).

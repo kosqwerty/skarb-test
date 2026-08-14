@@ -486,9 +486,10 @@ body:not(.light-theme) .tm-sec-tabs{box-shadow:0 2px 14px rgba(0,0,0,.2)}
     </div>
 
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;flex-wrap:wrap">
-        <div class="tm-search-wrap">
+        <div class="tm-search-wrap search-clear-wrap">
             <i class="fa-solid fa-magnifying-glass"></i>
             <input class="tm-search-inp" type="text" placeholder="Пошук тесту..." oninput="TestsManagerPage._filterTests(this.value)">
+            <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
         </div>
         <div class="tm-fchips" id="tm-fchips">
             <button class="tm-fchip${this._listFilter==='all'?' on':''}" data-f="all" onclick="TestsManagerPage._setListFilter('all',this)">Всі <b>${this._tests.length}</b></button>
@@ -1329,8 +1330,11 @@ body:not(.light-theme) .tm-sec-tabs{box-shadow:0 2px 14px rgba(0,0,0,.2)}
                 }
             </div>
             ${allPositions.length ? `
-            <input id="tm-pos-search" type="text" class="tset-pos-search" placeholder="Пошук посади..."
-                oninput="TestsManagerPage._filterPosSearch(this.value)">
+            <div class="search-clear-wrap">
+                <input id="tm-pos-search" type="text" class="tset-pos-search" placeholder="Пошук посади..."
+                    oninput="TestsManagerPage._filterPosSearch(this.value)">
+                <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
+            </div>
             <div id="tm-pos-list" class="tset-pos-list">
                 ${allPositions.map(p => {
                     const on = selectedPos.includes(p);
@@ -3735,9 +3739,10 @@ body.light-theme .tm-src-ta{background:#f6f8fa;color:#24292f;border-color:#d0d7d
         <div class="tasgn-right-col">
     <div class="tasgn-controls">
         <div class="tasgn-filters" style="grid-template-columns:repeat(${filterCols},1fr) auto">
-            <div class="tasgn-search-wrap">
+            <div class="tasgn-search-wrap search-clear-wrap">
                 <i class="fa-solid fa-magnifying-glass"></i>
                 <input id="tm-search" class="tasgn-search-inp" type="text" placeholder="Пошук за іменем..." oninput="TestsManagerPage._applyAssignFilters()">
+                <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
             </div>
             ${positions.length ? `<div>${MultiSelect.html('tasgn-ms-pos', 'Всі посади')}</div>` : ''}
             ${showMgrFilter ? `

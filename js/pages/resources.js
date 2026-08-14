@@ -359,9 +359,10 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
 </div>
 
 <div class="kb-search-bar">
-    <div class="kb-search-wrap">
+    <div class="kb-search-wrap search-clear-wrap">
         <span class="kb-search-icon"><i class="fa-solid fa-magnifying-glass"></i></span>
         <input type="text" id="resource-search" placeholder="Пошук за назвою або описом..." value="${this._search}" oninput="ResourcesPage.onSearch(event)">
+        <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
     </div>
     <div style="display:flex;align-items:center;gap:.5rem;flex-shrink:0">
         ${AppState.isStaff() && AppState.canMutate() ? '<button class="btn btn-primary kb-add-btn" onclick="ResourcesPage.openForm()"><i class="fa-solid fa-plus"></i> Додати ресурс</button>' : ''}
@@ -509,10 +510,11 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
                     </div>
                     <div style="flex:1;min-width:0">
                         <div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem">
-                            <div style="position:relative;flex:1;min-width:200px;max-width:360px">
+                            <div class="search-clear-wrap" style="position:relative;flex:1;min-width:200px;max-width:360px">
                                 <i class="fa-solid fa-magnifying-glass" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:.85rem;pointer-events:none"></i>
                                 <input type="text" id="resource-search" placeholder="Пошук за назвою або описом..." value="${this._search}"
                                        style="width:100%;padding-left:2.1rem;box-sizing:border-box" oninput="ResourcesPage.onSearch(event)">
+                                <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
                             </div>
                             <select id="docs-sort-sel" onchange="ResourcesPage._docsSetSort(this.value)" style="width:auto">
                                 <option value="priority" ${this._docsSort==='priority'?'selected':''}>🔴 Нові / оновлені першими</option>
@@ -798,8 +800,11 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
                     </div>
                     <button class="btn btn-ghost btn-sm" onclick="ResourcesPage._exportStatusList()" style="white-space:nowrap"><i class="fa-solid fa-download"></i> Експорт</button>
                 </div>
-                <input type="text" placeholder="Пошук за іменем або посадою…" value="${search}"
-                    style="width:100%" oninput="ResourcesPage._statusModalSearch(this.value)">
+                <div class="search-clear-wrap" style="width:100%">
+                    <input type="text" placeholder="Пошук за іменем або посадою…" value="${search}"
+                        style="width:100%" oninput="ResourcesPage._statusModalSearch(this.value)">
+                    <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
+                </div>
                 <div style="max-height:400px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-md);padding:0 .5rem">
                     ${rowsHtml}
                 </div>
@@ -1947,8 +1952,11 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
         return `
             <div style="display:flex;flex-direction:column;gap:.875rem">
                 <div style="font-size:.85rem;color:var(--text-muted)">${Fmt.esc(this._viewStatsTitle || '')}</div>
-                <input type="text" placeholder="Пошук за іменем або посадою…" value="${Fmt.esc(this._viewStatsSearch || '')}"
-                    style="width:100%" oninput="ResourcesPage._viewStatsSetSearch(this.value)">
+                <div class="search-clear-wrap" style="width:100%">
+                    <input type="text" placeholder="Пошук за іменем або посадою…" value="${Fmt.esc(this._viewStatsSearch || '')}"
+                        style="width:100%" oninput="ResourcesPage._viewStatsSetSearch(this.value)">
+                    <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
+                </div>
                 <div style="display:flex;align-items:center;padding:0 .25rem .4rem;gap:.75rem;border-bottom:1px solid var(--border);color:var(--text-muted);font-size:.72rem;font-weight:600;text-transform:uppercase">
                     <div style="flex:1">Співробітник</div>
                     <span>Переглядів</span>
@@ -2058,8 +2066,11 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
             </style>
             <div style="display:flex;flex-direction:column;gap:.875rem">
                 <div style="font-size:.85rem;color:var(--text-muted)">${Fmt.esc(this._scormStatsTitle || '')}</div>
-                <input type="text" placeholder="Пошук за іменем або посадою…" value="${Fmt.esc(this._scormStatsSearch || '')}"
-                    style="width:100%" oninput="ResourcesPage._scormStatsSetSearch(this.value)">
+                <div class="search-clear-wrap" style="width:100%">
+                    <input type="text" placeholder="Пошук за іменем або посадою…" value="${Fmt.esc(this._scormStatsSearch || '')}"
+                        style="width:100%" oninput="ResourcesPage._scormStatsSetSearch(this.value)">
+                    <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
+                </div>
                 <div style="max-height:440px;overflow-y:auto">
                     ${rowsHtml}
                 </div>

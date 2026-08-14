@@ -608,8 +608,11 @@ const SchedulerPage = {
                 <div>
                     <div class="input-label" style="margin-bottom:8px"><span>Отримувачі</span></div>
                     <div class="sch-rcp-search-row">
-                        <input id="sf-rcp-search" type="search" class="sch-search" style="border-radius:12px;padding:8px 12px"
-                               placeholder="Пошук користувача…" oninput="SchedulerPage._filterRcpList(this.value)">
+                        <div class="search-clear-wrap" style="flex:1;min-width:200px">
+                            <input id="sf-rcp-search" type="search" class="sch-search" style="border-radius:12px;padding:8px 12px;width:100%;box-sizing:border-box"
+                                   placeholder="Пошук користувача…" oninput="SchedulerPage._filterRcpList(this.value)">
+                            <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
+                        </div>
                         <button type="button" class="sch-btn-outline" onclick="SchedulerPage._addAllUsers()">Всі користувачі</button>
                     </div>
                     <div class="sch-rcp-dropdown" id="sf-rcp-dropdown">

@@ -249,8 +249,9 @@ const AccessGroupsPage = {
                         ${anyActive ? 'Будь-яке' : sel.length + ' вибр.'}
                     </span>
                 </div>
-                <div class="ag-srch">
+                <div class="ag-srch search-clear-wrap">
                     <input type="text" placeholder="Пошук..." oninput="AccessGroupsPage._filter('${type}', this.value)">
+                    <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
                 </div>
                 <div class="ag-list" id="ag-lst-${type}">
                     <div class="ag-itm ag-itm-any ${anyActive ? 'ag-sel' : ''}" onclick="AccessGroupsPage._clearSel('${type}')">

@@ -47,7 +47,10 @@ const AnalyticsPage = {
                 <div class="card-header">
                     <h3>👥 Користувачі</h3>
                     <div style="display:flex;gap:.5rem">
-                        <input type="text" id="student-search" placeholder="Пошук користувача..." style="width:200px" onkeyup="AnalyticsPage.filterStudents(event)">
+                        <div class="search-clear-wrap" style="width:200px">
+                            <input type="text" id="student-search" placeholder="Пошук користувача..." style="width:100%;box-sizing:border-box" onkeyup="AnalyticsPage.filterStudents(event)">
+                            <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
+                        </div>
                         <button class="btn btn-success btn-sm" onclick="AnalyticsPage.exportStudents()">Експорт</button>
                     </div>
                 </div>

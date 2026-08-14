@@ -2084,9 +2084,10 @@ const SurveysPage = {
         <div class="svasgn-right-col">
             <div class="svasgn-controls">
                 <div class="svasgn-filters" style="grid-template-columns:repeat(${filterCols},1fr) auto">
-                    <div class="svasgn-search-wrap">
+                    <div class="svasgn-search-wrap search-clear-wrap">
                         <i class="fa-solid fa-magnifying-glass"></i>
                         <input id="sv-asgn-search" class="svasgn-search-inp" type="text" placeholder="Пошук за іменем…" oninput="SurveysPage._applyAssignFilters()">
+                        <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
                     </div>
                     ${positions.length ? `
                     <select id="sv-asgn-pos" class="svasgn-select" onchange="SurveysPage._applyAssignFilters()">

@@ -888,9 +888,10 @@ const RedFolderPage = {
                         </div>
                         <div class="rfm-sub">Позначте сторінки-колекції, до яких належить цей документ</div>
                         <div>
-                            <div class="rfm-search">
+                            <div class="rfm-search search-clear-wrap">
                                 <i class="fa-solid fa-magnifying-glass"></i>
                                 <input type="text" placeholder="Пошук сторінок-колекцій" oninput="RedFolderPage._filterPages(this.value)">
+                                <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
                             </div>
                             <div class="rfm-chk-list" id="rf-chk-list">
                                 ${allPageCheckboxes}

@@ -144,9 +144,10 @@
 
         area.innerHTML = `
         <div class="in-toolbar">
-            <div class="in-search-wrap">
+            <div class="in-search-wrap search-clear-wrap">
                 <i class="fa-solid fa-magnifying-glass in-search-icon"></i>
                 <input id="in-search" class="in-toolbar-input in-search-input" placeholder="Пошук за ПІБ…" value="${Fmt.esc(this._search)}" oninput="InternsPage._onSearch(this.value)">
+                <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div class="in-toolbar-divider"></div>
             <div class="in-toolbar-filters">
@@ -3027,9 +3028,10 @@ select.ia-input{cursor:pointer}
                 </style>
                 <div class="in-arch-hint">Ці записи вже без активного акаунту — залишились лише для історії. Видалення остаточне.</div>
                 <div class="in-arch-toolbar">
-                    <div class="in-arch-search">
+                    <div class="in-arch-search search-clear-wrap">
                         <i class="fa-solid fa-magnifying-glass"></i>
                         <input type="text" id="in-arch-search-input" placeholder="Пошук за ім'ям…" oninput="InternsPage._archFilter(this.value)">
+                        <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
                     </div>
                     <span class="in-arch-count" id="in-arch-count"></span>
                     <span class="in-arch-links"><a onclick="InternsPage._archToggleAll(true)">Всі</a><a onclick="InternsPage._archToggleAll(false)">Жодного</a></span>
@@ -4161,9 +4163,10 @@ select.ia-input{cursor:pointer}
         </style>
 
         <div class="iac-section-title"><i class="fa-solid fa-plus"></i> Надати доступ</div>
-        <div class="iac-search-wrap">
+        <div class="iac-search-wrap search-clear-wrap">
             <i class="fa-solid fa-magnifying-glass iac-search-icon"></i>
             <input id="iac-search" class="iac-search" placeholder="Пошук за ПІБ або містом…" oninput="InternsPage._accessSearch(this.value)" onfocus="InternsPage._accessSearch(this.value)">
+            <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
         </div>
         <div id="iac-dropdown" class="iac-dropdown"></div>
         <div id="iac-add-bar" class="iac-add-bar">

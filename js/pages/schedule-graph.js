@@ -3371,11 +3371,12 @@ ${this._manCss()}
                 onclick="ScheduleGraphPage._selectSubstDate('${nd}','${this._substQuickPrevLocId}')">${Fmt.dateShort(new Date(nd + 'T00:00:00'))}</button>`).join('')}
         </div>
     </div>` : ''}
-    <div class="sg-subst-search-bar">
+    <div class="sg-subst-search-bar search-clear-wrap">
         <span class="sg-subst-search-ico"><i class="fa-solid fa-magnifying-glass"></i></span>
         <input type="text" id="sg-subst-search" placeholder="Пошук за ПІБ — свої й партнерські…" autocomplete="off"
             value="${Fmt.esc(this._substSearchQuery || '')}"
             oninput="ScheduleGraphPage._filterSubstByName(this.value)">
+        <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
     </div>
     <div class="sg-subst-tabs">
         <button class="sg-subst-tab active" id="sg-stab-free" onclick="ScheduleGraphPage._switchSubstTab('free')">
@@ -3959,9 +3960,10 @@ ${this._manCss()}
             <span class="sg-csl-count">${candidates.length}</span>
             <button class="sg-mclose" onclick="document.getElementById('sg-cansub-list-modal').remove()">✕</button>
         </div>
-        ${candidates.length > 4 ? `<div class="sg-csl-search-wrap">
+        ${candidates.length > 4 ? `<div class="sg-csl-search-wrap search-clear-wrap">
             <i class="fa-solid fa-magnifying-glass sg-csl-search-ico"></i>
             <input class="sg-csl-search" id="sg-csl-search" placeholder="Пошук за іменем..." oninput="ScheduleGraphPage._filterCanSub(this.value)">
+            <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
         </div>` : ''}
     </div>
     <div class="sg-csl-list" id="sg-csl-list">
@@ -10662,12 +10664,13 @@ ${ScheduleGraphPage._styles()}${this._styles()}`;
     ${this._locations.length > 1 ? `
     <div class="sgv-loc-picker">
         <div class="sgv-loc-picker-label">🏪 Локація</div>
-        <div class="sgv-loc-picker-wrap">
+        <div class="sgv-loc-picker-wrap search-clear-wrap">
             <input class="sgv-loc-search" id="sgv-loc-search" type="text" placeholder="Пошук локації…"
                 oninput="ScheduleViewPage._filterLocs(this.value)"
                 onfocus="this.select();ScheduleViewPage._openLocList()"
                 onblur="setTimeout(()=>{const d=document.getElementById('sgv-loc-dropdown'),i=document.getElementById('sgv-loc-search');if(d)d.classList.remove('open');if(i&&!i.value.trim()){const a=d&&d.querySelector('.sgv-loc-opt.active');if(a)i.value=a.textContent.trim().replace(/^🏪\s*/,'');}},180)"
                 value="${Fmt.esc(this._locations.find(l=>l.id===this._locId)?.name||'')}">
+            <button type="button" class="search-clear-btn" onmousedown="event.preventDefault()" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
             <div class="sgv-loc-dropdown" id="sgv-loc-dropdown">
                 ${this._locations.map(l => `
                 <button class="sgv-loc-opt ${l.id === this._locId ? 'active' : ''}"

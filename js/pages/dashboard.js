@@ -2064,9 +2064,9 @@ const DashboardPage = {
                     background:linear-gradient(135deg,#f59e0b,#d97706);
                     display:flex;align-items:center;justify-content:center;overflow:hidden;border:2px solid #fff}
                 .db-bday-info{min-width:0}
-                .db-bday-name{font-size:.82rem;font-weight:700;color:#1c1917;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
+                .db-bday-name{font-size:.82rem;font-weight:700;color:#1c1917;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
                 body:not(.light-theme) .db-bday-name{color:#fef3c7}
-                .db-bday-pos{font-size:.68rem;color:#78350f;opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px;margin-top:.1rem}
+                .db-bday-pos{font-size:.68rem;color:#78350f;opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;margin-top:.1rem}
                 body:not(.light-theme) .db-bday-pos{color:#fcd34d;opacity:.65}
                 .db-bday-wish-btn{display:inline-flex;align-items:center;gap:.35rem;
                     background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border:none;

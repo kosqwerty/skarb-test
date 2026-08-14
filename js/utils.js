@@ -915,15 +915,16 @@ const UI = {
             expertItem,
             // { icon: '<img src="/news.png" style="width:18px;height:18px;object-fit:contain;display:inline-block;vertical-align:middle;filter:none">', label: 'Новини',  route: 'news' }
         ];
+        const menuItem = { icon: sbIcon('metoda_ico.webp'), label: 'Меню', route: 'collections' };
         const contentItems = [
             ...common,
-            { icon: sbIcon('knowledge.webp'),  label: 'База знань',        route: 'knowledge-base' },
             { icon: sbIcon('documents.webp'),  label: 'Документи',         route: 'documents', badgeId: 'nav-doc-badge' },
-            { icon: sbIcon('metoda_ico.webp'), label: 'Методики та інструкції', route: 'collections' },
+            menuItem,
         ];
         const ntfItem      = { icon: '<i class="fa-solid fa-bell"         style="color:#C9A227"></i>', label: 'Сповіщення', route: 'notifications', badgeId: 'nav-ntf-badge' };
         const contactsItem = { icon: '<i class="fa-solid fa-address-book" style="color:#059669"></i>', label: 'Контакти',   route: 'contacts' };
         const bmItem       = { icon: '<i class="fa-solid fa-bookmark"     style="color:#FBBF24"></i>', label: 'Закладки',   route: 'bookmarks', noStar: true };
+        const knowledgeBaseItem = { icon: sbIcon('knowledge.webp'), label: 'База знань', route: 'knowledge-base' };
         const analyticsItem   = { icon: sbIcon('statistics.webp'), label: 'Аналітика',        route: 'analytics' };
         const schedulerItem   = { icon: sbIcon('plan.webp'), label: 'Розділ планування', route: 'scheduler' };
         const schedulerItemNs = { icon: sbIcon('plan.webp'), label: 'Розділ планування', route: 'scheduler', noStar: true };
@@ -935,42 +936,39 @@ const UI = {
         if (role === 'ceo') {
             return this._applyNavRestriction([
                 { title: 'Навчання',    items: contentItems },
-                { title: 'Управління',  items: [ analyticsItem, schedulerItem, adminItem ] },
+                { title: 'Управління',  items: [ knowledgeBaseItem, analyticsItem, schedulerItem, adminItem ] },
                 { title: 'Особисте',    items: [ contactsItem, bmItem ] }
             ]);
         }
         if (role === 'superadmin' || role === 'admin') {
             return this._applyNavRestriction([
                 { title: 'Навчання',    items: contentItems },
-                { title: 'Управління',  items: [ analyticsItem, schedulerItem, internsItem, adminItem ] },
+                { title: 'Управління',  items: [ knowledgeBaseItem, analyticsItem, schedulerItem, internsItem, adminItem ] },
                 { title: 'Особисте',    items: [ contactsItem, bmItem ] }
             ]);
         }
         if (role === 'manager') {
             return this._applyNavRestriction([
                 { title: 'Навчання',   items: contentItems },
-                { title: 'Управління', items: [ schedulerItem, internsItem ] },
+                { title: 'Управління', items: [ knowledgeBaseItem, schedulerItem, internsItem ] },
                 { title: 'Особисте',   items: [ contactsItem, bmItem ] }
             ]);
         }
         if (role === 'smm') {
             return this._applyNavRestriction([
                 { title: 'Навчання',   items: contentItems },
-                { title: 'Управління', items: [ analyticsItem, contentAdmItem, schedulerItemNs ] },
+                { title: 'Управління', items: [ knowledgeBaseItem, analyticsItem, contentAdmItem, schedulerItemNs ] },
                 { title: 'Особисте',   items: [ contactsItem, bmItem ] }
             ]);
         }
-        // Стажер: навчання + закладки, без документів/контактів/сповіщень
+        // Стажер: навчання + закладки, без документів/бази знань/контактів/сповіщень
         if (AppState.isIntern()) {
-            const internContentItems = [
-                ...common,
-                { icon: sbIcon('knowledge.webp'), label: 'База знань', route: 'knowledge-base' },
-            ];
             return [
-                { title: 'Навчання',  items: internContentItems },
+                { title: 'Навчання',  items: [ ...common, menuItem ] },
                 { title: 'Особисте',  items: [ bmItem ] }
             ];
         }
+        // user: без бази знань — доступна лише staff-ролям (перенесено в "Управління")
         return [
             { title: 'Навчання',  items: contentItems },
             { title: 'Особисте',  items: [ contactsItem, schedulerItemNs, bmItem ] }

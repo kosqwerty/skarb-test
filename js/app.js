@@ -109,7 +109,15 @@ const App = {
         // Розділи закриті для стажерів
         const requireNotIntern = () => {
             if (!AppState.isIntern()) return true;
-            Router.go('knowledge-base');
+            Router.go('dashboard');
+            return false;
+        };
+
+        // База знань — доступна лише staff-ролям (superadmin/admin/manager/smm/ceo),
+        // не звичайним user і не стажерам (перенесено з "Навчання" в "Управління").
+        const requireKbAccess = () => {
+            if (!AppState.isIntern() && AppState.profile?.role !== 'user') return true;
+            Router.go('dashboard');
             return false;
         };
 
@@ -180,11 +188,13 @@ const App = {
             },
 
             'resources': async ({ container, params }) => {
+                if (!requireKbAccess()) return;
                 if (!requireTrusted(true)) return;
                 Router.go('knowledge-base');
             },
 
             'knowledge-base': async ({ container, params }) => {
+                if (!requireKbAccess()) return;
                 if (!requireTrusted(true)) return;
                 await ResourcesPage.init(container, { view: 'kb' });
             },
@@ -202,26 +212,22 @@ const App = {
             },
 
             'collections': async ({ container }) => {
-                if (!requireNotIntern()) return;
                 if (!requireTrusted(true)) return;
                 await CollectionsPage.init(container);
             },
 
             'collections/:id': async ({ container, params }) => {
-                if (!requireNotIntern()) return;
                 if (!requireTrusted(true)) return;
                 await CollectionsPage.initView(container, params);
             },
 
             'collections/new': async ({ container }) => {
-                if (!requireNotIntern()) return;
                 if (!requireTrusted(true)) return;
                 if (!AppState.isAdmin()) { Router.go('collections'); return; }
                 await CollectionsPage.openEditor();
             },
 
             'collections/:id/edit': async ({ container, params }) => {
-                if (!requireNotIntern()) return;
                 if (!requireTrusted(true)) return;
                 if (!AppState.isAdmin()) { Router.go('collections'); return; }
                 await CollectionsPage.openEditor(params.id);

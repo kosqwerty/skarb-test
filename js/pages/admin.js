@@ -5946,7 +5946,7 @@ ${item?.is_deleted ? `
         { route: 'knowledge-base',label: 'База знань',        icon: 'fa-folder-open',              color: '#C9A227' },
         { route: 'documents',     label: 'Документи',         icon: 'fa-file-lines',               color: '#f87171' },
         { route: 'analytics',     label: 'Аналітика',         icon: 'fa-chart-bar',                color: '#34d399' },
-        { route: 'collections',   label: 'Сторінки',          icon: 'fa-wand-magic-sparkles',      color: '#c084fc' },
+        { route: 'collections',   label: 'Меню',              icon: 'fa-wand-magic-sparkles',      color: '#c084fc' },
         { route: 'scheduler',     label: 'Розділ планування', icon: 'fa-calendar-days',            color: '#60a5fa' },
         { route: 'interns',       label: 'Стажери',           icon: 'fa-user-graduate',            color: '#8b5cf6' },
         { route: 'admin',         label: 'Адміністрування',   icon: 'fa-gear',                     color: '#f87171' },

@@ -134,8 +134,7 @@ const AppState = {
         UI.renderNavigation(role);
         UI.renderSidebarUser(this.profile);
         RoleSwitchBanner.show(role, this.profile.base_role);
-        const defaultRoute = ['admin','smm','manager','ceo'].includes(role) ? 'dashboard' : 'knowledge-base';
-        Router.go(defaultRoute);
+        Router.go('dashboard');
     },
 
     async exitRoleSwitch() {

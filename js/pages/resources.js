@@ -52,7 +52,12 @@ const ResourcesPage = {
         }
 
         if (view === 'docs' && AppState.isIntern()) {
-            Router.go('knowledge-base');
+            Router.go('dashboard');
+            return;
+        }
+
+        if (view === 'kb' && (AppState.isIntern() || AppState.profile?.role === 'user')) {
+            Router.go('dashboard');
             return;
         }
 

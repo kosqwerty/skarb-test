@@ -312,14 +312,16 @@ Nav items visible per role:
 
 | Role | Sections |
 |------|---------|
-| superadmin / admin | Навчання, Управління (Аналітика + Планування + Адміністрування + Обмеження доступу), Особисте |
-| manager | Навчання, Управління (Планування only), Особисте |
-| smm | Навчання, Управління (Аналітика + **Контент** + Планування), Особисте |
-| user | Навчання, Особисте (+ Планування hidden) |
+| superadmin / admin | Навчання, Управління (База знань + Аналітика + Планування + Адміністрування + Обмеження доступу), Особисте |
+| manager | Навчання, Управління (База знань + Планування), Особисте |
+| smm | Навчання, Управління (База знань + Аналітика + **Контент** + Планування), Особисте |
+| ceo | Навчання, Управління (База знань + Аналітика + Планування + Адміністрування), Особисте |
+| user | Навчання (без Бази знань), Особисте (+ Планування hidden) |
+| intern (label) | Навчання (лише Головна + Моє навчання), Особисте (лише Закладки) |
 
 Note: `smm` sees the `admin` route labelled **"Контент"** — same page, different label.
 
-`contentItems` (shared across all roles) includes: Головна, Skill Up, Новини, База знань, Документи (with badge), Меню порталу. **Куточок споживача is intentionally NOT in the sidebar** — it's accessible only as a tab inside the Документи page.
+`contentItems` (shared, `Навчання` section) includes: Головна, Моє навчання, Документи (with badge), Меню (route `collections`). **База знань** (route `knowledge-base`) is staff-only — deliberately NOT in `contentItems`, added explicitly to each staff role's `Управління` items instead; plain `user` and interns have no access at all (route-level guard `requireKbAccess()` in `js/app.js` redirects to `dashboard`). **Куточок споживача is intentionally NOT in the sidebar** — it's accessible only as a tab inside the Документи page.
 
 ## Storage URLs
 

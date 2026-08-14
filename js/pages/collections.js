@@ -518,6 +518,7 @@ const CollectionsPage = {
             : `<span class="badge badge-muted">чернетка</span>`;
         const tags = [
             p.is_home ? `<span class="col-tbl-tag" style="background:rgba(16,185,129,.12);color:#10b981;border-color:rgba(16,185,129,.25)">🏠 Головна</span>` : '',
+            p.network_visibility === 'trusted' ? `<span class="col-tbl-tag" style="background:rgba(245,158,11,.12);color:#f59e0b;border-color:rgba(245,158,11,.25)" title="Звичайні користувачі бачать лише з довіреної мережі. Адміни й superadmin — завжди">🔒 Довірена мережа</span>` : '',
             p.section ? `<span class="col-tbl-tag" style="background:rgba(139,92,246,.12);color:#8b5cf6;border-color:rgba(139,92,246,.25)">📁 ${Fmt.esc(p.section)}</span>` : '',
             ...(p.allowed_labels || []).map(l => `<span class="col-tbl-tag">🏷 ${Fmt.esc(l)}</span>`)
         ].filter(Boolean).join('');

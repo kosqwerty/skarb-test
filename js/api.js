@@ -1442,7 +1442,7 @@ const API = {
         async getAll() {
             const { data, error } = await supabase
                 .from('custom_pages')
-                .select('id, title, is_published, is_home, allowed_labels, network_visibility, track_visits, created_at, updated_at')
+                .select('id, title, is_published, is_home, allowed_labels, network_visibility, track_visits, section, created_at, updated_at')
                 .order('created_at', { ascending: false });
             if (error) throw error;
             const pages = data || [];

@@ -46,12 +46,19 @@ const CollectionsPage = {
                 <div class="page-title">
                     <h1>📄 Сторінки</h1>
                     <p>Власні HTML-сторінки з довільним стилем та посиланнями.</p>
+                    <div class="col-admin-hint"><i class="fa-solid fa-circle-info"></i> Цей список бачать лише адміни. Усі інші користувачі при вході в розділ одразу потрапляють на головну сторінку (🏠) — і переходять далі лише за посиланнями всередині неї.</div>
                 </div>
                 <div class="page-actions">
                     ${AppState.canMutate() ? `<button class="btn btn-primary" onclick="CollectionsPage.openEditor()">+ Нова сторінка</button>` : ''}
                 </div>
             </div>
-            <div id="pages-list"></div>`;
+            <div id="pages-list"></div>
+            <style>
+                .col-admin-hint{display:inline-flex;align-items:center;gap:8px;margin-top:.6rem;padding:9px 16px;
+                    border-radius:12px;background:var(--bg-raised);border:1px solid var(--border);
+                    color:var(--text-secondary);font-size:.8rem;max-width:560px}
+                .col-admin-hint i{color:var(--primary);flex-shrink:0}
+            </style>`;
         await this._loadList();
     },
 
@@ -160,6 +167,69 @@ const CollectionsPage = {
         document.addEventListener('mouseup', onUp);
     },
 
+    // Кастомний dropdown-фільтр (кнопка + панель) замість native <select> —
+    // той не можна нормально стилізувати (спливаючий список завжди рендериться
+    // ОС/браузером, а не CSS проєкту). Стан зберігається в прихованому input,
+    // щоб _renderTableRows() читав значення так само, як раніше з <select>.
+    _filterDropHtml(key, icon, defaultLabel, options) {
+        const items = options.map(([val, label]) => `
+            <div class="col-tbl-fdrop-item${val === '' ? ' active' : ''}" data-val="${Fmt.esc(val)}" data-label="${Fmt.esc(label)}"
+                 onclick="CollectionsPage._pickFilter('${key}', this.dataset.val, this.dataset.label)">${Fmt.esc(label)}</div>`).join('');
+        return `
+            <div class="col-tbl-fgroup" id="col-tbl-${key}-group">
+                <button type="button" class="col-tbl-fbtn" onclick="event.stopPropagation();CollectionsPage._toggleFilterDrop('${key}')">
+                    <i class="fa-solid ${icon}"></i>
+                    <span id="col-tbl-${key}-label">${Fmt.esc(defaultLabel)}</span>
+                    <i class="fa-solid fa-chevron-down"></i>
+                </button>
+                <input type="hidden" id="col-tbl-${key}-filter" value="">
+                <div class="col-tbl-fdrop" id="col-tbl-${key}-drop" style="display:none" onclick="event.stopPropagation()">${items}</div>
+            </div>`;
+    },
+
+    _toggleFilterDrop(key) {
+        const wasOpen = this._openFilterDrop === key;
+        this._closeAllFilterDrops();
+        if (wasOpen) return;
+        const drop  = document.getElementById(`col-tbl-${key}-drop`);
+        const group = document.getElementById(`col-tbl-${key}-group`);
+        if (!drop || !group) return;
+        drop.style.display = 'block';
+        group.classList.add('open');
+        this._openFilterDrop = key;
+        this._ensureFilterOutsideClick();
+    },
+
+    _closeAllFilterDrops() {
+        ['status', 'home', 'section'].forEach(k => {
+            const drop  = document.getElementById(`col-tbl-${k}-drop`);
+            const group = document.getElementById(`col-tbl-${k}-group`);
+            if (drop) drop.style.display = 'none';
+            if (group) group.classList.remove('open');
+        });
+        this._openFilterDrop = null;
+    },
+
+    _pickFilter(key, val, label) {
+        const input = document.getElementById(`col-tbl-${key}-filter`);
+        const labelEl = document.getElementById(`col-tbl-${key}-label`);
+        if (input) input.value = val;
+        if (labelEl) labelEl.textContent = label;
+        document.querySelectorAll(`#col-tbl-${key}-drop .col-tbl-fdrop-item`).forEach(el => {
+            el.classList.toggle('active', el.dataset.val === val);
+        });
+        this._closeAllFilterDrops();
+        this._applyTableFilters();
+    },
+
+    _ensureFilterOutsideClick() {
+        if (this._filterOutsideBound) return;
+        this._filterOutsideBound = true;
+        document.addEventListener('click', e => {
+            if (!e.target.closest('.col-tbl-fgroup')) this._closeAllFilterDrops();
+        });
+    },
+
     _tableHtml() {
         const widths = this._loadColWidths();
         const resizer = field => `<span class="col-tbl-resizer" onmousedown="CollectionsPage._startColResize(event,'${field}')" onclick="event.stopPropagation()"></span>`;
@@ -177,18 +247,54 @@ const CollectionsPage = {
         };
         return `
             <style>
-                .col-tbl-toolbar{display:flex;align-items:center;gap:.6rem;margin-bottom:.85rem;flex-wrap:wrap}
-                .col-tbl-search{position:relative;flex:1;min-width:220px}
-                .col-tbl-search input{width:100%;height:36px;padding:0 12px 0 34px;border-radius:var(--radius-md);
-                    border:1px solid var(--border);background:var(--bg-surface);color:var(--text-primary);
-                    font-size:.85rem;outline:none;box-sizing:border-box;transition:border-color .15s}
-                .col-tbl-search input:focus{border-color:var(--primary)}
-                .col-tbl-search i{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:.8rem;pointer-events:none}
-                .col-tbl-fselect{height:36px;padding:0 10px;font-size:.85rem;background:var(--bg-surface);
-                    border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text-primary);
-                    outline:none;cursor:pointer}
-                .col-tbl-fselect:focus{border-color:var(--primary)}
-                .col-tbl-count{font-size:.78rem;color:var(--text-muted);white-space:nowrap;margin-left:auto}
+                @keyframes colTbToolbarIn{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:translateY(0)}}
+                .col-tbl-toolbar{display:flex;align-items:center;gap:.5rem;margin-bottom:1rem;padding:.45rem;flex-wrap:wrap;
+                    background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);
+                    box-shadow:var(--shadow-sm);animation:colTbToolbarIn .3s cubic-bezier(.16,1,.3,1)}
+                @media (prefers-reduced-motion: reduce){.col-tbl-toolbar{animation:none}}
+                .col-tbl-search{position:relative;flex:1;min-width:200px}
+                .col-tbl-search i{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--text-muted);
+                    font-size:.78rem;pointer-events:none;transition:color .2s ease}
+                .col-tbl-search input{width:100%;height:38px;padding:0 14px 0 36px;border-radius:999px;box-sizing:border-box;
+                    border:1.5px solid transparent;background:var(--bg-hover);color:var(--text-primary);
+                    font-size:.85rem;outline:none;transition:border-color .2s ease,background .2s ease,box-shadow .2s ease}
+                .col-tbl-search input::placeholder{color:var(--text-muted)}
+                .col-tbl-search input:focus{border-color:var(--primary);background:var(--bg-surface);box-shadow:0 0 0 4px var(--primary-glow)}
+                .col-tbl-search:focus-within i{color:var(--primary)}
+                .col-tbl-divider{width:1px;align-self:stretch;margin:3px 0;background:var(--border);flex-shrink:0}
+                .col-tbl-fgroup{position:relative;flex-shrink:0}
+                .col-tbl-fbtn{display:flex;align-items:center;gap:.4rem;height:38px;padding:0 11px;border-radius:999px;
+                    border:1.5px solid transparent;background:var(--bg-hover);cursor:pointer;
+                    font:inherit;font-size:.82rem;font-weight:500;color:var(--text-primary);
+                    transition:border-color .2s ease,background .2s ease,box-shadow .2s ease}
+                .col-tbl-fbtn i:first-child{font-size:.72rem;color:var(--text-muted);transition:color .2s ease}
+                .col-tbl-fbtn i:last-child{font-size:.55rem;color:var(--text-muted);transition:transform .2s ease,color .2s ease}
+                .col-tbl-fbtn:hover{background:var(--bg-raised)}
+                .col-tbl-fgroup.open .col-tbl-fbtn{border-color:var(--primary);background:var(--bg-surface);box-shadow:0 0 0 4px var(--primary-glow)}
+                .col-tbl-fgroup.open .col-tbl-fbtn i:last-child{transform:rotate(180deg);color:var(--primary)}
+                .col-tbl-fgroup.active .col-tbl-fbtn{border-color:color-mix(in srgb, var(--primary) 45%, var(--border));
+                    background:color-mix(in srgb, var(--primary) 8%, var(--bg-hover))}
+                .col-tbl-fgroup.active .col-tbl-fbtn i:first-child{color:var(--primary)}
+                @keyframes colTbDropIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+                .col-tbl-fdrop{position:absolute;top:calc(100% + 6px);left:0;min-width:180px;z-index:30;
+                    background:var(--bg-surface);border:1px solid var(--border);border-radius:12px;
+                    box-shadow:var(--shadow-md);padding:.3rem;animation:colTbDropIn .16s cubic-bezier(.16,1,.3,1)}
+                @media (prefers-reduced-motion: reduce){.col-tbl-fdrop{animation:none}}
+                .col-tbl-fdrop-item{padding:.5rem .65rem;border-radius:8px;font-size:.82rem;color:var(--text-primary);
+                    cursor:pointer;transition:background .12s ease;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+                .col-tbl-fdrop-item:hover{background:var(--bg-hover)}
+                .col-tbl-fdrop-item.active{color:var(--primary);font-weight:600;background:color-mix(in srgb, var(--primary) 10%, transparent)}
+                .col-tbl-count{margin-left:auto;display:flex;align-items:center;gap:.4rem;height:38px;padding:0 .95rem;
+                    border-radius:999px;background:var(--bg-hover);border:1px solid var(--border);
+                    font-size:.76rem;font-weight:600;color:var(--text-secondary);white-space:nowrap;
+                    font-variant-numeric:tabular-nums}
+                .col-tbl-count i{font-size:.68rem;color:var(--text-muted)}
+                @media (max-width:768px){
+                    .col-tbl-toolbar{padding:.55rem}
+                    .col-tbl-search{min-width:100%;order:-1}
+                    .col-tbl-divider{display:none}
+                    .col-tbl-count{margin-left:0;width:100%;justify-content:center}
+                }
                 .col-tbl-wrap{width:100%;overflow-x:auto;border-radius:var(--radius-lg);border:1px solid var(--border)}
                 .col-tbl{border-collapse:collapse;font-size:.85rem;table-layout:fixed}
                 .col-tbl-th{position:sticky;top:0;z-index:5;background:var(--bg-raised);color:var(--text-muted);
@@ -220,22 +326,33 @@ const CollectionsPage = {
                 .col-tbl-abtn.danger:hover{border-color:var(--danger);color:var(--danger)}
                 .col-tbl-abtn.active{color:var(--primary);border-color:var(--primary)}
                 .col-tbl-empty{padding:2.5rem;text-align:center;color:var(--text-muted)}
+                .col-tbl-sec-row{background:var(--bg-raised);cursor:pointer}
+                .col-tbl-sec-row:hover{background:var(--bg-hover)}
+                .col-tbl-sec-th{display:flex;align-items:center;gap:.5rem;padding:.55rem .85rem;font-weight:600;font-size:.82rem;color:var(--text-primary)}
+                .col-tbl-sec-th i.fa-chevron-down,.col-tbl-sec-th i.fa-chevron-right{font-size:.65rem;color:var(--text-muted);width:10px}
+                .col-tbl-sec-th i.fa-folder,.col-tbl-sec-th i.fa-folder-open{color:var(--primary);font-size:.85rem}
+                .col-tbl-sec-count{margin-left:.15rem;font-size:.7rem;font-weight:600;color:var(--text-muted);background:var(--bg-surface);border:1px solid var(--border);border-radius:20px;padding:0 7px}
+                #col-tbl-body.col-tbl-grouped tr:not(.col-tbl-sec-row) td:first-child{padding-left:2.3rem}
             </style>
             <div class="col-tbl-toolbar">
-                <div class="col-tbl-search">
+                <div class="col-tbl-search search-clear-wrap">
                     <i class="fa-solid fa-magnifying-glass"></i>
                     <input type="text" id="col-tbl-search-input" placeholder="Пошук за назвою…" autocomplete="off" oninput="CollectionsPage._applyTableFilters()">
+                    <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
                 </div>
-                <select id="col-tbl-status-filter" class="col-tbl-fselect" onchange="CollectionsPage._applyTableFilters()">
-                    <option value="">Усі статуси</option>
-                    <option value="published">Опубліковано</option>
-                    <option value="draft">Чернетка</option>
-                </select>
-                <select id="col-tbl-home-filter" class="col-tbl-fselect" onchange="CollectionsPage._applyTableFilters()">
-                    <option value="">Усі сторінки</option>
-                    <option value="home">Лише головна</option>
-                </select>
-                <span class="col-tbl-count" id="col-tbl-count"></span>
+                <div class="col-tbl-divider"></div>
+                ${this._filterDropHtml('status', 'fa-circle-half-stroke', 'Усі статуси', [
+                    ['', 'Усі статуси'], ['published', 'Опубліковано'], ['draft', 'Чернетка']
+                ])}
+                ${this._filterDropHtml('home', 'fa-house', 'Усі сторінки', [
+                    ['', 'Усі сторінки'], ['home', 'Лише головна']
+                ])}
+                ${this._filterDropHtml('section', 'fa-folder', 'Усі розділи', [
+                    ['', 'Усі розділи'],
+                    ...this._distinctSections().map(s => [s, s]),
+                    ['__none__', 'Без розділу']
+                ])}
+                <span class="col-tbl-count"><i class="fa-solid fa-layer-group"></i> <span id="col-tbl-count"></span></span>
             </div>
             <div class="col-tbl-wrap">
                 <table class="col-tbl">
@@ -271,6 +388,11 @@ const CollectionsPage = {
     },
 
     _applyTableFilters() {
+        ['status', 'home', 'section'].forEach(key => {
+            const sel = document.getElementById(`col-tbl-${key}-filter`);
+            const group = document.getElementById(`col-tbl-${key}-group`);
+            if (sel && group) group.classList.toggle('active', !!sel.value);
+        });
         this._renderTableRows();
     },
 
@@ -281,23 +403,27 @@ const CollectionsPage = {
         const q = (document.getElementById('col-tbl-search-input')?.value || '').trim().toLowerCase();
         const statusF = document.getElementById('col-tbl-status-filter')?.value || '';
         const homeF = document.getElementById('col-tbl-home-filter')?.value || '';
+        const sectionF = document.getElementById('col-tbl-section-filter')?.value || '';
 
         let rows = this._pagesAll.filter(p => {
             if (q && !(p.title || '').toLowerCase().includes(q)) return false;
             if (statusF === 'published' && !p.is_published) return false;
             if (statusF === 'draft' && p.is_published) return false;
             if (homeF === 'home' && !p.is_home) return false;
+            if (sectionF === '__none__' && p.section) return false;
+            if (sectionF && sectionF !== '__none__' && p.section !== sectionF) return false;
             return true;
         });
 
         const field = this._sortField, dir = this._sortDir;
-        rows = [...rows].sort((a, b) => {
+        const sortFn = (a, b) => {
             let av = a[field], bv = b[field];
             if (field === 'title') { av = (av || '').toLowerCase(); bv = (bv || '').toLowerCase(); return av.localeCompare(bv, 'uk') * dir; }
             if (field === 'is_published') { return ((a.is_published ? 1 : 0) - (b.is_published ? 1 : 0)) * dir; }
             av = av || ''; bv = bv || '';
             return (av < bv ? -1 : av > bv ? 1 : 0) * dir;
-        });
+        };
+        rows = [...rows].sort(sortFn);
 
         document.querySelectorAll('.col-tbl-th .sort-arrow').forEach(el => el.classList.remove('active'));
         const activeSpan = document.querySelector(`.sort-btns[data-field="${field}"]`);
@@ -307,19 +433,92 @@ const CollectionsPage = {
         document.getElementById('col-tbl-count').textContent = `${rows.length} з ${this._pagesAll.length}`;
 
         if (!rows.length) {
+            tbody.classList.remove('col-tbl-grouped');
             tbody.innerHTML = `<tr><td colspan="5" class="col-tbl-empty">Нічого не знайдено</td></tr>`;
             return;
         }
-        tbody.innerHTML = rows.map(p => this._renderTableRow(p)).join('');
+
+        // Групування розділами вимикається під час пошуку — показуємо плаский
+        // відфільтрований список, щоб не гортати розділи вручну.
+        if (q) {
+            tbody.classList.remove('col-tbl-grouped');
+            tbody.innerHTML = rows.map(p => this._renderTableRow(p, q)).join('');
+            return;
+        }
+        tbody.classList.add('col-tbl-grouped');
+        tbody.innerHTML = this._renderGroupedRows(rows);
     },
 
-    _renderTableRow(p) {
+    // ── Section grouping ─────────────────────────────────────────
+
+    _distinctSections() {
+        const set = new Set();
+        this._pagesAll.forEach(p => { if (p.section) set.add(p.section); });
+        return [...set].sort((a, b) => a.localeCompare(b, 'uk'));
+    },
+
+    _loadSectionCollapse() {
+        try { return new Set(JSON.parse(localStorage.getItem('col_section_collapsed') || '[]')); }
+        catch { return new Set(); }
+    },
+
+    _toggleSection(rowEl) {
+        const key = rowEl.dataset.secKey;
+        const collapsed = this._loadSectionCollapse();
+        if (collapsed.has(key)) collapsed.delete(key); else collapsed.add(key);
+        try { localStorage.setItem('col_section_collapsed', JSON.stringify([...collapsed])); } catch {}
+        this._renderTableRows();
+    },
+
+    _renderGroupedRows(rows) {
+        const groups = new Map(); // section name ('' = без розділу) → сторінки
+        rows.forEach(p => {
+            const key = p.section || '';
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key).push(p);
+        });
+        const names = [...groups.keys()].filter(k => k !== '').sort((a, b) => a.localeCompare(b, 'uk'));
+        if (groups.has('')) names.push(''); // "Без розділу" — завжди останнім
+
+        const collapsed = this._loadSectionCollapse();
+        return names.map(name => {
+            const list = groups.get(name);
+            const label = name || 'Без розділу';
+            const key = name || '__none__';
+            const isCollapsed = collapsed.has(key);
+            const header = `
+                <tr class="col-tbl-sec-row" data-sec-key="${Fmt.esc(key)}" onclick="CollectionsPage._toggleSection(this)">
+                    <td colspan="5" class="col-tbl-sec-th">
+                        <i class="fa-solid fa-chevron-${isCollapsed ? 'right' : 'down'}"></i>
+                        <i class="fa-solid fa-folder${isCollapsed ? '' : '-open'}"></i>
+                        <span>${Fmt.esc(label)}</span>
+                        <span class="col-tbl-sec-count">${list.length}</span>
+                    </td>
+                </tr>`;
+            const body = isCollapsed ? '' : list.map(p => this._renderTableRow(p)).join('');
+            return header + body;
+        }).join('');
+    },
+
+    // Підсвічує збіг пошукового запиту в escaped-тексті. Порівняння без
+    // урахування регістру, сам текст лишається безпечно екранованим —
+    // підсвічуємо вже після Fmt.esc(), тому обгортка <mark> не може зламати HTML.
+    _highlightMatch(text, query) {
+        if (!query || !text) return Fmt.esc(text || '');
+        const esc = Fmt.esc(text);
+        const escQuery = Fmt.esc(query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return esc.replace(new RegExp(`(${escQuery})`, 'gi'),
+            '<mark style="background:#fde047;color:#1e1e1e;border-radius:2px;padding:0 1px">$1</mark>');
+    },
+
+    _renderTableRow(p, query = '') {
         const canManage = AppState.isStaff() && AppState.canMutate();
         const statusBadge = p.is_published
             ? `<span class="badge badge-success">опубліковано</span>`
             : `<span class="badge badge-muted">чернетка</span>`;
         const tags = [
             p.is_home ? `<span class="col-tbl-tag" style="background:rgba(16,185,129,.12);color:#10b981;border-color:rgba(16,185,129,.25)">🏠 Головна</span>` : '',
+            p.section ? `<span class="col-tbl-tag" style="background:rgba(139,92,246,.12);color:#8b5cf6;border-color:rgba(139,92,246,.25)">📁 ${Fmt.esc(p.section)}</span>` : '',
             ...(p.allowed_labels || []).map(l => `<span class="col-tbl-tag">🏷 ${Fmt.esc(l)}</span>`)
         ].filter(Boolean).join('');
 
@@ -337,7 +536,7 @@ const CollectionsPage = {
                     <a class="col-tbl-row-link" href="#/collections/${p.id}" aria-label="${Fmt.esc(p.title || 'Відкрити')}"></a>
                     <div class="col-tbl-title">
                         ${p.is_home ? '<i class="fa-solid fa-house" style="color:var(--primary);font-size:.78rem"></i>' : ''}
-                        ${Fmt.esc(p.title)}
+                        <span>${this._highlightMatch(p.title, query)}</span>
                     </div>
                 </td>
                 <td>${statusBadge}</td>
@@ -556,11 +755,12 @@ const CollectionsPage = {
                             }
                         </style>
                         <div id="pg-search-bar" class="col-search-bar">
-                            <div class="col-search-wrap">
+                            <div class="col-search-wrap search-clear-wrap">
                                 <span class="col-search-icon"><i class="fa-solid fa-magnifying-glass"></i></span>
                                 <input id="pg-search-input" type="text" placeholder="Пошук на сторінці…" autocomplete="off"
                                        oninput="CollectionsPage._onSearchInput()"
                                        onkeydown="if(event.key==='Enter'){event.preventDefault();CollectionsPage._searchNav(1);}if(event.key==='Escape'){this.value='';CollectionsPage._applySearch('');}">
+                                <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
                             </div>
                             <span id="pg-search-count" style="font-size:.75rem;font-weight:600;color:var(--text-muted);white-space:nowrap;min-width:72px;text-align:right;letter-spacing:.01em"></span>
                         </div>` : ''}
@@ -799,6 +999,33 @@ document.addEventListener('click', function(e) {
         if (btn) { btn.classList.remove('btn-warning'); btn.classList.add('btn-primary'); btn.innerHTML = '<i class="fa-regular fa-floppy-disk"></i> Зберегти'; }
     },
 
+    // ── Section combobox (кастомний випадний список замість native datalist) ──
+    _filterSectionSuggest() {
+        const input = document.getElementById('page-section-input');
+        const box   = document.getElementById('page-section-suggest');
+        if (!input || !box) return;
+        const q = input.value.trim().toLowerCase();
+        const list = (this._sectionOptions || []).filter(s => !q || s.toLowerCase().includes(q));
+        if (!list.length) {
+            box.innerHTML = q ? `<div class="col-section-suggest-empty">Нових збігів немає — Enter створить «${Fmt.esc(input.value.trim())}»</div>` : '';
+            box.style.display = q ? 'block' : 'none';
+            return;
+        }
+        box.innerHTML = list.map(s => `<div class="col-section-suggest-item" data-val="${Fmt.esc(s)}" onmousedown="event.preventDefault();CollectionsPage._pickSection(this.dataset.val)">${Fmt.esc(s)}</div>`).join('');
+        box.style.display = 'block';
+    },
+
+    _pickSection(val) {
+        const input = document.getElementById('page-section-input');
+        if (input) { input.value = val; this._markDirty(); }
+        this._hideSectionSuggest();
+    },
+
+    _hideSectionSuggest() {
+        const box = document.getElementById('page-section-suggest');
+        if (box) box.style.display = 'none';
+    },
+
     async openEditor(id = null) {
         this._destroyEditor();
         this._editingPageId = id;
@@ -809,18 +1036,21 @@ document.addEventListener('click', function(e) {
         this._insertedIds   = new Set();
         const editHash = '#/' + (id ? `collections/${id}/edit` : 'collections/new');
         if (location.hash !== editHash) history.pushState(null, '', editHash);
-        let page = null, attachments = [], groups = [], allDov = [], selectedDovIds = [];
+        let page = null, attachments = [], groups = [], allDov = [], selectedDovIds = [], allSections = [];
         Loader.show();
         try {
             const fetches = [
                 API.accessGroups.getAll().catch(() => []),
-                API.dovirenosti.getAll().catch(() => [])
+                API.dovirenosti.getAll().catch(() => []),
+                API.pages.getAll().catch(() => [])
             ];
             if (id) fetches.push(API.pages.getById(id), API.pageAttachments.getAll(id), API.pageDovirenosti.get(id).catch(() => []));
             const results = await Promise.all(fetches);
             groups      = results[0];
             allDov      = results[1];
-            if (id) { page = results[2]; attachments = results[3]; selectedDovIds = results[4]; }
+            allSections = [...new Set(results[2].map(p => p.section).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'uk'));
+            this._sectionOptions = allSections;
+            if (id) { page = results[3]; attachments = results[4]; selectedDovIds = results[5]; }
             this._editingPageData = page;
         }
         catch (e) { Toast.error('Помилка', e.message); Loader.hide(); return; }
@@ -832,7 +1062,7 @@ document.addEventListener('click', function(e) {
             { label: id ? 'Редагувати' : 'Нова сторінка' }
         ]);
         this._allDov = allDov;
-        container.innerHTML = this._editorHtml(page, groups, allDov, selectedDovIds);
+        container.innerHTML = this._editorHtml(page, groups, allDov, selectedDovIds, allSections);
         this._initEditor(page);
         if (page?.html_content) {
             const found = [...page.html_content.matchAll(/att:([0-9a-f-]{36})/g)];
@@ -841,7 +1071,7 @@ document.addEventListener('click', function(e) {
         this._renderAttachmentGrid(attachments);
     },
 
-    _editorHtml(page, groups = [], allDov = [], selectedDovIds = []) {
+    _editorHtml(page, groups = [], allDov = [], selectedDovIds = [], allSections = []) {
         const selectedLabels = page?.allowed_labels || [];
         const groupNames = groups.map(g => g.name).sort();
         const dovNames = allDov.map(d => ({ id: d.id, name: d.name }));
@@ -904,6 +1134,18 @@ document.addEventListener('click', function(e) {
                             <label>Назва сторінки *</label>
                             <input id="page-title-input" class="col-title-input" type="text" value="${Fmt.esc(page?.title || '')}" placeholder="Введіть назву сторінки…"
                                    oninput="CollectionsPage._markDirty()">
+                        </div>
+                        <div class="col-field" style="margin-top:.75rem">
+                            <label><i class="fa-solid fa-folder" style="color:var(--text-muted);margin-right:.3rem"></i>Розділ</label>
+                            <div class="col-section-combo">
+                                <input id="page-section-input" class="col-tb-select" type="text" style="cursor:text"
+                                       value="${Fmt.esc(page?.section || '')}" placeholder="Наприклад: Онбординг"
+                                       autocomplete="off"
+                                       oninput="CollectionsPage._markDirty();CollectionsPage._filterSectionSuggest()"
+                                       onfocus="CollectionsPage._filterSectionSuggest()"
+                                       onblur="setTimeout(()=>CollectionsPage._hideSectionSuggest(),150)">
+                                <div id="page-section-suggest" class="col-section-suggest" style="display:none"></div>
+                            </div>
                         </div>
                     </div>
 
@@ -1101,6 +1343,12 @@ document.addEventListener('click', function(e) {
             .col-tb-select { width:100%;box-sizing:border-box;padding:.45rem .6rem;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-hover);color:var(--text-primary);font-family:inherit;font-size:.82rem;outline:none;cursor:pointer;transition:border-color .15s,box-shadow .15s; }
             .col-tb-select:hover { border-color:color-mix(in srgb,var(--primary) 40%,var(--border)); }
             .col-tb-select:focus { border-color:var(--primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 16%,transparent); }
+            .col-section-combo { position:relative; }
+            .col-section-suggest { position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:20;max-height:220px;overflow-y:auto;
+                background:var(--bg-surface);border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow-md,0 8px 24px rgba(0,0,0,.18));padding:.3rem; }
+            .col-section-suggest-item { padding:.45rem .6rem;border-radius:7px;font-size:.82rem;color:var(--text-primary);cursor:pointer;transition:background .12s; }
+            .col-section-suggest-item:hover,.col-section-suggest-item.active { background:var(--bg-hover);color:var(--primary); }
+            .col-section-suggest-empty { padding:.45rem .6rem;font-size:.8rem;color:var(--text-muted); }
             .col-tb-list { border:1px solid var(--border);border-radius:10px;background:var(--bg-hover);padding:.25rem .4rem; }
             .col-tb-list-empty { font-size:.8rem;color:var(--text-muted);padding:.3rem .25rem; }
             .col-tb-check-row { display:flex;align-items:center;gap:.5rem;padding:.32rem .35rem;border-radius:7px;cursor:pointer;font-size:.84rem;transition:background .12s; }
@@ -1599,8 +1847,11 @@ tr:hover td { background: #f8fafc; }
                 title: 'Вставити посилання на ресурс',
                 size: 'md',
                 body: `
-                    <input type="text" placeholder="Пошук..." style="width:100%;margin-bottom:.75rem"
-                           oninput="CollectionsPage.__filterRes(this.value)">
+                    <div class="search-clear-wrap" style="width:100%;margin-bottom:.75rem">
+                        <input type="text" placeholder="Пошук..." style="width:100%"
+                               oninput="CollectionsPage.__filterRes(this.value)">
+                        <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
                     <div id="res-link-list" style="max-height:360px;overflow-y:auto;display:flex;flex-direction:column;gap:.35rem">
                         ${data.map(r => `
                             <div onclick="CollectionsPage.__pickRes('${r.id}',${JSON.stringify(r.title||'').replace(/"/g,'&quot;')},'${r.type||''}')"
@@ -1805,6 +2056,7 @@ tr:hover td { background: #f8fafc; }
             track_visits: document.getElementById('page-track-visits')
                 ? document.getElementById('page-track-visits').checked
                 : (this._editingPageData?.track_visits ?? false),
+            section: document.getElementById('page-section-input')?.value.trim() || null,
             allowed_labels
         };
         this._saving = true;
@@ -1925,8 +2177,11 @@ tr:hover td { background: #f8fafc; }
         return `
             <div style="display:flex;flex-direction:column;gap:.875rem">
                 <div style="font-size:.85rem;color:var(--text-muted)">${Fmt.esc(this._pvsTitle || '')}</div>
-                <input type="text" placeholder="Пошук за іменем або посадою…" value="${Fmt.esc(this._pvsSearch || '')}"
-                    style="width:100%" oninput="CollectionsPage._pvsSetSearch(this.value)">
+                <div class="search-clear-wrap" style="width:100%">
+                    <input type="text" placeholder="Пошук за іменем або посадою…" value="${Fmt.esc(this._pvsSearch || '')}"
+                        style="width:100%" oninput="CollectionsPage._pvsSetSearch(this.value)">
+                    <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
+                </div>
                 <div style="display:flex;align-items:center;padding:0 .25rem .4rem;gap:.75rem;border-bottom:1px solid var(--border);color:var(--text-muted);font-size:.72rem;font-weight:600;text-transform:uppercase">
                     <div style="flex:1">Співробітник</div>
                     <span>Переглядів</span>
@@ -2031,8 +2286,8 @@ tr:hover td { background: #f8fafc; }
             </div>
             <div style="width:76px;font-size:.65rem;color:var(--text-muted);text-align:center;margin-top:.2rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${name}</div>
             ${inserted ? `<div style="position:absolute;top:-5px;left:-5px;width:18px;height:18px;border-radius:50%;background:#10b981;color:#fff;font-size:.55rem;display:flex;align-items:center;justify-content:center;font-weight:700;pointer-events:none">✓</div>` : ''}
-            <button class="adel"
-                    onclick="event.stopPropagation();CollectionsPage._deleteAttachment('${att.id}')"
+            <button class="adel" data-name="${Fmt.esc(att.file_name)}"
+                    onclick="event.stopPropagation();CollectionsPage._deleteAttachment('${att.id}', this.dataset.name)"
                     style="display:none;position:absolute;top:-5px;right:-5px;width:20px;height:20px;border-radius:50%;background:#ef4444;color:#fff;border:none;cursor:pointer;font-size:.65rem;align-items:center;justify-content:center;z-index:2;font-weight:700">✕</button>
         </div>`;
     },
@@ -2062,6 +2317,7 @@ tr:hover td { background: #f8fafc; }
             is_published: document.getElementById('page-published')?.checked || false,
             search_enabled: document.getElementById('page-search-enabled')?.checked || false,
             network_visibility: document.getElementById('page-network-visibility')?.value || 'all',
+            section: document.getElementById('page-section-input')?.value.trim() || null,
             allowed_labels
         };
         Loader.show();
@@ -2113,8 +2369,29 @@ tr:hover td { background: #f8fafc; }
         }
     },
 
-    async _deleteAttachment(attId) {
-        if (!confirm('Видалити файл?')) return;
+    // Центрована модалка (не глобальний Modal.confirm — той є боковою
+    // панеллю на весь екран праворуч, для такого маленького підтвердження
+    // це виглядає незручно).
+    _deleteAttachment(attId, fileName) {
+        document.getElementById('col-delatt-confirm')?.remove();
+        const el = document.createElement('div');
+        el.id = 'col-delatt-confirm';
+        el.className = 'center-confirm-backdrop';
+        el.innerHTML = `
+            <div class="center-confirm-box">
+                <h3>Видалити файл?</h3>
+                <p>«${Fmt.esc(fileName || '')}» буде видалено назавжди.</p>
+                <div class="center-confirm-actions">
+                    <button class="btn btn-ghost" onclick="document.getElementById('col-delatt-confirm').remove()">Скасувати</button>
+                    <button class="btn btn-danger" onclick="CollectionsPage._submitDeleteAttachment('${attId}')">Видалити</button>
+                </div>
+            </div>`;
+        document.body.appendChild(el);
+        el.addEventListener('click', e => { if (e.target === el) el.remove(); });
+    },
+
+    async _submitDeleteAttachment(attId) {
+        document.getElementById('col-delatt-confirm')?.remove();
         Loader.show();
         try {
             await API.pageAttachments.delete(attId);

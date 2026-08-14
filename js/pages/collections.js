@@ -990,13 +990,13 @@ document.addEventListener('click', function(e) {
         if (this._isDirty) return;
         this._isDirty = true;
         const btn = document.getElementById('col-save-btn');
-        if (btn) { btn.classList.remove('btn-primary'); btn.classList.add('btn-warning'); btn.innerHTML = '<i class="fa-solid fa-circle" style="font-size:.45rem;vertical-align:middle;margin-right:.35rem"></i> Зберегти'; }
+        if (btn) { btn.classList.remove('btn-primary'); btn.classList.add('btn-warning'); btn.innerHTML = '<i class="fa-solid fa-circle" style="font-size:.45rem;vertical-align:middle;margin-right:.35rem"></i> Зберегти та закрити'; }
     },
 
     _markClean() {
         this._isDirty = false;
         const btn = document.getElementById('col-save-btn');
-        if (btn) { btn.classList.remove('btn-warning'); btn.classList.add('btn-primary'); btn.innerHTML = '<i class="fa-regular fa-floppy-disk"></i> Зберегти'; }
+        if (btn) { btn.classList.remove('btn-warning'); btn.classList.add('btn-primary'); btn.innerHTML = '<i class="fa-regular fa-floppy-disk"></i> Зберегти та закрити'; }
     },
 
     // ── Section combobox (кастомний випадний список замість native datalist) ──
@@ -1106,16 +1106,16 @@ document.addEventListener('click', function(e) {
                     <div style="position:relative;flex-shrink:0">
                         <div class="col-tb-save-split">
                             <button id="col-save-btn" class="col-tb-save-btn"
-                                    onclick="CollectionsPage.savePage(CollectionsPage._editingPageId || '', true)">
-                                <i class="fa-solid fa-check"></i> Зберегти
+                                    onclick="CollectionsPage.savePage(CollectionsPage._editingPageId || '', false)">
+                                <i class="fa-regular fa-floppy-disk"></i> Зберегти та закрити
                             </button>
                             <button class="col-tb-save-caret" onclick="CollectionsPage._toggleSaveMenu(this)">
                                 <i class="fa-solid fa-chevron-down"></i>
                             </button>
                         </div>
                         <div id="col-save-menu" class="col-tb-menu">
-                            <button class="col-tb-menu-item" onclick="CollectionsPage._selectSaveOption(CollectionsPage._editingPageId || '', false, 'Зберегти та закрити', 'fa-solid fa-floppy-disk')">
-                                <i class="fa-solid fa-floppy-disk" style="color:var(--text-muted);width:14px"></i> Зберегти та закрити
+                            <button class="col-tb-menu-item" onclick="CollectionsPage._selectSaveOption(CollectionsPage._editingPageId || '', true, 'Зберегти', 'fa-solid fa-check')">
+                                <i class="fa-solid fa-check" style="color:var(--text-muted);width:14px"></i> Зберегти
                             </button>
                         </div>
                     </div>
@@ -2307,6 +2307,10 @@ tr:hover td { background: #f8fafc; }
         if (!files.length) return;
         const title = document.getElementById('page-title-input')?.value.trim();
         if (!title) { Toast.warning('Вкажіть назву сторінки перед завантаженням файлів'); return; }
+        // Той самий guard, що й у savePage() — інакше одночасний клік "Зберегти"
+        // і прикріплення файлу до ще незбереженої сторінки викликають
+        // API.pages.create() паралельно й створюють дві сторінки замість однієї.
+        if (this._saving) return;
         // Auto-save first
         const allowed_labels = this._getSelectedLabels();
         const dovIds = this._getSelectedDovIds();
@@ -2320,6 +2324,9 @@ tr:hover td { background: #f8fafc; }
             section: document.getElementById('page-section-input')?.value.trim() || null,
             allowed_labels
         };
+        this._saving = true;
+        const saveBtn = document.getElementById('col-save-btn');
+        if (saveBtn) saveBtn.disabled = true;
         Loader.show();
         try {
             const created = await API.pages.create(fields);
@@ -2335,11 +2342,14 @@ tr:hover td { background: #f8fafc; }
                 </label>`;
             this._markClean();
             Loader.hide();
-            Toast.success('Сторінку збережено — завантажуємо файли');
+            Toast.success('Сторінку створено — завантажуємо файли');
         } catch(e) {
             Loader.hide();
             Toast.error('Помилка збереження', e.message);
             return;
+        } finally {
+            this._saving = false;
+            if (saveBtn) saveBtn.disabled = false;
         }
         await this._uploadFiles(this._editingPageId, files);
     },

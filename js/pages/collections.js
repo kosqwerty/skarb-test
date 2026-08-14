@@ -1064,6 +1064,7 @@ document.addEventListener('click', function(e) {
         this._allDov = allDov;
         container.innerHTML = this._editorHtml(page, groups, allDov, selectedDovIds, allSections);
         this._initEditor(page);
+        this._updateNetworkHint();
         if (page?.html_content) {
             const found = [...page.html_content.matchAll(/att:([0-9a-f-]{36})/g)];
             found.forEach(m => this._insertedIds.add(m[1]));
@@ -1244,10 +1245,11 @@ document.addEventListener('click', function(e) {
                         <div class="col-card-body">
                             <div class="col-field">
                                 <label>Мережа доступу</label>
-                                <select id="page-network-visibility" class="col-tb-select" onchange="CollectionsPage._markDirty()">
+                                <select id="page-network-visibility" class="col-tb-select" onchange="CollectionsPage._markDirty();CollectionsPage._updateNetworkHint()">
                                     <option value="all" ${(!page?.network_visibility || page.network_visibility === 'all') ? 'selected' : ''}>Видно з будь-якої мережі</option>
                                     <option value="trusted" ${page?.network_visibility === 'trusted' ? 'selected' : ''}>Тільки довірена мережа</option>
                                 </select>
+                                <div id="col-network-hint" class="col-net-hint"></div>
                             </div>
                             <div class="col-field">
                                 <label>Мітки груп</label>
@@ -1343,6 +1345,13 @@ document.addEventListener('click', function(e) {
             .col-tb-select { width:100%;box-sizing:border-box;padding:.45rem .6rem;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-hover);color:var(--text-primary);font-family:inherit;font-size:.82rem;outline:none;cursor:pointer;transition:border-color .15s,box-shadow .15s; }
             .col-tb-select:hover { border-color:color-mix(in srgb,var(--primary) 40%,var(--border)); }
             .col-tb-select:focus { border-color:var(--primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 16%,transparent); }
+            .col-net-hint{display:flex;align-items:flex-start;gap:.5rem;margin-top:.5rem;padding:.55rem .7rem;border-radius:10px;font-size:.76rem;line-height:1.4}
+            .col-net-hint i{margin-top:.1rem;flex-shrink:0}
+            .col-net-hint.ok{background:color-mix(in srgb,var(--success,#10b981) 10%,transparent);color:var(--text-secondary)}
+            .col-net-hint.ok i{color:var(--success,#10b981)}
+            .col-net-hint.warn{background:color-mix(in srgb,var(--warning,#f59e0b) 12%,transparent);color:var(--text-secondary)}
+            .col-net-hint.warn i{color:var(--warning,#f59e0b)}
+            .col-net-hint b{color:var(--text-primary)}
             .col-section-combo { position:relative; }
             .col-section-suggest { position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:20;max-height:220px;overflow-y:auto;
                 background:var(--bg-surface);border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow-md,0 8px 24px rgba(0,0,0,.18));padding:.3rem; }
@@ -1930,6 +1939,27 @@ tr:hover td { background: #f8fafc; }
                 if (!e.target.closest('#col-save-menu')) { m.style.display = 'none'; document.removeEventListener('click', h); }
             }), 0);
         }
+    },
+
+    // Пояснює, кому насправді буде видно сторінку залежно від вибраної мережі
+    // доступу, і показує поточний мережевий статус самого адміна для довідки
+    // (staff завжди бачить сторінку сам, незалежно від мережі — обмеження діє
+    // лише на звичайних користувачів, тож текст явно про це попереджає).
+    _updateNetworkHint() {
+        const sel  = document.getElementById('page-network-visibility');
+        const hint = document.getElementById('col-network-hint');
+        if (!sel || !hint) return;
+        const iAmTrusted = !!AppState.isTrustedNetwork;
+        const myStatus = iAmTrusted
+            ? '<b>довірена мережа</b> ✅'
+            : '<b>недовірена мережа</b> ⚠️';
+        if (sel.value !== 'trusted') {
+            hint.className = 'col-net-hint ok';
+            hint.innerHTML = `<i class="fa-solid fa-globe"></i><span>Бачать усі користувачі, з будь-якої мережі. Ваша поточна мережа: ${myStatus}.</span>`;
+            return;
+        }
+        hint.className = 'col-net-hint warn';
+        hint.innerHTML = `<i class="fa-solid fa-shield-halved"></i><span>Бачать лише користувачі, що заходять з довіреної мережі (напр. офісний Wi-Fi) — інші отримають "Доступ обмежено". <b>Адміни й superadmin бачать завжди</b>, незалежно від мережі. Ваша поточна мережа: ${myStatus}.</span>`;
     },
 
     _updateAccessSummary() {

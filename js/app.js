@@ -1169,14 +1169,35 @@ const DailyBriefModal = {
         } catch (e) { return []; }
     },
 
+    _shiftMeta: { work:{label:'Робоча зміна',color:'#10b981'}, day_off:{label:'Вихідний',color:'#8b5cf6'}, vacation:{label:'Відпустка',color:'#f59e0b'}, sick:{label:'Лікарняний',color:'#ef4444'} },
+
+    _shiftRowHtml(s) {
+        if (!s) return '';
+        const m = this._shiftMeta[s.shift_type] || this._shiftMeta.work;
+        const loc = s.schedule_locations?.name ? ` · ${Fmt.esc(s.schedule_locations.name)}` : '';
+        return `<div class="dbb-row">
+            <span class="dbb-row-dot" style="background:${m.color}"></span>
+            <span class="dbb-row-title" style="font-weight:600">${m.label}${loc}</span>
+        </div>`;
+    },
+
     async _show(todayStr) {
         const isManager = !!AppState.canSchedule?.();
-        const [evRes, helpList, notifRes] = await Promise.all([
+        const p = n => String(n).padStart(2, '0');
+        const tomorrowD = new Date(todayStr + 'T00:00:00'); tomorrowD.setDate(tomorrowD.getDate() + 1);
+        const tomorrowStr = `${tomorrowD.getFullYear()}-${p(tomorrowD.getMonth() + 1)}-${p(tomorrowD.getDate())}`;
+
+        const [evRes, shiftRes, helpList, notifRes] = await Promise.all([
             supabase.from('personal_cal_events')
-                .select('id,title,time,end_time,color,is_important')
+                .select('id,title,date,time,end_time,color,is_important')
                 .eq('user_id', AppState.user.id)
-                .eq('date', todayStr)
+                .in('date', [todayStr, tomorrowStr])
                 .order('time', { nullsFirst: true })
+                .then(r => r).catch(() => ({ data: [] })),
+            supabase.from('schedule_entries')
+                .select('date,shift_type,notes,schedule_locations(name)')
+                .eq('user_id', AppState.user.id)
+                .in('date', [todayStr, tomorrowStr])
                 .then(r => r).catch(() => ({ data: [] })),
             isManager ? this._loadCoverageGaps(todayStr) : this._loadMgrHelpRequests(todayStr),
             supabase.from('notifications')
@@ -1188,11 +1209,16 @@ const DailyBriefModal = {
                 .then(r => r).catch(() => ({ data: [] })),
         ]);
 
-        const evList    = evRes.data || [];
-        const notifList = notifRes.data || [];
+        const allEvents  = evRes.data || [];
+        const allShifts  = shiftRes.data || [];
+        const notifList  = notifRes.data || [];
+        const todayEvs    = allEvents.filter(e => e.date === todayStr);
+        const tomorrowEvs = allEvents.filter(e => e.date === tomorrowStr);
+        const todayShift    = allShifts.find(s => s.date === todayStr);
+        const tomorrowShift = allShifts.find(s => s.date === tomorrowStr);
 
-        // Якщо на сьогодні взагалі нічого показати — не турбуємо порожньою модалкою
-        if (!evList.length && !helpList.length && !notifList.length) return;
+        // Якщо взагалі нічого показати — не турбуємо порожньою модалкою
+        if (!todayEvs.length && !tomorrowEvs.length && !todayShift && !tomorrowShift && !helpList.length && !notifList.length) return;
         // Не показуємо поверх модалок днів народження/річниці — ці вже мають
         // власний setTimeout і могли з'явитись першими.
         if (document.getElementById('birthday-modal') || document.getElementById('anniversary-modal')) {
@@ -1201,13 +1227,17 @@ const DailyBriefModal = {
         }
 
         const fmtTime = t => t ? t.slice(0, 5) : '';
-        const evHtml = evList.length ? evList.map(e => `
+        const evRowsHtml = list => list.map(e => `
             <div class="dbb-row">
                 <span class="dbb-row-dot" style="background:${e.color || '#6366f1'}"></span>
                 <span class="dbb-row-time">${e.time ? fmtTime(e.time) + (e.end_time ? '–' + fmtTime(e.end_time) : '') : 'Весь день'}</span>
                 <span class="dbb-row-title">${Fmt.esc(e.title)}</span>
                 ${e.is_important ? '<span class="dbb-row-flag">⭐</span>' : ''}
-            </div>`).join('') : `<div class="dbb-empty">Немає запланованих справ на сьогодні</div>`;
+            </div>`).join('');
+
+        const todayHtml = this._shiftRowHtml(todayShift) + evRowsHtml(todayEvs) ||
+            `<div class="dbb-empty">Немає запланованих справ на сьогодні</div>`;
+        const tomorrowBody = this._shiftRowHtml(tomorrowShift) + evRowsHtml(tomorrowEvs);
 
         const helpHtml = helpList.length ? helpList.map(h => {
             const d = new Date(h.date + 'T00:00:00').toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' });
@@ -1261,8 +1291,12 @@ const DailyBriefModal = {
     <div class="dbb-body">
         <div class="dbb-section">
             <div class="dbb-section-title">📅 Справи на сьогодні</div>
-            ${evHtml}
+            ${todayHtml}
         </div>
+        ${tomorrowBody ? `<div class="dbb-section">
+            <div class="dbb-section-title">🌙 Завтра</div>
+            ${tomorrowBody}
+        </div>` : ''}
         <div class="dbb-section">
             <div class="dbb-section-title">🆘 ${isManager ? 'Потрібна підміна у ваших локаціях' : 'Запити керівника на підміну'}</div>
             ${helpHtml}

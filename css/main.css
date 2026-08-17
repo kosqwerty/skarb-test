@@ -1950,20 +1950,6 @@ body.light-theme .logo-icon .logo-dark  { display: none; }
 .res-star-btn:hover { border-color: #f59e0b; color: #f59e0b; background: rgba(245,158,11,.1); }
 .res-star-btn.active { border-color: #f59e0b; color: #f59e0b; background: rgba(245,158,11,.12); }
 
-@keyframes doc-ack-pulse {
-    0%, 100% {
-        box-shadow: 0 0 0 0 rgba(16,185,129,0.7);
-        transform: scale(1);
-    }
-    50% {
-        box-shadow: 0 0 0 8px rgba(16,185,129,0);
-        transform: scale(1.04);
-    }
-}
-.doc-ack-pulse {
-    animation: doc-ack-pulse 1.4s ease-in-out infinite;
-}
-
 .resource-item.bookmarked {
     border-left: 3px solid #C9A227;
     background: rgba(201,162,39,0.06);
@@ -2966,51 +2952,162 @@ select {
     flex-shrink: 0;
 }
 
-/* ── Toast ──────────────────────────────────────────────────────── */
+/* ── Toast — macOS-style banner notifications, stacked into an accordion ──
+   Найновіший тост — перша дитина в DOM (Toast.prepend), тому стек рахує
+   --stack-i від 0 (згори). Згорнуто показує лише верхній тост + "віяло"
+   країв позаду; наведення на контейнер розгортає повний список. */
 .toast-container {
     position: fixed;
-    top: 1.25rem;
+    top: calc(64px + 1rem); /* нижче .top-bar (64px), інакше стек перекриває його */
     right: 1.25rem;
     z-index: 99999;
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
     pointer-events: none;
 }
 
+/* Кнопка-годинник — на тому самому правому краю, де й стек тостів.
+   З'являється лише коли всі активні тости вже зникли (Toast._syncHistBtn). */
+.toast-hist-btn {
+    position: fixed;
+    top: calc(64px + 1rem);
+    right: 1.25rem;
+    z-index: 99998;
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--bg-surface); border: 1px solid var(--border); color: var(--text-secondary);
+    align-items: center; justify-content: center; font-size: .82rem;
+    cursor: pointer; box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,.15));
+    transition: background .15s ease, color .15s ease, transform .15s ease;
+    display: none;
+}
+.toast-hist-btn.visible { display: flex; }
+.toast-hist-btn:hover { background: var(--bg-hover); color: var(--text-primary); transform: scale(1.07); }
+
+.toast-hist-panel {
+    position: fixed; z-index: 99999; width: 320px; max-height: 420px; overflow-y: auto;
+    background: var(--bg-surface); border: 1px solid var(--border); border-radius: 14px;
+    box-shadow: 0 20px 50px -12px rgba(0,0,0,.35), 0 4px 14px rgba(0,0,0,.1);
+    padding: .5rem;
+    animation: toastHistIn .18s cubic-bezier(.4,0,.2,1) both;
+}
+@keyframes toastHistIn { from { opacity: 0; transform: translateY(-6px) scale(.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@media (prefers-reduced-motion: reduce) { .toast-hist-panel { animation: none; } }
+.toast-hist-panel::-webkit-scrollbar { width: 6px; }
+.toast-hist-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+.toast-hist-head { display: flex; align-items: center; justify-content: space-between; padding: .3rem .5rem .5rem; }
+.toast-hist-title { font-size: .72rem; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); }
+.toast-hist-clear { font-size: .72rem; color: var(--primary); background: none; border: none; cursor: pointer; font-family: inherit; padding: .2rem .4rem; border-radius: 6px; }
+.toast-hist-clear:hover { background: var(--bg-hover); }
+.toast-hist-empty { padding: 1.5rem .5rem; text-align: center; color: var(--text-muted); font-size: .82rem; }
+.toast-hist-row { display: flex; align-items: flex-start; gap: .55rem; padding: .5rem; border-radius: 10px; }
+.toast-hist-row:hover { background: var(--bg-hover); }
+.toast-hist-icon { width: 26px; height: 26px; border-radius: 7px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: #fff; font-size: .68rem; }
+.toast-hist-info { min-width: 0; flex: 1; }
+.toast-hist-row-title { font-size: .82rem; font-weight: 600; color: var(--text-primary); }
+.toast-hist-row-msg { font-size: .74rem; color: var(--text-muted); margin-top: .1rem; }
+.toast-hist-row-time { font-size: .68rem; color: var(--text-muted); flex-shrink: 0; white-space: nowrap; margin-left: .4rem; }
+
 .toast {
-    background: var(--bg-surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    padding: 0.875rem 1.25rem;
+    width: 340px;
+    max-width: 380px;
+    pointer-events: auto;
+    animation: toastMacIn .45s cubic-bezier(.16,1,.3,1);
+    transform-origin: top center;
+    transition: transform .32s cubic-bezier(.4,0,.2,1), opacity .32s cubic-bezier(.4,0,.2,1), margin-top .32s cubic-bezier(.4,0,.2,1);
+    margin-top: .5rem;
+    z-index: calc(50 - var(--stack-i, 0));
+}
+.toast:first-child { margin-top: 0; }
+
+/* Скляна панель — статична (без transform/animation на собі), тому
+   backdrop-filter коректно рендериться навіть під час руху .toast. */
+.toast-glass {
+    background: rgba(255,255,255,.55);
+    border: 1px solid rgba(255,255,255,.4);
+    border-radius: 14px;
+    padding: .7rem .85rem .75rem;
     display: flex;
     align-items: flex-start;
-    gap: 0.75rem;
-    min-width: 280px;
-    max-width: 380px;
-    box-shadow: var(--shadow-md);
-    pointer-events: auto;
-    animation: toastIn 0.3s cubic-bezier(0.34,1.56,0.64,1);
-    border-left: 4px solid var(--border);
+    gap: .65rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 12px 32px rgba(0,0,0,.16);
+    backdrop-filter: blur(20px) saturate(1.7);
+    -webkit-backdrop-filter: blur(20px) saturate(1.7);
 }
-@keyframes toastIn {
-    from { opacity: 0; transform: translateX(100%); }
-    to   { opacity: 1; transform: translateX(0); }
-}
-.toast.removing { animation: toastOut 0.25s ease forwards; }
-@keyframes toastOut {
-    to { opacity: 0; transform: translateX(100%); }
+body:not(.light-theme) .toast-glass {
+    background: rgba(40,40,44,.55);
+    border-color: rgba(255,255,255,.1);
+    box-shadow: 0 1px 3px rgba(0,0,0,.35), 0 16px 40px rgba(0,0,0,.5);
 }
 
-.toast.success { border-left-color: var(--success); }
-.toast.error   { border-left-color: var(--danger); }
-.toast.warning { border-left-color: var(--warning); }
-.toast.info    { border-left-color: var(--info); }
+.toast-glass { position: relative; }
+.toast-close {
+    position: absolute; top: -7px; left: -7px; z-index: 5;
+    width: 19px; height: 19px; border-radius: 50%; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(120,120,128,.9); color: #fff; font-size: .55rem;
+    border: 1.5px solid rgba(255,255,255,.7);
+    box-shadow: 0 1px 3px rgba(0,0,0,.25);
+    cursor: pointer; opacity: 0; transform: scale(.7);
+    transition: opacity .15s ease, transform .15s ease, background .15s ease;
+}
+body:not(.light-theme) .toast-close { border-color: rgba(0,0,0,.4); }
+.toast:hover .toast-close, .toast-close:focus-visible { opacity: 1; transform: scale(1); }
+.toast-close:hover { background: #e0342a; }
+@keyframes toastMacIn {
+    0%   { opacity: 0; transform: translateY(-18px) scale(.94); }
+    60%  { opacity: 1; }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.toast.removing { animation: toastMacOut .3s cubic-bezier(.4,0,1,1) forwards; }
+@keyframes toastMacOut {
+    to { opacity: 0; transform: translateY(-10px) scale(.96); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .toast, .toast.removing { animation: none; }
+}
 
-.toast-icon { font-size: 1.2rem; flex-shrink: 0; margin-top: 0.1rem; }
-.toast-content { flex: 1; }
-.toast-title { font-weight: 600; font-size: 0.875rem; }
-.toast-msg   { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.15rem; }
+/* Згорнутий стан — тости з i>0 ховаються майже повністю за верхнім,
+   лишаючи тонкий "корінець" картки видимим і трохи звужуючись з глибиною.
+   Сам margin-top (залежить від реальної висоти картки) рахує й виставляє
+   inline JS (Toast._restack) — тут лише transform/opacity через --stack-i. */
+.toast:not(:first-child) {
+    transform: scale(calc(1 - var(--stack-i, 0) * 0.045));
+    opacity: calc(1 - var(--stack-i, 0) * 0.22);
+}
+.toast:nth-child(n+5) { opacity: 0; pointer-events: none; }
+.toast-container:hover .toast {
+    margin-top: .5rem !important;
+    transform: scale(1);
+    opacity: 1;
+}
+.toast-container:hover .toast:first-child { margin-top: 0 !important; }
+
+.toast-stack-count {
+    position: absolute; top: -8px; right: -8px; z-index: 60;
+    min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px;
+    background: var(--danger); color: #fff; font-size: .68rem; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 0 2px var(--bg-base, #0A0A12);
+    transition: opacity .2s ease; pointer-events: none;
+}
+.toast-container:hover .toast-stack-count { opacity: 0; }
+
+.toast-content { flex: 1; min-width: 0; }
+.toast-mac-icon {
+    width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: .8rem;
+    box-shadow: 0 1px 2px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.25);
+}
+.toast-mac-head { display: flex; align-items: baseline; justify-content: space-between; gap: .5rem; margin-bottom: .1rem; }
+.toast-mac-app { font-size: .66rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: rgba(60,60,67,.6); }
+body:not(.light-theme) .toast-mac-app { color: rgba(235,235,245,.5); }
+.toast-mac-time { font-size: .66rem; color: rgba(60,60,67,.5); flex-shrink: 0; }
+body:not(.light-theme) .toast-mac-time { color: rgba(235,235,245,.4); }
+.toast-title { font-size: .85rem; font-weight: 700; color: #000; }
+body:not(.light-theme) .toast-title { color: #fff; }
+.toast-msg { font-size: .8rem; color: rgba(0,0,0,.82); margin-top: .1rem; }
+body:not(.light-theme) .toast-msg { color: rgba(255,255,255,.82); }
 
 /* ── Loading Overlay ────────────────────────────────────────────── */
 .loading-overlay {
@@ -3711,6 +3808,9 @@ select {
     /* Топбар */
     .top-bar { padding: 0 .75rem; height: 56px; }
     .main-wrapper { margin-top: 56px; }
+    .toast-container { top: calc(56px + .75rem); right: .75rem; }
+    /* Мало місця збоку на мобілі — годинник історії стає над стеком */
+    .toast-hist-btn { top: calc(56px + .75rem); right: .75rem; }
     .top-bar-left { gap: .35rem; }
     .tb-user-info { display: none; }
     .tb-user { padding: .25rem; border: none; background: none !important; }
@@ -3750,6 +3850,8 @@ select {
     .page-content { padding: .5rem; }
     .top-bar { height: 52px; padding: 0 .5rem; }
     .main-wrapper { margin-top: 52px; }
+    .toast-container { top: calc(52px + .5rem); right: .5rem; }
+    .toast-hist-btn { top: calc(52px + .5rem); right: .5rem; }
     h1 { font-size: 1.25rem !important; }
     h2 { font-size: 1.1rem !important; }
     .btn { padding: .35rem .65rem; font-size: .78rem; }
@@ -3764,6 +3866,8 @@ select {
 @media (max-width: 768px) and (orientation: landscape) {
     .top-bar { height: 48px; }
     .main-wrapper { margin-top: 48px; }
+    .toast-container { top: calc(48px + .5rem); }
+    .toast-hist-btn { top: calc(48px + .5rem); }
     .page-content { padding: .4rem .6rem; }
     .mob-nav { display: none; } /* ховаємо нижній nav в landscape */
 }

@@ -3,23 +3,200 @@
 // ================================================================
 
 const Toast = {
+    // Один-в-один стиль для всіх типів: іконка-бейдж (FA, не емодзі) + рядок
+    // App/"зараз" — macOS "banner notification". Кольори — тільки на бейджі,
+    // сама картка нейтральна (var(--bg-surface)), щоб добре лягало на обидві теми.
+    _META: {
+        success: { icon: 'fa-check',                bg: 'linear-gradient(155deg,#34d399,#059669)' },
+        error:   { icon: 'fa-circle-exclamation',    bg: 'linear-gradient(155deg,#ff6259,#e0342a)' },
+        warning: { icon: 'fa-triangle-exclamation',  bg: 'linear-gradient(155deg,#fbbf24,#d97706)' },
+        info:    { icon: 'fa-circle-info',           bg: 'linear-gradient(155deg,#60a5fa,#2563eb)' },
+    },
+
     show(type, title, message = '', duration = 7000) {
-        const icons = { success: '✅', error: '❌', warning: '⚠️', info: 'ℹ️' };
+        const meta = this._META[type] || this._META.info;
         const container = document.getElementById('toast-container');
         const el = document.createElement('div');
         el.className = `toast ${type}`;
+        el.dataset.createdAt = String(Date.now());
+        // .toast (зовнішній) відповідає лише за transform/opacity-анімацію
+        // й позицію в стеку; .toast-glass (внутрішній, статичний) несе
+        // backdrop-filter — розмиття й анімація transform на ОДНОМУ елементі
+        // одночасно ламали рендер (Chromium/webview-баг), тому розділено.
         el.innerHTML = `
-            <span class="toast-icon">${icons[type] || 'ℹ️'}</span>
-            <div class="toast-content">
-                <div class="toast-title">${title}</div>
-                ${message ? `<div class="toast-msg">${message}</div>` : ''}
+            <div class="toast-glass">
+                <button type="button" class="toast-close" aria-label="Закрити"><i class="fa-solid fa-xmark"></i></button>
+                <span class="toast-mac-icon" style="background:${meta.bg}"><i class="fa-solid ${meta.icon}"></i></span>
+                <div class="toast-content">
+                    <div class="toast-mac-head">
+                        <span class="toast-mac-app">Скарбниця</span>
+                        <span class="toast-mac-time">щойно</span>
+                    </div>
+                    <div class="toast-title">${title}</div>
+                    ${message ? `<div class="toast-msg">${message}</div>` : ''}
+                </div>
             </div>`;
-        container.appendChild(el);
-        const remove = () => { el.classList.add('removing'); setTimeout(() => el.remove(), 300); };
-        setTimeout(remove, duration);
-        el.addEventListener('click', remove);
+        // Найновіший тост — першим у DOM, тому він на вершині стека
+        // (акордеон збирає старіші тости позаду, див. _restack).
+        container.prepend(el);
+        this._restack();
+        this._ensureTicking();
+        this._pushHistory(type, title, message);
+
+        const remove = () => {
+            el.classList.add('removing');
+            setTimeout(() => { el.remove(); this._restack(); }, 300);
+        };
+
+        // Пауза автозникнення, поки курсор над тостом (як у macOS) —
+        // рахуємо залишок часу вручну при виході з hover.
+        let remaining = duration;
+        let startedAt = Date.now();
+        let timer = setTimeout(remove, remaining);
+        el.addEventListener('mouseenter', () => {
+            clearTimeout(timer);
+            remaining -= Date.now() - startedAt;
+        });
+        el.addEventListener('mouseleave', () => {
+            startedAt = Date.now();
+            timer = setTimeout(remove, Math.max(0, remaining));
+        });
+
+        el.addEventListener('click', () => { clearTimeout(timer); remove(); });
+        el.querySelector('.toast-close').addEventListener('click', e => { e.stopPropagation(); clearTimeout(timer); remove(); });
         return el;
     },
+
+    // Живий "щойно / N хв тому" над заголовком — один спільний інтервал на
+    // всі тости разом (не по таймеру на кожен), сам себе зупиняє, коли
+    // тостів не лишилось.
+    _tickTimer: null,
+    _ensureTicking() {
+        if (this._tickTimer) return;
+        this._tickTimer = setInterval(() => this._tick(), 15000);
+    },
+    _tick() {
+        const container = document.getElementById('toast-container');
+        const toasts = container ? [...container.querySelectorAll('.toast[data-created-at]')] : [];
+        if (!toasts.length) { clearInterval(this._tickTimer); this._tickTimer = null; return; }
+        toasts.forEach(t => {
+            const label = t.querySelector('.toast-mac-time');
+            if (!label) return;
+            const ageSec = Math.floor((Date.now() - Number(t.dataset.createdAt)) / 1000);
+            label.textContent = ageSec < 45 ? 'щойно'
+                : ageSec < 90 ? 'хвилину тому'
+                : `${Math.round(ageSec / 60)} хв тому`;
+        });
+    },
+
+    // ── Історія — щоб прочитати тост, який уже сам зник ────────────
+    // Лише пам'ять поточної сесії (як і сам Notification Center у macOS
+    // показує тільки недавнє) — жодного стореджу, скидається на F5.
+    _history: [],
+
+    _pushHistory(type, title, message) {
+        this._history.unshift({ type, title, message, ts: Date.now() });
+        if (this._history.length > 20) this._history.length = 20;
+        this._syncHistBtn();
+    },
+
+    _syncHistBtn() {
+        let btn = document.getElementById('toast-hist-btn');
+        if (!btn) {
+            btn = document.createElement('button');
+            btn.type = 'button';
+            btn.id = 'toast-hist-btn';
+            btn.className = 'toast-hist-btn';
+            btn.title = 'Історія сповіщень';
+            btn.innerHTML = '<i class="fa-regular fa-clock"></i>';
+            btn.addEventListener('click', e => { e.stopPropagation(); this._toggleHistPanel(btn); });
+            document.body.appendChild(btn);
+        }
+        // Показуємо лише після того, як усі активні тости зникли — поки
+        // стек видно, годинник лише заважав би (та й стоїть на тому самому
+        // місці, з того ж правого краю).
+        const container = document.getElementById('toast-container');
+        const hasActive = container?.querySelector('.toast:not(.removing)');
+        btn.classList.toggle('visible', this._history.length > 0 && !hasActive);
+    },
+
+    _toggleHistPanel(btn) {
+        const existing = document.getElementById('toast-hist-panel');
+        if (existing) { existing.remove(); return; }
+        const rect = btn.getBoundingClientRect();
+        const el = document.createElement('div');
+        el.id = 'toast-hist-panel';
+        el.className = 'toast-hist-panel';
+        el.style.cssText = `top:${rect.bottom + 8}px; left:${Math.min(rect.left, window.innerWidth - 336)}px`;
+        el.innerHTML = this._histPanelHtml();
+        document.body.appendChild(el);
+        setTimeout(() => document.addEventListener('click', function h(e) {
+            if (!e.target.closest('.toast-hist-btn') && !e.target.closest('#toast-hist-panel')) {
+                el.remove();
+                document.removeEventListener('click', h);
+            }
+        }), 0);
+    },
+
+    _histPanelHtml() {
+        const rows = this._history.map(h => {
+            const meta = this._META[h.type] || this._META.info;
+            const ageMin = Math.floor((Date.now() - h.ts) / 60000);
+            const timeLabel = ageMin < 1 ? 'щойно' : ageMin < 60 ? `${ageMin} хв` : `${Math.floor(ageMin / 60)} год`;
+            return `<div class="toast-hist-row">
+                <span class="toast-hist-icon" style="background:${meta.bg}"><i class="fa-solid ${meta.icon}"></i></span>
+                <div class="toast-hist-info">
+                    <div class="toast-hist-row-title">${h.title}</div>
+                    ${h.message ? `<div class="toast-hist-row-msg">${h.message}</div>` : ''}
+                </div>
+                <span class="toast-hist-row-time">${timeLabel}</span>
+            </div>`;
+        }).join('');
+        return `
+            <div class="toast-hist-head">
+                <span class="toast-hist-title">Історія сповіщень</span>
+                <button type="button" class="toast-hist-clear" onclick="Toast._clearHistory()">Очистити</button>
+            </div>
+            ${rows || '<div class="toast-hist-empty">Ще нічого не було</div>'}`;
+    },
+
+    _clearHistory() {
+        this._history = [];
+        document.getElementById('toast-hist-panel')?.remove();
+        this._syncHistBtn();
+    },
+
+    // Розставляє --stack-i на кожному тості (0 = найновіший, зверху) і
+    // оновлює бейдж "+N". Згорнутий margin-top рахуємо тут із реальної
+    // offsetHeight картки (у % він рахувався б від ширини контейнера, а не
+    // від висоти — CSS-пастка) і ставимо inline; розгортання при наведенні
+    // перебиває це через margin-top:...!important в CSS.
+    _restack() {
+        const container = document.getElementById('toast-container');
+        if (!container) return;
+        const toasts = [...container.querySelectorAll('.toast:not(.removing)')];
+        toasts.forEach((t, i) => {
+            t.style.setProperty('--stack-i', i);
+            if (i === 0) { t.style.marginTop = ''; return; }
+            const peek = Math.max(4, 10 - i * 2);
+            t.style.marginTop = `${peek - t.offsetHeight}px`;
+        });
+
+        let badge = container.querySelector('.toast-stack-count');
+        const extra = toasts.length - 1;
+        if (extra > 0) {
+            if (!badge) {
+                badge = document.createElement('div');
+                badge.className = 'toast-stack-count';
+                container.appendChild(badge);
+            }
+            badge.textContent = `+${extra}`;
+        } else {
+            badge?.remove();
+        }
+        this._syncHistBtn();
+    },
+
     success(title, msg)  { return this.show('success', title, msg); },
     error(title, msg)    { return this.show('error', title, msg); },
     warning(title, msg)  { return this.show('warning', title, msg); },
@@ -1222,22 +1399,40 @@ const UI = {
             const canManage = AppState.isAdmin() || AppState.profile?.role === 'smm' || AppState.isStaff();
             const today = new Date().toISOString().slice(0, 10);
 
-            const [enrollments, assignments, attempts, surveys, surveyResponses, surveyAssignments] = await Promise.all([
+            const [enrollments, assignments, attempts, grants, surveys, surveyResponses, surveyAssignments] = await Promise.all([
                 supabase.from('enrollments').select('id, completed_at, run_id, course_runs(end_date)').eq('user_id', uid),
-                supabase.from('test_assignments').select('test_id').eq('user_id', uid),
-                supabase.from('test_attempts').select('test_id, completed_at').eq('user_id', uid).not('completed_at', 'is', null),
+                supabase.from('test_assignments').select('test_id, test:tests(max_attempts)').eq('user_id', uid),
+                supabase.from('test_attempts').select('test_id, completed_at, passed').eq('user_id', uid).not('completed_at', 'is', null),
+                // Додаткові спроби (кнопка "Дати додаткову спробу") лежать в
+                // окремій таблиці, а не в test.max_attempts — без цього тест,
+                // якому адмін надав ще спробу, зникає з лічильника назавжди.
+                supabase.from('test_attempt_grants').select('test_id').eq('user_id', uid),
                 supabase.from('surveys').select('id').eq('is_published', true),
                 supabase.from('survey_responses').select('survey_id').eq('user_id', uid),
                 canManage ? Promise.resolve({ data: null }) : supabase.from('survey_assignments').select('survey_id').eq('user_id', uid),
             ]);
 
-            const completedTestIds   = new Set((attempts.data || []).map(a => a.test_id));
+            const passedTestIds = new Set((attempts.data || []).filter(a => a.passed).map(a => a.test_id));
+            const attemptCounts = new Map();
+            (attempts.data || []).forEach(a => attemptCounts.set(a.test_id, (attemptCounts.get(a.test_id) || 0) + 1));
+            const grantCounts = new Map();
+            (grants.data || []).forEach(g => grantCounts.set(g.test_id, (grantCounts.get(g.test_id) || 0) + 1));
             const respondedSurveyIds = new Set((surveyResponses.data || []).map(r => r.survey_id));
 
             const allEnr       = enrollments.data || [];
             const completedEnr = allEnr.filter(e => e.completed_at || (e.course_runs?.end_date && e.course_runs.end_date < today));
             const activeEnr    = allEnr.filter(e => !completedEnr.includes(e));
-            const activeTests  = (assignments.data || []).filter(a => !completedTestIds.has(a.test_id));
+            // Тест лишається "активним" (не порахований як завершений), якщо
+            // його ще не пройдено успішно і є хоча б одна спроба в запасі
+            // (звичайна чи додаткова, надана адміном).
+            const activeTests  = (assignments.data || []).filter(a => {
+                if (passedTestIds.has(a.test_id)) return false;
+                const used = attemptCounts.get(a.test_id) || 0;
+                if (used === 0) return true;
+                const max = a.test?.max_attempts;
+                if (!max) return true;
+                return (max + (grantCounts.get(a.test_id) || 0)) - used > 0;
+            });
 
             let activeSurveys;
             if (canManage) {
@@ -1247,16 +1442,46 @@ const UI = {
                 activeSurveys = (surveys.data || []).filter(s => assignedSurveyIds.has(s.id) && !respondedSurveyIds.has(s.id));
             }
 
-            const total = activeEnr.length + activeTests.length + activeSurveys.length;
-            const badge = document.getElementById('nav-learn-badge');
-            if (!badge) return;
-            if (total > 0) {
-                badge.textContent = total > 99 ? '99+' : total;
-                badge.classList.remove('hidden');
-            } else {
-                badge.classList.add('hidden');
-            }
+            this.setLearnBadge(activeEnr.length + activeTests.length + activeSurveys.length);
         } catch { /* silent */ }
+        this._subscribeLearnBadge();
+    },
+
+    // Живе оновлення бейджа "Моє навчання", коли користувачу щось призначають
+    // (тест/курс/опитування) поки він сидить деінде в порталі — інакше бейдж
+    // лишається застарілим, поки він сам не відкриє розділ (там лічильники
+    // рахуються наживо через ExpertPathPage._fetchAndShowCounts()).
+    _learnBadgeDebounce: null,
+    _subscribeLearnBadge() {
+        if (this._learnChannel || !AppState.user?.id) return;
+        const refetch = () => {
+            clearTimeout(this._learnBadgeDebounce);
+            // Групове призначення (кілька тестів одразу) шле кілька INSERT
+            // підряд — дебаунс, щоб не робити купу паралельних перерахунків.
+            this._learnBadgeDebounce = setTimeout(() => this.loadLearnBadge(), 400);
+        };
+        this._learnChannel = supabase
+            .channel('learn-badge-' + AppState.user.id)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'test_assignments',    filter: `user_id=eq.${AppState.user.id}` }, refetch)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'enrollments',         filter: `user_id=eq.${AppState.user.id}` }, refetch)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'survey_assignments',  filter: `user_id=eq.${AppState.user.id}` }, refetch)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'test_attempts',       filter: `user_id=eq.${AppState.user.id}` }, refetch)
+            .subscribe();
+    },
+
+    // Дозволяє сторінці "Моє навчання" (ExpertPathPage), яка й так рахує ці
+    // числа наживо при кожному відкритті, одразу оновити бейдж у сайдбарі
+    // без повторного запиту — інакше бейдж лишається застарілим від моменту
+    // логіну, поки користувачу не призначать щось нове ПІСЛЯ входу.
+    setLearnBadge(total) {
+        const badge = document.getElementById('nav-learn-badge');
+        if (!badge) return;
+        if (total > 0) {
+            badge.textContent = total > 99 ? '99+' : total;
+            badge.classList.remove('hidden');
+        } else {
+            badge.classList.add('hidden');
+        }
     }
 };
 

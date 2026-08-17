@@ -43,6 +43,14 @@ const TourManager = {
         Object.keys(localStorage)
             .filter(k => k.startsWith('tour_done_'))
             .forEach(k => localStorage.removeItem(k));
+        // Скидаємо також в БД — інакше API.profiles.isTourDone() досі
+        // блокує повторний показ, навіть коли localStorage вже чистий.
+        if (AppState.profile?.completed_tours?.length) {
+            AppState.profile.completed_tours = [];
+            supabase.from('profiles')
+                .update({ completed_tours: [] })
+                .eq('id', AppState.user.id).then(() => {});
+        }
     },
 
     // ── Побудова DOM ─────────────────────────────────────────────

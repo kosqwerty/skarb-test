@@ -405,11 +405,24 @@ const RegistryPage = {
         if (content) content.innerHTML = this._buildDocContent(secId, this._canManage);
     },
 
-    // ── Open doc (saves selected section for back-navigation) ────────
-    _openDoc(resourceId) {
+    // ── Open doc — PDF відкривається в шухляді праворуч (як у Документах),
+    // інші типи — повним переглядачем (шухляда вміє показувати лише PDF).
+    // Ознайомлення тепер ставиться автоматично при скролі до кінця
+    // (ResourcesPage._openPdfDrawer), а не миттєво при відкритті.
+    async _openDoc(resourceId) {
         if (this._selectedSection) sessionStorage.setItem('rg_selected_sec', this._selectedSection);
-        API.documentDownloads.track(resourceId).catch(() => {});
-        Router.go(`resource/${resourceId}?from=documents&tab=registry`);
+        try {
+            const resource = await API.resources.getById(resourceId);
+            const ext = resource.storage_path?.split('.').pop().toLowerCase() || '';
+            const isPdf = resource.type === 'pdf' || ext === 'pdf';
+            if (isPdf) {
+                await ResourcesPage._openPdfDrawer(resource);
+            } else {
+                Router.go(`resource/${resourceId}?from=documents&tab=registry`);
+            }
+        } catch (e) {
+            Toast.error('Помилка', e.message);
+        }
     },
 
     async _saveSecDesc(id, value) {

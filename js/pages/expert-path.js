@@ -39,10 +39,14 @@ const ExpertPathPage = {
             // Fetch raw data for accurate filtering
             const canManage = AppState.isAdmin() || AppState.profile?.role === 'smm' || AppState.isStaff();
 
-            const [enrollments, assignments, attempts, surveyResponses, surveys, lectures, surveyAssignments, pendingReview] = await Promise.all([
+            const [enrollments, assignments, attempts, grants, surveyResponses, surveys, lectures, surveyAssignments, pendingReview] = await Promise.all([
                 supabase.from('enrollments').select('id, completed_at, run_id, course_runs(end_date)').eq('user_id', uid),
-                supabase.from('test_assignments').select('test_id').eq('user_id', uid),
-                supabase.from('test_attempts').select('test_id, completed_at').eq('user_id', uid).not('completed_at', 'is', null),
+                supabase.from('test_assignments').select('test_id, test:tests(max_attempts)').eq('user_id', uid),
+                supabase.from('test_attempts').select('test_id, completed_at, passed').eq('user_id', uid).not('completed_at', 'is', null),
+                // Додаткові спроби (кнопка "Дати додаткову спробу") лежать в
+                // окремій таблиці, а не в test.max_attempts — без цього тест,
+                // якому адмін надав ще спробу, зникає з лічильника назавжди.
+                supabase.from('test_attempt_grants').select('test_id').eq('user_id', uid),
                 supabase.from('survey_responses').select('survey_id').eq('user_id', uid),
                 supabase.from('surveys').select('id').eq('is_published', true),
                 supabase.from('lectures').select('id, start_date, duration_days').eq('is_published', true),
@@ -52,6 +56,11 @@ const ExpertPathPage = {
 
             const today = new Date().toISOString().slice(0, 10);
             const completedTestIds   = new Set((attempts.data || []).map(a => a.test_id));
+            const passedTestIds      = new Set((attempts.data || []).filter(a => a.passed).map(a => a.test_id));
+            const attemptCounts = new Map();
+            (attempts.data || []).forEach(a => attemptCounts.set(a.test_id, (attemptCounts.get(a.test_id) || 0) + 1));
+            const grantCounts = new Map();
+            (grants.data || []).forEach(g => grantCounts.set(g.test_id, (grantCounts.get(g.test_id) || 0) + 1));
             const respondedSurveyIds = new Set((surveyResponses.data || []).map(r => r.survey_id));
 
             const allEnr     = enrollments.data || [];
@@ -59,7 +68,16 @@ const ExpertPathPage = {
                 e.completed_at || (e.course_runs?.end_date && e.course_runs.end_date < today)
             );
             const activeEnr  = allEnr.filter(e => !completedEnr.includes(e));
-            const activeTests    = (assignments.data || []).filter(a => !completedTestIds.has(a.test_id));
+            // Тест лишається "активним", якщо його ще не пройдено успішно і є
+            // хоча б одна спроба в запасі (звичайна чи додаткова від адміна).
+            const activeTests = (assignments.data || []).filter(a => {
+                if (passedTestIds.has(a.test_id)) return false;
+                const used = attemptCounts.get(a.test_id) || 0;
+                if (used === 0) return true;
+                const max = a.test?.max_attempts;
+                if (!max) return true;
+                return (max + (grantCounts.get(a.test_id) || 0)) - used > 0;
+            });
             // Регулярні користувачі бачать лише опитування, призначені їм через survey_assignments
             // (як у SurveysPage.renderInTab) — інакше бейдж рахує чужі опубліковані опитування.
             let activeSurveys;
@@ -75,14 +93,23 @@ const ExpertPathPage = {
                 return end >= new Date(new Date().toDateString());
             });
 
+            // "Завершені" рахуємо лише ті пройдені тести, яких немає серед
+            // ще активних (щоб тест з наданою додатковою спробою не
+            // потрапляв одразу у два лічильники).
+            const activeTestIdSet = new Set(activeTests.map(a => a.test_id));
+            const doneTestCount = [...completedTestIds].filter(id => !activeTestIdSet.has(id)).length;
+
             this._updateTabBadges({
                 courses:   activeEnr.length,
                 tests:     activeTests.length,
                 surveys:   activeSurveys.length,
                 lectures:  upcomingLectures.length,
-                completed: completedEnr.length + completedTestIds.size + respondedSurveyIds.size,
+                completed: completedEnr.length + doneTestCount + respondedSurveyIds.size,
                 review:    pendingReview.count || 0,
             });
+            // Синхронізуємо бейдж у сайдбарі з цими ж (щойно порахованими) числами —
+            // інакше він лишається застарілим від моменту логіну.
+            UI.setLearnBadge(activeEnr.length + activeTests.length + activeSurveys.length);
         } catch(e) {}
     },
 

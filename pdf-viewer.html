@@ -254,15 +254,15 @@ body { display: flex; flex-direction: column; background: var(--bg-viewer); colo
 #viewer-wrap::-webkit-scrollbar-thumb { background: rgba(255,255,255,.2); border-radius: 4px; }
 
 .page-wrap {
-  position: relative; line-height: 0;
+  position: relative; line-height: 0; isolation: isolate;
   box-shadow: 0 4px 24px var(--page-shadow);
 }
-.page-wrap canvas { display: block; }
+.page-wrap canvas { display: block; position: relative; z-index: 1; }
 
 /* Text layer */
 .textLayer {
   position: absolute; inset: 0; overflow: hidden;
-  line-height: 1; opacity: 1;
+  line-height: 1; opacity: 1; z-index: 2;
 }
 .textLayer span {
   color: transparent; position: absolute; white-space: pre;
@@ -270,11 +270,28 @@ body { display: flex; flex-direction: column; background: var(--bg-viewer); colo
 }
 .textLayer .highlight { background: rgba(255,220,0,.4); border-radius: 2px; color: transparent; }
 .textLayer .highlight.selected { background: rgba(0,100,255,.4); }
+/* Plain-text URLs auto-detected inside the text layer (no embedded Link annotation) */
+.textLayer span.text-link { pointer-events: auto !important; cursor: pointer; }
+.textLayer span.text-link:hover { background: rgba(37,99,235,.18); border-radius: 1px; }
+
+/* Link annotations — always clickable regardless of active tool.
+   NOTE: pdf_viewer.min.css (loaded above for its base styles) also
+   defines its own .annotationLayer with pointer-events:none by
+   default (only specific pdf.js-internal child elements re-enable
+   it) — since our div reuses that exact class name, we must
+   explicitly override pointer-events here or clicks silently fall
+   through to whatever's underneath. */
+.annotationLayer { position: absolute; inset: 0; line-height: 1; z-index: 3; pointer-events: none; }
+.link-annot { position: absolute; cursor: pointer; pointer-events: auto; }
+.link-annot:hover { background: rgba(37,99,235,.14); border-radius: 2px; }
 
 /* Hand tool mode */
 body.hand-tool #viewer-wrap { cursor: grab; }
 body.hand-tool #viewer-wrap:active { cursor: grabbing; }
 body.hand-tool .textLayer { pointer-events: none; }
+
+/* Select (cursor) tool mode */
+body:not(.hand-tool) #viewer-wrap { cursor: auto; }
 
 /* Status */
 #loading-msg, #error-msg {
@@ -391,6 +408,9 @@ body.hand-tool .textLayer { pointer-events: none; }
   <div class="tb-spacer"></div>
 
   <!-- Tools right -->
+  <button class="tb-btn" id="btn-select-tool" title="Курсор (виділення тексту, посилання)">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 3l6.5 16.5 2.42-6.98L20 9.5z"/></svg>
+  </button>
   <button class="tb-btn active" id="btn-hand-tool" title="Інструмент рука">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"/><path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v2"/><path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>
   </button>
@@ -508,6 +528,8 @@ const _prefs = _loadPrefs();
 let scale    = _prefs.scale    ?? 1.5;
 let rotation = _prefs.rotation ?? 0;
 let rendering = false;
+let firstRenderDone = false;
+let pageObserver = null;
 let handTool = true;
 let activePanel = _prefs.activePanel ?? 'thumbs';
 let panelOpen   = forcePanel === 'closed' ? false : (_prefs.panelOpen ?? true);
@@ -563,12 +585,70 @@ function updateNav() {
     el.classList.toggle('active', i + 1 === currentPage));
 }
 
+// ── Auto-linkify plain-text URLs in the text layer ───────────────
+// Some PDFs (e.g. Word/Docs exports) print "https://…" as plain text
+// instead of an embedded Link annotation — getAnnotations() misses
+// those entirely, so we detect and wrap them ourselves. A single URL
+// is frequently split across several text items/spans (kerning, TJ
+// arrays), so matching is done against the concatenated page text and
+// mapped back to whichever spans overlap the match — rather than
+// per-span regex matching, which misses split URLs, and rather than
+// rewriting span.innerHTML, which would corrupt pdf.js's own layout.
+const URL_RE = /((https?:\/\/|www\.)[^\s<>"')\]]+|[\w.+-]+@[\w-]+\.[\w.-]+\.[a-z]{2,})/gi;
+function linkifyTextLayer(tc, textDivs) {
+  const items = tc.items;
+  let offset = 0;
+  const ranges = items.map(it => {
+    const start = offset;
+    const str = it.str || '';
+    offset += str.length;
+    return { start, end: offset };
+  });
+  const fullText = items.map(it => it.str || '').join('');
+  URL_RE.lastIndex = 0;
+  let m;
+  while ((m = URL_RE.exec(fullText))) {
+    const raw = m[0].replace(/[.,;:!?]+$/, '');
+    const mStart = m.index;
+    const mEnd = mStart + raw.length;
+    let href = raw;
+    if (/^www\./i.test(href)) href = 'https://' + href;
+    else if (href.includes('@') && !/^https?:/i.test(href)) href = 'mailto:' + href;
+    ranges.forEach((r, idx) => {
+      if (r.end <= mStart || r.start >= mEnd) return;
+      const span = textDivs[idx];
+      if (!span) return;
+      span.classList.add('text-link');
+      if (!span.dataset.linkBound) {
+        span.dataset.linkBound = '1';
+        span.dataset.linkHref = href;
+        span.addEventListener('click', e => {
+          e.preventDefault();
+          window.open(span.dataset.linkHref, '_blank', 'noopener,noreferrer');
+        });
+      }
+    });
+  }
+}
+
 // ── Render ─────────────────────────────────────────────────────
 async function renderAll() {
   if (!pdfDoc || rendering) return;
   rendering = true;
+  // Preserve scroll position proportionally across rebuilds (resize,
+  // rotate, zoom) instead of snapping to currentPage's top — currentPage
+  // is only updated by the IntersectionObserver (30% threshold) and can
+  // lag behind the actual scroll position while the user is actively
+  // scrolling, which made a resize-triggered rebuild appear to yank the
+  // view back by roughly one page. Skipped entirely on the very first
+  // render: for a large document the initial build itself can take
+  // several seconds, during which the user may already be scrolling —
+  // restoring a ratio captured before anything existed (0) would snap
+  // them back to page 1 the moment loading finishes.
+  const scrollRatio = (firstRenderDone && wrap.scrollHeight > 0) ? wrap.scrollTop / wrap.scrollHeight : null;
   wrap.innerHTML = '';
   document.getElementById('loading-msg')?.remove();
+  createPageObserver();
 
   for (let i = 1; i <= totalPages; i++) {
     const page = await pdfDoc.getPage(i);
@@ -586,6 +666,7 @@ async function renderAll() {
     canvas.height = viewport.height;
     pageWrap.appendChild(canvas);
     wrap.appendChild(pageWrap);
+    pageObserver?.observe(pageWrap);
 
     await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
 
@@ -599,14 +680,61 @@ async function renderAll() {
       tl.style.height = viewport.height + 'px';
       tl.style.setProperty('--scale-factor', viewport.scale);
       pageWrap.appendChild(tl);
-      await pdfjsLib.renderTextLayer({ textContentSource: tc, container: tl, viewport, textDivs: [] }).promise;
-    } catch(_) {}
+      const textDivs = [];
+      await pdfjsLib.renderTextLayer({ textContentSource: tc, container: tl, viewport, textDivs }).promise;
+      linkifyTextLayer(tc, textDivs);
+    } catch(e) { console.error('textLayer/linkify error', e); }
+
+    // Link annotations — rendered above the text layer so they stay
+    // clickable regardless of hand-tool vs cursor-tool mode.
+    try {
+      const annots = await page.getAnnotations();
+      const links = annots.filter(a => a.subtype === 'Link' && (a.url || a.dest || a.action));
+      if (links.length) {
+        const al = document.createElement('div');
+        al.className = 'annotationLayer';
+        al.style.width  = viewport.width  + 'px';
+        al.style.height = viewport.height + 'px';
+        links.forEach(a => {
+          const rect = viewport.convertToViewportRectangle(a.rect);
+          const left   = Math.min(rect[0], rect[2]);
+          const top    = Math.min(rect[1], rect[3]);
+          const width  = Math.abs(rect[2] - rect[0]);
+          const height = Math.abs(rect[3] - rect[1]);
+          const isSafeUrl = a.url && /^(https?:|mailto:)/i.test(a.url);
+          const el = document.createElement(isSafeUrl ? 'a' : 'div');
+          el.className = 'link-annot';
+          el.style.left = left + 'px';
+          el.style.top = top + 'px';
+          el.style.width = width + 'px';
+          el.style.height = height + 'px';
+          if (isSafeUrl) {
+            el.href = a.url;
+            el.target = '_blank';
+            el.rel = 'noopener noreferrer';
+          } else if (a.dest) {
+            el.addEventListener('click', async e => {
+              e.preventDefault();
+              try {
+                const dest = typeof a.dest === 'string' ? await pdfDoc.getDestination(a.dest) : a.dest;
+                const ref  = await pdfDoc.getPageIndex(dest[0]);
+                goTo(ref + 1);
+              } catch(err) { console.error('[pdf-viewer] dest navigation failed', a, err); }
+            });
+          }
+          al.appendChild(el);
+        });
+        pageWrap.appendChild(al);
+      }
+    } catch(e) { console.error('annotationLayer error', e); }
   }
 
   rendering = false;
   updateNav();
-  observePages();
-  scrollToPage(currentPage, false);
+  bindScrollEndListener();
+  if (totalPages === 1) notifyScrollEnd();
+  if (scrollRatio !== null) wrap.scrollTop = scrollRatio * wrap.scrollHeight;
+  firstRenderDone = true;
   if (searchQuery) runSearch(searchQuery, false);
 }
 
@@ -685,8 +813,13 @@ function notifyScrollEnd() {
   window.parent.postMessage({ type: 'pdf-scroll-end' }, '*');
 }
 
-function observePages() {
-  const io = new IntersectionObserver(entries => {
+// Creates a fresh observer before each rebuild — pages are attached to it
+// incrementally as they're appended (see renderAll's loop) so the current
+// page indicator keeps working even while a large document is still
+// loading, instead of only starting to track once every page is done.
+function createPageObserver() {
+  pageObserver?.disconnect();
+  pageObserver = new IntersectionObserver(entries => {
     entries.forEach(e => {
       if (e.isIntersecting) {
         const p = parseInt(e.target.dataset.page);
@@ -695,8 +828,12 @@ function observePages() {
       }
     });
   }, { threshold: 0.3 });
-  wrap.querySelectorAll('.page-wrap').forEach(el => io.observe(el));
-  if (totalPages === 1) notifyScrollEnd();
+}
+
+let scrollEndListenerBound = false;
+function bindScrollEndListener() {
+  if (scrollEndListenerBound) return;
+  scrollEndListenerBound = true;
   wrap.addEventListener('scroll', () => {
     if (wrap.scrollTop + wrap.clientHeight >= wrap.scrollHeight - 100) notifyScrollEnd();
   }, { passive: true });
@@ -841,6 +978,13 @@ document.getElementById('btn-hand-tool').addEventListener('click', () => {
   handTool = true;
   document.body.classList.add('hand-tool');
   document.getElementById('btn-hand-tool').classList.add('active');
+  document.getElementById('btn-select-tool').classList.remove('active');
+});
+document.getElementById('btn-select-tool').addEventListener('click', () => {
+  handTool = false;
+  document.body.classList.remove('hand-tool');
+  document.getElementById('btn-select-tool').classList.add('active');
+  document.getElementById('btn-hand-tool').classList.remove('active');
 });
 
 // Rotate
@@ -966,6 +1110,7 @@ document.addEventListener('keydown', e => {
 let isDragging = false, dragStartX = 0, dragStartY = 0, scrollStartX = 0, scrollStartY = 0;
 
 wrap.addEventListener('mousedown', e => {
+  if (e.target.closest('.link-annot, .text-link')) return;
   if (!handTool || e.button !== 0) return;
   isDragging = true;
   dragStartX = e.clientX; dragStartY = e.clientY;
@@ -985,8 +1130,11 @@ document.addEventListener('mouseup', () => {
 });
 
 if (!canDownload) document.addEventListener('contextmenu', e => e.preventDefault());
+let resizeTimer;
 window.addEventListener('resize', () => {
-  if (scale === 'fit-width' || scale === 'fit-page') renderAll();
+  if (scale !== 'fit-width' && scale !== 'fit-page') return;
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(renderAll, 250);
 });
 
 updateZoomLabel();

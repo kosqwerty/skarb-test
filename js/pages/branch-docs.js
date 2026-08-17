@@ -165,11 +165,37 @@ const BranchDocsPage = {
         document.head.appendChild(s);
     },
 
+    _onDocAcked({ resourceId, version, at }) {
+        const inDocs = Object.values(this._byBlock || {}).flat().some(d => d.id === resourceId);
+        const inHeader = (this._headerDocs || []).some(d => d.id === resourceId);
+        if (!inDocs && !inHeader) return;
+        this._ackMap[resourceId] = { at, version };
+        const dot = document.querySelector(`[data-doc-dot="${resourceId}"]`);
+        if (dot) { dot.classList.remove('bd-unread'); dot.classList.add('bd-read'); dot.title = 'Ознайомлено'; }
+        const block = Object.entries(this._byBlock || {}).find(([, docs]) => docs.find(d => d.id === resourceId));
+        if (block) {
+            const [bNum, bDocs] = block;
+            const anyUnread = bDocs.some(d => { const a = this._ackMap[d.id]; return !a || (a.version || 1) < (d.doc_version || 1); });
+            const blk = (this._blocks || []).find(b => b.number === parseInt(bNum));
+            if (blk) {
+                const sidebarDot = document.querySelector(`#bd-ibtn-${blk.id} .bd-ibtn-dot`);
+                if (sidebarDot) { sidebarDot.className = `bd-ibtn-dot ${anyUnread ? 'unread' : 'read'}`; }
+            }
+        }
+    },
+
     async renderInTab(area) {
         this._injectStyles();
         const canManage = AppState.isAdmin();
         const seeAll = AppState.isAdmin() || AppState.isManager() || AppState.isSmm();
         area.innerHTML = `<div id="bd-content" style="padding:.25rem 0"><div style="text-align:center;padding:3rem 1rem;color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin"></i> Завантаження...</div></div>`;
+        // PDF тепер відкривається в спільній шухляді (ResourcesPage), яка
+        // ознайомлює автоматично по скролу — подія прилітає сюди, щоб
+        // оновити власні індикатори "ознайомлено" (реєструємо раз назавжди).
+        if (!this._ackListenerBound) {
+            this._ackListenerBound = true;
+            window.addEventListener('doc-acked', e => this._onDocAcked(e.detail));
+        }
         try {
             const [blocks, docs, myDovs, pages, pageDovs, allDov, headerDocs, tabs] = await Promise.all([
                 API.branchDocBlocks.getAll(),
@@ -606,6 +632,13 @@ const BranchDocsPage = {
         const doc = this._headerDocs.find(d => d.id === id);
         if (!doc) return;
         try {
+            const ext = (doc.storage_path || '').split('.').pop().toLowerCase();
+            const isPdf = doc.type === 'pdf' || ext === 'pdf';
+            if (isPdf) {
+                const resource = await API.resources.getById(id);
+                await ResourcesPage._openPdfDrawer(resource);
+                return;
+            }
             Loader.show();
             const url = await API.resources.getSignedUrl(doc.storage_path);
             const viewerUrl = `pdf-viewer.html?file=${encodeURIComponent(url)}&title=${encodeURIComponent(doc.title)}&download=1`;
@@ -1156,31 +1189,21 @@ const BranchDocsPage = {
 
     async _openDoc(storagePath, resourceId) {
         try {
-            Loader.show();
-            const url = await API.resources.getSignedUrl(storagePath);
             const doc = Object.values(this._byBlock).flat().find(d => d.id === resourceId);
-            const title = doc?.title || storagePath.split('/').pop();
-            const viewerUrl = `pdf-viewer.html?file=${encodeURIComponent(url)}&title=${encodeURIComponent(title)}&download=1`;
-            window.open(viewerUrl, '_blank', 'noopener,noreferrer');
-            if (resourceId) {
-                const docVersion = doc?.doc_version || 1;
-                API.documentDownloads.track(resourceId, { docVersion }).catch(() => {});
-                this._ackMap[resourceId] = { at: new Date().toISOString(), version: docVersion };
-                const dot = document.querySelector(`[data-doc-dot="${resourceId}"]`);
-                if (dot) { dot.classList.remove('bd-unread'); dot.classList.add('bd-read'); dot.title = 'Ознайомлено'; }
-                // Update sidebar dot
-                const block = Object.entries(this._byBlock).find(([, docs]) => docs.find(d => d.id === resourceId));
-                if (block) {
-                    const [bNum, bDocs] = block;
-                    const anyUnread = bDocs.some(d => { const a = this._ackMap[d.id]; return !a || (a.version || 1) < (d.doc_version || 1); });
-                    const blk = this._blocks.find(b => b.number === parseInt(bNum));
-                    if (blk) {
-                        const sidebarDot = document.querySelector(`#bd-ibtn-${blk.id} .bd-ibtn-dot`);
-                        if (sidebarDot) { sidebarDot.className = `bd-ibtn-dot ${anyUnread ? 'unread' : 'read'}`; }
-                    }
-                }
+            const ext = (doc?.storage_path || storagePath || '').split('.').pop().toLowerCase();
+            const isPdf = doc?.type === 'pdf' || ext === 'pdf';
+            if (isPdf) {
+                const resource = await API.resources.getById(resourceId);
+                await ResourcesPage._openPdfDrawer(resource);
+            } else {
+                Loader.show();
+                const url = await API.resources.getSignedUrl(storagePath);
+                const title = doc?.title || storagePath.split('/').pop();
+                const viewerUrl = `pdf-viewer.html?file=${encodeURIComponent(url)}&title=${encodeURIComponent(title)}&download=1`;
+                window.open(viewerUrl, '_blank', 'noopener,noreferrer');
+                Loader.hide();
             }
-        } catch(e) { Toast.error('Помилка', e.message); } finally { Loader.hide(); }
+        } catch(e) { Loader.hide(); Toast.error('Помилка', e.message); }
     },
 
     async _uploadModal(blockNum, displayNum, blockTitle) {

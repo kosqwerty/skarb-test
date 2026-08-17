@@ -174,7 +174,30 @@ const RedFolderPage = {
                 <div style="text-align:center;padding:3rem 1rem;color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin"></i> Завантаження...</div>
             </div>
         </div>`;
+        // PDF тепер відкривається в спільній шухляді (ResourcesPage), яка
+        // ознайомлює автоматично по скролу — подія прилітає сюди, щоб
+        // оновити власні індикатори "ознайомлено" (реєструємо раз назавжди).
+        if (!this._ackListenerBound) {
+            this._ackListenerBound = true;
+            window.addEventListener('doc-acked', e => this._onDocAcked(e.detail));
+        }
         await this._load();
+    },
+
+    _onDocAcked({ resourceId, version, at }) {
+        const inDocs = Object.values(this._docs).flat().some(d => d.id === resourceId);
+        const inHeader = this._headerDocs.some(d => d.id === resourceId);
+        if (!inDocs && !inHeader) return;
+        this._ackMap[resourceId] = { at, version };
+        const dot = document.querySelector(`[data-doc-dot="${resourceId}"]`);
+        if (dot) { dot.classList.remove('rf-unread'); dot.classList.add('rf-read'); dot.title = 'Ознайомлено'; }
+        const item = Object.entries(this._docs).find(([, docs]) => docs.find(d => d.id === resourceId));
+        if (item) {
+            const [iid, idocs] = item;
+            const anyUnread = idocs.some(d => { const a = this._ackMap[d.id]; return !a || (a.version || 1) < (d.doc_version || 1); });
+            const sidebarDot = document.querySelector(`#rf-ibtn-${iid} .rf-ibtn-dot`);
+            if (sidebarDot) sidebarDot.className = `rf-ibtn-dot ${anyUnread ? 'unread' : 'read'}`;
+        }
     },
 
     async _load() {
@@ -1120,33 +1143,29 @@ const RedFolderPage = {
         }
     },
 
+    // PDF відкривається в шухляді праворуч (ResourcesPage._openPdfDrawer) —
+    // ознайомлення ставиться автоматично по скролу до кінця, не миттєво.
+    // Інші типи файлів — як раніше, у новій вкладці (шухляда вміє лише PDF).
     async _openDoc(storagePath, resourceId) {
         try {
-            Loader.show();
-            const url = await API.resources.getSignedUrl(storagePath);
-            const doc = Object.values(this._docs).flat().find(d => d.id === resourceId);
-            const title = doc?.title || storagePath.split('/').pop();
-            const viewerUrl = `pdf-viewer.html?file=${encodeURIComponent(url)}&title=${encodeURIComponent(title)}&download=1`;
-            window.open(viewerUrl, '_blank', 'noopener,noreferrer');
-            if (resourceId) {
-                const docVersion = doc?.doc_version || 1;
-                API.documentDownloads.track(resourceId, { docVersion }).catch(() => {});
-                this._ackMap[resourceId] = { at: new Date().toISOString(), version: docVersion };
-                const dot = document.querySelector(`[data-doc-dot="${resourceId}"]`);
-                if (dot) { dot.classList.remove('rf-unread'); dot.classList.add('rf-read'); dot.title = 'Ознайомлено'; }
-                // Update sidebar dot
-                const item = Object.entries(this._docs).find(([, docs]) => docs.find(d => d.id === resourceId));
-                if (item) {
-                    const [iid, idocs] = item;
-                    const anyUnread = idocs.some(d => { const a = this._ackMap[d.id]; return !a || (a.version || 1) < (d.doc_version || 1); });
-                    const sidebarDot = document.querySelector(`#rf-ibtn-${iid} .rf-ibtn-dot`);
-                    if (sidebarDot) { sidebarDot.className = `rf-ibtn-dot ${anyUnread ? 'unread' : 'read'}`; }
-                }
+            const doc = Object.values(this._docs).flat().find(d => d.id === resourceId)
+                || this._headerDocs.find(d => d.id === resourceId);
+            const ext = (doc?.storage_path || storagePath || '').split('.').pop().toLowerCase();
+            const isPdf = doc?.type === 'pdf' || ext === 'pdf';
+            if (isPdf) {
+                const resource = await API.resources.getById(resourceId);
+                await ResourcesPage._openPdfDrawer(resource);
+            } else {
+                Loader.show();
+                const url = await API.resources.getSignedUrl(storagePath);
+                const title = doc?.title || storagePath.split('/').pop();
+                const viewerUrl = `pdf-viewer.html?file=${encodeURIComponent(url)}&title=${encodeURIComponent(title)}&download=1`;
+                window.open(viewerUrl, '_blank', 'noopener,noreferrer');
+                Loader.hide();
             }
         } catch (e) {
-            Toast.error('Помилка', e.message);
-        } finally {
             Loader.hide();
+            Toast.error('Помилка', e.message);
         }
     },
 

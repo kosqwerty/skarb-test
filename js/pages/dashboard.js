@@ -379,13 +379,14 @@ const DashboardPage = {
 
         // Unacked docs + pending assignments (interns have no access to documents)
         const isIntern = AppState.isIntern();
-        const [unackedDocs, testsCount, surveysCount] = await Promise.all([
+        const [unackedDocs, testsCount, surveysCount, onlineUsers] = await Promise.all([
             isIntern ? Promise.resolve([]) : this._getUnackedDocs().catch(() => []),
             API.tests.getMyPendingCount().catch(() => 0),
             API.surveys.getMyPendingCount().catch(() => 0),
+            AppState.isAdmin() ? API.profiles.getOnline().catch(() => []) : Promise.resolve([]),
         ]);
 
-        this._renderWelcome(enrollments, testsCount, surveysCount);
+        this._renderWelcome(enrollments, testsCount, surveysCount, onlineUsers);
         this._renderCalWidget(calEvents, today, scheduleEntries, mgrHelpDates, needSubDates);
         this._renderImportantEvents(calEvents, today);
         this._renderAlerts(unackedDocs, recentNotifs);
@@ -393,9 +394,6 @@ const DashboardPage = {
         this._renderBirthdays(birthdays);
         CompanyBirthdayModal._initDashboardChat();
         this._renderFeed(newsRes.data || []);
-
-        // План дня
-        this._showDayPlanPopup(scheduleEntries, calEvents, today);
 
         // Тур для нових користувачів (тимчасово вимкнено)
         // setTimeout(() => this._startTour(), 1800);
@@ -594,11 +592,18 @@ const DashboardPage = {
                 text: 'Нові сповіщення від адміністрації, призначені тести та курси — все тут. Кнопка <em>«Прочитати всі»</em> миттєво очищає список.',
             },
             {
+                target: '.nav-item[data-route="documents"]',
+                position: 'right',
+                icon: '📄',
+                title: 'Перегляд документів',
+                text: 'У розділі <strong>Документи</strong> файли відкриваються одразу у бічній панелі — без переходу на окрему сторінку. Статус <strong>«Ознайомлено»</strong> проставляється <strong>автоматично</strong>, коли ви прогортаєте PDF до кінця (або передивитесь більшу частину відео) — окрему кнопку тиснути не потрібно. Посилання всередині PDF (на сайти чи інші розділи документа) — клікабельні.',
+            },
+            {
                 target: '#db-cal-tour-target',
                 position: 'left',
                 icon: '📅',
                 title: 'Календар та важливі події',
-                text: 'Ваш особистий календар — <strong>натисніть на дату</strong> щоб додати подію або нагадування. Для кожної події можна встановити <strong>нагадування за N днів</strong> — прийде сповіщення заздалегідь. Кнопка <strong>🎉 Свята</strong> показує українські державні свята на місяць. Нижче відображаються <strong>важливі події сьогодні</strong> та майбутні. При вході в портал автоматично відкривається <strong>вікно з планом дня</strong>.',
+                text: 'Ваш особистий календар — <strong>натисніть на дату</strong> щоб додати подію або нагадування. Для кожної події можна встановити <strong>нагадування за N днів</strong> — прийде сповіщення заздалегідь. Кнопка <strong>🎉 Свята</strong> показує українські державні свята на місяць. Нижче відображаються <strong>важливі події сьогодні</strong> та майбутні. При вході в портал (раз на день) автоматично з\'являється <strong>огляд дня</strong> — справи з календаря, запити на підміну та непрочитані сповіщення.',
             },
             {
                 target: '#db-birthdays',
@@ -606,42 +611,6 @@ const DashboardPage = {
                 icon: '🎂',
                 title: 'Дні народження колег',
                 text: 'Портал автоматично нагадує про <strong>дні народження</strong> колег. Коли у когось ДН — з\'являється яскравий банер з можливістю надіслати привітання прямо в системі.',
-            },
-            {
-                icon: '💎',
-                title: 'День народження Скарбниці',
-                text: `9 листопада — день народження компанії! З'являється святкова модалка з привітанням та картка-чат на дашборді. Натисніть <b>Далі</b> щоб побачити чат.`,
-                tipStyle: { top: '50%', bottom: 'auto', left: 'auto', right: '16px', transform: 'translateY(-50%)', width: '540px' },
-                noBackdrop: true,
-                onShow: () => {
-                    CompanyBirthdayModal.demo();
-                    const tourRoot = document.getElementById('tour-root');
-                    if (tourRoot) tourRoot.style.zIndex = '10102';
-                    setTimeout(() => {
-                        const box = document.querySelector('.cbd-box');
-                        if (box) box.style.boxShadow = '0 0 0 4px var(--primary), 0 0 0 8px rgba(99,102,241,.35), 0 32px 100px rgba(0,0,0,.5)';
-                    }, 400);
-                },
-                onLeave: () => {
-                    document.getElementById('company-bday-modal')?.remove();
-                    document.getElementById('cbd-topbar-badge')?.remove();
-                    document.getElementById('cbd-emoji-rain')?.remove();
-                    const tourRoot = document.getElementById('tour-root');
-                    if (tourRoot) tourRoot.style.zIndex = '99990';
-                },
-            },
-            {
-                target: '#db-bday-chat',
-                position: 'left',
-                icon: '💬',
-                title: 'Чат привітань',
-                text: 'На дашборді з\'являється ця картка — <strong>натисніть на неї</strong> щоб відкрити повноекранний чат і написати привітання компанії.',
-                tipStyle: { top: '24px', bottom: 'auto', left: '24px', right: 'auto', transform: 'none', width: '580px' },
-                noBackdrop: true,
-                onShow: () => {
-                    const el = document.getElementById('db-bday-chat');
-                    if (el) el.scrollIntoView({ behavior: 'instant', block: 'center' });
-                },
             },
             {
                 icon: '🎉',
@@ -663,18 +632,18 @@ const DashboardPage = {
                 },
             },
             {
-                target: '.nav-item[data-route="news"]',
+                target: '#db-feed',
                 position: 'right',
                 icon: '📰',
-                title: 'Новини компанії',
-                text: 'Розділ <strong>Новини</strong> доступний у бічному меню. А іконка 📣 у шапці показує лічильник нових новин — натисніть щоб побачити превью останньої без переходу в розділ.',
+                title: 'Стрічка новин',
+                text: 'Тут — останні новини: анонси, оновлення умов роботи та інша важлива інформація від компанії. Можна реагувати емодзі прямо в стрічці. Кнопка <strong>«Всі новини»</strong> відкриває повний список.',
             },
             {
                 target: '.sb-icons-row',
                 position: 'bottom',
                 icon: '🛎️',
-                title: 'Дзвоник сповіщень',
-                text: `Оновлення в реальному часі — нові призначення, нагадування, повідомлення від адміністрації. Число оновлюється автоматично.<br><br>
+                title: 'Дзвоники в шапці',
+                text: `Іконка <strong>🕐 «Нещодавно переглянуті»</strong> — швидкий доступ до сторінок, які ви відкривали останнім часом. Іконка <strong>🔔 Сповіщення</strong> оновлюється в реальному часі — нові призначення, нагадування, повідомлення від адміністрації. Число оновлюється автоматично.<br><br>
                     <div style="background:var(--bg-raised);border:1px solid var(--border);border-radius:10px;padding:.65rem 1rem;display:flex;align-items:center;gap:.75rem">
                         <i class="fa-solid fa-volume-high" style="color:var(--primary);font-size:1.1rem;flex-shrink:0"></i>
                         <div style="flex:1;min-width:0;font-size:.82rem">При непрочитаних — <strong>звуковий сигнал кожні 5 хв</strong></div>
@@ -691,15 +660,18 @@ const DashboardPage = {
                 text: (() => {
                     const r = AppState.profile?.role;
                     const isStaff  = ['superadmin','admin','smm'].includes(r);
+                    const isCeo    = r === 'ceo';
                     const isMgr    = r === 'manager';
                     const isIntern = AppState.isIntern();
-                    const base = isStaff
-                        ? 'Досліджуйте портал через бокове меню: <strong>Моє навчання</strong>, <strong>Новини</strong>, <strong>База знань</strong>, <strong>Документи</strong>, <strong>Сторінки</strong>. В розділі <strong>Управління</strong> — аналітика, планування та адміністрування.'
+                    const base = isIntern
+                        ? 'Досліджуйте портал через бокове меню: <strong>Головна</strong>, <strong>Моє навчання</strong>. У розділі <strong>Особисте</strong> — <strong>Закладки</strong>.'
+                        : isStaff
+                        ? 'Досліджуйте портал через бокове меню: <strong>Моє навчання</strong>, <strong>Документи</strong>, <strong>Меню</strong>. У розділі <strong>Управління</strong> — база знань, аналітика, планування та адміністрування.'
+                        : isCeo
+                        ? 'Досліджуйте портал через бокове меню: <strong>Моє навчання</strong>, <strong>Документи</strong>, <strong>Меню</strong>. У розділі <strong>Управління</strong> — база знань, аналітика та планування.'
                         : isMgr
-                        ? 'Досліджуйте портал через бокове меню: <strong>Моє навчання</strong>, <strong>Новини</strong>, <strong>База знань</strong>, <strong>Документи</strong>. В розділі <strong>Управління</strong> є <strong>Розділ планування</strong>.'
-                        : isIntern
-                        ? 'Досліджуйте портал через бокове меню: <strong>Моє навчання</strong>, <strong>Новини</strong>, <strong>База знань</strong>.'
-                        : 'Досліджуйте портал через бокове меню.';
+                        ? 'Досліджуйте портал через бокове меню: <strong>Моє навчання</strong>, <strong>Документи</strong>, <strong>Меню</strong>. У розділі <strong>Управління</strong> є <strong>база знань</strong> та <strong>Розділ планування</strong>.'
+                        : 'Досліджуйте портал через бокове меню: <strong>Моє навчання</strong>, <strong>Документи</strong>, <strong>Меню</strong>.';
                     return base + ' Успіхів!';
                 })(),
             },
@@ -742,6 +714,19 @@ const DashboardPage = {
             { id: 'ie2', title: 'Дедлайн звіту Q2', date: today, time: '18:00', is_important: true, acked_date: null, color: '#f59e0b' },
         ], today);
 
+        // Стрічка новин — підставляємо демо-новину щоб highlight на кроці туру спрацював
+        // (реальна стрічка ховається повністю, якщо новин немає)
+        this._renderFeed([
+            {
+                id: 'demo-news-1',
+                title: 'Оновлення умов преміювання на 2026 рік',
+                excerpt: 'Ознайомтесь з новими умовами нарахування премій та бонусів для всіх підрозділів.',
+                thumbnail_url: null,
+                published_at: new Date().toISOString(),
+                author: { full_name: 'Редакція', avatar_url: null, subdivision: null },
+            },
+        ]).catch(() => {});
+
         // Дзвоник сповіщень — показуємо бейдж
         UI._setNotificationBadge(5);
 
@@ -759,10 +744,6 @@ const DashboardPage = {
         const newsBell  = document.getElementById('news-bell');
         if (newsBadge) { newsBadge.textContent = '3'; newsBadge.classList.remove('hidden'); }
         if (newsBell)  newsBell.classList.add('has-unread');
-
-        // Чат ДР компанії — рендеруємо картку щоб highlight спрацював на кроці
-        const chatEl = document.getElementById('db-bday-chat');
-        if (chatEl) CompanyBirthdayModal._renderChatCard(chatEl);
 
         this._tourDemoActive = true;
     },
@@ -1564,98 +1545,8 @@ const DashboardPage = {
         if (el) { el.style.transition = 'opacity .3s'; el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }
     },
 
-    _showDayPlanPopup(scheduleEntries, calEvents, today) {
-        // Show once per day per user
-        const storageKey = `dayplan_shown_${AppState.user.id}_${today}`;
-        if (localStorage.getItem(storageKey)) return;
-
-        const _pad = n => String(n).padStart(2,'0');
-        const todayD = new Date();
-        const tomorrowD = new Date(todayD); tomorrowD.setDate(tomorrowD.getDate() + 1);
-        const tomorrow = `${tomorrowD.getFullYear()}-${_pad(tomorrowD.getMonth()+1)}-${_pad(tomorrowD.getDate())}`;
-
-        const shiftMeta = { work:{label:'Робоча зміна',color:'#10b981',icon:'fa-briefcase'}, day_off:{label:'Вихідний',color:'#8b5cf6',icon:'fa-couch'}, vacation:{label:'Відпустка',color:'#f59e0b',icon:'fa-umbrella-beach'}, sick:{label:'Лікарняний',color:'#ef4444',icon:'fa-house-medical'} };
-
-        const todayShift    = scheduleEntries.find(e => e.date === today);
-        const tomorrowShift = scheduleEntries.find(e => e.date === tomorrow);
-        const todayEvs      = calEvents.filter(e => e.date === today);
-        const tomorrowEvs   = calEvents.filter(e => e.date === tomorrow);
-
-        // Nothing to show
-        if (!todayShift && !tomorrowShift && !todayEvs.length && !tomorrowEvs.length) return;
-
-        const _shiftRow = (s) => {
-            if (!s) return '';
-            const m = shiftMeta[s.shift_type] || shiftMeta.work;
-            const loc = s.schedule_locations?.name ? ` · ${Fmt.esc(s.schedule_locations.name)}` : '';
-            return `<div class="dp-row">
-                <div class="dp-dot" style="background:${m.color}"></div>
-                <div class="dp-rtext">
-                    <span class="dp-rtitle">${m.label}${loc}</span>
-                    ${s.notes && !['__sub__','__needsub__','__sub_confirmed__'].includes(s.notes) ? `<span class="dp-rsub">${Fmt.esc(s.notes)}</span>` : ''}
-                </div>
-            </div>`;
-        };
-        const _evRow = (ev, dateLabel) => {
-            const c = ev.color || '#6366f1';
-            const time = ev.time ? `${ev.time.slice(0,5)}` : '';
-            const meta = [dateLabel, time].filter(Boolean).join(' · ');
-            return `<div class="dp-row">
-                <div class="dp-dot" style="background:${c}"></div>
-                <div class="dp-rtext">
-                    <span class="dp-rtitle">${Fmt.esc(ev.title)}</span>
-                    ${meta ? `<span class="dp-rsub" style="color:${c};font-weight:600">${meta}</span>` : ''}
-                </div>
-            </div>`;
-        };
-
-        const ua = new Date().toLocaleDateString('uk-UA',{weekday:'long',day:'numeric',month:'long'});
-        const ub = tomorrowD.toLocaleDateString('uk-UA',{weekday:'long',day:'numeric',month:'long'});
-
-        const todayShort    = todayD.toLocaleDateString('uk-UA',{day:'numeric',month:'short'});
-        const tomorrowShort = tomorrowD.toLocaleDateString('uk-UA',{day:'numeric',month:'short'});
-
-        const secToday = (todayShift || todayEvs.length) ? `
-            <div class="dp-day-hdr"><i class="fa-solid fa-sun"></i> Сьогодні · ${ua}</div>
-            <div class="dp-day-rows">
-                ${_shiftRow(todayShift)}
-                ${todayEvs.map(e => _evRow(e, todayShort)).join('')}
-            </div>` : '';
-
-        const secTomorrow = (tomorrowShift || tomorrowEvs.length) ? `
-            <div class="dp-day-hdr" style="margin-top:.75rem"><i class="fa-regular fa-moon"></i> Завтра · ${ub}</div>
-            <div class="dp-day-rows">
-                ${_shiftRow(tomorrowShift)}
-                ${tomorrowEvs.map(e => _evRow(e, tomorrowShort)).join('')}
-            </div>` : '';
-
-        const body = `<style>
-            .dp-wrap{padding:.25rem 0}
-            .dp-day-hdr{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:.45rem;display:flex;align-items:center;gap:.4rem}
-            .dp-day-rows{display:flex;flex-direction:column;gap:.3rem}
-            .dp-row{display:flex;align-items:flex-start;gap:.65rem;padding:.35rem .5rem;border-radius:var(--radius-md);background:var(--bg-raised)}
-            .dp-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:.28rem}
-            .dp-rtext{display:flex;flex-direction:column;gap:.1rem;min-width:0}
-            .dp-rtitle{font-size:.85rem;font-weight:600;color:var(--text-primary)}
-            .dp-rsub{font-size:.72rem;color:var(--text-muted)}
-        </style>
-        <div class="dp-wrap">${secToday}${secTomorrow}</div>`;
-
-        setTimeout(async () => {
-            // Не показуємо якщо вже відкрито нагадування з календаря
-            // showTodayReminder стартує за 300мс + async запити — чекаємо достатньо
-            if (window._calPopupShown) return;
-            window._dashPopupShown = true;
-            Modal.open({
-                title: '📅 План на сьогодні і завтра',
-                body,
-                footer: `<button class="btn btn-primary" onclick="Modal.close();window._dashPopupShown=false;">Зрозуміло</button>`,
-                size: 'sm',
-                onClose: () => { window._dashPopupShown = false; }
-            });
-            localStorage.setItem(storageKey, '1');
-        }, 1500);
-    },
+    // "План на сьогодні і завтра" видалено — дублював DailyBriefModal (dbb-box,
+    // app.js), який тепер теж показує зміну графіку й дані на завтра.
 
     _renderAlerts(unackedDocs, recentNotifs) {
         const docsEl  = document.getElementById('db-alerts-docs');
@@ -2045,8 +1936,11 @@ const DashboardPage = {
                 .db-bday-sub{font-size:.72rem;color:#b45309;opacity:.8;margin-top:.15rem}
                 body:not(.light-theme) .db-bday-sub{color:#fbbf24}
                 .db-bday-divider{width:1px;height:48px;background:rgba(245,158,11,.35);flex-shrink:0}
-                .db-bday-scroll{display:flex;gap:.75rem;overflow-x:auto;flex:1;align-items:center;scrollbar-width:none;padding:.1rem 0}
-                .db-bday-scroll::-webkit-scrollbar{display:none}
+                .db-bday-scroll{overflow-x:hidden;flex:1;min-width:0;padding:.1rem 0}
+                .db-bday-track{display:flex;gap:.75rem;align-items:center;width:max-content}
+                @keyframes db-bday-marquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+                .db-bday-track.marquee{animation:db-bday-marquee linear infinite;animation-duration:var(--db-bday-dur,25s)}
+                .db-bday-scroll:hover .db-bday-track.marquee{animation-play-state:paused}
                 .db-bday-card{display:flex;align-items:center;gap:.65rem;flex-shrink:0;
                     padding:.5rem .85rem .5rem .55rem;border-radius:var(--radius-lg);
                     background:rgba(255,255,255,.7);border:1px solid rgba(245,158,11,.25);
@@ -2087,8 +1981,20 @@ const DashboardPage = {
                     </div>
                 </div>
                 <div class="db-bday-divider"></div>
-                <div class="db-bday-scroll">${cards}</div>
+                <div class="db-bday-scroll" id="db-bday-scroll"><div class="db-bday-track" id="db-bday-track">${cards}</div></div>
             </div>`;
+
+        // Якщо картки не вміщаються в один ряд — вмикаємо біжучу стрічку
+        // (безшовний луп: дублюємо контент і крутимо трек на -50%), інакше
+        // частина іменинників просто губилась поза видимою областю.
+        const scrollEl = document.getElementById('db-bday-scroll');
+        const trackEl  = document.getElementById('db-bday-track');
+        if (scrollEl && trackEl && trackEl.scrollWidth > scrollEl.clientWidth + 4) {
+            const dur = Math.max(18, Math.round(trackEl.scrollWidth / 45));
+            trackEl.innerHTML += trackEl.innerHTML;
+            trackEl.style.setProperty('--db-bday-dur', dur + 's');
+            trackEl.classList.add('marquee');
+        }
 
         const confEl = document.getElementById('db-bday-conf');
         if (confEl) {
@@ -2150,16 +2056,20 @@ const DashboardPage = {
             });
             this._bdaySentIds?.add(personId);
             Modal.close();
-            const cardBtn = document.querySelector(`[data-bday-btn="${personId}"]`);
-            if (cardBtn) { cardBtn.textContent = '✅ Надіслано'; cardBtn.disabled = true; cardBtn.style.opacity = '.5'; }
+            // querySelectorAll — картка може бути продубльована для біжучої
+            // стрічки (db-bday-track.marquee), тож збігів може бути кілька
+            document.querySelectorAll(`[data-bday-btn="${personId}"]`).forEach(cardBtn => {
+                cardBtn.textContent = '✅ Надіслано'; cardBtn.disabled = true; cardBtn.style.opacity = '.5';
+            });
             Toast.success('Надіслано! 🎉', `Привітання для ${Fmt.esc(p?.full_name || '')} відправлено`);
         } catch(e) {
             btn.disabled = false;
             btn.textContent = '🎊 Надіслати';
             if (e.code === '23505') {
                 this._bdaySentIds?.add(personId);
-                const cardBtn = document.querySelector(`[data-bday-btn="${personId}"]`);
-                if (cardBtn) { cardBtn.textContent = '✅ Надіслано'; cardBtn.disabled = true; cardBtn.style.opacity = '.5'; }
+                document.querySelectorAll(`[data-bday-btn="${personId}"]`).forEach(cardBtn => {
+                    cardBtn.textContent = '✅ Надіслано'; cardBtn.disabled = true; cardBtn.style.opacity = '.5';
+                });
                 Modal.close();
                 Toast.info('Вже надіслано', `Ви вже привітали ${Fmt.esc(p?.full_name || '')} цього року`);
             } else {
@@ -2203,7 +2113,7 @@ const DashboardPage = {
     },
 
 
-    _renderWelcome(enrollments, testsCount = 0, surveysCount = 0) {
+    _renderWelcome(enrollments, testsCount = 0, surveysCount = 0, onlineUsers = []) {
         const el = document.getElementById('db-welcome');
         if (!el) return;
 
@@ -2260,6 +2170,34 @@ const DashboardPage = {
         });
         const chipsHtml = chips.length ? `<div class="dbw-sep"></div><div class="dbw-chips">${chips.join('')}</div>` : '';
 
+        // ── Онлайн зараз (тільки для адмінів) — presence-піґулки з
+        // аватар-стеком, клік відкриває панель зі списком людей.
+        const onlineAll    = onlineUsers || [];
+        const onlineAdmins = onlineAll.filter(u => ['admin', 'superadmin'].includes(u.role));
+        this._onlineData = { all: onlineAll, admins: onlineAdmins };
+        const _miniAva = u => {
+            const initials = Fmt.esc(Fmt.initials(u.full_name || '?'));
+            return `<span class="dbw-online-ava">${u.avatar_url
+                ? `<img src="${u.avatar_url}" alt="" style="width:100%;height:100%;object-fit:cover;display:block">`
+                : `<span>${initials}</span>`}</span>`;
+        };
+        const _onlinePill = (id, icon, list, label, hex) => {
+            if (!list.length) return '';
+            const rgb = _hex2rgb(hex);
+            return `<button type="button" class="dbw-online-pill" style="--cc:${hex};--cc-rgb:${rgb}"
+                    onclick="event.stopPropagation();DashboardPage._toggleOnlinePopover('${id}', this)" title="${label}">
+                <span class="dbw-online-stack">${list.slice(0, 4).map(_miniAva).join('')}</span>
+                <span class="dbw-online-dot"></span>
+                <span>${icon} ${list.length}</span>
+            </button>`;
+        };
+        const onlineHtml = AppState.isAdmin() && onlineAll.length ? `
+            <div class="dbw-sep"></div>
+            <div class="dbw-online-group">
+                ${_onlinePill('all', '🟢', onlineAll, 'Онлайн зараз', '#10b981')}
+                ${_onlinePill('admins', '🛡️', onlineAdmins, 'Адміни онлайн', '#2563eb')}
+            </div>` : '';
+
         el.innerHTML = `
         <style>
             @keyframes dbw-in{0%{opacity:0;transform:translateY(-6px)}100%{opacity:1;transform:translateY(0)}}
@@ -2308,6 +2246,48 @@ const DashboardPage = {
                 box-shadow:0 0 0 3px rgba(var(--cc-rgb),.12);transform:translateY(-1px)}
             .dbw-chip:active{transform:translateY(0)}
             .dbw-chip-check{font-size:.58rem;margin-left:.1rem}
+            .dbw-online-group{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap}
+            .dbw-online-pill{display:inline-flex;align-items:center;gap:.4rem;
+                border-radius:999px;padding:.22rem .7rem .22rem .3rem;
+                font-size:.78rem;font-weight:700;line-height:1;color:var(--cc);
+                background:rgba(var(--cc-rgb),.09);border:1px solid rgba(var(--cc-rgb),.28);
+                cursor:pointer;font-family:inherit;white-space:nowrap;
+                transition:all .18s cubic-bezier(.4,0,.2,1)}
+            .dbw-online-pill:hover{background:rgba(var(--cc-rgb),.16);border-color:rgba(var(--cc-rgb),.55);
+                box-shadow:0 0 0 3px rgba(var(--cc-rgb),.12);transform:translateY(-1px)}
+            .dbw-online-pill:active{transform:translateY(0)}
+            .dbw-online-stack{display:flex;align-items:center}
+            .dbw-online-ava{width:18px;height:18px;border-radius:50%;overflow:hidden;flex-shrink:0;
+                background:var(--cc);border:1.5px solid var(--bg-surface);margin-left:-7px;
+                display:flex;align-items:center;justify-content:center;color:#fff;font-size:.55rem;font-weight:800}
+            .dbw-online-ava:first-child{margin-left:0}
+            .dbw-online-dot{width:6px;height:6px;border-radius:50%;background:var(--cc);flex-shrink:0;
+                box-shadow:0 0 0 2px rgba(var(--cc-rgb),.3);animation:dbw-pulse 1.8s ease-in-out infinite}
+            @keyframes dbw-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.7)}}
+            @media (prefers-reduced-motion: reduce){.dbw-online-dot{animation:none}}
+            .dbw-online-pop{position:fixed;z-index:9000;min-width:230px;max-width:290px;
+                max-height:320px;overflow-y:auto;padding:.45rem;border-radius:14px;
+                background:var(--bg-surface);border:1px solid var(--border);
+                box-shadow:0 20px 50px -12px rgba(0,0,0,.35),0 4px 14px rgba(0,0,0,.1);
+                backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+                animation:dbw-pop-in .18s cubic-bezier(.4,0,.2,1) both}
+            @keyframes dbw-pop-in{from{opacity:0;transform:translateY(-6px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+            .dbw-online-pop::-webkit-scrollbar{width:6px}
+            .dbw-online-pop::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+            .dbw-pop-title{font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;
+                color:var(--text-muted);padding:.3rem .5rem .45rem}
+            .dbw-pop-row{display:flex;align-items:center;gap:.6rem;padding:.4rem .5rem;border-radius:9px;
+                animation:dbw-pop-row-in .22s cubic-bezier(.4,0,.2,1) both;animation-delay:calc(var(--i) * 35ms)}
+            @keyframes dbw-pop-row-in{from{opacity:0;transform:translateX(-5px)}to{opacity:1;transform:translateX(0)}}
+            .dbw-pop-row:hover{background:var(--bg-hover)}
+            .dbw-pop-ava{width:30px;height:30px;border-radius:50%;overflow:hidden;flex-shrink:0;
+                background:var(--cc);display:flex;align-items:center;justify-content:center;
+                color:#fff;font-size:.68rem;font-weight:800}
+            .dbw-pop-info{display:flex;flex-direction:column;min-width:0;gap:.05rem}
+            .dbw-pop-name{font-size:.82rem;font-weight:600;color:var(--text-primary);
+                white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+            .dbw-pop-sub{font-size:.68rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+            @media (prefers-reduced-motion: reduce){.dbw-online-pop,.dbw-pop-row{animation:none}}
             @media(max-width:768px){
                 .db-welcome-bar{padding:.65rem .9rem;gap:.65rem;border-radius:12px}
                 .dbw-sep{display:none}
@@ -2338,6 +2318,7 @@ const DashboardPage = {
             </div>
             ${AppState.isTrustedNetwork ? courseHtml : ''}
             ${AppState.isTrustedNetwork ? chipsHtml : ''}
+            ${onlineHtml}
             <svg class="dbw-deco" viewBox="0 0 620 80" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" preserveAspectRatio="xMaxYMid slice">
                 <defs>
                     <filter id="dbw-f-glow" x="-60%" y="-60%" width="220%" height="220%">
@@ -2383,6 +2364,51 @@ const DashboardPage = {
         </div>`;
     },
 
+    // Панель "хто онлайн" — фіксований елемент, доданий у <body> (не всередину
+    // .db-welcome-bar, бо той має overflow:hidden для декоративного SVG і
+    // обрізав би спливаючу панель). Позиція рахується від кнопки-тригера.
+    _toggleOnlinePopover(id, btn) {
+        const existing = document.getElementById('dbw-online-pop');
+        const wasOpenSameId = existing && this._onlinePopOpenId === id;
+        existing?.remove();
+        this._onlinePopOpenId = null;
+        if (wasOpenSameId) return;
+
+        const list = (this._onlineData && this._onlineData[id]) || [];
+        if (!list.length) return;
+        const hex = id === 'admins' ? '#2563eb' : '#10b981';
+        const title = id === 'admins' ? 'Адміни онлайн' : 'Онлайн зараз';
+
+        const rect = btn.getBoundingClientRect();
+        const el = document.createElement('div');
+        el.id = 'dbw-online-pop';
+        el.className = 'dbw-online-pop';
+        el.style.cssText = `--cc:${hex};top:${rect.bottom + 8}px;left:${Math.min(rect.left, window.innerWidth - 300)}px`;
+        el.innerHTML = `
+            <div class="dbw-pop-title">${title} · ${list.length}</div>
+            ${list.map((u, i) => {
+                const initials = Fmt.esc(Fmt.initials(u.full_name || '?'));
+                return `<div class="dbw-pop-row" style="--i:${i}">
+                    <span class="dbw-pop-ava">${u.avatar_url
+                        ? `<img src="${u.avatar_url}" alt="" style="width:100%;height:100%;object-fit:cover;display:block">`
+                        : `<span>${initials}</span>`}</span>
+                    <span class="dbw-pop-info">
+                        <span class="dbw-pop-name">${Fmt.esc(u.full_name || '—')}</span>
+                        <span class="dbw-pop-sub">${Fmt.esc(u.job_position || Fmt.role(u.role))}</span>
+                    </span>
+                </div>`;
+            }).join('')}`;
+        document.body.appendChild(el);
+        this._onlinePopOpenId = id;
+
+        setTimeout(() => document.addEventListener('click', function h(e) {
+            if (!e.target.closest('.dbw-online-pill') && !e.target.closest('#dbw-online-pop')) {
+                el.remove();
+                DashboardPage._onlinePopOpenId = null;
+                document.removeEventListener('click', h);
+            }
+        }), 0);
+    },
 
     _renderNewsWidget(items) {
         const el = document.getElementById('db-news-widget');

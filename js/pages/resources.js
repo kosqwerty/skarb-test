@@ -1000,9 +1000,12 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
         ];
         const otherCats = [...new Set(allDocs.map(r => r.category).filter(c => c && !catDefs.find(d => d.key === c) && c.toLowerCase() !== 'general' && c.toLowerCase() !== 'реєстри нпа' && c.toLowerCase() !== 'реєстри' && c.toLowerCase() !== 'анкета'))].sort();
 
-        // Status counts
-        const unreadCount = allDocs.filter(r => { const dl = this._myDownloads[r.id]; return !dl || r.doc_version > (dl.version||1); }).length;
-        const readCount   = allDocs.length - unreadCount;
+        // Status counts — лише трековані документи (нетраковані теж
+        // показують "Ознайомлено" на самій картці, але в цей розділ не
+        // потрапляють)
+        const trackedDocs = allDocs.filter(r => r.is_tracked_download);
+        const unreadCount = trackedDocs.filter(r => { const dl = this._myDownloads[r.id]; return !dl || r.doc_version > (dl.version||1); }).length;
+        const readCount   = trackedDocs.length - unreadCount;
 
         // TOV counts
         const tovMap = {};
@@ -1468,11 +1471,20 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
                 if (this._category) {
                     filtered = filtered.filter(r => r.category === this._category);
                 }
-                // apply tree status filter
+                // apply tree status filter — лише трековані документи
+                // (розділ "Статус" у сайдбарі стосується тільки них)
                 if (this._docsTreeStatus === 'unread') {
-                    filtered = filtered.filter(r => { const dl = this._myDownloads[r.id]; return !dl || r.doc_version > (dl.version||1); });
+                    filtered = filtered.filter(r => {
+                        if (!r.is_tracked_download) return false;
+                        const dl = this._myDownloads[r.id];
+                        return !dl || r.doc_version > (dl.version || 1);
+                    });
                 } else if (this._docsTreeStatus === 'read') {
-                    filtered = filtered.filter(r => { const dl = this._myDownloads[r.id]; return dl && !(r.doc_version > (dl.version||1)); });
+                    filtered = filtered.filter(r => {
+                        if (!r.is_tracked_download) return false;
+                        const dl = this._myDownloads[r.id];
+                        return dl && !(r.doc_version > (dl.version || 1));
+                    });
                 }
                 // apply tree TOV filter
                 if (this._docsTreeTov) {
@@ -1510,33 +1522,32 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
             const dlAt = dlStatus?.at;
             const isNewVersion = dlStatus && resource.doc_version > (dlStatus.version || 1);
 
+            // Візуальний статус "Ознайомлено"/"Не ознайомлено" тепер однаковий
+            // для ВСІХ документів (трекованих і ні) — раніше нетраковані
+            // показували нейтральне сіре "Відкрито", що виглядало
+            // неузгоджено. is_tracked_download і далі впливає лише на розділ
+            // "Статус" у сайдбарі (_renderDocsFilterSidebar) — туди
+            // потрапляють тільки трековані документи.
             let statusBadge;
-            if (resource.is_tracked_download) {
-                if (isNewVersion) {
-                    statusBadge = `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.73rem;color:#d97706;font-weight:500"><i class="fa-solid fa-rotate" style="font-size:.65rem"></i> Нова версія</span>`;
-                } else if (dlAt) {
-                    statusBadge = `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.73rem;color:#10b981;font-weight:500"><i class="fa-solid fa-check" style="font-size:.65rem"></i> ${this._ackLabel()} ${Fmt.dateShort(dlAt)}</span>`;
-                } else {
-                    statusBadge = `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.73rem;color:#ef4444;font-weight:500"><i class="fa-solid fa-circle-exclamation" style="font-size:.65rem"></i> Не ознайомлено</span>`;
-                }
+            if (isNewVersion) {
+                statusBadge = `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.73rem;color:#d97706;font-weight:500"><i class="fa-solid fa-rotate" style="font-size:.65rem"></i> Нова версія</span>`;
+            } else if (dlAt) {
+                statusBadge = `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.73rem;color:#10b981;font-weight:500"><i class="fa-solid fa-check" style="font-size:.65rem"></i> ${this._ackLabel()} ${Fmt.dateShort(dlAt)}</span>`;
             } else {
-                statusBadge = dlAt
-                    ? `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.73rem;color:var(--text-muted)"><i class="fa-regular fa-eye" style="font-size:.65rem"></i> Відкрито ${Fmt.dateShort(dlAt)}</span>`
-                    : `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.73rem;color:var(--text-muted)"><i class="fa-regular fa-eye-slash" style="font-size:.65rem"></i> Не переглянуто</span>`;
+                statusBadge = `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.73rem;color:#ef4444;font-weight:500"><i class="fa-solid fa-circle-exclamation" style="font-size:.65rem"></i> Не ознайомлено</span>`;
             }
 
             const deadlineBadge = this._deadlineBadge(resource, dlStatus);
 
-            const docClass = resource.is_tracked_download
-                ? (dlAt && !isNewVersion ? 'doc-acked' : 'doc-needs-ack')
-                : '';
+            const docClass = dlAt && !isNewVersion ? 'doc-acked' : 'doc-needs-ack';
 
             const ackDotClass = (dlAt && !isNewVersion) ? 'res-read' : 'res-unread';
             const ackDotTitle = (dlAt && !isNewVersion) ? 'Ознайомлено' : (isNewVersion ? 'Нова версія — потрібне повторне ознайомлення' : 'Не ознайомлено');
             const ackDot = `<span class="res-ack-dot ${ackDotClass}" title="${ackDotTitle}" data-doc-dot="${resource.id}"></span>`;
 
-            const typeColor = { pdf:'#ef4444', video:'#2563eb', scorm:'#f59e0b', link:'#06b6d4', file:'#6366f1', document:'#10b981', image:'#ec4899' };
-            const tc = typeColor[resource.type||'file'] || '#6366f1';
+            // inline border-left-color інакше й далі перебивав би клас
+            // .doc-acked/.doc-needs-ack кольором за типом файлу
+            const tc = (dlAt && !isNewVersion) ? '#10b981' : '#ef4444';
             return `
                 <div class="resource-item ${docClass}" data-id="${resource.id}" onclick="ResourcesPage.openViewer('${resource.id}')" style="cursor:pointer;border-left-color:${tc}">
                     ${ackDot}
@@ -1652,13 +1663,10 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
                 this._openPdfDrawer(resource);
                 return;
             }
-
-            // Non-PDF tracked docs: mark immediately on open
-            if (!isPdf) {
-                API.documentDownloads.track(id).catch(() => {});
-                if (!this._myDownloads[id]) this._myDownloads[id] = { at: new Date().toISOString(), version: 1 };
-            }
-            // PDF via route: tracking deferred to scroll-end in ResourceViewPage
+            // Трекання ознайомлення тепер лише в самому переглядачі:
+            // PDF — скрол до кінця, відео — перегляд до заданого відсотка
+            // (_setupUnlockListeners). Зображення/інші iframe-документи не
+            // трекаються взагалі — немає надійного сигналу "прочитано".
         }
         const from = this._view === 'admin' ? 'resources' : this._view === 'docs' ? 'documents' : 'knowledge-base';
         let route = `resource/${id}?from=${from}`;
@@ -1670,10 +1678,22 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
         Router.go(route);
     },
 
+    // Спільна шухляда для перегляду PDF праворуч — викликається не лише зі
+    // списку Документів, а й з Реєстрів/Червоної папки/Куточка споживача,
+    // де свого кешу ResourcesPage._myDownloads немає. Тому статус
+    // ознайомлення підвантажуємо тут же, якщо він ще не відомий цій сесії.
     async _openPdfDrawer(resource) {
         // Remove existing drawer if any
         document.getElementById('pdf-drawer')?.remove();
         document.getElementById('pdf-drawer-backdrop')?.remove();
+
+        if (!this._myDownloads) this._myDownloads = {};
+        if (!(resource.id in this._myDownloads)) {
+            try {
+                const latest = await API.documentDownloads.getMyLatest([resource.id]);
+                this._myDownloads[resource.id] = latest[resource.id] || null;
+            } catch (_) { this._myDownloads[resource.id] = null; }
+        }
 
         let url;
         try {
@@ -1692,6 +1712,9 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
         const safeIcon  = JSON.stringify('<i class="fa-regular fa-file-pdf"></i>').replace(/"/g, '&quot;');
         const safeCat   = JSON.stringify(resource.category || '').replace(/"/g, '&quot;');
 
+        // "Ознайомлено"/"Не ознайомлено" однаково для трекованих і
+        // нетрекованих (як тепер і в списку) — is_tracked_download більше
+        // не впливає на візуальний статус самого документа.
         const ackBadge = dlStatus
             ? `<span class="pdf-drawer-ack pdf-drawer-ack--done" id="pdf-drawer-ack">
                    <i class="fa-solid fa-check"></i> ${this._ackLabel()} ${Fmt.dateShort(dlStatus.at)}
@@ -1727,6 +1750,11 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
 
         this._drawerResource = resource;
 
+        // Блокуємо скрол сторінки позаду — інакше наведення курсору поза
+        // межами шухляди й прокрутка колесом гортає фоновий список
+        // документів, а не саму шухляду.
+        document.body.style.overflow = 'hidden';
+
         document.body.appendChild(backdrop);
         document.body.appendChild(drawer);
 
@@ -1751,6 +1779,14 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
                         badge.className = 'pdf-drawer-ack pdf-drawer-ack--done';
                         badge.innerHTML = `<i class="fa-solid fa-check"></i> ${this._ackLabel()} ${Fmt.dateShort(now)}`;
                     }
+                    // Шухляда — це оверлей ПОВЕРХ списку, а не окрема сторінка,
+                    // тому рядок у списку позаду треба оновити вручну — інакше
+                    // він лишається зі старим статусом навіть після ознайомлення.
+                    this._refreshDocCard(resource);
+                    // Реєстри/Червона папка/Куточок споживача відкривають цю ж
+                    // шухляду, але мають власні індикатори "ознайомлено" —
+                    // подія дозволяє їм синхронізуватись, не знаючи одне про одного.
+                    window.dispatchEvent(new CustomEvent('doc-acked', { detail: { resourceId: resource.id, version: resource.doc_version || 1, at: now } }));
                 }
                 window.removeEventListener('message', this._drawerScrollHandler);
                 this._drawerScrollHandler = null;
@@ -1770,22 +1806,17 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
         const dlAt = dlStatus?.at;
         const isNewVersion = dlStatus && resource.doc_version > (dlStatus.version || 1);
 
-        // Update status badge
+        // Update status badge — однаково для трекованих і нетрекованих
+        // (is_tracked_download впливає лише на розділ "Статус" у сайдбарі)
         const statusRow = card.querySelector('[data-status-row]');
         if (statusRow) {
             let statusBadge;
-            if (resource.is_tracked_download) {
-                if (isNewVersion) {
-                    statusBadge = `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.73rem;color:#d97706;font-weight:500"><i class="fa-solid fa-rotate" style="font-size:.65rem"></i> Нова версія</span>`;
-                } else if (dlAt) {
-                    statusBadge = `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.73rem;color:#10b981;font-weight:500"><i class="fa-solid fa-check" style="font-size:.65rem"></i> ${this._ackLabel()} ${Fmt.dateShort(dlAt)}</span>`;
-                } else {
-                    statusBadge = `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.73rem;color:#ef4444;font-weight:500"><i class="fa-solid fa-circle-exclamation" style="font-size:.65rem"></i> Не ознайомлено</span>`;
-                }
+            if (isNewVersion) {
+                statusBadge = `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.73rem;color:#d97706;font-weight:500"><i class="fa-solid fa-rotate" style="font-size:.65rem"></i> Нова версія</span>`;
+            } else if (dlAt) {
+                statusBadge = `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.73rem;color:#10b981;font-weight:500"><i class="fa-solid fa-check" style="font-size:.65rem"></i> ${this._ackLabel()} ${Fmt.dateShort(dlAt)}</span>`;
             } else {
-                statusBadge = dlAt
-                    ? `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.73rem;color:var(--text-muted)"><i class="fa-regular fa-eye" style="font-size:.65rem"></i> Відкрито ${Fmt.dateShort(dlAt)}</span>`
-                    : `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.73rem;color:var(--text-muted)"><i class="fa-regular fa-eye-slash" style="font-size:.65rem"></i> Не переглянуто</span>`;
+                statusBadge = `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.73rem;color:#ef4444;font-weight:500"><i class="fa-solid fa-circle-exclamation" style="font-size:.65rem"></i> Не ознайомлено</span>`;
             }
             statusRow.innerHTML = statusBadge + this._deadlineBadge(resource, dlStatus);
         }
@@ -1798,11 +1829,12 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
             dot.title = isRead ? 'Ознайомлено' : (isNewVersion ? 'Нова версія — потрібне повторне ознайомлення' : 'Не ознайомлено');
         }
 
-        // Update card class
-        if (resource.is_tracked_download) {
-            card.classList.toggle('doc-acked', !!(dlAt && !isNewVersion));
-            card.classList.toggle('doc-needs-ack', !(dlAt && !isNewVersion));
-        }
+        // Update card class + смужку зліва (inline border-left-color з
+        // початкового рендеру інакше й далі перебивав би клас кольором типу файлу)
+        const isAcked = !!(dlAt && !isNewVersion);
+        card.classList.toggle('doc-acked', isAcked);
+        card.classList.toggle('doc-needs-ack', !isAcked);
+        card.style.borderLeftColor = isAcked ? '#10b981' : '#ef4444';
     },
 
     _toggleDrawerBookmark(id, title, icon, category) {
@@ -1822,6 +1854,7 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
         if (!drawer) return;
         drawer.classList.remove('pdf-drawer--open');
         backdrop?.classList.remove('pdf-drawer-backdrop--open');
+        document.body.style.overflow = '';
         setTimeout(() => {
             drawer.remove();
             backdrop?.remove();
@@ -2201,20 +2234,10 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
                 viewerAction.innerHTML = `<span style="display:inline-flex;align-items:center;gap:.3rem;color:#10b981;font-weight:500;font-size:.85rem;white-space:nowrap">✅ ${this._ackLabel()} ${dateStr}</span>`;
             }
 
-            // Update only the acknowledged item in the list (no re-fetch needed)
-            const listEl = document.getElementById('resource-list');
-            if (listEl) {
-                const itemEl = listEl.querySelector(`[data-id="${resource.id}"]`);
-                if (itemEl) {
-                    itemEl.classList.remove('doc-needs-ack');
-                    itemEl.classList.add('doc-acked');
-                    const dateStr = Fmt.dateShort(this._myDownloads[resource.id].at);
-                    const statusRow = itemEl.querySelector('[data-status-row]');
-                    if (statusRow) {
-                        statusRow.innerHTML = `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.75rem;color:#10b981;font-weight:500">✅ ${this._ackLabel()} ${dateStr}</span>`;
-                    }
-                }
-            }
+            // Update the acknowledged item in the list (no re-fetch needed) —
+            // єдина спільна функція, щоб клас/колір смужки/текст/крапка-індикатор
+            // (res-ack-dot) завжди оновлювались разом, а не розбіжними шляхами.
+            this._refreshDocCard(resource);
         } catch (e) {
             Toast.error('Помилка', e.message);
         } finally {
@@ -3138,7 +3161,7 @@ const ResourceViewPage = {
 
         const deadlineBadge = from === 'documents' ? ResourcesPage._deadlineBadge(resource, dlStatus) : '';
 
-        const _alreadyAcked = from === 'documents' && resource.is_tracked_download && dlStatus && !(resource.doc_version > (dlStatus.version || 1));
+        const _alreadyAcked = from === 'documents' && dlStatus && !(resource.doc_version > (dlStatus.version || 1));
         const _ackInline = _alreadyAcked ? (() => {
             const btnBase = 'flex-shrink:0;display:inline-flex;align-items:center;gap:6px;padding:5px 14px;border-radius:20px;font-size:.85rem;font-weight:500;cursor:pointer;transition:background var(--transition),color var(--transition)';
             return `<span style="display:inline-flex;align-items:center;gap:.3rem;color:#10b981;font-weight:500;font-size:.85rem;white-space:nowrap">✅ ${ResourcesPage._ackLabel()} ${Fmt.dateShort(dlStatus.at)}</span>`;
@@ -3178,7 +3201,7 @@ const ResourceViewPage = {
 
                 <!-- Action footer (centered, tracked docs only) -->
                 <div style="display:flex;justify-content:center">
-                    ${this._buildActionFooter(resource, from, dlStatus, isPdf)}
+                    ${this._buildActionFooter(resource, from, dlStatus, isPdf, isVideo)}
                 </div>
 
                 <!-- Download bar (above viewer, hidden for PDF — viewer has its own download button) -->
@@ -3208,55 +3231,46 @@ const ResourceViewPage = {
         });
     },
 
-    _buildActionFooter(resource, from, dlStatus, isPdf) {
-        const id = resource.id;
-        const btnBase = 'flex-shrink:0;display:inline-flex;align-items:center;gap:6px;padding:5px 14px;border-radius:20px;font-size:.85rem;font-weight:500;cursor:pointer;transition:background var(--transition),color var(--transition)';
-
-        if (from === 'documents') {
-            if (!resource.is_tracked_download) {
-                return ''; // download handled by centered bar above viewer
-            }
-
-            const isNewVersion = dlStatus && resource.doc_version > (dlStatus.version || 1);
-            const alreadyAcked = dlStatus && !isNewVersion;
-
-            if (alreadyAcked) {
-                return ''; // shown inline in title row
-            }
-
-            // Needs (re-)acknowledgment — locked until scroll end
-            const lockHint = isNewVersion
-                ? '🔄 Нова версія — пролистайте до кінця'
-                : '📜 Пролистайте документ до кінця';
-            const ackBtn = `<button class="doc-unlock-btn" onclick="ResourcesPage.acknowledgeDoc('${id}')"
-                    style="${btnBase};display:none;border:1.5px solid #10b981;background:transparent;color:#10b981"
-                    onmouseenter="this.style.background='#10b981';this.style.color='#fff'"
-                    onmouseleave="this.style.background='transparent';this.style.color='#10b981'">✅ Підтвердити ознайомлення</button>`;
-            return `<div id="doc-viewer-action" style="flex-shrink:0;display:inline-flex;align-items:center;gap:.5rem">
-                <style>
-                @keyframes doc-lock-pulse {
-                    0%,100%{opacity:1;transform:scale(1)}
-                    50%{opacity:.55;transform:scale(.97)}
-                }
-                @keyframes doc-lock-glow {
-                    0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,0)}
-                    50%{box-shadow:0 0 0 6px rgba(239,68,68,.22)}
-                }
-                #doc-viewer-lock {
-                    animation:doc-lock-pulse 2s ease-in-out infinite,doc-lock-glow 2s ease-in-out infinite;
-                    display:inline-flex;align-items:center;gap:6px;
-                    padding:5px 14px;border-radius:20px;
-                    background:rgba(239,68,68,.1);border:1.5px solid rgba(239,68,68,.35);
-                    color:#ef4444;font-weight:600;font-size:.82rem;white-space:nowrap;
-                    margin-left:-100px;
-                }
-                </style>
-                <span id="doc-viewer-lock">${lockHint}</span>
-                ${ackBtn}
-            </div>`;
+    // Індикатор очікування ознайомлення — без кнопки: підтвердження тепер
+    // ставиться автоматично (PDF — скрол до кінця, відео — перегляд до
+    // заданого відсотка, див. _setupUnlockListeners), однаково для всіх
+    // документів (is_tracked_download більше не впливає на це, лише на
+    // розділ "Статус" у сайдбарі). Для зображень/docx/Google Docs вимогу
+    // прибрано зовсім — немає надійного сигналу "прочитано".
+    _buildActionFooter(resource, from, dlStatus, isPdf, isVideo) {
+        if (from !== 'documents' || !(isPdf || isVideo)) {
+            return ''; // download handled by centered bar above viewer
         }
 
-        return ''; // download handled by centered bar above viewer
+        const isNewVersion = dlStatus && resource.doc_version > (dlStatus.version || 1);
+        const alreadyAcked = dlStatus && !isNewVersion;
+        if (alreadyAcked) {
+            return ''; // shown inline in title row
+        }
+
+        const lockHint = isPdf
+            ? (isNewVersion ? '🔄 Нова версія — пролистайте до кінця' : '📜 Пролистайте документ до кінця')
+            : (isNewVersion ? '🔄 Нова версія — перегляньте відео' : '🎬 Перегляньте відео до кінця');
+        return `<div id="doc-viewer-action" style="flex-shrink:0;display:inline-flex;align-items:center;gap:.5rem">
+            <style>
+            @keyframes doc-lock-pulse {
+                0%,100%{opacity:1;transform:scale(1)}
+                50%{opacity:.55;transform:scale(.97)}
+            }
+            @keyframes doc-lock-glow {
+                0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,0)}
+                50%{box-shadow:0 0 0 6px rgba(239,68,68,.22)}
+            }
+            #doc-viewer-lock {
+                animation:doc-lock-pulse 2s ease-in-out infinite,doc-lock-glow 2s ease-in-out infinite;
+                display:inline-flex;align-items:center;gap:6px;
+                padding:5px 14px;border-radius:20px;
+                background:rgba(239,68,68,.1);border:1.5px solid rgba(239,68,68,.35);
+                color:#ef4444;font-weight:600;font-size:.82rem;white-space:nowrap;
+            }
+            </style>
+            <span id="doc-viewer-lock">${lockHint}</span>
+        </div>`;
     },
 
     _docTimeoutId: null,
@@ -3304,26 +3318,25 @@ const ResourceViewPage = {
         if (this._docIframeUrl) this._startDocTimeout(this._docIframeUrl);
     },
 
+    // Автоматичне ознайомлення — без кнопки, однаково для трекованих і
+    // нетрекованих документів (is_tracked_download більше не впливає на
+    // сам факт ознайомлення — лише на розділ "Статус" у сайдбарі).
+    // Спрацьовує лише для PDF (скрол до кінця) і відео (перегляд до
+    // VIDEO_ACK_THRESHOLD). Для зображень/docx/Google Docs вимогу
+    // прибрано — немає надійного сигналу "прочитано".
+    _VIDEO_ACK_THRESHOLD: 0.85,
+
     _setupUnlockListeners(resource, from, dlStatus, isPdf, isVideo, isImage, isDoc) {
         const isNewVersion = dlStatus && resource.doc_version > (dlStatus.version || 1);
-        const needsUnlock = from === 'documents' && resource.is_tracked_download && (!dlStatus || isNewVersion);
+        const needsUnlock = from === 'documents' && (!dlStatus || isNewVersion) && (isPdf || isVideo);
         if (!needsUnlock) return;
 
-        const unlock = () => {
-            const lock = document.getElementById('doc-viewer-lock');
-            if (lock) lock.style.display = 'none';
-            document.querySelectorAll('#doc-viewer-action .doc-unlock-btn').forEach(btn => {
-                btn.style.display = 'inline-flex';
-                btn.classList.add('doc-ack-pulse');
-            });
-        };
-
-        if (isImage) { unlock(); return; }
+        const autoAck = () => { ResourcesPage.acknowledgeDoc(resource.id); };
 
         if (isPdf) {
             const handler = e => {
                 if (e.data?.type === 'pdf-scroll-end') {
-                    unlock();
+                    autoAck();
                     window.removeEventListener('message', handler);
                 }
             };
@@ -3331,23 +3344,17 @@ const ResourceViewPage = {
             return;
         }
 
-        if (isVideo) {
-            // use a short timeout to let the video element appear in DOM
-            setTimeout(() => {
-                const video = document.querySelector('video');
-                if (!video) { unlock(); return; }
-                const handler = () => {
-                    if (video.duration && video.currentTime / video.duration >= 0.85) {
-                        unlock();
-                        video.removeEventListener('timeupdate', handler);
-                    }
-                };
-                video.addEventListener('timeupdate', handler);
-            }, 200);
-            return;
-        }
-
-        // Google Docs / other iframe: 15s fallback
-        setTimeout(unlock, 15000);
+        // use a short timeout to let the video element appear in DOM
+        setTimeout(() => {
+            const video = document.querySelector('video');
+            if (!video) { autoAck(); return; }
+            const handler = () => {
+                if (video.duration && video.currentTime / video.duration >= this._VIDEO_ACK_THRESHOLD) {
+                    autoAck();
+                    video.removeEventListener('timeupdate', handler);
+                }
+            };
+            video.addEventListener('timeupdate', handler);
+        }, 200);
     }
 };

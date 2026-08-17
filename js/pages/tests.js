@@ -86,20 +86,23 @@ const TestsPage = {
         const completedAttempts = attempts.filter(a => a.completed_at);
         const saved             = this._loadSavedProgress();
 
-        const resultStat = best
+        const hideScore = !!test.hide_score_from_user;
+        // При увімкненому "приховати бал від співробітника" плашку з результатом/
+        // прохідним балом взагалі не показуємо (а не просто ховаємо число в ній).
+        const resultStat = hideScore ? null : (best
             ? { icon:'fa-trophy', label:'Ваш результат', value: Math.round(best.percentage || 0) + '%', accent: best.passed ? '#10b981' : '#ef4444' }
-            : { icon:'fa-bullseye', label:'Прохідний бал', value: test.passing_score + '%', accent:'#14b8a6' };
+            : { icon:'fa-bullseye', label:'Прохідний бал', value: test.passing_score + '%', accent:'#14b8a6' });
         const attemptsStat = { icon:'fa-rotate-right', label:'Спроб залишилось', value: attemptsLeft === null ? '∞' : attemptsLeft, accent: canAttempt ? '#10b981' : '#ef4444' };
 
         // Тест пройдено і спроб більше немає — ховаємо "Запитань"/"Час" до появи нової спроби
-        const stats = (best && !canAttempt)
+        const stats = ((best && !canAttempt)
             ? [resultStat, attemptsStat]
             : [
                 { icon:'fa-question', label:'Запитань', value: test.questions?.length || 0, accent:'#3b82f6' },
                 resultStat,
                 attemptsStat,
                 { icon:'fa-clock', label:'Час', value: test.time_limit_minutes ? test.time_limit_minutes + ' хв' : 'Без ліміту', accent:'#C9A227' }
-            ];
+            ]).filter(Boolean);
 
         let barIcon, barClass, barHtml;
         if (!canAttempt) {
@@ -109,7 +112,9 @@ const TestsPage = {
         } else if (best) {
             barClass = best.passed ? 'pass' : 'fail';
             barIcon  = best.passed ? 'fa-trophy' : 'fa-circle-exclamation';
-            barHtml  = `Ваш найкращий результат: <b>${Math.round(best.percentage || 0)}%</b> — ${best.passed ? 'зараховано' : 'не зараховано'}`;
+            barHtml  = hideScore
+                ? `Ваш найкращий результат: <b>${best.passed ? 'зараховано' : 'не зараховано'}</b>`
+                : `Ваш найкращий результат: <b>${Math.round(best.percentage || 0)}%</b> — ${best.passed ? 'зараховано' : 'не зараховано'}`;
         } else {
             barClass = 'info';
             barIcon  = 'fa-star';
@@ -287,7 +292,7 @@ const TestsPage = {
                         <span style="color:var(--text-secondary);font-size:.9rem">${test.instructions}</span>
                     </div>` : ''}
 
-                ${completedAttempts.length ? `
+                ${(completedAttempts.length && !hideScore) ? `
                     <div class="th-acc" id="th-acc">
                         <button type="button" class="th-head" onclick="TestsPage._toggleHistory()">
                             <span class="th-head-icon"><i class="fa-solid fa-clock-rotate-left"></i></span>
@@ -1004,6 +1009,11 @@ const TestsPage = {
     _renderResult(result, timeSpent) {
         const container = document.getElementById('page-content');
         const pct = Math.round(result.percentage);
+        const hideScore = !!this._test.hide_score_from_user;
+        // При "приховати бал від співробітника" результат завжди показуємо
+        // як "Зараховано" (зелений) — лише візуально, result.passed і далі
+        // впливає на реальну логіку (needsReview лишається як є).
+        const displayPassed = result.needsReview ? false : (result.passed || hideScore);
 
         const total      = result.answers.length;
         const correctCnt = result.answers.filter(a => a.isCorrect === true).length;
@@ -1034,6 +1044,7 @@ const TestsPage = {
                 .tr-top-actions{display:flex;align-items:center;gap:.6rem;padding:14px 20px;flex-shrink:0}
 
                 .tr-body{display:grid;grid-template-columns:1fr 340px;gap:20px;align-items:stretch;margin-bottom:20px}
+                .tr-body.tr-body--solo{grid-template-columns:1fr}
                 .tr-card{background:var(--bg-surface);border:1px solid var(--border);border-radius:18px;padding:24px}
                 .tr-status-icon{width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.5rem;margin-bottom:1rem}
                 .tr-status-icon.pass{background:rgba(16,185,129,.14);color:var(--success)}
@@ -1043,7 +1054,9 @@ const TestsPage = {
                 .tr-metrics{display:flex;gap:2rem;flex-wrap:wrap}
                 .tr-metric-lbl{font-size:.72rem;color:var(--text-muted);margin-bottom:.3rem}
                 .tr-metric-val{font-size:1.15rem;font-weight:800;color:var(--text-primary);display:flex;align-items:center;gap:.5rem}
-                .tr-metric-val .pct{font-size:.85rem;font-weight:700;color:var(--success)}
+                .tr-metric-val .pct{font-size:.85rem;font-weight:700}
+                .tr-metric-val .pct.pass{color:var(--success)}
+                .tr-metric-val .pct.fail{color:var(--danger)}
 
                 .tr-donut-title{font-size:.85rem;font-weight:700;color:var(--text-primary);margin-bottom:1rem}
                 .tr-donut{width:150px;height:150px;border-radius:50%;margin:0 auto 1.2rem;
@@ -1095,19 +1108,19 @@ const TestsPage = {
                     </div>
                 </div>
 
-                <div class="tr-body">
+                <div class="tr-body${hideScore ? ' tr-body--solo' : ''}">
                     <div class="tr-card">
-                        <div class="tr-status-icon ${result.needsReview ? '' : (result.passed ? 'pass' : 'fail')}" style="${result.needsReview ? 'background:rgba(245,158,11,.14);color:#f59e0b' : ''}">
-                            <i class="fa-solid ${result.needsReview ? 'fa-hourglass-half' : (result.passed ? 'fa-check' : 'fa-xmark')}"></i>
+                        <div class="tr-status-icon ${result.needsReview ? '' : (displayPassed ? 'pass' : 'fail')}" style="${result.needsReview ? 'background:rgba(245,158,11,.14);color:#f59e0b' : ''}">
+                            <i class="fa-solid ${result.needsReview ? 'fa-hourglass-half' : (displayPassed ? 'fa-check' : 'fa-xmark')}"></i>
                         </div>
-                        <div class="tr-title">${result.needsReview ? 'Тест на перевірці' : (result.passed ? 'Тест завершено!' : 'Тест не зараховано')}</div>
+                        <div class="tr-title">${result.needsReview ? 'Тест на перевірці' : (displayPassed ? 'Тест завершено!' : 'Тест не зараховано')}</div>
                         <div class="tr-sub">${result.needsReview
                             ? 'У тесті є відкриті питання — адміністратор перевірить відповіді вручну, після чого стане відомий фінальний результат.'
-                            : (result.passed ? 'Ви успішно склали тест.' : `Набрано ${pct}% з ${this._test.passing_score}% необхідних.`)}</div>
+                            : (displayPassed ? 'Ви успішно склали тест.' : `Набрано ${pct}% з ${this._test.passing_score}% необхідних.`)}</div>
                         <div class="tr-metrics">
                             <div>
                                 <div class="tr-metric-lbl">Ваш результат</div>
-                                <div class="tr-metric-val">${result.needsReview ? '— з ' + result.maxScore : `${result.score} з ${result.maxScore} <span class="pct">${pct}%</span>`}</div>
+                                <div class="tr-metric-val">${result.needsReview ? '— з ' + result.maxScore : (hideScore ? `<span class="pct pass">Зараховано</span>` : `${result.score} з ${result.maxScore} <span class="pct ${displayPassed ? 'pass' : 'fail'}">${pct}%</span>`)}</div>
                             </div>
                             <div>
                                 <div class="tr-metric-lbl">Витрачено часу</div>
@@ -1115,6 +1128,7 @@ const TestsPage = {
                             </div>
                         </div>
                     </div>
+                    ${hideScore ? '' : `
                     <div class="tr-card">
                         <div class="tr-donut-title">Результати тесту</div>
                         <div class="tr-donut"><div class="tr-donut-center">
@@ -1128,7 +1142,7 @@ const TestsPage = {
                             <div class="tr-legend-item"><span class="tr-legend-dot" style="background:var(--border-light,#CBD5E1)"></span> Без відповіді <span class="tr-legend-val">${unansCnt}</span></div>
                             <div class="tr-legend-item"><span class="tr-legend-dot" style="background:var(--text-muted)"></span> Всього питань <span class="tr-legend-val">${total}</span></div>
                         </div>
-                    </div>
+                    </div>`}
                 </div>
 
                 ${(this._test.show_results !== false && this._test.show_wrong_answers !== false) ? `
@@ -1253,7 +1267,7 @@ const TestsPage = {
             instructions:        Dom.val('t-instructions').trim() || null,
             max_attempts:        parseInt(Dom.val('t-attempts')) || 3,
             time_limit_minutes:  parseInt(Dom.val('t-time')) || null,
-            passing_score:       parseInt(Dom.val('t-passing')) || 70,
+            passing_score:       Number.isNaN(parseInt(Dom.val('t-passing'))) ? 70 : parseInt(Dom.val('t-passing')),
             is_published:        document.getElementById('t-published').checked,
             randomize_questions: document.getElementById('t-random').checked,
             show_results:        document.getElementById('t-results').checked

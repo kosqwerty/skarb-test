@@ -315,9 +315,27 @@ const TestsManagerAPI = {
     },
 
     async unassignGroup(groupId, userId) {
+        const { data: items, error: itemsErr } = await supabase.from('test_group_items')
+            .select('test_id').eq('group_id', groupId);
+        if (itemsErr) throw itemsErr;
+        const testIds = (items || []).map(i => i.test_id);
+
         const { error } = await supabase.from('test_assignments')
             .delete().eq('group_id', groupId).eq('user_id', userId);
         if (error) throw error;
+
+        // Зняття людини з групи скасовує й усі її результати по тестах цієї
+        // групи (реальні бали/спроби), а не лише саме призначення — інакше
+        // завершені спроби так і лишаються висіти у вкладці «Завершені».
+        if (testIds.length) {
+            const { error: attErr } = await supabase.from('test_attempts')
+                .delete().eq('user_id', userId).in('test_id', testIds);
+            if (attErr) throw attErr;
+
+            const { error: grantErr } = await supabase.from('test_attempt_grants')
+                .delete().eq('user_id', userId).in('test_id', testIds);
+            if (grantErr) throw grantErr;
+        }
     }
 };
 
@@ -346,6 +364,7 @@ const TestsManagerPage = {
     _pendingCoverFile: null,
     _coverImageUrl:    null,
     _container:        null,
+    _testImportQueue:  [],
 
     async init(container, params = {}) {
         if (!AppState.canSchedule() && !AppState.isStaff()) {
@@ -501,7 +520,9 @@ body:not(.light-theme) .tm-sec-tabs{box-shadow:0 2px 14px rgba(0,0,0,.2)}
             <option value="title">За назвою</option>
             <option value="progress">За % проходження</option>
         </select>
-        ${AppState.canMutate() ? `<button class="tm-btn-new" style="margin-left:auto" onclick="TestsManagerPage.openCreateModal()"><i class="fa-solid fa-plus"></i> Новий тест</button>` : ''}
+        ${AppState.canMutate() ? `
+        <button class="tm-btn-new" style="margin-left:auto;background:transparent;border:1.5px solid var(--border);color:var(--text-secondary)" onclick="TestsManagerPage.openBulkImportModal()"><i class="fa-solid fa-file-import"></i> Імпортувати тести</button>
+        <button class="tm-btn-new" onclick="TestsManagerPage.openCreateModal()"><i class="fa-solid fa-plus"></i> Новий тест</button>` : ''}
     </div>
 
     ${this._tests.length ? `
@@ -627,6 +648,7 @@ body:not(.light-theme) .tm-sec-tabs{box-shadow:0 2px 14px rgba(0,0,0,.2)}
 
     async openGroupEditor(groupId) {
         this._pendingGroupCoverFile = null;
+        this._groupAvailFilter = '';
         let group = null;
         if (groupId) {
             Loader.show();
@@ -640,72 +662,150 @@ body:not(.light-theme) .tm-sec-tabs{box-shadow:0 2px 14px rgba(0,0,0,.2)}
 
         const availableTests = (this._tests?.length ? this._tests : await TestsManagerAPI.getAllStandalone().catch(e => { console.error('[test group editor] load tests:', e); return []; }));
         this._editorAllTests = availableTests;
+        const isSeq = group ? group.is_sequential : true;
 
         Modal.open({
             title: groupId ? 'Редагувати групу тестів' : 'Нова група тестів',
             size: 'lg',
             body: `
 <style>
-.tmge-cover-wrap{margin-bottom:16px}
-.tmge-stretch-row{display:flex;align-items:flex-start;gap:10px;font-size:.83rem;color:var(--text-primary);margin:-4px 0 16px;cursor:pointer}
-.tmge-stretch-row input{margin-top:2px;accent-color:var(--primary);flex-shrink:0}
-.tmge-stretch-hint{display:block;font-size:.75rem;color:var(--text-muted);font-weight:400;margin-top:2px}
-.tmge-cover-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;height:200px;border:2px dashed var(--border);border-radius:12px;cursor:pointer;color:var(--text-muted);text-align:center}
+/* ── Layout: fills the drawer height, no outer scroll — only the two
+   list panels scroll internally if their content overflows. ── */
+.tmge-wrap{display:flex;flex-direction:column;height:100%;min-height:0}
+
+/* ── Top: compact square cover + title/description side by side ── */
+.tmge-top{display:flex;gap:14px;margin-bottom:10px}
+.tmge-cover-empty,.tmge-cover-preview{flex-shrink:0;width:84px;height:84px;border-radius:14px}
+.tmge-cover-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+    border:1.5px dashed var(--border);cursor:pointer;color:var(--text-muted);text-align:center;font-size:.62rem;
+    line-height:1.25;padding:4px;transition:border-color .15s,color .15s}
+.tmge-cover-empty i{font-size:1.05rem}
 .tmge-cover-empty:hover{border-color:var(--primary);color:var(--primary)}
-.tmge-cover-preview{position:relative;height:200px;border-radius:12px;overflow:hidden}
-.tmge-cover-preview img{width:100%;height:100%;object-fit:cover}
-.tmge-cover-actions{position:absolute;top:8px;right:8px;display:flex;gap:6px}
-.tmge-cover-btn{width:30px;height:30px;border-radius:8px;border:none;background:rgba(0,0,0,.55);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center}
-.tmge-field{margin-bottom:14px}
-.tmge-label{display:block;font-size:.78rem;font-weight:700;color:var(--text-secondary);margin-bottom:6px}
-.tmge-inp,.tmge-textarea{width:100%;padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.85rem;outline:none;font-family:inherit}
-.tmge-inp:focus,.tmge-textarea:focus{border-color:var(--primary)}
-.tmge-textarea{resize:vertical;min-height:60px}
-.tmge-toggle-row{display:flex;align-items:center;gap:10px;font-size:.84rem;color:var(--text-primary)}
-.tmge-items{border:1px solid var(--border);border-radius:12px;overflow:hidden}
-.tmge-item{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border);font-size:.83rem}
-.tmge-item:last-child{border-bottom:none}
-.tmge-item-idx{width:20px;text-align:center;font-weight:700;color:var(--text-muted);flex-shrink:0}
-.tmge-item-title{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.tmge-item-btn{width:26px;height:26px;border-radius:7px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;flex-shrink:0}
-.tmge-item-btn:hover{border-color:var(--primary);color:var(--primary)}
-.tmge-item-btn:disabled{opacity:.3;cursor:not-allowed}
-.tmge-empty-items{padding:14px;text-align:center;color:var(--text-muted);font-size:.8rem}
-.tmge-checklist{border:1px solid var(--border);border-radius:12px;max-height:220px;overflow-y:auto}
-.tmge-check-row{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);font-size:.83rem;cursor:pointer}
-.tmge-check-row:last-child{border-bottom:none}
-.tmge-check-row:hover{background:var(--bg-hover)}
-.tmge-check-row input{width:16px;height:16px;accent-color:var(--primary);flex-shrink:0}
-.tmge-check-row span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-primary)}
+.tmge-cover-preview{position:relative;overflow:hidden;border:1.5px solid var(--border)}
+.tmge-cover-preview img{width:100%;height:100%;object-fit:cover;display:block}
+.tmge-cover-actions{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:5px;
+    background:rgba(0,0,0,0);opacity:0;transition:opacity .15s,background .15s}
+.tmge-cover-preview:hover .tmge-cover-actions{opacity:1;background:rgba(0,0,0,.5)}
+.tmge-cover-btn{width:26px;height:26px;border-radius:7px;border:none;background:rgba(255,255,255,.15);color:#fff;
+    cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.75rem}
+.tmge-cover-btn:hover{background:rgba(255,255,255,.3)}
+.tmge-top-fields{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.tmge-title-inp{width:100%;padding:8px 12px;border-radius:10px;border:1.5px solid var(--border);
+    background:var(--bg-surface);color:var(--text-primary);font-size:.92rem;font-weight:700;outline:none;font-family:inherit}
+.tmge-title-inp:focus{border-color:var(--primary)}
+.tmge-desc-inp{width:100%;padding:7px 12px;border-radius:10px;border:1.5px solid var(--border);
+    background:var(--bg-surface);color:var(--text-secondary);font-size:.78rem;outline:none;font-family:inherit;
+    resize:none;flex:1;min-height:34px}
+.tmge-desc-inp:focus{border-color:var(--primary)}
+.tmge-stretch-row{display:flex;align-items:center;gap:7px;font-size:.72rem;color:var(--text-muted);
+    margin-bottom:12px;cursor:pointer;user-select:none}
+.tmge-stretch-row input{accent-color:var(--primary);flex-shrink:0}
+
+/* ── Sequential-order mode switch ── */
+.tmge-mode-row{display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:10px 14px;border-radius:12px;background:var(--bg-raised);border:1px solid var(--border);margin-bottom:14px}
+.tmge-mode-text{min-width:0}
+.tmge-mode-text b{display:block;font-size:.82rem;color:var(--text-primary)}
+.tmge-mode-text span{display:block;font-size:.72rem;color:var(--text-muted);margin-top:1px}
+.tmge-switch{position:relative;flex-shrink:0;width:42px;height:24px;cursor:pointer}
+.tmge-switch input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer;z-index:1}
+.tmge-switch-track{position:absolute;inset:0;background:var(--border);border-radius:20px;transition:background .18s}
+.tmge-switch-thumb{position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;
+    box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .18s}
+.tmge-switch input:checked ~ .tmge-switch-track{background:var(--primary)}
+.tmge-switch input:checked ~ .tmge-switch-track .tmge-switch-thumb{transform:translateX(18px)}
+
+/* ── Two-column builder: pick on the left, sequence appears on the right ── */
+.tmge-builder{flex:1;min-height:0;display:grid;grid-template-columns:1fr auto 1fr;gap:12px}
+.tmge-col{display:flex;flex-direction:column;min-height:0;border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.tmge-col-head{display:flex;align-items:center;gap:7px;padding:10px 12px;font-size:.74rem;font-weight:700;
+    text-transform:uppercase;letter-spacing:.04em;color:var(--text-secondary);border-bottom:1px solid var(--border);
+    background:var(--bg-raised);flex-shrink:0}
+.tmge-col-head i{color:var(--primary)}
+.tmge-col-count{margin-left:auto;font-size:.7rem;font-weight:700;color:var(--text-muted);
+    background:var(--bg-surface);border-radius:20px;padding:1px 8px}
+.tmge-search{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border);flex-shrink:0}
+.tmge-search i{color:var(--text-muted);font-size:.78rem}
+.tmge-search input{flex:1;min-width:0;border:none;outline:none;background:transparent;color:var(--text-primary);
+    font-size:.82rem;font-family:inherit}
+.tmge-col-arrow{align-self:center;color:var(--text-muted);font-size:1.1rem}
+.tmge-avail-list,.tmge-seq-list{flex:1;overflow-y:auto;min-height:0;padding:6px}
+.tmge-avail-row{display:flex;align-items:center;gap:8px;padding:8px 9px;border-radius:9px;cursor:pointer;
+    font-size:.82rem;color:var(--text-primary);transition:background .12s}
+.tmge-avail-row:hover{background:var(--bg-hover)}
+.tmge-avail-title{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tmge-avail-add{flex-shrink:0;width:22px;height:22px;border-radius:7px;background:var(--bg-raised);
+    color:var(--primary);display:flex;align-items:center;justify-content:center;font-size:.72rem}
+.tmge-avail-row:hover .tmge-avail-add{background:var(--primary);color:#fff}
+.tmge-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+    height:100%;padding:16px;text-align:center;color:var(--text-muted);font-size:.78rem}
+.tmge-empty i{font-size:1.3rem;opacity:.5}
+.tmge-flow-block{display:flex;align-items:center;gap:8px;padding:8px 9px;border-radius:10px;
+    border:1.5px solid var(--border);background:var(--bg-surface);cursor:grab;user-select:none;margin-bottom:0;
+    transition:border-color .15s,box-shadow .15s,opacity .15s}
+.tmge-flow-block:hover{border-color:var(--primary)}
+.tmge-flow-block.dragging{opacity:.4}
+.tmge-flow-block.drag-over{border-color:var(--primary);box-shadow:0 0 0 3px rgba(99,102,241,.18)}
+.tmge-flow-idx{flex-shrink:0;width:22px;height:22px;border-radius:50%;background:var(--primary);color:#fff;
+    font-size:.7rem;font-weight:700;display:flex;align-items:center;justify-content:center}
+.tmge-flow-title{flex:1;min-width:0;font-size:.81rem;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tmge-flow-grip{flex-shrink:0;color:var(--text-muted);font-size:.7rem;cursor:grab}
+.tmge-flow-del{flex-shrink:0;width:20px;height:20px;border-radius:6px;border:none;background:transparent;
+    color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center}
+.tmge-flow-del:hover{color:var(--danger);background:rgba(239,68,68,.1)}
+.tmge-flow-arrow{flex-shrink:0;height:16px;display:flex;align-items:center;justify-content:center;
+    color:var(--text-muted);font-size:.72rem;margin-left:11px}
 </style>
-<div class="tmge-cover-wrap" id="tmge-cover-wrap">${this._groupCoverPreviewHtml()}</div>
-<label class="tmge-stretch-row">
-    <input type="checkbox" id="tmge-stretch-cover" ${group?.stretch_cover_image ? 'checked' : ''}>
-    <span><b>Розтягнути обкладинку</b><span class="tmge-stretch-hint">Картинка групи заповнює всю ширину блока (без збереження пропорцій)</span></span>
-</label>
-<div class="tmge-field">
-    <label class="tmge-label">Назва групи</label>
-    <input class="tmge-inp" id="tmge-title" type="text" value="${Fmt.esc(group?.title || '')}" placeholder="Напр. Вступний курс продавця">
-</div>
-<div class="tmge-field">
-    <label class="tmge-label">Опис</label>
-    <textarea class="tmge-textarea" id="tmge-desc" placeholder="Короткий опис групи тестів">${Fmt.esc(group?.description || '')}</textarea>
-</div>
-<div class="tmge-field">
-    <label class="tmge-toggle-row"><input type="checkbox" id="tmge-seq" ${(group ? group.is_sequential : true) ? 'checked' : ''}> Проходити тести строго по порядку (наступний тест відкривається лише після успішного складання попереднього)</label>
-</div>
-<div class="tmge-field">
-    <label class="tmge-label">Тести для додавання</label>
-    <div class="tmge-checklist" id="tmge-checklist">${this._groupChecklistHtml()}</div>
-</div>
-<div class="tmge-field">
-    <label class="tmge-label">Тести у групі (порядок проходження)</label>
-    <div class="tmge-items" id="tmge-items">${this._groupItemsHtml()}</div>
+<div class="tmge-wrap">
+    <div class="tmge-top">
+        <div id="tmge-cover-wrap">${this._groupCoverPreviewHtml()}</div>
+        <div class="tmge-top-fields">
+            <input class="tmge-title-inp" id="tmge-title" type="text" value="${Fmt.esc(group?.title || '')}" placeholder="Назва групи, напр. «Вступний курс продавця»">
+            <textarea class="tmge-desc-inp" id="tmge-desc" placeholder="Короткий опис (необов'язково)">${Fmt.esc(group?.description || '')}</textarea>
+        </div>
+    </div>
+    <label class="tmge-stretch-row">
+        <input type="checkbox" id="tmge-stretch-cover" ${group?.stretch_cover_image ? 'checked' : ''}>
+        <span>Розтягнути обкладинку на всю ширину картки групи</span>
+    </label>
+
+    <div class="tmge-mode-row">
+        <div class="tmge-mode-text">
+            <b>Порядок проходження</b>
+            <span id="tmge-mode-desc">${isSeq ? 'Наступний тест відкривається після завершення спроби в попередньому (незалежно від результату)' : 'Співробітник може проходити тести в будь-якому порядку'}</span>
+        </div>
+        <label class="tmge-switch">
+            <input type="checkbox" id="tmge-seq" ${isSeq ? 'checked' : ''} onchange="TestsManagerPage._groupSeqChanged(this.checked)">
+            <span class="tmge-switch-track"><span class="tmge-switch-thumb"></span></span>
+        </label>
+    </div>
+
+    <div class="tmge-builder">
+        <div class="tmge-col">
+            <div class="tmge-col-head"><i class="fa-solid fa-list-check"></i> Доступні тести <span class="tmge-col-count" id="tmge-avail-count"></span></div>
+            <div class="tmge-search"><i class="fa-solid fa-magnifying-glass"></i><input type="text" placeholder="Пошук тесту..." oninput="TestsManagerPage._groupFilterAvailable(this.value)"></div>
+            <div class="tmge-avail-list" id="tmge-available">${this._groupAvailableHtml()}</div>
+        </div>
+        <div class="tmge-col-arrow"><i class="fa-solid fa-arrow-right-long"></i></div>
+        <div class="tmge-col">
+            <div class="tmge-col-head"><i class="fa-solid fa-route"></i> Послідовність <span class="tmge-col-count" id="tmge-seq-count"></span></div>
+            <div class="tmge-search" style="color:var(--text-muted);font-size:.74rem"><i class="fa-solid fa-arrows-up-down"></i> Перетягуйте картки, щоб змінити порядок</div>
+            <div class="tmge-seq-list" id="tmge-items">${this._groupItemsHtml()}</div>
+        </div>
+    </div>
 </div>`,
             footer: `
 <button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
 <button class="btn btn-primary" onclick="TestsManagerPage._saveGroup('${groupId || ''}')"><i class="fa-solid fa-check"></i> Зберегти</button>`
         });
+        this._groupUpdateCounts();
+    },
+
+    _groupSeqChanged(checked) {
+        const el = document.getElementById('tmge-mode-desc');
+        if (el) el.textContent = checked
+            ? 'Наступний тест відкривається після завершення спроби в попередньому (незалежно від результату)'
+            : 'Співробітник може проходити тести в будь-якому порядку';
     },
 
     _groupCoverPreviewHtml() {
@@ -713,14 +813,14 @@ body:not(.light-theme) .tm-sec-tabs{box-shadow:0 2px 14px rgba(0,0,0,.2)}
 <div class="tmge-cover-preview">
     <img src="${Fmt.esc(this._groupCoverUrl)}" alt="">
     <div class="tmge-cover-actions">
-        <label class="tmge-cover-btn"><i class="fa-solid fa-image"></i><input type="file" accept="image/*" style="display:none" onchange="TestsManagerPage._onGroupCoverPick(this)"></label>
-        <button type="button" class="tmge-cover-btn" onclick="TestsManagerPage._removeGroupCover()"><i class="fa-solid fa-trash"></i></button>
+        <label class="tmge-cover-btn" title="Змінити"><i class="fa-solid fa-pen"></i><input type="file" accept="image/*" style="display:none" onchange="TestsManagerPage._onGroupCoverPick(this)"></label>
+        <button type="button" class="tmge-cover-btn" title="Прибрати" onclick="TestsManagerPage._removeGroupCover()"><i class="fa-solid fa-trash"></i></button>
     </div>
 </div>`;
         return `
 <label class="tmge-cover-empty">
     <i class="fa-solid fa-cloud-arrow-up"></i>
-    <span>Завантажити обкладинку групи</span>
+    <span>Обкладинка</span>
     <input type="file" accept="image/*" style="display:none" onchange="TestsManagerPage._onGroupCoverPick(this)">
 </label>`;
     },
@@ -743,44 +843,78 @@ body:not(.light-theme) .tm-sec-tabs{box-shadow:0 2px 14px rgba(0,0,0,.2)}
         document.getElementById('tmge-cover-wrap').innerHTML = this._groupCoverPreviewHtml();
     },
 
+    // Вертикальна схема послідовності: картки-тести одна під одною, з'єднані
+    // стрілками вниз, які можна перетягувати мишею щоб змінити порядок.
+    // Логіка порядку/строгості проходження не змінюється — лише візуальне
+    // представлення тієї самої лінійної послідовності.
     _groupItemsHtml() {
         const items = this._editorGroupItems || [];
-        if (!items.length) return `<div class="tmge-empty-items">Ще немає тестів у групі</div>`;
-        return items.map((it, i) => `
-<div class="tmge-item">
-    <span class="tmge-item-idx">${i + 1}</span>
-    <span class="tmge-item-title">${Fmt.esc(it.title)}</span>
-    <button type="button" class="tmge-item-btn" ${i === 0 ? 'disabled' : ''} onclick="TestsManagerPage._groupMoveItem(${i},-1)"><i class="fa-solid fa-arrow-up"></i></button>
-    <button type="button" class="tmge-item-btn" ${i === items.length - 1 ? 'disabled' : ''} onclick="TestsManagerPage._groupMoveItem(${i},1)"><i class="fa-solid fa-arrow-down"></i></button>
-    <button type="button" class="tmge-item-btn" onclick="TestsManagerPage._groupRemoveItem(${i})"><i class="fa-solid fa-xmark"></i></button>
+        if (!items.length) return `
+<div class="tmge-empty">
+    <i class="fa-solid fa-arrow-left-long"></i>
+    <span>Оберіть тести зліва —<br>вони з'являться тут по порядку</span>
+</div>`;
+        const blocks = items.map((it, i) => `
+<div class="tmge-flow-block" draggable="true" data-idx="${i}"
+     ondragstart="TestsManagerPage._groupDragStart(event,${i})"
+     ondragover="TestsManagerPage._groupDragOver(event,${i})"
+     ondragleave="TestsManagerPage._groupDragLeave(event)"
+     ondrop="TestsManagerPage._groupDrop(event,${i})"
+     ondragend="TestsManagerPage._groupDragEnd(event)">
+    <span class="tmge-flow-idx">${i + 1}</span>
+    <span class="tmge-flow-title" title="${Fmt.esc(it.title)}">${Fmt.esc(it.title)}</span>
+    <i class="fa-solid fa-grip-lines-vertical tmge-flow-grip"></i>
+    <button type="button" class="tmge-flow-del" title="Прибрати" onclick="TestsManagerPage._groupRemoveItem(${i})"><i class="fa-solid fa-xmark"></i></button>
+</div>`);
+        const arrow = `<div class="tmge-flow-arrow"><i class="fa-solid fa-arrow-down"></i></div>`;
+        return blocks.join(arrow);
+    },
+
+    // Тести, яких ще немає в послідовності — клік/кнопка «+» додає їх у
+    // кінець схеми праворуч. Додані тести зникають з цього списку.
+    _groupAvailableHtml() {
+        const usedIds = new Set((this._editorGroupItems || []).map(it => it.id));
+        const all = this._editorAllTests || [];
+        const filter = (this._groupAvailFilter || '').trim().toLowerCase();
+        let tests = all.filter(t => !usedIds.has(t.id));
+        if (filter) tests = tests.filter(t => (t.title || '').toLowerCase().includes(filter));
+        if (!tests.length) {
+            const msg = !all.length ? 'Немає доступних тестів'
+                : filter ? 'Нічого не знайдено'
+                : 'Усі тести вже додано до послідовності';
+            return `<div class="tmge-empty"><i class="fa-solid fa-circle-check"></i><span>${Fmt.esc(msg)}</span></div>`;
+        }
+        return tests.map(t => `
+<div class="tmge-avail-row" onclick="TestsManagerPage._groupAddItem('${t.id}')">
+    <span class="tmge-avail-title" title="${Fmt.esc(t.title)}">${Fmt.esc(t.title)}</span>
+    <span class="tmge-avail-add"><i class="fa-solid fa-plus"></i></span>
 </div>`).join('');
     },
 
-    _groupChecklistHtml() {
-        const usedIds = new Set((this._editorGroupItems || []).map(it => it.id));
-        const tests = this._editorAllTests || [];
-        if (!tests.length) return `<div class="tmge-empty-items">Немає доступних тестів</div>`;
-        return tests.map(t => `
-<label class="tmge-check-row">
-    <input type="checkbox" value="${t.id}" ${usedIds.has(t.id) ? 'checked' : ''} onchange="TestsManagerPage._groupToggleTest('${t.id}', this.checked)">
-    <span>${Fmt.esc(t.title)}</span>
-</label>`).join('');
+    _groupFilterAvailable(value) {
+        this._groupAvailFilter = value;
+        const el = document.getElementById('tmge-available');
+        if (el) el.innerHTML = this._groupAvailableHtml();
+    },
+
+    _groupUpdateCounts() {
+        const avail = document.getElementById('tmge-avail-count');
+        const seq   = document.getElementById('tmge-seq-count');
+        if (avail) avail.textContent = (this._editorAllTests || []).length - (this._editorGroupItems || []).length;
+        if (seq)   seq.textContent   = (this._editorGroupItems || []).length;
     },
 
     _refreshGroupEditorLists() {
-        document.getElementById('tmge-items').innerHTML      = this._groupItemsHtml();
-        document.getElementById('tmge-checklist').innerHTML  = this._groupChecklistHtml();
+        document.getElementById('tmge-items').innerHTML     = this._groupItemsHtml();
+        document.getElementById('tmge-available').innerHTML = this._groupAvailableHtml();
+        this._groupUpdateCounts();
     },
 
-    _groupToggleTest(testId, checked) {
-        if (checked) {
-            if ((this._editorGroupItems || []).some(it => it.id === testId)) return;
-            const test = this._editorAllTests.find(t => t.id === testId);
-            if (!test) return;
-            this._editorGroupItems.push({ id: test.id, title: test.title });
-        } else {
-            this._editorGroupItems = (this._editorGroupItems || []).filter(it => it.id !== testId);
-        }
+    _groupAddItem(testId) {
+        if ((this._editorGroupItems || []).some(it => it.id === testId)) return;
+        const test = (this._editorAllTests || []).find(t => t.id === testId);
+        if (!test) return;
+        this._editorGroupItems.push({ id: test.id, title: test.title });
         this._refreshGroupEditorLists();
     },
 
@@ -789,12 +923,37 @@ body:not(.light-theme) .tm-sec-tabs{box-shadow:0 2px 14px rgba(0,0,0,.2)}
         this._refreshGroupEditorLists();
     },
 
-    _groupMoveItem(i, dir) {
+    // Drag-and-drop переупорядкування блоків у флоучарт-схемі групи.
+    _groupDragStart(e, i) {
+        this._groupDragIdx = i;
+        e.dataTransfer.effectAllowed = 'move';
+        e.currentTarget.classList.add('dragging');
+    },
+
+    _groupDragOver(e, i) {
+        e.preventDefault();
+        if (i === this._groupDragIdx) return;
+        e.currentTarget.classList.add('drag-over');
+    },
+
+    _groupDragLeave(e) {
+        e.currentTarget.classList.remove('drag-over');
+    },
+
+    _groupDrop(e, i) {
+        e.preventDefault();
+        e.currentTarget.classList.remove('drag-over');
+        const from = this._groupDragIdx;
+        if (from === null || from === undefined || from === i) return;
         const items = this._editorGroupItems;
-        const j = i + dir;
-        if (j < 0 || j >= items.length) return;
-        [items[i], items[j]] = [items[j], items[i]];
+        const [moved] = items.splice(from, 1);
+        items.splice(i, 0, moved);
         document.getElementById('tmge-items').innerHTML = this._groupItemsHtml();
+    },
+
+    _groupDragEnd(e) {
+        e.currentTarget.classList.remove('dragging');
+        this._groupDragIdx = null;
     },
 
     async _saveGroup(groupId) {
@@ -1028,6 +1187,160 @@ body:not(.light-theme) .tm-sec-tabs{box-shadow:0 2px 14px rgba(0,0,0,.2)}
         finally { Loader.hide(); }
     },
 
+    // ── Масовий імпорт тестів (кілька .txt файлів → кілька нових тестів) ──
+    // Той самий формат, що й для одного тесту (_parseImportText), але кожен
+    // файл стає окремим новим тестом. Обробка йде у фоновій черзі — модалка
+    // закривається одразу, і можна продовжувати працювати (як завантаження
+    // файлів у Базі знань).
+
+    openBulkImportModal() {
+        Modal.open({
+            title: '<i class="fa-solid fa-file-import"></i> Імпортувати кілька тестів',
+            body: `
+<div style="display:flex;flex-direction:column;gap:14px">
+    <label class="te-import-btn" style="padding:22px">
+        <i class="fa-solid fa-cloud-arrow-up" style="font-size:1.3rem"></i> Оберіть .txt файли (можна кілька)
+        <input type="file" accept=".txt" multiple style="display:none" onchange="TestsManagerPage._onBulkImportFiles(this)">
+    </label>
+    <div style="display:flex;gap:8px;font-size:.78rem;color:var(--text-muted);line-height:1.55">
+        <i class="fa-solid fa-circle-info" style="color:var(--primary);margin-top:2px"></i>
+        <span>Кожен файл стане окремим новим тестом (назва — з імені файлу), питання імпортуються з нього так само, як і для одного тесту. Формат файлу не змінюється.</span>
+    </div>
+</div>`,
+            footer: `<button class="btn-secondary-modern" onclick="Modal.close()">Закрити</button>`
+        });
+    },
+
+    async _onBulkImportFiles(input) {
+        const files = Array.from(input.files || []);
+        input.value = '';
+        if (!files.length) return;
+        Modal.close();
+
+        for (const file of files) {
+            const title = file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim() || file.name;
+            const qid = this._tiqAdd(title);
+            try {
+                const text = await file.text();
+                const parsed = this._parseImportText(text);
+                if (!parsed.length) { this._tiqUpdate(qid, { status: 'error', error: 'Питань не знайдено' }); continue; }
+
+                const test = await API.tests.create({
+                    title, description: null,
+                    passing_score: 70, max_attempts: 1,
+                    is_published: false, course_id: null,
+                    created_by: AppState.user.id
+                });
+                ActivityTracker.track('test_create', { entity_type: 'test', entity_id: test.id, entity_title: title });
+
+                let done = 0;
+                for (const item of parsed) {
+                    this._tiqUpdate(qid, { progress: Math.round(done / parsed.length * 100) });
+                    const q = await API.questions.create({
+                        test_id:       test.id,
+                        question_text: item.question_text,
+                        question_type: item.question_type,
+                        points:        1,
+                        order_index:   done
+                    });
+                    if (item.answers.length) {
+                        await API.questions.upsertAnswers(q.id, item.answers.map(a => ({ text: a.text, is_correct: a.is_correct, image_url: null })));
+                    }
+                    done++;
+                }
+                this._tiqUpdate(qid, { status: 'done', progress: 100 });
+                setTimeout(() => this._tiqRemove(qid), 3000);
+            } catch (e) {
+                this._tiqUpdate(qid, { status: 'error', error: e.message });
+                Toast.error('Помилка імпорту', `«${title}»: ${e.message}`);
+            }
+        }
+
+        if (this._container && this._prevView === 'list') await this._renderList(this._container);
+    },
+
+    _tiqEnsureStyles() {
+        if (document.getElementById('tm-iq-styles')) return;
+        const style = document.createElement('style');
+        style.id = 'tm-iq-styles';
+        style.textContent = `
+            .tm-iq-panel{position:fixed;bottom:20px;right:20px;z-index:9998;width:300px;max-height:70vh;overflow-y:auto;
+                background:var(--bg-surface);border:1px solid var(--border);border-radius:16px;
+                box-shadow:0 12px 40px rgba(0,0,0,.18);animation:tm-iq-in .25s ease}
+            @keyframes tm-iq-in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+            .tm-iq-head{display:flex;align-items:center;gap:.5rem;padding:.7rem .9rem;font-size:.82rem;font-weight:600;
+                color:var(--text-primary);border-bottom:1px solid var(--border)}
+            .tm-iq-head i{color:var(--primary)}
+            .tm-iq-list{display:flex;flex-direction:column}
+            .tm-iq-item{padding:.6rem .9rem;border-bottom:1px solid var(--border)}
+            .tm-iq-item:last-child{border-bottom:none}
+            .tm-iq-row{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-bottom:.35rem}
+            .tm-iq-title{font-size:.8rem;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
+            .tm-iq-pct{font-size:.74rem;color:var(--text-muted);flex-shrink:0}
+            .tm-iq-item.tm-iq-done .tm-iq-pct{color:#10b981}
+            .tm-iq-close{background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:.8rem;padding:2px;flex-shrink:0}
+            .tm-iq-close:hover{color:var(--danger)}
+            .tm-iq-bar{height:5px;border-radius:20px;background:var(--bg-raised);overflow:hidden}
+            .tm-iq-fill{height:100%;background:var(--primary);border-radius:20px;transition:width .2s ease}
+            .tm-iq-item.tm-iq-done .tm-iq-fill{background:#10b981}
+            .tm-iq-item.tm-iq-error .tm-iq-fill{background:var(--danger)}
+            .tm-iq-status{margin-top:.25rem;font-size:.7rem;color:var(--text-muted)}
+            .tm-iq-item.tm-iq-error .tm-iq-status{color:var(--danger)}
+        `;
+        document.head.appendChild(style);
+    },
+
+    _tiqAdd(title) {
+        this._tiqEnsureStyles();
+        const id = 'tiq_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+        this._testImportQueue.push({ id, title, progress: 0, status: 'importing', error: '' });
+        this._tiqRender();
+        return id;
+    },
+
+    _tiqUpdate(id, patch) {
+        const item = this._testImportQueue.find(q => q.id === id);
+        if (!item) return;
+        Object.assign(item, patch);
+        this._tiqRender();
+    },
+
+    _tiqRemove(id) {
+        this._testImportQueue = this._testImportQueue.filter(q => q.id !== id);
+        this._tiqRender();
+    },
+
+    _tiqRender() {
+        let panel = document.getElementById('tm-import-queue');
+        if (!this._testImportQueue.length) {
+            panel?.remove();
+            return;
+        }
+        if (!panel) {
+            panel = document.createElement('div');
+            panel.id = 'tm-import-queue';
+            panel.className = 'tm-iq-panel';
+            document.body.appendChild(panel);
+        }
+        const statusLabel = { importing: 'Імпорт питань…', done: 'Готово', error: 'Помилка' };
+        panel.innerHTML = `
+            <div class="tm-iq-head"><i class="fa-solid fa-file-import"></i> Імпорт тестів (${this._testImportQueue.length})</div>
+            <div class="tm-iq-list">
+                ${this._testImportQueue.map(q => `
+                    <div class="tm-iq-item tm-iq-${q.status}">
+                        <div class="tm-iq-row">
+                            <span class="tm-iq-title" title="${Fmt.esc(q.title)}">${Fmt.esc(q.title)}</span>
+                            ${q.status === 'error'
+                                ? `<button class="tm-iq-close" onclick="TestsManagerPage._tiqRemove('${q.id}')" title="Закрити"><i class="fa-solid fa-xmark"></i></button>`
+                                : `<span class="tm-iq-pct">${q.status === 'done' ? '<i class="fa-solid fa-check"></i>' : q.progress + '%'}</span>`}
+                        </div>
+                        <div class="tm-iq-bar"><div class="tm-iq-fill" style="width:${q.status === 'done' ? 100 : q.progress}%"></div></div>
+                        <div class="tm-iq-status">${q.status === 'error' ? Fmt.esc(q.error || 'Помилка') : statusLabel[q.status]}</div>
+                    </div>
+                `).join('')}
+            </div>`;
+    },
+
     async _togglePublish(testId, el) {
         const t = this._tests.find(x => x.id === testId);
         if (!t) return;
@@ -1119,10 +1432,11 @@ body:not(.light-theme) .tm-sec-tabs{box-shadow:0 2px 14px rgba(0,0,0,.2)}
             { id: 'tm-skip',     icon: 'fa-solid fa-forward',           label: 'Пропуск питань',        sub: 'Дозволити пропускати питання без відповіді',        on: !!test?.allow_skip },
             { id: 'tm-feedback', icon: 'fa-regular fa-circle-check',    label: 'Миттєвий фідбек',       sub: 'Показувати правильність відповіді після кожного питання', on: !!test?.show_answer_feedback },
             { id: 'tm-wrong',    icon: 'fa-solid fa-list-check',        label: 'Протокол помилок',      sub: 'Показувати розбір невірних відповідей після завершення', on: !!test?.show_wrong_answers },
-            { id: 'tm-grant-reassign', icon: 'fa-solid fa-rotate-right', label: 'Нова спроба при перепризначенні', sub: 'Напр. при записі на лекцію — якщо тест вже пройдено, додати ще одну спробу', on: !!test?.grant_attempt_on_reassign }
+            { id: 'tm-grant-reassign', icon: 'fa-solid fa-rotate-right', label: 'Нова спроба при перепризначенні', sub: 'Напр. при записі на лекцію — якщо тест вже пройдено, додати ще одну спробу', on: !!test?.grant_attempt_on_reassign },
+            { id: 'tm-hide-score', icon: 'fa-solid fa-eye-slash', label: 'Приховати бал від співробітника', sub: 'Він бачить лише «Зараховано» / «Не зараховано», без відсотка — бал лишається видимим у звітах адміна', on: !!test?.hide_score_from_user }
         ];
         container.innerHTML = `<style>
-.tset-page{max-width:920px}
+.tset-page{max-width:1440px}
 .tset-hero{display:flex;align-items:center;gap:14px;padding:18px 22px;margin-bottom:22px;border-radius:18px;border:1px solid var(--border);
     background:linear-gradient(135deg,color-mix(in srgb,var(--primary) 14%,var(--bg-surface)),color-mix(in srgb,var(--primary) 4%,var(--bg-surface)))}
 .tset-hero-icon{width:42px;height:42px;border-radius:12px;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0;box-shadow:0 4px 14px color-mix(in srgb,var(--primary) 40%,transparent)}
@@ -1130,11 +1444,23 @@ body:not(.light-theme) .tm-sec-tabs{box-shadow:0 2px 14px rgba(0,0,0,.2)}
 .tset-hero-title{font-size:1.05rem;font-weight:700;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tset-hero-sub{font-size:.76rem;color:var(--text-muted);margin-top:2px}
 .tset-hero .btn{flex-shrink:0}
-.tset-grid{display:grid;grid-template-columns:1fr 340px;gap:22px;align-items:start}
-@media(max-width:700px){.tset-grid{grid-template-columns:1fr}}
-.tset-section{margin-bottom:22px}
-.tset-section-lbl{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:10px}
+
+/* ── Staged layout: three clear horizontal bands, read top-to-bottom,
+   left-to-right — each band is its own independent grid so row heights
+   never fight each other across unrelated cards. ── */
+.tset-row-top{display:grid;grid-template-columns:340px 1fr;gap:20px;align-items:start;margin-bottom:20px}
+.tset-row-bottom{display:grid;grid-template-columns:2fr 1fr;gap:20px;align-items:start}
+@media(max-width:900px){.tset-row-top,.tset-row-bottom{grid-template-columns:1fr}}
+
+.tset-card{background:var(--bg-surface);border:1px solid var(--border);border-radius:16px;padding:20px;box-sizing:border-box}
+.tset-card-head{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+.tset-card-num{width:24px;height:24px;border-radius:50%;background:var(--primary);color:#fff;font-size:.72rem;font-weight:700;
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 8px color-mix(in srgb,var(--primary) 45%,transparent)}
+.tset-card-title{font-size:.88rem;font-weight:700;color:var(--text-primary);line-height:1.2}
+.tset-card-sub{font-size:.71rem;color:var(--text-muted);margin-top:1px}
+
 .tset-field{display:flex;align-items:flex-start;gap:12px;margin-bottom:14px}
+.tset-field:last-child{margin-bottom:0}
 .tset-field-icon{width:32px;height:32px;border-radius:8px;background:var(--bg-hover);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:.82rem;color:var(--text-muted);flex-shrink:0;margin-top:19px}
 .tset-field-inner{flex:1;min-width:0}
 .tset-label{display:block;font-size:.72rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px}
@@ -1143,7 +1469,10 @@ body:not(.light-theme) .tm-sec-tabs{box-shadow:0 2px 14px rgba(0,0,0,.2)}
 .tset-textarea{min-height:56px;resize:vertical}
 .tset-select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23888' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px;cursor:pointer}
 .tset-row2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.tset-toggle-row{display:flex;align-items:center;gap:12px;padding:11px 13px;background:var(--bg-raised);border:1.5px solid var(--border);border-radius:12px;cursor:pointer;transition:border-color .15s,background .15s;user-select:none;margin-bottom:8px}
+
+.tset-toggle-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+@media(max-width:600px){.tset-toggle-grid{grid-template-columns:1fr}}
+.tset-toggle-row{display:flex;align-items:center;gap:12px;padding:11px 13px;background:var(--bg-raised);border:1.5px solid var(--border);border-radius:12px;cursor:pointer;transition:border-color .15s,background .15s;user-select:none}
 .tset-toggle-row:hover{border-color:var(--border-light)}
 .tset-toggle-icon{width:30px;height:30px;border-radius:8px;background:var(--bg-hover);display:flex;align-items:center;justify-content:center;font-size:.85rem;color:var(--text-muted);flex-shrink:0;transition:all .15s}
 .tset-toggle-input{position:absolute;opacity:0;width:1px;height:1px}
@@ -1155,39 +1484,32 @@ body:not(.light-theme) .tm-sec-tabs{box-shadow:0 2px 14px rgba(0,0,0,.2)}
 .tset-toggle-input:checked ~ .tset-toggle-pill{background:var(--primary)}
 .tset-toggle-knob{position:absolute;top:3px;left:3px;width:15px;height:15px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.25);transition:transform .2s}
 .tset-toggle-input:checked ~ .tset-toggle-pill .tset-toggle-knob{transform:translateX(17px)}
-.tset-toggle-row--pub{background:rgba(16,185,129,.06);border-color:rgba(16,185,129,.25)}
-.tset-toggle-row--pub:hover{border-color:rgba(16,185,129,.4)}
-.tset-toggle-row--pub .tset-toggle-input:checked ~ .tset-toggle-icon{background:rgba(16,185,129,.18);color:#10b981}
-.tset-toggle-row--pub .tset-toggle-input:checked ~ .tset-toggle-pill{background:#10b981}
-.tset-auto-panel{padding:16px;border-radius:14px;border:1.5px solid var(--border);background:var(--bg-raised);display:flex;flex-direction:column;gap:10px}
-.tset-auto-head{display:flex;align-items:center;gap:10px}
-.tset-auto-icon{width:32px;height:32px;border-radius:9px;background:color-mix(in srgb,var(--primary) 14%,transparent);color:var(--primary);display:flex;align-items:center;justify-content:center;font-size:.85rem;flex-shrink:0}
-.tset-auto-title{font-weight:700;font-size:.86rem;color:var(--text-primary)}
-.tset-auto-sub{font-size:.73rem;color:var(--text-muted);margin-top:1px}
-.tset-pos-tags{display:flex;flex-wrap:wrap;gap:4px;min-height:24px}
+
+.tset-pos-tags{display:flex;flex-wrap:wrap;gap:4px;min-height:24px;margin-bottom:10px}
 .tset-pos-search{width:100%;box-sizing:border-box;padding:7px 10px;border-radius:9px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.82rem;outline:none;font-family:inherit;transition:border-color .15s}
 .tset-pos-search:focus{border-color:var(--primary)}
-.tset-pos-list{flex:1;max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:3px;background:var(--bg-surface)}
-.tm-cover-frame{padding:2px;border-radius:20px;background:var(--border-light,#CBD5E1);margin-bottom:20px}
-.tm-cover-upload{border:none;border-radius:18px;overflow:hidden;position:relative;background:linear-gradient(145deg,rgba(99,102,241,.05) 0%,rgba(139,92,246,.05) 100%);transition:background .25s}
-.tm-cover-preview{width:100%;max-height:220px;object-fit:cover;display:block}
-.tm-cover-empty{padding:28px 20px;display:flex;align-items:center;justify-content:center;gap:16px;cursor:pointer;position:relative;overflow:hidden}
+.tset-pos-list{max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:3px;background:var(--bg-raised);margin-top:8px}
+.tset-auto-run{margin-top:14px}
+
+.tm-cover-frame{padding:2px;border-radius:14px;background:var(--border-light,#CBD5E1)}
+.tm-cover-upload{border:none;border-radius:12px;overflow:hidden;position:relative;background:linear-gradient(145deg,rgba(99,102,241,.05) 0%,rgba(139,92,246,.05) 100%);transition:background .25s}
+.tm-cover-preview{width:100%;height:170px;object-fit:cover;display:block}
+.tm-cover-empty{height:170px;padding:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;cursor:pointer;position:relative;overflow:hidden;box-sizing:border-box}
 .tm-cover-empty::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 90% 70% at 50% 110%,rgba(99,102,241,.13),transparent 60%),radial-gradient(ellipse 35% 35% at 8% 8%,rgba(139,92,246,.09),transparent);pointer-events:none}
-.tm-cover-empty-icon{width:76px;height:76px;border-radius:22px;background:linear-gradient(135deg,rgba(99,102,241,.15),rgba(139,92,246,.18));border:1.5px solid rgba(99,102,241,.28);display:flex;align-items:center;justify-content:center;transition:transform .25s,box-shadow .25s;box-shadow:0 4px 18px rgba(99,102,241,.12)}
-.tm-cover-empty-icon i{font-size:1.9rem;color:#6366f1}
-.tm-cover-frame:hover .tm-cover-empty-icon{transform:translateY(-5px) scale(1.06);box-shadow:0 10px 28px rgba(99,102,241,.22)}
-.tm-cover-empty-text{text-align:center;display:flex;flex-direction:column;gap:6px}
-.tm-cover-empty-text b{display:block;font-size:.95rem;font-weight:700;color:var(--text-primary)}
-.tm-cover-empty-hint{display:flex;align-items:center;gap:8px;font-size:.73rem;color:var(--text-muted)}
-.tm-cover-empty-hint::before,.tm-cover-empty-hint::after{content:'';flex:1;height:1px;background:var(--border);max-width:36px}
+.tm-cover-empty-icon{width:52px;height:52px;border-radius:16px;background:linear-gradient(135deg,rgba(99,102,241,.15),rgba(139,92,246,.18));border:1.5px solid rgba(99,102,241,.28);display:flex;align-items:center;justify-content:center;transition:transform .25s,box-shadow .25s;box-shadow:0 4px 18px rgba(99,102,241,.12);flex-shrink:0}
+.tm-cover-empty-icon i{font-size:1.35rem;color:#6366f1}
+.tm-cover-frame:hover .tm-cover-empty-icon{transform:translateY(-3px) scale(1.06);box-shadow:0 10px 28px rgba(99,102,241,.22)}
+.tm-cover-empty-text{text-align:center;display:flex;flex-direction:column;gap:4px}
+.tm-cover-empty-text b{display:block;font-size:.82rem;font-weight:700;color:var(--text-primary)}
+.tm-cover-empty-hint{font-size:.68rem;color:var(--text-muted)}
 .tm-cover-actions{position:absolute;bottom:8px;right:8px;display:flex;gap:6px}
 .tm-cover-btn{padding:5px 12px;border-radius:8px;border:none;font-size:.78rem;font-weight:600;cursor:pointer;backdrop-filter:blur(6px)}
 .tm-cover-btn-change{background:rgba(255,255,255,.85);color:#111}
 .tm-cover-btn-del{background:rgba(239,68,68,.85);color:#fff}
-.tm-cover-stretch-row{display:flex;align-items:flex-start;gap:10px;padding:10px 4px 20px;cursor:pointer}
-.tm-cover-stretch-row input{width:17px;height:17px;margin-top:2px;accent-color:var(--primary);cursor:pointer;flex-shrink:0}
-.tm-cover-stretch-row b{font-size:.85rem;color:var(--text-primary)}
-.tm-cover-stretch-hint{font-size:.76rem;color:var(--text-muted)}
+.tm-cover-stretch-row{display:flex;align-items:flex-start;gap:9px;padding-top:14px;cursor:pointer}
+.tm-cover-stretch-row input{width:16px;height:16px;margin-top:2px;accent-color:var(--primary);cursor:pointer;flex-shrink:0}
+.tm-cover-stretch-row b{font-size:.8rem;color:var(--text-primary)}
+.tm-cover-stretch-hint{font-size:.71rem;color:var(--text-muted)}
 </style>
 <div class="tset-page">
     <div class="tset-hero">
@@ -1199,31 +1521,51 @@ body:not(.light-theme) .tm-sec-tabs{box-shadow:0 2px 14px rgba(0,0,0,.2)}
         </div>
         <button class="btn-primary-modern" onclick="TestsManagerPage._saveMeta(${isEdit ? `'${test.id}'` : 'null'})">${isEdit ? '<i class="fa-regular fa-floppy-disk"></i> Зберегти' : '<i class="fa-solid fa-plus"></i> Створити'}</button>
     </div>
-    <div class="tm-cover-frame">
-        <div id="tm-cover-wrap" class="tm-cover-upload">
-            ${test?.cover_image
-                ? `<img class="tm-cover-preview" id="tm-cover-img" src="${Fmt.esc(test.cover_image)}" alt="">
-                   <div class="tm-cover-actions">
-                       <label class="tm-cover-btn tm-cover-btn-change"><i class="fa-solid fa-image"></i> Змінити<input type="file" accept="image/*" style="display:none" onchange="TestsManagerPage._onCoverPick(this)"></label>
-                       <button type="button" class="tm-cover-btn tm-cover-btn-del" onclick="TestsManagerPage._removeCover()"><i class="fa-solid fa-trash"></i></button>
-                   </div>`
-                : `<label class="tm-cover-empty">
-                       <div class="tm-cover-empty-icon"><i class="fa-solid fa-cloud-arrow-up"></i></div>
-                       <div class="tm-cover-empty-text">
-                           <b>Перетягніть або натисніть для завантаження</b>
-                           <div class="tm-cover-empty-hint">PNG, JPG · до 5 МБ · 1200×400</div>
-                       </div>
-                       <input type="file" accept="image/*" style="display:none" onchange="TestsManagerPage._onCoverPick(this)">
-                   </label>`}
-        </div>
-    </div>
-    <label class="tm-cover-stretch-row">
-        <input type="checkbox" id="tm-stretch-cover" ${test?.stretch_cover_image ? 'checked' : ''}>
-        <span><b>Розтягнути обкладинку</b><br><span class="tm-cover-stretch-hint">Картинка тесту заповнює всю ширину блока (без збереження пропорцій)</span></span>
-    </label>
-    <div class="tset-grid">
+
+    <div class="tset-row-top">
         <div>
-            <div class="tset-section">
+            <div class="tset-card">
+                <div class="tset-card-head">
+                    <div class="tset-card-num">1</div>
+                    <div>
+                        <div class="tset-card-title">Обкладинка</div>
+                        <div class="tset-card-sub">Показується на картці тесту в списку</div>
+                    </div>
+                </div>
+                <div class="tm-cover-frame">
+                    <div id="tm-cover-wrap" class="tm-cover-upload">
+                        ${test?.cover_image
+                            ? `<img class="tm-cover-preview" id="tm-cover-img" src="${Fmt.esc(test.cover_image)}" alt="">
+                               <div class="tm-cover-actions">
+                                   <label class="tm-cover-btn tm-cover-btn-change"><i class="fa-solid fa-image"></i> Змінити<input type="file" accept="image/*" style="display:none" onchange="TestsManagerPage._onCoverPick(this)"></label>
+                                   <button type="button" class="tm-cover-btn tm-cover-btn-del" onclick="TestsManagerPage._removeCover()"><i class="fa-solid fa-trash"></i></button>
+                               </div>`
+                            : `<label class="tm-cover-empty">
+                                   <div class="tm-cover-empty-icon"><i class="fa-solid fa-cloud-arrow-up"></i></div>
+                                   <div class="tm-cover-empty-text">
+                                       <b>Натисніть, щоб завантажити</b>
+                                       <div class="tm-cover-empty-hint">PNG, JPG · до 5 МБ · 1200×400</div>
+                                   </div>
+                                   <input type="file" accept="image/*" style="display:none" onchange="TestsManagerPage._onCoverPick(this)">
+                               </label>`}
+                    </div>
+                </div>
+                <label class="tm-cover-stretch-row">
+                    <input type="checkbox" id="tm-stretch-cover" ${test?.stretch_cover_image ? 'checked' : ''}>
+                    <span><b>Розтягнути обкладинку</b><br><span class="tm-cover-stretch-hint">Заповнює всю ширину блока без збереження пропорцій</span></span>
+                </label>
+            </div>
+        </div>
+
+        <div>
+            <div class="tset-card">
+                <div class="tset-card-head">
+                    <div class="tset-card-num">2</div>
+                    <div>
+                        <div class="tset-card-title">Основна інформація</div>
+                        <div class="tset-card-sub">Назва, опис і ключові параметри проходження</div>
+                    </div>
+                </div>
                 <div class="tset-field">
                     <div class="tset-field-icon"><i class="fa-solid fa-heading"></i></div>
                     <div class="tset-field-inner">
@@ -1258,8 +1600,8 @@ body:not(.light-theme) .tm-sec-tabs{box-shadow:0 2px 14px rgba(0,0,0,.2)}
                     <div class="tset-field-inner">
                         <div class="tset-row2">
                             <div>
-                                <label class="tset-label">Прохідний бал, %</label>
-                                <input id="tm-score" class="tset-input" type="number" min="1" max="100" value="${test?.passing_score||70}">
+                                <label class="tset-label">Прохідний бал, % <span style="text-transform:none;font-weight:400;color:var(--text-muted)">(0 = зараховується будь-який результат)</span></label>
+                                <input id="tm-score" class="tset-input" type="number" min="0" max="100" value="${test?.passing_score ?? 70}">
                             </div>
                             <div>
                                 <label class="tset-label">Категорія табелю</label>
@@ -1277,78 +1619,82 @@ body:not(.light-theme) .tm-sec-tabs{box-shadow:0 2px 14px rgba(0,0,0,.2)}
                     </div>
                 </div>
             </div>
-            <div class="tset-section">
-                <div class="tset-section-lbl">Поведінка тесту</div>
-                <label class="tset-toggle-row" for="tm-shuffle">
-                    <input type="checkbox" id="tm-shuffle" class="tset-toggle-input" ${test?.randomize_questions?'checked':''}>
-                    <div class="tset-toggle-icon"><i class="fa-solid fa-shuffle"></i></div>
-                    <div class="tset-toggle-text">
-                        <span class="tset-toggle-label">Перемішати питання</span>
-                        <span class="tset-toggle-sub">Порядок питань випадковий для кожної спроби</span>
-                    </div>
-                    <div class="tset-toggle-pill"><div class="tset-toggle-knob"></div></div>
-                </label>
-                ${toggles.map(t => `
-                <label class="tset-toggle-row" for="${t.id}">
-                    <input type="checkbox" id="${t.id}" class="tset-toggle-input" ${t.on?'checked':''}>
-                    <div class="tset-toggle-icon"><i class="${t.icon}"></i></div>
-                    <div class="tset-toggle-text">
-                        <span class="tset-toggle-label">${t.label}</span>
-                        <span class="tset-toggle-sub">${t.sub}</span>
-                    </div>
-                    <div class="tset-toggle-pill"><div class="tset-toggle-knob"></div></div>
-                </label>`).join('')}
-            </div>
-            <div class="tset-section">
-                <div class="tset-section-lbl">Публікація</div>
-                <label class="tset-toggle-row tset-toggle-row--pub" for="tm-pub">
-                    <input type="checkbox" id="tm-pub" class="tset-toggle-input" ${test?.is_published?'checked':''}>
-                    <div class="tset-toggle-icon"><i class="fa-solid fa-globe"></i></div>
-                    <div class="tset-toggle-text">
-                        <span class="tset-toggle-label">Опубліковано</span>
-                        <span class="tset-toggle-sub">Тест доступний для проходження співробітникам</span>
-                    </div>
-                    <div class="tset-toggle-pill"><div class="tset-toggle-knob"></div></div>
-                </label>
-            </div>
         </div>
-        <div class="tset-auto-panel">
-            <div class="tset-auto-head">
-                <div class="tset-auto-icon"><i class="fa-solid fa-robot"></i></div>
-                <div>
-                    <div class="tset-auto-title">Автоматизація</div>
-                    <div class="tset-auto-sub">Автоназначення новим співробітникам за посадою</div>
+    </div>
+
+    <div class="tset-row-bottom">
+        <div>
+            <div class="tset-card">
+                <div class="tset-card-head">
+                    <div class="tset-card-num">3</div>
+                    <div>
+                        <div class="tset-card-title">Поведінка тесту</div>
+                        <div class="tset-card-sub">Як тест поводиться для співробітника під час і після проходження</div>
+                    </div>
+                </div>
+                <div class="tset-toggle-grid">
+                    <label class="tset-toggle-row" for="tm-shuffle">
+                        <input type="checkbox" id="tm-shuffle" class="tset-toggle-input" ${test?.randomize_questions?'checked':''}>
+                        <div class="tset-toggle-icon"><i class="fa-solid fa-shuffle"></i></div>
+                        <div class="tset-toggle-text">
+                            <span class="tset-toggle-label">Перемішати питання</span>
+                            <span class="tset-toggle-sub">Порядок випадковий для кожної спроби</span>
+                        </div>
+                        <div class="tset-toggle-pill"><div class="tset-toggle-knob"></div></div>
+                    </label>
+                    ${toggles.map(t => `
+                    <label class="tset-toggle-row" for="${t.id}">
+                        <input type="checkbox" id="${t.id}" class="tset-toggle-input" ${t.on?'checked':''}>
+                        <div class="tset-toggle-icon"><i class="${t.icon}"></i></div>
+                        <div class="tset-toggle-text">
+                            <span class="tset-toggle-label">${t.label}</span>
+                            <span class="tset-toggle-sub">${t.sub}</span>
+                        </div>
+                        <div class="tset-toggle-pill"><div class="tset-toggle-knob"></div></div>
+                    </label>`).join('')}
                 </div>
             </div>
-            <div id="tm-pos-tags" class="tset-pos-tags">
-                ${selectedPos.length
-                    ? selectedPos.map(p => {
-                        const js = JSON.stringify(p).replace(/"/g,'&quot;');
-                        return `<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px 2px 10px;border-radius:20px;background:rgba(99,102,241,.1);border:1.5px solid var(--primary);color:var(--primary);font-size:.72rem;font-weight:600">${Fmt.esc(p)}<button type="button" onclick="TestsManagerPage._removePosTag(${js})" style="background:none;border:none;cursor:pointer;color:var(--primary);padding:0;margin:0 0 0 2px;font-size:.75rem;line-height:1"><i class="fa-solid fa-xmark"></i></button></span>`;
-                    }).join('')
-                    : `<span style="font-size:.75rem;color:var(--text-muted)">Не вибрано — тільки вручну</span>`
-                }
+        </div>
+
+        <div>
+            <div class="tset-card">
+                <div class="tset-card-head">
+                    <div class="tset-card-num">4</div>
+                    <div>
+                        <div class="tset-card-title">Автоматизація</div>
+                        <div class="tset-card-sub">Автоназначення новим співробітникам за посадою</div>
+                    </div>
+                </div>
+                <div id="tm-pos-tags" class="tset-pos-tags">
+                    ${selectedPos.length
+                        ? selectedPos.map(p => {
+                            const js = JSON.stringify(p).replace(/"/g,'&quot;');
+                            return `<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px 2px 10px;border-radius:20px;background:rgba(99,102,241,.1);border:1.5px solid var(--primary);color:var(--primary);font-size:.72rem;font-weight:600">${Fmt.esc(p)}<button type="button" onclick="TestsManagerPage._removePosTag(${js})" style="background:none;border:none;cursor:pointer;color:var(--primary);padding:0;margin:0 0 0 2px;font-size:.75rem;line-height:1"><i class="fa-solid fa-xmark"></i></button></span>`;
+                        }).join('')
+                        : `<span style="font-size:.75rem;color:var(--text-muted)">Не вибрано — тільки вручну</span>`
+                    }
+                </div>
+                ${allPositions.length ? `
+                <div class="search-clear-wrap">
+                    <input id="tm-pos-search" type="text" class="tset-pos-search" placeholder="Пошук посади..."
+                        oninput="TestsManagerPage._filterPosSearch(this.value)">
+                    <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div id="tm-pos-list" class="tset-pos-list">
+                    ${allPositions.map(p => {
+                        const on = selectedPos.includes(p);
+                        return `<label style="display:flex;align-items:center;gap:7px;padding:5px 8px;border-radius:7px;cursor:pointer;background:${on?'rgba(99,102,241,.06)':''};transition:background .12s"
+                            onmouseenter="this.style.background=this.querySelector('input').checked?'rgba(99,102,241,.06)':'var(--bg-hover)'"
+                            onmouseleave="this.style.background=this.querySelector('input').checked?'rgba(99,102,241,.06)':''">
+                            <input type="checkbox" name="tm-pos" value="${Fmt.esc(p)}" ${on?'checked':''}
+                                style="width:14px;height:14px;cursor:pointer;accent-color:var(--primary);flex-shrink:0"
+                                onchange="TestsManagerPage._togglePosLabel(this.closest('label'),this.checked)">
+                            <span style="font-size:.82rem;color:var(--text-primary)">${Fmt.esc(p)}</span>
+                        </label>`;
+                    }).join('')}
+                </div>` : `<div style="font-size:.78rem;color:var(--text-muted)">Посади не знайдено — заповніть профілі співробітників</div>`}
+                ${isEdit ? `<button type="button" class="btn btn-ghost btn-sm tset-auto-run" onclick="TestsManagerPage._runAutoAssign('${test.id}')"><i class="fa-solid fa-play"></i> Запустити зараз</button>` : ''}
             </div>
-            ${allPositions.length ? `
-            <div class="search-clear-wrap">
-                <input id="tm-pos-search" type="text" class="tset-pos-search" placeholder="Пошук посади..."
-                    oninput="TestsManagerPage._filterPosSearch(this.value)">
-                <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
-            </div>
-            <div id="tm-pos-list" class="tset-pos-list">
-                ${allPositions.map(p => {
-                    const on = selectedPos.includes(p);
-                    return `<label style="display:flex;align-items:center;gap:7px;padding:5px 8px;border-radius:7px;cursor:pointer;background:${on?'rgba(99,102,241,.06)':''};transition:background .12s"
-                        onmouseenter="this.style.background=this.querySelector('input').checked?'rgba(99,102,241,.06)':'var(--bg-raised)'"
-                        onmouseleave="this.style.background=this.querySelector('input').checked?'rgba(99,102,241,.06)':''">
-                        <input type="checkbox" name="tm-pos" value="${Fmt.esc(p)}" ${on?'checked':''}
-                            style="width:14px;height:14px;cursor:pointer;accent-color:var(--primary);flex-shrink:0"
-                            onchange="TestsManagerPage._togglePosLabel(this.closest('label'),this.checked)">
-                        <span style="font-size:.82rem;color:var(--text-primary)">${Fmt.esc(p)}</span>
-                    </label>`;
-                }).join('')}
-            </div>` : `<div style="font-size:.78rem;color:var(--text-muted)">Посади не знайдено — заповніть профілі співробітників</div>`}
-            ${isEdit ? `<button type="button" class="btn btn-ghost btn-sm" style="margin-top:auto" onclick="TestsManagerPage._runAutoAssign('${test.id}')"><i class="fa-solid fa-play"></i> Запустити зараз</button>` : ''}
         </div>
     </div>
 </div>`;
@@ -1363,20 +1709,24 @@ body:not(.light-theme) .tm-sec-tabs{box-shadow:0 2px 14px rgba(0,0,0,.2)}
             description:            Dom.val('tm-desc').trim() || null,
             time_limit_minutes:     parseInt(Dom.val('tm-time')) || null,
             max_attempts:           parseInt(Dom.val('tm-attempts')) || 1,
-            passing_score:          parseInt(Dom.val('tm-score')) || 70,
+            passing_score:          Number.isNaN(parseInt(Dom.val('tm-score'))) ? 70 : parseInt(Dom.val('tm-score')),
             randomize_questions:    document.getElementById('tm-shuffle')?.checked || false,
             allow_restart:          document.getElementById('tm-restart')?.checked   || false,
             allow_skip:             document.getElementById('tm-skip')?.checked      || false,
             show_answer_feedback:   document.getElementById('tm-feedback')?.checked  || false,
             show_wrong_answers:     document.getElementById('tm-wrong')?.checked     || false,
             grant_attempt_on_reassign: document.getElementById('tm-grant-reassign')?.checked || false,
+            hide_score_from_user:   document.getElementById('tm-hide-score')?.checked || false,
             stretch_cover_image:    document.getElementById('tm-stretch-cover')?.checked || false,
             intern_category:        document.getElementById('tm-intern-cat')?.value  || null,
-            is_published:           document.getElementById('tm-pub')?.checked || false,
             auto_assign_positions:  autoPositions,
             course_id:              null,
             created_by:             AppState.user.id
         };
+        // Публікація керується окремо в списку тестів (перемикач у tm-table-wrap) —
+        // тут її не чіпаємо, щоб збереження інших налаштувань не скидало статус.
+        // Для щойно створеного тесту явно стартуємо як чернетку.
+        if (!testId) payload.is_published = false;
         Loader.show();
         try {
             let test;
@@ -3628,7 +3978,7 @@ body.light-theme .tm-src-ta{background:#f6f8fa;color:#24292f;border-color:#d0d7d
         const mgrNameById = new Map(managers.map(m => [m.id, m.full_name]));
         const qCount   = test?.questions?.length ?? '—';
         const timeTxt  = test?.time_limit_minutes ? `${test.time_limit_minutes} хв` : 'Без обмежень';
-        const passTxt  = `${test?.passing_score || 70}%`;
+        const passTxt  = `${test?.passing_score ?? 70}%`;
 
         container.innerHTML = `<style>
 .tasgn-page{display:flex;flex-direction:column;height:calc(100vh - 120px)}
@@ -4333,28 +4683,35 @@ const MyTestsPage = {
 
     async _render(container, fromExpert = false) {
         this._fromExpert = fromExpert;
-        let assignments = [], attempts = [];
+        let assignments = [], attempts = [], grants = [];
         try {
-            [assignments, attempts] = await Promise.all([
+            [assignments, attempts, grants] = await Promise.all([
                 TestsManagerAPI.getMyAssignments(),
                 supabase.from('test_attempts')
-                    .select('*, test:tests(id,title)')
+                    .select('*, test:tests(id,title,hide_score_from_user)')
                     .eq('user_id', AppState.user.id)
                     .not('completed_at', 'is', null)
                     .order('completed_at', { ascending: false })
+                    .then(({ data }) => data || []),
+                // Додаткові спроби (API.attempts.grantExtra) лежать в окремій
+                // таблиці, а не в test.max_attempts — без цього
+                // _attemptsLeftForTest() не бачить наданих адміном спроб.
+                supabase.from('test_attempt_grants')
+                    .select('test_id')
+                    .eq('user_id', AppState.user.id)
                     .then(({ data }) => data || [])
             ]);
-        } catch(e) { assignments = []; attempts = []; }
+        } catch(e) { assignments = []; attempts = []; grants = []; }
 
         const completedTestIds = new Set(attempts.map(a => a.test_id));
         this._assignments      = assignments;
         this._attempts         = attempts;
         this._completedTestIds = completedTestIds;
         this._passedTestIds    = new Set(attempts.filter(a => a.passed).map(a => a.test_id));
+        this._grantsByTest     = grants.reduce((m, g) => m.set(g.test_id, (m.get(g.test_id) || 0) + 1), new Map());
 
         container.innerHTML = `
 <style>
-.mt-page{max-width:1100px;}
 .mt-hero{border-radius:22px;padding:30px 36px;margin-bottom:24px;background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 60%,#1e40af 100%);position:relative;overflow:hidden}
 .mt-hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 60% 80% at 80% 20%,rgba(201,162,39,.15),transparent);pointer-events:none}
 .mt-hero-inner{position:relative;display:flex;align-items:center;gap:18px}
@@ -4419,9 +4776,9 @@ const MyTestsPage = {
 .mt-card-bar.overdue{background:linear-gradient(90deg,#ef4444,#dc2626)}
 .mt-card-bar.done{background:linear-gradient(90deg,#10b981,#059669)}
 .mt-card-body{position:relative;z-index:2;padding:16px 18px;flex:1;display:flex;flex-direction:column;gap:14px}
-.mt-card-banner-wrap{position:relative;margin:-16px -18px 0;height:190px;overflow:hidden;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.mt-card-banner-wrap{position:relative;margin:-16px -18px 0;height:260px;overflow:hidden;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .mt-card-banner-glow{position:absolute;inset:0;background-size:cover;background-position:center;filter:blur(26px) saturate(150%) brightness(.85);transform:scale(1.2)}
-.mt-card-banner{position:relative;z-index:1;width:calc(100% - 32px);height:158px;object-fit:cover;border-radius:14px;box-shadow:0 12px 30px rgba(0,0,0,.35);display:block}
+.mt-card-banner{position:relative;z-index:1;width:calc(100% - 32px);height:calc(100% - 32px);object-fit:cover;border-radius:14px;box-shadow:0 12px 30px rgba(0,0,0,.35);display:block}
 .mt-card-banner.stretch{object-fit:fill}
 .mt-card-info{flex:1;min-width:0}
 .mt-card-title{font-weight:700;font-size:.95rem;color:var(--text-primary);margin-bottom:5px}
@@ -4450,7 +4807,8 @@ const MyTestsPage = {
 .mt-card .mt-btn-start,.mt-card .mt-btn-view{width:100%;justify-content:center}
 .mt-score-circle{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.82rem;font-weight:800;flex-shrink:0;align-self:center}
 
-.mtg-grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+.mtg-grid2{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;align-items:start}
+@media(max-width:1200px){.mtg-grid2{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:820px){.mtg-grid2{grid-template-columns:1fr}}
 .mtg-card{
     position:relative;isolation:isolate;
@@ -4474,7 +4832,7 @@ const MyTestsPage = {
     background-image:linear-gradient(180deg,rgba(15,23,42,.55) 0%,rgba(15,23,42,.15) 100%);
     border-bottom:1px solid rgba(255,255,255,.14);
 }
-.mtg-head .mt-card-banner-wrap{margin:0}
+.mtg-head .mt-card-banner-wrap{margin:0;height:260px}
 .mtg-head-row{padding:20px 22px;display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
 .mtg-head-main{min-width:0}
 .mtg-head-title{font-size:1.1rem;font-weight:800;color:#fff}
@@ -4561,8 +4919,9 @@ const MyTestsPage = {
 
     _attemptsLeftForTest(test) {
         if (!test.max_attempts) return null;
-        const used = (this._attempts || []).filter(a => a.test_id === test.id).length;
-        return test.max_attempts - used;
+        const used   = (this._attempts || []).filter(a => a.test_id === test.id).length;
+        const grants = this._grantsByTest?.get(test.id) || 0;
+        return (test.max_attempts + grants) - used;
     },
 
     _pendingHtml(assignments, completedTestIds) {
@@ -4580,7 +4939,16 @@ const MyTestsPage = {
 
         const groupEntries = [...groupsMap.values()].map(g => {
             g.items.sort((x, y) => (x._order ?? 0) - (y._order ?? 0));
-            g.done = g.items.every(a => completedTestIds.has(a.test_id));
+            // Група вважається завершеною лише коли КОЖЕН тест або пройдено
+            // успішно, або провалено й спроби вичерпані — якщо є ще спроба
+            // (напр. адмін підвищив ліміт чи перепризначив тест), група має
+            // лишатись у "Моїх тестах", а не зникати у "Завершені".
+            g.done = g.items.every(a => {
+                if (passedTestIds.has(a.test_id)) return true;
+                if (!completedTestIds.has(a.test_id)) return false;
+                const left = a.test ? this._attemptsLeftForTest(a.test) : null;
+                return left !== null && left <= 0;
+            });
             g.earliest = g.items.map(a => a.deadline_at).filter(Boolean).sort()[0] || null;
             return g;
         }).filter(g => !g.done);
@@ -4642,7 +5010,7 @@ const MyTestsPage = {
             <div class="mt-card-meta">
                 <span class="mt-badge mt-badge-info"><i class="fa-solid fa-question"></i> ${qCount} питань</span>
                 ${test.time_limit_minutes ? `<span class="mt-badge mt-badge-info"><i class="fa-regular fa-clock"></i> ${test.time_limit_minutes} хв</span>` : ''}
-                <span class="mt-badge mt-badge-info"><i class="fa-solid fa-bullseye"></i> ${test.passing_score||70}% прохідний</span>
+                ${!test.hide_score_from_user ? `<span class="mt-badge mt-badge-info"><i class="fa-solid fa-bullseye"></i> ${test.passing_score ?? 70}% прохідний</span>` : ''}
                 ${deadlineTxt}
             </div>
         </div>
@@ -4688,33 +5056,73 @@ const MyTestsPage = {
             if (!test) return '';
             const passed  = passedTestIds.has(a.test_id);
             const done    = completedTestIds.has(a.test_id);
-            const locked  = group.is_sequential && i > 0 && !passedTestIds.has(items[i-1].test_id);
+            // Розблоковуємо наступний тест після БУДЬ-ЯКОЇ завершеної спроби
+            // попереднього (не лише успішної) — інакше співробітник, який
+            // провалив тест і вичерпав спроби, назавжди застрягає на місці.
+            const locked  = group.is_sequential && i > 0 && !completedTestIds.has(items[i-1].test_id);
             const qCount  = test.questions?.length || 0;
             const attemptsLeft   = this._attemptsLeftForTest(test);
             const noMoreAttempts = attemptsLeft !== null && attemptsLeft <= 0;
+            // При "приховати бал від співробітника" бейдж завжди зелений
+            // "Зараховано" — незалежно від реального passed (лише візуально;
+            // розблокування/прогрес рахуються по справжньому статусу).
+            const displayPassed = done && (passed || !!test.hide_score_from_user);
             let statusHtml;
-            if (passed) statusHtml = `<span class="mt-badge mt-badge-done"><i class="fa-solid fa-check"></i> Зараховано</span>`;
+            if (displayPassed) statusHtml = `<span class="mt-badge mt-badge-done"><i class="fa-solid fa-check"></i> Зараховано</span>`;
             else if (done) statusHtml = `<span class="mt-badge mt-badge-fail"><i class="fa-solid fa-xmark"></i> Не зараховано</span>`;
             else if (locked) statusHtml = `<span class="mt-badge mt-badge-info"><i class="fa-solid fa-lock"></i> Заблоковано</span>`;
             const isResult = done && noMoreAttempts;
             const btnLabel = isResult ? 'Результат' : (done && !passed ? 'Спробувати ще' : 'Пройти тест');
-            const btnClass = isResult ? (passed ? ' mt-btn-result-pass' : ' mt-btn-result-fail') : '';
+            const btnClass = isResult ? (displayPassed ? ' mt-btn-result-pass' : ' mt-btn-result-fail') : '';
             return `
 <div class="mtg-row${locked ? ' locked' : ''}">
-    <span class="mtg-row-idx${passed ? ' done' : ''}">${passed ? '<i class="fa-solid fa-check"></i>' : (i + 1)}</span>
+    <span class="mtg-row-idx${displayPassed ? ' done' : ''}">${displayPassed ? '<i class="fa-solid fa-check"></i>' : (i + 1)}</span>
     <div class="mtg-row-info">
         <div class="mtg-row-title">${Fmt.esc(test.title)}</div>
         <div class="mt-card-meta">
+            ${done ? '' : `
             <span class="mt-badge mt-badge-info"><i class="fa-solid fa-question"></i> ${qCount} питань</span>
-            ${test.time_limit_minutes ? `<span class="mt-badge mt-badge-info"><i class="fa-regular fa-clock"></i> ${test.time_limit_minutes} хв</span>` : ''}
+            ${test.time_limit_minutes ? `<span class="mt-badge mt-badge-info"><i class="fa-regular fa-clock"></i> ${test.time_limit_minutes} хв</span>` : ''}`}
             ${statusHtml || ''}
         </div>
     </div>
     ${locked
         ? `<button class="mt-btn-start mt-btn-locked" data-prev="${Fmt.esc(items[i-1].test?.title || '')}" onclick="MyTestsPage._lockedNotice(this.dataset.prev)"><i class="fa-solid fa-lock"></i></button>`
-        : `<button class="mt-btn-start${btnClass}" onclick="Router.go('tests/${test.id}?from=expert-path')">${btnLabel}</button>`}
+        : (test.hide_score_from_user && isResult)
+            ? ''
+            : `<button class="mt-btn-start${btnClass}" onclick="Router.go('tests/${test.id}?from=expert-path')">${btnLabel}</button>`}
 </div>`;
         }).join('')}
+    </div>
+</div>`;
+    },
+
+    _historyCardHtml(a) {
+        const pct  = Math.round(a.percentage || 0);
+        const hideScore = !!a.test?.hide_score_from_user;
+        // При "приховати бал від співробітника" бейдж/колір завжди як
+        // "Зараховано" — лише візуально, реальний passed не змінюється.
+        const displayPassed = hideScore || a.passed;
+        const glow = a.needs_review ? ['#f59e0b','#d97706'] : displayPassed ? ['#10b981','#059669'] : ['#ef4444','#dc2626'];
+        return `
+<div class="mt-card" style="--mt-glow:${glow[0]};--mt-glow2:${glow[1]}">
+    <div class="mt-card-frost"></div>
+    <div class="mt-card-bar ${a.needs_review ? '' : displayPassed ? 'done' : 'overdue'}" style="${a.needs_review ? 'background:#f59e0b' : ''}"></div>
+    <div class="mt-card-body">
+        <div class="mt-card-info">
+            <div class="mt-card-title">${a.test?.title || 'Тест'}</div>
+            <div class="mt-card-meta">
+                <span class="mt-badge mt-badge-info">${Fmt.datetime(a.completed_at)}</span>
+                ${a.time_spent_seconds ? `<span class="mt-badge mt-badge-info"><i class="fa-regular fa-clock"></i> ${Math.floor(a.time_spent_seconds/60)} хв</span>` : ''}
+                ${a.needs_review
+                    ? `<span class="mt-badge" style="background:rgba(245,158,11,.14);color:#f59e0b"><i class="fa-solid fa-hourglass-half"></i> На перевірці</span>`
+                    : `<span class="mt-badge ${displayPassed ? 'mt-badge-done' : 'mt-badge-fail'}">${displayPassed ? '<i class="fa-solid fa-check"></i> Зараховано' : '<i class="fa-solid fa-xmark"></i> Не зараховано'}</span>`}
+            </div>
+        </div>
+        <div class="mt-score-circle" style="background:${a.needs_review?'rgba(245,158,11,.12)':displayPassed?'rgba(16,185,129,.12)':'rgba(239,68,68,.1)'};color:${a.needs_review?'#f59e0b':displayPassed?'#10b981':'#ef4444'}">
+            ${a.needs_review ? '—' : (hideScore ? `<i class="fa-solid fa-check"></i>` : pct + '%')}
+        </div>
+        <button class="mt-btn-view" onclick="Router.go('tests/${a.test_id}${this._fromExpert ? '?from=expert-path' : ''}')">Деталі</button>
     </div>
 </div>`;
     },
@@ -4727,30 +5135,39 @@ const MyTestsPage = {
     <div class="mt-empty-txt">Результати пройдених тестів будуть відображатись тут</div>
 </div>`;
 
-        return `<div class="mt-list">${attempts.map(a => {
-            const pct  = Math.round(a.percentage || 0);
-            const glow = a.needs_review ? ['#f59e0b','#d97706'] : a.passed ? ['#10b981','#059669'] : ['#ef4444','#dc2626'];
-            return `
-<div class="mt-card" style="--mt-glow:${glow[0]};--mt-glow2:${glow[1]}">
-    <div class="mt-card-frost"></div>
-    <div class="mt-card-bar ${a.needs_review ? '' : a.passed ? 'done' : 'overdue'}" style="${a.needs_review ? 'background:#f59e0b' : ''}"></div>
-    <div class="mt-card-body">
-        <div class="mt-card-info">
-            <div class="mt-card-title">${a.test?.title || 'Тест'}</div>
-            <div class="mt-card-meta">
-                <span class="mt-badge mt-badge-info">${Fmt.datetime(a.completed_at)}</span>
-                ${a.time_spent_seconds ? `<span class="mt-badge mt-badge-info"><i class="fa-regular fa-clock"></i> ${Math.floor(a.time_spent_seconds/60)} хв</span>` : ''}
-                ${a.needs_review
-                    ? `<span class="mt-badge" style="background:rgba(245,158,11,.14);color:#f59e0b"><i class="fa-solid fa-hourglass-half"></i> На перевірці</span>`
-                    : `<span class="mt-badge ${a.passed ? 'mt-badge-done' : 'mt-badge-fail'}">${a.passed ? '<i class="fa-solid fa-check"></i> Зараховано' : '<i class="fa-solid fa-xmark"></i> Не зараховано'}</span>`}
-            </div>
-        </div>
-        <div class="mt-score-circle" style="background:${a.needs_review?'rgba(245,158,11,.12)':a.passed?'rgba(16,185,129,.12)':'rgba(239,68,68,.1)'};color:${a.needs_review?'#f59e0b':a.passed?'#10b981':'#ef4444'}">
-            ${a.needs_review ? '—' : pct + '%'}
-        </div>
-        <button class="mt-btn-view" onclick="Router.go('tests/${a.test_id}${this._fromExpert ? '?from=expert-path' : ''}')">Деталі</button>
-    </div>
-</div>`;
-        }).join('')}</div>`;
+        // Групуємо історію за групою тестів (як у "Моїх тестах") — інакше
+        // спроби для тестів з однієї групи розсипаються по окремих картках
+        // без жодного зв'язку між собою.
+        const groupByTestId = new Map();
+        (this._assignments || []).forEach(a => {
+            if (a.group_id && a.group) groupByTestId.set(a.test_id, a.group);
+        });
+
+        const groups = new Map();
+        const ungrouped = [];
+        attempts.forEach(a => {
+            const g = groupByTestId.get(a.test_id);
+            if (g) {
+                if (!groups.has(g.id)) groups.set(g.id, { group: g, attempts: [] });
+                groups.get(g.id).attempts.push(a);
+            } else {
+                ungrouped.push(a);
+            }
+        });
+
+        const groupSections = [...groups.values()].map(entry => `
+<div class="mt-section">
+    <div class="mt-section-head"><i class="fa-solid fa-layer-group"></i> ${Fmt.esc(entry.group.title)}</div>
+    <div class="mt-list">${entry.attempts.map(a => this._historyCardHtml(a)).join('')}</div>
+</div>`).join('');
+
+        const ungroupedHtml = ungrouped.length
+            ? `<div class="mt-section${groups.size ? ' mt-section-sep' : ''}">
+                   ${groups.size ? `<div class="mt-section-head"><i class="fa-solid fa-file-pen"></i> Окремі тести</div>` : ''}
+                   <div class="mt-list">${ungrouped.map(a => this._historyCardHtml(a)).join('')}</div>
+               </div>`
+            : '';
+
+        return groupSections + ungroupedHtml;
     }
 };

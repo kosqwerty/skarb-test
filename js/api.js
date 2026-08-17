@@ -32,6 +32,19 @@ const API = {
             return data;
         },
 
+        // "Онлайн" = ping (last_seen_at, Heartbeat кожні 30с) за останні 3 хв —
+        // той самий поріг, що й Admin._isOnline() в адмінпанелі.
+        async getOnline() {
+            const since = new Date(Date.now() - 3 * 60 * 1000).toISOString();
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('id, full_name, avatar_url, role, job_position, last_seen_at')
+                .gte('last_seen_at', since)
+                .order('last_seen_at', { ascending: false });
+            if (error) throw error;
+            return data || [];
+        },
+
         async updateRole(id, role) {
             return this.update(id, { role });
         },

@@ -51,23 +51,11 @@ const NewsPage = {
                    смарагд тут лише акцентні токени поверх теми, не заміна їй. */
                 :root{ --vlg-gold:#d4a856; --vlg-gold-2:#f0c869; --vlg-ruby:#b5384f; --vlg-emerald:#2f8f6b; }
 
-                /* min-width:0 на обох треках — без цього grid-колонка з fr не
-                   стискається нижче intrinsic-ширини вмісту (класична пастка
-                   CSS grid), і довгий заголовок у стрічці "звужував" hero,
-                   бо той відсовувався праворуч. */
-                /* Сітка новин йде одразу під hero в тій самій (лівій) колонці —
-                   стрічка "Також цього тижня" тримається окремою колонкою
-                   праворуч на всю висоту (hero + сітка разом), а не одним
-                   рядком тільки з hero. Якщо стрічки немає (немає featured) —
-                   .vlg-layout.no-ledger колапсує в одну колонку на всю ширину. */
-                .vlg-layout{display:grid;grid-template-columns:1fr 350px;gap:1.75rem;align-items:start}
-                .vlg-layout.no-ledger{grid-template-columns:1fr}
-                .vlg-layout.no-ledger .vlg-ledger{display:none}
-                .vlg-main{min-width:0;display:flex;flex-direction:column;gap:.75rem}
-                .news-grid{grid-template-columns:repeat(auto-fit,minmax(min(430px,100%),1fr));max-width:none}
+                .vlg-layout{display:grid;grid-template-columns:1fr;gap:1.75rem;align-items:start}
+                .vlg-main{min-width:0;display:flex;flex-direction:column;gap:1.75rem}
                 .vlg-hero-main{
                     min-width:0;
-                    position:relative;border-radius:var(--radius-xl);overflow:hidden;min-height:400px;
+                    position:relative;border-radius:var(--radius-xl);overflow:hidden;min-height:340px;
                     background:radial-gradient(120% 100% at 85% 0%,rgba(212,168,86,.22),transparent 60%),
                                linear-gradient(155deg,#211c48 0%,#140f30 60%,#0d0b1f 100%);
                     border:1px solid rgba(212,168,86,.16);cursor:pointer;
@@ -82,12 +70,32 @@ const NewsPage = {
                     background-size:38px 38px;-webkit-mask-image:radial-gradient(ellipse at top right,black,transparent 70%);mask-image:radial-gradient(ellipse at top right,black,transparent 70%);
                 }
                 .vlg-hero-bg{position:absolute;inset:0;background-size:auto 100%;background-repeat:no-repeat;background-position:center}
-                .vlg-hero-fade{position:absolute;inset:0;background:linear-gradient(0deg,rgba(13,11,31,.5) 5%,rgba(13,11,31,.28) 55%,rgba(13,11,31,.13) 100%)}
-                .vlg-hero-tag{position:relative;display:inline-flex;align-items:center;gap:8px;font-size:.7rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--vlg-gold-2);margin-bottom:1.1rem}
-                .vlg-hero-tag::before{content:'◆';font-size:8px}
-                .vlg-hero-main h2{position:relative;font-size:1.85rem;font-weight:700;line-height:1.22;margin:0 0 .85rem;max-width:640px;color:#fbf7ec;text-wrap:balance}
-                .vlg-hero-main p{position:relative;font-size:.95rem;line-height:1.6;color:#a89fc9;max-width:560px;margin:0 0 1.5rem;display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-                .vlg-hero-foot{position:relative;display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+                /* Кінематографічне затемнення: знизу — щільне (під текст),
+                   зліва — м'яке (під заголовок/бейлайн), справа-знизу —
+                   тепле золоте сяйво замість плаского чорного шару, зверху —
+                   майже прозоро, щоб фото "дихало". */
+                .vlg-hero-fade{
+                    position:absolute;inset:0;
+                    background:
+                        radial-gradient(75% 65% at 100% 100%,rgba(212,168,86,.28),transparent 68%),
+                        linear-gradient(180deg,rgba(10,8,26,0) 0%,rgba(10,8,26,.04) 32%,rgba(10,8,26,.5) 68%,rgba(10,8,26,.94) 100%),
+                        linear-gradient(100deg,rgba(10,8,26,.6) 0%,rgba(10,8,26,.15) 38%,transparent 62%);
+                }
+                /* Використовує глобальні .badge.badge-warning (css/main.css) —
+                   той самий бейдж "⭐ Головна", що й у перегляді статті. Там
+                   він теж закріплений угорі картки (.nv-hero-badges), а не
+                   біля тексту внизу — .vlg-hero-main тримає контент через
+                   justify-content:flex-end, тож без position:absolute бейдж
+                   спливав би до низу разом із заголовком/анонсом. */
+                .vlg-hero-tag{position:absolute;top:1.25rem;left:2.75rem;z-index:3;width:fit-content}
+                /* Заголовок піднятий одразу під бейдж — .vlg-hero-bottom (анонс
+                   + підпис/кнопка) забирає на себе весь вільний простір через
+                   margin-top:auto, тож заголовок більше не "прилипає" до низу
+                   разом з рештою контенту. */
+                .vlg-hero-h2{position:relative;z-index:2;font-size:1.85rem;font-weight:700;line-height:1.22;margin:3.25rem 0 0;max-width:640px;color:#fbf7ec;text-wrap:balance}
+                .vlg-hero-bottom{position:relative;margin-top:auto}
+                .vlg-hero-main p{font-size:.95rem;line-height:1.6;color:#a89fc9;max-width:560px;margin:.85rem 0 1.5rem;display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+                .vlg-hero-foot{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}
                 .vlg-byline{display:flex;align-items:center;gap:.7rem;font-size:.85rem;color:#cfc9e6}
                 .vlg-avatar{width:36px;height:36px;border-radius:50%;overflow:hidden;background:linear-gradient(135deg,var(--vlg-gold),#8a6a2e);display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;font-family:-apple-system,sans-serif;color:#1a1530;flex-shrink:0}
                 .vlg-avatar img{width:100%;height:100%;object-fit:cover;display:block}
@@ -104,31 +112,42 @@ const NewsPage = {
                     border-color:rgba(42,94,232,.3);
                 }
                 body.light-theme .vlg-hero-main:hover{border-color:var(--primary)}
-                body.light-theme .vlg-hero-fade{background:linear-gradient(0deg,rgba(243,246,253,.46) 5%,rgba(243,246,253,.2) 55%,transparent 100%)}
-                body.light-theme .vlg-hero-tag{color:var(--primary)}
-                body.light-theme .vlg-hero-main h2{color:#1b2350}
+                body.light-theme .vlg-hero-fade{
+                    background:
+                        radial-gradient(75% 65% at 100% 100%,rgba(42,94,232,.22),transparent 68%),
+                        linear-gradient(180deg,rgba(243,246,253,0) 0%,rgba(243,246,253,.08) 32%,rgba(243,246,253,.62) 68%,rgba(243,246,253,.95) 100%),
+                        linear-gradient(100deg,rgba(243,246,253,.7) 0%,rgba(243,246,253,.2) 38%,transparent 62%);
+                }
+                body.light-theme .vlg-hero-h2{color:#1b2350}
                 body.light-theme .vlg-hero-main p{color:rgba(27,35,80,.65)}
                 body.light-theme .vlg-byline{color:#3a3560}
                 body.light-theme .vlg-byline small{color:rgba(27,35,80,.5)}
                 body.light-theme .vlg-read{background:rgba(255,255,255,.7);border-color:var(--primary);color:var(--primary)}
                 body.light-theme .vlg-read:hover{background:var(--primary);color:#fff}
 
-                .vlg-ledger{min-width:0;border:1px solid var(--border);border-radius:var(--radius-xl);background:var(--bg-surface);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 24px -12px rgba(0,0,0,.18)}
-                .vlg-ledger-head{padding:1rem 1.25rem;border-bottom:1px solid var(--border);font-size:.7rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--vlg-gold)}
-                .vlg-ledger-item{padding:.9rem 1.25rem;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:.6rem;cursor:pointer;transition:background .18s}
-                .vlg-ledger-item:last-child{border-bottom:none}
-                .vlg-ledger-item:hover{background:var(--bg-hover)}
-                .vlg-ledger-thumb{width:100%;height:170px;border-radius:var(--radius-md);overflow:hidden;flex-shrink:0;background:var(--bg-raised)}
-                .vlg-ledger-thumb img{width:100%;height:100%;object-fit:cover;display:block}
-                .vlg-ledger-thumb-ph{width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:1.4rem;background:linear-gradient(135deg,rgba(212,168,86,.1),rgba(139,92,246,.08))}
-                .vlg-ledger-text{min-width:0;flex:1}
-                .vlg-ledger-item h4{font-size:.92rem;font-weight:400;line-height:1.35;margin:0 0 .3rem;color:var(--text-primary);text-wrap:balance;display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-                .vlg-ledger-item time{font-size:.68rem;color:var(--text-muted);font-family:-apple-system,sans-serif}
-                @media(max-width:900px){.vlg-layout{grid-template-columns:1fr}}
-
-                .news-card{border-radius:var(--radius-lg);transition:transform .22s ease,border-color .22s ease,box-shadow .22s ease}
-                .news-card:hover{border-color:var(--vlg-gold);box-shadow:0 12px 28px -18px rgba(0,0,0,.35)}
-                .vlg-draft-tag{position:absolute;top:.6rem;left:.6rem;z-index:2;display:inline-flex;align-items:center;gap:.35rem;padding:.3rem .6rem;font-size:.65rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:rgba(13,11,31,.75);backdrop-filter:blur(6px);border:1px solid rgba(212,168,86,.4);color:var(--vlg-gold-2);border-radius:var(--radius-sm)}
+                /* ── Сітка новин — редизайн карток ──
+                   Тонка золота лінія-акцент згори (замість суцільної рамки),
+                   плавний підйом + сяйво на ховер, дата-плашка на фото поверх
+                   градієнтного затемнення знизу (як підпис під фото в пресі),
+                   заголовок перефарбовується в золото на ховер. */
+                .news-grid{grid-template-columns:repeat(auto-fill,minmax(min(340px,100%),1fr));gap:1.5rem;max-width:none}
+                .news-card{position:relative;border-radius:var(--radius-xl);border-color:transparent;background:var(--bg-surface);box-shadow:0 1px 0 var(--border),0 8px 20px -16px rgba(0,0,0,.25);transition:transform .28s cubic-bezier(.22,1,.36,1),box-shadow .28s cubic-bezier(.22,1,.36,1)}
+                .news-card::before{content:'';position:absolute;inset:0;border-radius:inherit;padding:1px;background:linear-gradient(155deg,var(--border) 0%,var(--border) 60%,transparent 100%);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;z-index:2;transition:background .28s}
+                .news-card:hover{transform:translateY(-6px);box-shadow:0 1px 0 var(--vlg-gold),0 22px 40px -20px rgba(0,0,0,.4),0 0 0 1px rgba(212,168,86,.15)}
+                .news-card:hover::before{background:linear-gradient(155deg,var(--vlg-gold) 0%,rgba(212,168,86,.25) 55%,transparent 100%)}
+                .news-thumb{height:190px;position:relative}
+                .news-thumb::after{content:'';position:absolute;inset:0;background:linear-gradient(0deg,rgba(0,0,0,.55) 0%,rgba(0,0,0,0) 45%);z-index:1;pointer-events:none}
+                .news-date-pill{position:absolute;left:.85rem;bottom:.7rem;z-index:2;display:inline-flex;align-items:center;gap:.35rem;font-size:.7rem;font-weight:700;letter-spacing:.03em;color:#f3ead9;text-transform:uppercase}
+                .news-date-pill i{color:var(--vlg-gold-2);font-size:.65rem}
+                .news-body{padding:1.1rem 1.25rem .3rem}
+                .news-title{font-size:1.02rem;font-weight:700;letter-spacing:-.005em;transition:color .2s;text-wrap:balance}
+                .news-card:hover .news-title{color:var(--vlg-gold)}
+                body.light-theme .news-card:hover .news-title{color:#9a6a1f}
+                .news-excerpt{line-height:1.55}
+                .news-footer{padding:.85rem 1.25rem 1.1rem;border-top:none;margin-top:.4rem;position:relative}
+                .news-footer::before{content:'';position:absolute;left:1.25rem;right:1.25rem;top:0;height:1px;background:linear-gradient(90deg,var(--border),transparent 75%)}
+                .vlg-draft-tag{position:absolute;top:.7rem;left:.7rem;z-index:2;display:inline-flex;align-items:center;gap:.35rem;padding:.3rem .6rem;font-size:.65rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:rgba(13,11,31,.75);backdrop-filter:blur(6px);border:1px solid rgba(212,168,86,.4);color:var(--vlg-gold-2);border-radius:var(--radius-sm)}
+                @media(prefers-reduced-motion:reduce){.news-card,.news-card::before,.news-title{transition:none}}
             </style>
             <div class="page-header">
                 <div class="page-title">
@@ -159,7 +178,6 @@ const NewsPage = {
                     <div id="featured-news"></div>
                     <div id="news-grid" class="news-grid"></div>
                 </div>
-                <div class="vlg-ledger" id="vlg-ledger"></div>
             </div>
             <div id="news-pagination" style="display:flex;justify-content:center;gap:.5rem;margin-top:2rem"></div>`;
 
@@ -189,8 +207,6 @@ const NewsPage = {
         const isPublishedView = AppState.isStaff() && this._view === 'published';
         const featuredEl = document.getElementById('featured-news');
         if (featuredEl) featuredEl.innerHTML = '';
-        const ledgerEl = document.getElementById('vlg-ledger');
-        if (ledgerEl) { ledgerEl.innerHTML = ''; ledgerEl.style.display = ''; }
 
         try {
             // Для не-staff завжди тільки опубліковані; для staff — залежно від
@@ -232,16 +248,7 @@ const NewsPage = {
             const regular = filtered.filter(n => n.id !== featured?.id);
             const gridItems = regular;
 
-            // Стрічка "Також цього тижня" поруч із hero — свіжі новини, не
-            // "вирізані" з gridItems (раніше забирала 3 картки з сітки, тому
-            // здавалось, що частина новин зникла). Підвантажується окремим
-            // легким запитом, як "Читайте також" на сторінці статті.
-            const showLedger = !!featured && this._page === 0;
-            document.getElementById('vlg-layout')?.classList.toggle('no-ledger', !showLedger);
-            if (featured) {
-                this._renderFeatured(featured);
-                if (showLedger) this._loadLedger(featured.id);
-            }
+            if (featured) this._renderFeatured(featured);
 
             if (!gridItems.length && !featured) {
                 grid.innerHTML = isDraftsView ? `
@@ -294,8 +301,9 @@ const NewsPage = {
             <div class="vlg-hero-main" onclick="Router.go('news/${news.slug || news.id}')">
                 ${news.thumbnail_url ? `<div class="vlg-hero-bg" style="background-image:url('${news.thumbnail_url}');background-position:${news.thumbnail_position || 'center'} center"></div>` : ''}
                 <div class="vlg-hero-fade"></div>
-                <span class="vlg-hero-tag">Головна новина</span>
-                <h2>${Fmt.esc(news.title)}</h2>
+                <span class="badge badge-warning vlg-hero-tag"><i class="fa-solid fa-star"></i> Головна</span>
+                <h2 class="vlg-hero-h2">${Fmt.esc(news.title)}</h2>
+                <div class="vlg-hero-bottom">
                 ${excerpt ? `<p>${excerpt}</p>` : ''}
                 <div class="vlg-hero-foot">
                     <div class="vlg-byline">
@@ -304,51 +312,8 @@ const NewsPage = {
                     </div>
                     <button class="vlg-read" onclick="event.stopPropagation();Router.go('news/${news.slug || news.id}')"><i class="fa-solid fa-eye"></i> Читати</button>
                 </div>
+                </div>
             </div>`;
-    },
-
-    async _loadLedger(excludeId) {
-        const el = document.getElementById('vlg-ledger');
-        if (!el) return;
-        try {
-            // Тягнемо ширший пул кандидатів (не рівно 3) — новини з обмеженою
-            // групою доступу чи мережевою видимістю треба відфільтрувати так
-            // само, як і в основному списку, інакше стрічка "витікала" б
-            // заголовки/картинки чужих обмежених новин будь-кому.
-            const { data: candidates } = await supabase.from('news')
-                .select(`id,slug,title,thumbnail_url,thumbnail_position,published_at,created_at,
-                    network_visibility,
-                    access_group:access_groups(id,name,is_public,
-                        cities:access_group_cities(city),
-                        positions:access_group_positions(position),
-                        departments:access_group_departments(department),
-                        labels:access_group_labels(label))`)
-                .eq('is_published', true)
-                .neq('id', excludeId)
-                .order('published_at', { ascending: false, nullsFirst: false })
-                .limit(12);
-            const data = (candidates || [])
-                .filter(n => this._matchesNetwork(n))
-                .filter(n => !n.access_group || AccessGroupsPage.checkAccess(n.access_group))
-                .slice(0, 3);
-            if (!data.length) { el.style.display = 'none'; return; }
-            // Ще актуальний контейнер? (могли встигнути перемкнути вкладку/сторінку)
-            if (!document.getElementById('vlg-ledger')) return;
-            el.innerHTML = `
-                <div class="vlg-ledger-head">Також цього тижня</div>
-                ${data.map((n, i) => `
-                    <div class="vlg-ledger-item" onclick="Router.go('news/${n.slug || n.id}')">
-                        <div class="vlg-ledger-thumb">
-                            ${n.thumbnail_url
-                                ? `<img src="${n.thumbnail_url}" style="object-position:${n.thumbnail_position || 'center'} center" loading="lazy">`
-                                : `<div class="vlg-ledger-thumb-ph"><i class="fa-regular fa-newspaper"></i></div>`}
-                        </div>
-                        <div class="vlg-ledger-text">
-                            <h4>${Fmt.esc(n.title)}</h4>
-                            <time>${Fmt.date(n.published_at || n.created_at, { day:'numeric', month:'short' })}</time>
-                        </div>
-                    </div>`).join('')}`;
-        } catch(_) { el.style.display = 'none'; }
     },
 
     _renderCard(news) {
@@ -362,6 +327,7 @@ const NewsPage = {
                         <div style="position:absolute;inset:0;background-image:url('${thumb}');background-size:contain;background-repeat:no-repeat;background-position:${news.thumbnail_position || 'center'} center;z-index:1"></div>
                     ` : `<div style="height:100%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,rgba(99,102,241,.08),rgba(139,92,246,.08));font-size:3rem">📰</div>`}
                     ${!news.is_published ? '<span class="vlg-draft-tag">Чернетка</span>' : ''}
+                    <span class="news-date-pill"><i class="fa-regular fa-calendar"></i>${Fmt.date(news.published_at || news.created_at, { day:'numeric', month:'short' })}</span>
                     ${AppState.isStaff() && AppState.canMutate() ? `
                         <div class="news-card-actions" onclick="event.stopPropagation()">
                             <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();NewsPage.openEdit('${news.id}')" title="Редагувати"><i class="fa-solid fa-pen"></i></button>
@@ -373,16 +339,13 @@ const NewsPage = {
                     <p class="news-excerpt">${excerpt}</p>
                 </div>
                 <div class="news-footer">
-                    <span style="display:flex;align-items:center;gap:.35rem;font-size:.78rem;color:var(--text-muted)">
-                        <i class="fa-regular fa-calendar"></i>${Fmt.date(news.published_at || news.created_at, { day:'numeric', month:'short' })}
-                    </span>
-                    <div style="display:flex;align-items:center;gap:.2rem;flex-wrap:nowrap" onclick="event.stopPropagation()">
-                        <button class="kb-star res-star-btn${Bookmarks.isBookmarked('news/'+news.id) ? ' active' : ''}"
-                            data-bm-route="news/${news.id}"
-                            title="${Bookmarks.isBookmarked('news/'+news.id) ? 'Видалити з закладок' : 'Зберегти в закладки'}"
-                            onclick="event.stopPropagation();Bookmarks.toggleNews('${news.id}',${JSON.stringify(news.title||'').replace(/"/g,'&quot;')},'')">
-                            ${Bookmarks.isBookmarked('news/'+news.id) ? '<i class="fa-solid fa-bookmark"></i>' : '<i class="fa-regular fa-bookmark"></i>'}
-                        </button>
+                    <button class="kb-star res-star-btn${Bookmarks.isBookmarked('news/'+news.id) ? ' active' : ''}"
+                        data-bm-route="news/${news.id}"
+                        title="${Bookmarks.isBookmarked('news/'+news.id) ? 'Видалити з закладок' : 'Зберегти в закладки'}"
+                        onclick="event.stopPropagation();Bookmarks.toggleNews('${news.id}',${JSON.stringify(news.title||'').replace(/"/g,'&quot;')},'')">
+                        ${Bookmarks.isBookmarked('news/'+news.id) ? '<i class="fa-solid fa-bookmark"></i>' : '<i class="fa-regular fa-bookmark"></i>'}
+                    </button>
+                    <div style="display:flex;align-items:center;gap:.2rem;flex-wrap:nowrap;margin-left:auto" onclick="event.stopPropagation()">
                         ${news.allow_reactions !== false ? ['👍','❤️','😂','😮','👏','🔥'].map(e => `
                             <button class="nv-emoji-btn" id="ce-${news.id}-${e.codePointAt(0)}" data-emoji="${e}"
                                 onclick="event.stopPropagation();NewsPage._reactEmoji('${news.id}','${e}',this)" title="${e}">
@@ -436,7 +399,7 @@ const NewsPage = {
                     .eq('is_published', true)
                     .neq('id', news.id)
                     .order('published_at', { ascending: false, nullsFirst: false })
-                    .limit(3);
+                    .limit(10);
 
             const backRoute = from === 'dashboard' ? 'dashboard' : 'news';
             const backLabel = from === 'dashboard' ? 'Головна' : 'Новини';
@@ -446,12 +409,14 @@ const NewsPage = {
             container.innerHTML = `
                 <button class="btn btn-ghost btn-sm" onclick="Router.go('${backRoute}')" style="display:inline-flex;align-items:center;gap:.35rem;margin-bottom:.75rem"><i class="fa-solid fa-angle-left"></i> ${backLabel}</button>
                 <style>
-                    .nv-top{display:grid;grid-template-columns:1fr 280px;gap:1.5rem;align-items:start;margin-bottom:2rem}
+                    .nv-top{display:grid;grid-template-columns:1fr;gap:1.5rem;align-items:start;margin-bottom:2rem}
+                    .nv-top .nv-hero{order:2}
+                    .nv-top .nv-sidebar{order:1}
                     /* Без картинки новини в hero — суцільна кольорова плашка
                        під текст (та сама мова бренду, що й .vlg-hero-main:
                        індиго+золото в темній темі, блакитний у світлій). */
                     .nv-hero{
-                        position:relative;width:100%;min-height:280px;border-radius:var(--radius-xl);overflow:hidden;
+                        position:relative;width:100%;min-height:190px;border-radius:var(--radius-xl);overflow:hidden;
                         background:radial-gradient(120% 100% at 85% 0%,rgba(212,168,86,.22),transparent 60%),
                                    linear-gradient(155deg,#211c48 0%,#140f30 60%,#0d0b1f 100%);
                         display:flex;align-items:flex-end;
@@ -462,11 +427,16 @@ const NewsPage = {
                                           linear-gradient(90deg,rgba(212,168,86,.05) 1px,transparent 1px);
                         background-size:38px 38px;-webkit-mask-image:radial-gradient(ellipse at top right,black,transparent 70%);mask-image:radial-gradient(ellipse at top right,black,transparent 70%);
                     }
+                    .nv-hero-art{position:absolute;top:-15%;right:-2%;font-size:13rem;color:rgba(212,168,86,.09);transform:rotate(-14deg);z-index:1;pointer-events:none;line-height:1}
+                    .nv-hero-art-2{font-size:5.5rem;top:auto;bottom:-8%;right:16%;transform:rotate(10deg);color:rgba(212,168,86,.07)}
+                    body.light-theme .nv-hero-art{color:rgba(120,90,20,.10)}
+                    body.light-theme .nv-hero-art-2{color:rgba(120,90,20,.08)}
                     .nv-hero-content{position:relative;width:100%;max-width:680px;padding:1.75rem 2rem;z-index:3}
-                    .nv-hero-badges{display:flex;gap:.5rem;margin-bottom:.65rem;flex-wrap:wrap}
+                    .nv-hero-badges{position:absolute;top:1.25rem;left:2rem;display:flex;gap:.5rem;flex-wrap:wrap;z-index:3}
                     .nv-hero-title{font-size:2rem;font-weight:800;color:#fbf7ec;line-height:1.25;margin:0}
                     .nv-hero-meta{display:flex;align-items:center;gap:1.25rem;margin-top:.65rem;color:#a89fc9;font-size:.82rem}
                     .nv-hero-actions{position:absolute;top:1rem;left:1rem;display:flex;gap:.5rem;z-index:3}
+                    .nv-hero-reactions{position:absolute;bottom:1.25rem;right:1.5rem;display:flex;align-items:center;gap:.4rem;z-index:3}
                     /* Світла тема — той самий підхід, що й для .vlg-hero-main:
                        теплий світлий фейд + темний наві-текст замість білого. */
                     body.light-theme .nv-hero{
@@ -476,7 +446,11 @@ const NewsPage = {
                     body.light-theme .nv-hero-title{color:#1b2350}
                     body.light-theme .nv-hero-meta{color:rgba(27,35,80,.65)}
                     .nv-article{min-width:0;display:grid;grid-template-columns:1fr 280px;gap:1.5rem;column-gap:1.5rem}
-                    .nv-article-body{min-width:0}
+                    /* На широких моніторах суцільний текст на всю ширину важко
+                       читати (рядок вибухає за 150+ символів) — обмежуємо саме
+                       текстовий контент і коментарі, герой та карусель
+                       "Читайте також" лишаються на всю ширину, бо не текст. */
+                    .nv-article-body{min-width:0;max-width:1000px;margin:0 auto;width:100%}
                     /* Картка тексту статті — раніше контент "висів" прямо на фоні
                        сторінки без меж і читабельної ширини, звідси відчуття
                        відсутності розділювачів. Плюс кольоровий верхній акцент і
@@ -514,9 +488,9 @@ const NewsPage = {
                     /* Відкриваємо ВНИЗ (не вгору) — інакше палітра накладається на
                        саму textarea, яка стоїть прямо над тулбаром, і виглядає як
                        "поламаний" оверлей поверх поля вводу. */
-                    .nv-emoji-picker{position:absolute;top:calc(100% + 8px);left:0;z-index:30;width:272px;box-sizing:border-box;
+                    .nv-emoji-picker{position:absolute;top:calc(100% + 8px);left:0;z-index:30;width:580px;max-width:calc(100vw - 2rem);box-sizing:border-box;
                         background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);
-                        box-shadow:0 12px 32px rgba(0,0,0,.18);padding:.6rem;display:grid;grid-template-columns:repeat(8,34px);gap:.2rem}
+                        box-shadow:0 12px 32px rgba(0,0,0,.18);padding:.6rem;display:grid;grid-template-columns:repeat(15,1fr);gap:.2rem}
                     .nv-emoji-picker[hidden]{display:none}
                     .nv-emoji-opt{width:34px;height:34px;border:none;background:none;font-size:1.1rem;line-height:1;
                         display:flex;align-items:center;justify-content:center;border-radius:8px;cursor:pointer;transition:background .12s}
@@ -529,27 +503,64 @@ const NewsPage = {
                     .nv-comment-body{flex:1;min-width:0}
                     .nv-comment-head{display:flex;align-items:baseline;gap:.5rem;flex-wrap:wrap}
                     .nv-comment-name{font-size:.85rem;font-weight:700;color:var(--text-primary)}
+                    .nv-comment-pos{display:inline-flex;align-items:center;width:fit-content;font-size:.68rem;font-weight:600;color:var(--primary);background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.25);border-radius:999px;padding:.1rem .55rem;margin-top:.25rem}
                     .nv-comment-time{font-size:.72rem;color:var(--text-muted)}
                     .nv-comment-text{font-size:.9rem;color:var(--text-secondary);line-height:1.55;margin-top:.15rem;white-space:pre-wrap;word-break:break-word}
-                    .nv-comment-del{margin-left:auto;background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:.78rem;padding:.15rem .3rem;opacity:.6;transition:opacity .15s,color .15s}
+                    .nv-comment-edited{font-size:.72rem;color:var(--text-muted);font-style:italic}
+                    .nv-comment-actions{margin-left:auto;display:flex;gap:.2rem;flex-shrink:0}
+                    .nv-comment-edit,.nv-comment-del{background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:.78rem;padding:.15rem .3rem;opacity:.6;transition:opacity .15s,color .15s}
+                    .nv-comment-edit:hover{opacity:1;color:var(--primary)}
                     .nv-comment-del:hover{opacity:1;color:var(--danger)}
-                    .nv-sidebar{position:sticky;top:1rem;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden}
-                    .nv-sidebar-head{padding:.75rem 1rem;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--primary);border-bottom:1px solid var(--border);background:rgba(99,102,241,.05)}
-                    .nv-sidebar-body{padding:.5rem}
+                    .nv-comment-edit-form{margin-top:.3rem}
+                    .nv-comment-edit-input{display:block;box-sizing:border-box;width:100%;resize:vertical;min-height:44px;font-family:inherit;font-size:.9rem;line-height:1.5;
+                        padding:.55rem .7rem;border-radius:var(--radius-md);border:1px solid var(--primary);background:var(--bg-raised);color:var(--text-primary)}
+                    .nv-comment-edit-input:focus{outline:none;box-shadow:0 0 0 3px var(--primary-glow)}
+                    .nv-comment-edit-actions{display:flex;justify-content:flex-end;gap:.4rem;margin-top:.4rem}
+                    .nv-comment-foot{margin-top:.35rem}
+                    .nv-comment-reply-btn{background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:.78rem;padding:.15rem .3rem;opacity:.75;display:inline-flex;align-items:center;gap:.35rem;transition:opacity .15s,color .15s}
+                    .nv-comment-reply-btn:hover{opacity:1;color:var(--primary)}
+                    .nv-replies{margin-left:2.6rem;margin-top:.6rem;padding-left:1rem;border-left:2px solid var(--border);display:flex;flex-direction:column;gap:.8rem}
+                    .nv-comment.reply .nv-comment-ava{width:28px;height:28px;font-size:.62rem}
+                    .nv-comment.reply .nv-comment-text{font-size:.86rem}
+                    .nv-replies-toggle{background:none;border:none;color:var(--primary);cursor:pointer;font-size:.8rem;font-weight:600;padding:.2rem 0;display:inline-flex;align-items:center;gap:.4rem;margin-bottom:.2rem}
+                    .nv-replies-toggle:hover{text-decoration:underline}
+                    .nv-reply-form{margin-top:.6rem}
+                    .nv-comment-deleted{opacity:.7}
+                    .nv-comment-ava-del{background:var(--bg-hover)!important;color:var(--text-muted)!important;font-size:.85rem}
+                    .nv-comment-deleted-text{color:var(--text-muted);font-style:italic;margin-top:0}
+                    .nv-comment-deleted-admin{opacity:.75}
+                    .nv-comment-deleted-admin-text{color:var(--text-muted);font-style:italic}
+                    .nv-comment-deleted-meta{font-size:.72rem;color:var(--danger);font-style:italic;margin-top:.3rem;display:flex;align-items:center;gap:.35rem;flex-wrap:wrap}
+                    .nv-comment-purge-btn{margin-left:auto;background:none;border:none;color:var(--danger);cursor:pointer;font-size:.72rem;font-weight:700;font-style:normal;padding:.1rem .4rem;opacity:.75;display:inline-flex;align-items:center;gap:.3rem;transition:opacity .15s}
+                    .nv-comment-purge-btn:hover{opacity:1;text-decoration:underline}
+                    .nv-sidebar{position:static;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden}
+                    .nv-sidebar-head{padding:.75rem 1rem;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--primary);border-bottom:1px solid var(--border);background:rgba(99,102,241,.05);display:flex;align-items:center;justify-content:space-between;gap:.5rem}
+                    .nv-marquee-toggle{width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:var(--bg-surface);color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.85rem;flex-shrink:0;transition:all .15s}
+                    .nv-marquee-toggle:hover{border-color:var(--primary);color:var(--primary)}
+                    .nv-sidebar-body{padding:.6rem;overflow-x:hidden;scrollbar-width:thin}
                     .nv-staff-actions{padding:.75rem 1rem;border-top:1px solid var(--border);display:flex;gap:.5rem}
-                    .nv-recent-item{display:flex;gap:.75rem;padding:.65rem .5rem;border-radius:var(--radius-md);cursor:pointer;transition:all var(--transition)}
+                    .nv-recent-item{display:flex;flex-direction:column;flex-shrink:0;width:160px;gap:.4rem;padding:.4rem;border-radius:var(--radius-md);cursor:pointer;transition:all var(--transition)}
                     .nv-recent-item:hover{background:var(--bg-raised)}
-                    .nv-recent-thumb{width:60px;height:44px;border-radius:var(--radius-sm);overflow:hidden;flex-shrink:0;background:var(--bg-raised)}
+                    .nv-recent-thumb{width:100%;height:80px;border-radius:var(--radius-sm);overflow:hidden;flex-shrink:0;background:var(--bg-raised)}
                     .nv-recent-thumb img{width:100%;height:100%;object-fit:cover;display:block}
                     .nv-recent-title{font-size:.83rem;font-weight:600;line-height:1.4;color:var(--text-primary);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
                     .nv-recent-date{font-size:.73rem;color:var(--text-muted);margin-top:.2rem}
-                    @media(max-width:900px){.nv-top,.nv-article{grid-template-columns:1fr}.nv-sidebar{position:static}.nv-hero{min-height:220px}.nv-hero-title{font-size:1.5rem}.nv-hero-content{padding:1.25rem}}
+                    .nv-sidebar-track{display:flex;flex-direction:row;gap:.6rem;width:max-content}
+                    @keyframes nv-recent-marquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+                    .nv-sidebar-track.marquee{animation:nv-recent-marquee linear infinite;animation-duration:var(--nv-recent-dur,25s)}
+                    .nv-sidebar-body:hover .nv-sidebar-track.marquee{animation-play-state:paused}
+                    @media(max-width:1280px){
+                        .nv-article{grid-template-columns:1fr}
+                        .nv-hero-title{font-size:1.5rem}
+                        .nv-hero-content{padding:1.25rem}
+                    }
                     @media(max-width:768px){
-                        .nv-hero{min-height:180px;border-radius:10px}
+                        .nv-hero{min-height:180px;border-radius:10px;flex-direction:column;align-items:stretch}
                         .nv-hero-title{font-size:1.15rem;line-height:1.3}
                         .nv-hero-content{padding:.9rem 1rem}
                         .nv-hero-meta{gap:.6rem;font-size:.75rem;flex-wrap:wrap}
                         .nv-hero-actions{top:.5rem;left:.5rem}
+                        .nv-hero-reactions{position:static;justify-content:flex-start;flex-wrap:wrap;padding:0 1rem 1rem}
                         .nv-article-body{font-size:.9rem}
                         .nv-react-btn{padding:.35rem .7rem;font-size:.8rem}
                     }
@@ -560,11 +571,13 @@ const NewsPage = {
 
                     <!-- Hero -->
                     <div class="nv-hero">
+                        <i class="fa-solid fa-newspaper nv-hero-art" aria-hidden="true"></i>
+                        <i class="fa-regular fa-bell nv-hero-art nv-hero-art-2" aria-hidden="true"></i>
+                        <div class="nv-hero-badges">
+                            ${news.is_featured ? '<span class="badge badge-warning"><i class="fa-solid fa-star"></i> Головна</span>' : ''}
+                            ${!news.is_published ? '<span class="badge badge-muted">Чернетка</span>' : ''}
+                        </div>
                         <div class="nv-hero-content">
-                            <div class="nv-hero-badges">
-                                ${news.is_featured ? '<span class="badge badge-warning"><i class="fa-solid fa-star"></i> Головна</span>' : ''}
-                                ${!news.is_published ? '<span class="badge badge-muted">Чернетка</span>' : ''}
-                            </div>
                             <h1 class="nv-hero-title">${Fmt.esc(news.title)}</h1>
                             <div class="nv-hero-meta">
                                 <span><i class="fa-regular fa-calendar" style="margin-right:.35rem"></i>${Fmt.date(news.published_at || news.created_at)}</span>
@@ -573,7 +586,7 @@ const NewsPage = {
                             </div>
                         </div>
                         ${news.allow_reactions !== false ? `
-                        <div style="position:absolute;bottom:1.25rem;right:1.5rem;display:flex;align-items:center;gap:.4rem;z-index:3">
+                        <div class="nv-hero-reactions">
                             ${['👍','❤️','😂','😮','👏','🔥'].map(e => `
                                 <button class="nv-emoji-btn nv-emoji-hero" id="nv-react-${news.id}-${e.codePointAt(0)}" data-emoji="${e}"
                                     onclick="NewsPage._reactArticleEmoji('${news.id}','${e}',this)" title="${e}">
@@ -591,24 +604,31 @@ const NewsPage = {
 
                     <!-- Sidebar -->
                     <aside class="nv-sidebar">
-                        <div class="nv-sidebar-head">Читайте також</div>
-                        <div class="nv-sidebar-body">
-                            ${(latest || []).map(n => `
-                                <div class="nv-recent-item" onclick="Router.go('news/${n.slug || n.id}')">
-                                    <div class="nv-recent-thumb">
-                                        ${n.thumbnail_url
-                                            ? `<img src="${n.thumbnail_url}" loading="lazy">`
-                                            : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:1.5rem">📰</div>`}
-                                    </div>
-                                    <div>
-                                        <div class="nv-recent-title">${Fmt.esc(n.title)}</div>
-                                        <div class="nv-recent-date">${Fmt.date(n.published_at || n.created_at, { day:'numeric', month:'short' })}</div>
-                                    </div>
-                                </div>`).join('')}
-                            ${!latest?.length ? `<p style="font-size:.82rem;color:var(--text-muted);padding:.5rem">Немає інших новин</p>` : ''}
+                        <div class="nv-sidebar-head">
+                            Читайте також
+                            <div style="display:flex;align-items:center;gap:.4rem;margin-left:auto">
+                                <button type="button" class="nv-marquee-toggle" id="nv-marquee-toggle" title="Зупинити/запустити рух стрічки" onclick="NewsPage._toggleRecentMarquee()" hidden>
+                                    <i class="fa-solid fa-pause"></i>
+                                </button>
+                                <button type="button" class="btn btn-ghost btn-sm" onclick="Router.go('news')">Всі новини →</button>
+                            </div>
                         </div>
-                        <div style="padding:.6rem .75rem;border-top:1px solid var(--border)">
-                            <button class="btn btn-ghost btn-sm" style="width:100%" onclick="Router.go('news')">Всі новини →</button>
+                        <div class="nv-sidebar-body" id="nv-sidebar-body">
+                            <div class="nv-sidebar-track" id="nv-sidebar-track">
+                                ${(latest || []).map(n => `
+                                    <div class="nv-recent-item" onclick="Router.go('news/${n.slug || n.id}')">
+                                        <div class="nv-recent-thumb">
+                                            ${n.thumbnail_url
+                                                ? `<img src="${n.thumbnail_url}" loading="lazy">`
+                                                : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:1.5rem">📰</div>`}
+                                        </div>
+                                        <div>
+                                            <div class="nv-recent-title">${Fmt.esc(n.title)}</div>
+                                            <div class="nv-recent-date">${Fmt.date(n.published_at || n.created_at, { day:'numeric', month:'short' })}</div>
+                                        </div>
+                                    </div>`).join('')}
+                                ${!latest?.length ? `<p style="font-size:.82rem;color:var(--text-muted);padding:.5rem">Немає інших новин</p>` : ''}
+                            </div>
                         </div>
                     </aside>
                 </div>
@@ -642,6 +662,7 @@ const NewsPage = {
 
             if (news.allow_reactions !== false) this._loadReactions(news.id);
             this._loadComments(news.id);
+            this._initRecentMarquee();
         } catch(e) {
             container.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>Новину не знайдено</h3><button class="btn-back" onclick="Router.go('news')"><i class="fa-solid fa-arrow-left"></i> Назад</button></div>`;
         }
@@ -705,6 +726,55 @@ const NewsPage = {
         } catch { /* ігноруємо якщо таблиці ще немає */ }
     },
 
+    // На вузьких екранах "Читайте також" стає горизонтальним рядом (див.
+    // @media(max-width:1280px)) — якщо картки туди не вміщаються, вмикаємо
+    // біжучу стрічку (той самий безшовний луп-прийом, що й у віджеті
+    // іменинників на дашборді: дублюємо контент і крутимо трек на -50%).
+    _initRecentMarquee() {
+        const scrollEl  = document.getElementById('nv-sidebar-body');
+        const trackEl   = document.getElementById('nv-sidebar-track');
+        const toggleBtn = document.getElementById('nv-marquee-toggle');
+        if (!scrollEl || !trackEl || trackEl.dataset.duplicated) return;
+        if (trackEl.scrollWidth > scrollEl.clientWidth) {
+            const dur = Math.max(15, Math.round(trackEl.scrollWidth / 45));
+            trackEl.innerHTML += trackEl.innerHTML;
+            trackEl.dataset.duplicated = '1';
+            trackEl.style.setProperty('--nv-recent-dur', dur + 's');
+            // Користувач сам вирішує, чи бачити рух — запам'ятовуємо вибір
+            // між новинами/сесіями (localStorage), а не скидаємо щоразу.
+            if (toggleBtn) {
+                toggleBtn.hidden = false;
+                const paused = localStorage.getItem('nv_recent_marquee_paused') === '1';
+                trackEl.classList.toggle('marquee', !paused);
+                toggleBtn.innerHTML = `<i class="fa-solid fa-${paused ? 'play' : 'pause'}"></i>`;
+            }
+        }
+        // Перевірка виконується один раз при рендері статті — якщо сторінку
+        // не перезавантажували, а просто звузили вікно (напр. DevTools),
+        // перераховуємо ще раз при resize.
+        if (!this._recentMarqueeResizeBound) {
+            this._recentMarqueeResizeBound = true;
+            let t;
+            window.addEventListener('resize', () => {
+                clearTimeout(t);
+                t = setTimeout(() => this._initRecentMarquee(), 200);
+            });
+        }
+    },
+
+    // Зупинка повністю вимикає CSS-анімацію (а не ставить її на паузу
+    // всередині циклу) — трек одразу повертається у вихідний стан
+    // (translateX:0), тож новини знову йдуть по порядку з початку, а не
+    // "заморожені" десь посеред прокрутки.
+    _toggleRecentMarquee() {
+        const trackEl   = document.getElementById('nv-sidebar-track');
+        const toggleBtn = document.getElementById('nv-marquee-toggle');
+        if (!trackEl || !toggleBtn) return;
+        const running = trackEl.classList.toggle('marquee');
+        toggleBtn.innerHTML = `<i class="fa-solid fa-${running ? 'pause' : 'play'}"></i>`;
+        localStorage.setItem('nv_recent_marquee_paused', running ? '0' : '1');
+    },
+
     async _reactArticleEmoji(newsId, emoji, btn) {
         // Блокуємо кнопку на час запиту — без цього швидкі повторні кліки
         // летіли паралельно, і локальний лічильник (+1 на кожен клік) не
@@ -726,41 +796,222 @@ const NewsPage = {
     // ── Коментарі ────────────────────────────────────────────────────
     _commentEmojis: ['😀','😂','😍','😘','🥰','😎','🤔','😢','😭','😡','👍','👎','👏','🙏','🔥','❤️','💯','🎉','🚀','✅','⭐','😴','🤝','🙌','😅','🤗','😉','🥳','😮','🤯'],
 
+    _REPLIES_VISIBLE: 2, // скільки останніх відповідей лишати на видноті одразу
+
     async _loadComments(newsId) {
         const list = document.getElementById('nv-comments-list');
         try {
             const comments = await API.newsComments.getByNewsId(newsId);
             this._comments = comments;
             this._commentsNewsId = newsId;
+            // Лічильник рахує лише реальний, невидалений контент — плейсхолдер
+            // "Коментар видалено" до нього не входить.
+            const activeCount = comments.filter(c => !c.deleted_at).length;
             const countEl = document.getElementById('nv-comments-count');
-            if (countEl) countEl.textContent = comments.length ? `(${comments.length})` : '';
+            if (countEl) countEl.textContent = activeCount ? `(${activeCount})` : '';
             if (!list) return;
-            list.innerHTML = comments.length ? comments.map(c => this._commentHtml(c)).join('') :
+
+            // Адміни бачать все як є (курсивом хто/коли видалив) — повна
+            // гілка лишається для модерації/аудиту. Для решти (юзери,
+            // керівники) видалений кореневий коментар згортається в
+            // плейсхолдер "Коментар видалено", а вся переписка під ним
+            // (відповіді) ховається повністю.
+            const isAdmin = AppState.isAdmin();
+            const repliesByParent = {};
+            comments.forEach(c => {
+                if (!c.parent_id) return;
+                if (!isAdmin && c.deleted_at) return; // видалену відповідь звичайний користувач не бачить
+                (repliesByParent[c.parent_id] ||= []).push(c);
+            });
+            const roots = comments
+                .filter(c => !c.parent_id)
+                .map(c => ({ root: c, replies: (!isAdmin && c.deleted_at) ? [] : (repliesByParent[c.id] || []) }));
+
+            list.innerHTML = roots.length ? roots.map(({ root, replies }) => this._threadHtml(root, replies)).join('') :
                 `<div style="padding:1rem;text-align:center;color:var(--text-muted);font-size:.85rem">Ще немає коментарів — будьте першим</div>`;
         } catch (e) {
             if (list) list.innerHTML = `<div style="padding:1rem;text-align:center;color:var(--text-muted);font-size:.85rem">Не вдалося завантажити коментарі</div>`;
         }
     },
 
-    _commentHtml(c) {
+    // Гілка = кореневий коментар + його відповіді (один рівень треду).
+    // Якщо відповідей більше за _REPLIES_VISIBLE — старі ховаємо за кнопкою
+    // "Показати ще", лишаючи на видноті лише останні — щоб довгі суперечки
+    // не розтягували стрічку коментарів.
+    _threadHtml(root, replies) {
+        const rootHtml = this._commentHtml(root, false);
+        if (!replies.length) {
+            return `<div class="nv-thread">${rootHtml}<div id="nv-reply-slot-${root.id}"></div></div>`;
+        }
+        const visible = this._REPLIES_VISIBLE;
+        let repliesHtml;
+        if (replies.length > visible) {
+            const hiddenCount = replies.length - visible;
+            const hidden = replies.slice(0, -visible);
+            const shown  = replies.slice(-visible);
+            repliesHtml = `
+                <button type="button" class="nv-replies-toggle" id="nv-replies-toggle-${root.id}" data-count="${hiddenCount}" onclick="NewsPage._toggleReplies('${root.id}')">
+                    <i class="fa-solid fa-chevron-down"></i> Показати ще ${hiddenCount} ${hiddenCount === 1 ? 'відповідь' : 'попередніх відповідей'}
+                </button>
+                <div class="nv-replies-hidden" id="nv-replies-hidden-${root.id}" hidden>
+                    ${hidden.map(r => this._commentHtml(r, true)).join('')}
+                </div>
+                ${shown.map(r => this._commentHtml(r, true)).join('')}`;
+        } else {
+            repliesHtml = replies.map(r => this._commentHtml(r, true)).join('');
+        }
+        return `
+            <div class="nv-thread">
+                ${rootHtml}
+                <div class="nv-replies">
+                    ${repliesHtml}
+                    <div id="nv-reply-slot-${root.id}"></div>
+                </div>
+            </div>`;
+    },
+
+    _toggleReplies(rootId) {
+        const hidden = document.getElementById(`nv-replies-hidden-${rootId}`);
+        const btn = document.getElementById(`nv-replies-toggle-${rootId}`);
+        if (!hidden || !btn) return;
+        const count = btn.dataset.count;
+        const show = hidden.hasAttribute('hidden');
+        if (show) {
+            hidden.removeAttribute('hidden');
+            btn.innerHTML = `<i class="fa-solid fa-chevron-up"></i> Сховати попередні відповіді`;
+        } else {
+            hidden.setAttribute('hidden', '');
+            btn.innerHTML = `<i class="fa-solid fa-chevron-down"></i> Показати ще ${count} ${count === '1' ? 'відповідь' : 'попередніх відповідей'}`;
+        }
+    },
+
+    _toggleReplyForm(parentId) {
+        const slot = document.getElementById(`nv-reply-slot-${parentId}`);
+        if (!slot) return;
+        if (slot.innerHTML) { slot.innerHTML = ''; return; }
+        document.querySelectorAll('[id^="nv-reply-slot-"]').forEach(s => s.innerHTML = '');
+        slot.innerHTML = `
+            <div class="nv-reply-form">
+                <textarea class="nv-comment-edit-input" id="nv-reply-input-${parentId}" rows="2" placeholder="Ваша відповідь…" maxlength="2000"></textarea>
+                <div class="nv-comment-edit-actions">
+                    <button type="button" class="btn btn-ghost btn-sm" onclick="NewsPage._toggleReplyForm('${parentId}')">Скасувати</button>
+                    <button type="button" class="btn btn-primary btn-sm" onclick="NewsPage._submitReply('${parentId}')">Відповісти</button>
+                </div>
+            </div>`;
+        document.getElementById(`nv-reply-input-${parentId}`)?.focus();
+    },
+
+    async _submitReply(parentId) {
+        const inp = document.getElementById(`nv-reply-input-${parentId}`);
+        const content = inp?.value.trim();
+        if (!content) return;
+        try {
+            await API.newsComments.add(this._commentsNewsId, content, parentId);
+            await this._loadComments(this._commentsNewsId);
+            document.getElementById(`nv-comment-${parentId}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        } catch (e) {
+            Toast.error('Помилка', e.message);
+        }
+    },
+
+    _commentHtml(c, isReply = false) {
+        if (c.deleted_at) {
+            // Адмін бачить реальний текст курсивом + ким і коли видалено
+            // (модерація/аудит). Усім іншим — лише нейтральний плейсхолдер.
+            if (AppState.isAdmin()) {
+                const u = c.user || {};
+                const avatar = u.avatar_url
+                    ? `<img class="nv-comment-ava" src="${Fmt.safeUrl(u.avatar_url)}" alt="">`
+                    : `<div class="nv-comment-ava">${Fmt.esc(Fmt.initials(u.full_name || '?'))}</div>`;
+                return `
+                    <div class="nv-comment${isReply ? ' reply' : ''} nv-comment-deleted-admin" id="nv-comment-${c.id}">
+                        ${avatar}
+                        <div class="nv-comment-body">
+                            <div class="nv-comment-head">
+                                <span class="nv-comment-name">${Fmt.esc(u.full_name || 'Користувач')}</span>
+                                <span class="nv-comment-time">${Fmt.datetime(c.created_at)}</span>
+                            </div>
+                            ${u.job_position ? `<div class="nv-comment-pos">${Fmt.esc(u.job_position)}</div>` : ''}
+                            <div class="nv-comment-text nv-comment-deleted-admin-text">${Fmt.esc(c.content)}</div>
+                            <div class="nv-comment-deleted-meta">
+                                <i class="fa-solid fa-trash"></i> Видалено: ${Fmt.esc(c.deleter?.full_name || '—')} · ${Fmt.datetime(c.deleted_at)}
+                                ${AppState.isSuperAdmin() ? `<button type="button" class="nv-comment-purge-btn" title="Видалити назавжди" onclick="NewsPage._purgeComment('${c.id}')"><i class="fa-solid fa-trash-can-arrow-up"></i> Назавжди</button>` : ''}
+                            </div>
+                        </div>
+                    </div>`;
+            }
+            return `
+                <div class="nv-comment${isReply ? ' reply' : ''} nv-comment-deleted" id="nv-comment-${c.id}">
+                    <div class="nv-comment-ava nv-comment-ava-del"><i class="fa-solid fa-trash"></i></div>
+                    <div class="nv-comment-body">
+                        <div class="nv-comment-text nv-comment-deleted-text"><i class="fa-solid fa-ban"></i> Коментар видалено</div>
+                    </div>
+                </div>`;
+        }
         const u = c.user || {};
         const isMine = u.id === AppState.user?.id;
         const canDelete = isMine || AppState.isAdmin();
+        const canEdit = isMine;
         const avatar = u.avatar_url
             ? `<img class="nv-comment-ava" src="${Fmt.safeUrl(u.avatar_url)}" alt="">`
             : `<div class="nv-comment-ava">${Fmt.esc(Fmt.initials(u.full_name || '?'))}</div>`;
         return `
-            <div class="nv-comment" id="nv-comment-${c.id}">
+            <div class="nv-comment${isReply ? ' reply' : ''}" id="nv-comment-${c.id}">
                 ${avatar}
                 <div class="nv-comment-body">
                     <div class="nv-comment-head">
                         <span class="nv-comment-name">${Fmt.esc(u.full_name || 'Користувач')}</span>
                         <span class="nv-comment-time">${Fmt.datetime(c.created_at)}</span>
-                        ${canDelete ? `<button type="button" class="nv-comment-del" title="Видалити" onclick="NewsPage._deleteComment('${c.id}')"><i class="fa-solid fa-trash"></i></button>` : ''}
+                        ${c.updated_at ? `<span class="nv-comment-edited">(редаговано ${Fmt.datetime(c.updated_at)})</span>` : ''}
+                        <div class="nv-comment-actions">
+                            ${canEdit ? `<button type="button" class="nv-comment-edit" title="Редагувати" onclick="NewsPage._startEditComment('${c.id}')"><i class="fa-solid fa-pen"></i></button>` : ''}
+                            ${canDelete ? `<button type="button" class="nv-comment-del" title="Видалити" onclick="NewsPage._deleteComment('${c.id}')"><i class="fa-solid fa-trash"></i></button>` : ''}
+                        </div>
                     </div>
-                    <div class="nv-comment-text">${Fmt.esc(c.content)}</div>
+                    ${u.job_position ? `<div class="nv-comment-pos">${Fmt.esc(u.job_position)}</div>` : ''}
+                    <div class="nv-comment-text" id="nv-comment-text-${c.id}">${Fmt.esc(c.content)}</div>
+                    ${!isReply ? `<div class="nv-comment-foot"><button type="button" class="nv-comment-reply-btn" onclick="NewsPage._toggleReplyForm('${c.id}')"><i class="fa-solid fa-reply"></i> Відповісти</button></div>` : ''}
                 </div>
             </div>`;
+    },
+
+    _startEditComment(id) {
+        const c = (this._comments || []).find(x => x.id === id);
+        if (!c) return;
+        const textEl = document.getElementById(`nv-comment-text-${id}`);
+        if (!textEl) return;
+        textEl.outerHTML = `
+            <div class="nv-comment-edit-form" id="nv-comment-text-${id}">
+                <textarea class="nv-comment-edit-input" id="nv-comment-edit-input-${id}" rows="2" maxlength="2000">${Fmt.esc(c.content)}</textarea>
+                <div class="nv-comment-edit-actions">
+                    <button type="button" class="btn btn-ghost btn-sm" onclick="NewsPage._cancelEditComment('${id}')">Скасувати</button>
+                    <button type="button" class="btn btn-primary btn-sm" onclick="NewsPage._saveEditComment('${id}')">Зберегти</button>
+                </div>
+            </div>`;
+        const inp = document.getElementById(`nv-comment-edit-input-${id}`);
+        if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+    },
+
+    _cancelEditComment(id) {
+        const c = (this._comments || []).find(x => x.id === id);
+        if (!c) return;
+        const wrap = document.getElementById(`nv-comment-text-${id}`);
+        if (wrap) wrap.outerHTML = `<div class="nv-comment-text" id="nv-comment-text-${id}">${Fmt.esc(c.content)}</div>`;
+    },
+
+    async _saveEditComment(id) {
+        const inp = document.getElementById(`nv-comment-edit-input-${id}`);
+        const content = inp?.value.trim();
+        if (!content) return;
+        try {
+            const updated = await API.newsComments.update(id, content);
+            const idx = (this._comments || []).findIndex(x => x.id === id);
+            if (idx !== -1) this._comments[idx] = { ...this._comments[idx], content: updated.content, updated_at: updated.updated_at };
+            const commentEl = document.getElementById(`nv-comment-${id}`);
+            if (commentEl) commentEl.outerHTML = this._commentHtml(this._comments[idx], !!this._comments[idx].parent_id);
+        } catch (e) {
+            Toast.error('Помилка', e.message);
+        }
     },
 
     async _submitComment(newsId) {
@@ -778,19 +1029,74 @@ const NewsPage = {
         }
     },
 
-    async _deleteComment(id) {
+    // Центрована модалка (не глобальний Modal.open — той відкривається
+    // боковою панеллю на весь екран праворуч, для такого маленького
+    // підтвердження це виглядає незручно).
+    _deleteComment(id) {
+        document.getElementById('nv-comment-delete-confirm')?.remove();
+        const el = document.createElement('div');
+        el.id = 'nv-comment-delete-confirm';
+        el.className = 'center-confirm-backdrop';
+        el.innerHTML = `
+            <div class="center-confirm-box">
+                <h3>Видалити коментар?</h3>
+                <p>Коментар (і всі відповіді на нього, якщо це кореневий коментар) зникне зі стрічки.<br>Цю дію не можна скасувати.</p>
+                <div class="center-confirm-actions">
+                    <button class="btn btn-ghost" onclick="document.getElementById('nv-comment-delete-confirm').remove()">Скасувати</button>
+                    <button class="btn btn-danger" id="nv-confirm-del-btn" onclick="NewsPage._confirmDeleteComment('${id}')">Видалити</button>
+                </div>
+            </div>`;
+        document.body.appendChild(el);
+        el.addEventListener('click', e => { if (e.target === el) el.remove(); });
+    },
+
+    async _confirmDeleteComment(id) {
+        const btn = document.getElementById('nv-confirm-del-btn');
+        if (btn) { btn.disabled = true; btn.textContent = '...'; }
         try {
             await API.newsComments.remove(id);
-            document.getElementById(`nv-comment-${id}`)?.remove();
-            this._comments = (this._comments || []).filter(c => c.id !== id);
-            const countEl = document.getElementById('nv-comments-count');
-            if (countEl) countEl.textContent = this._comments.length ? `(${this._comments.length})` : '';
-            if (!this._comments.length) {
-                const list = document.getElementById('nv-comments-list');
-                if (list) list.innerHTML = `<div style="padding:1rem;text-align:center;color:var(--text-muted);font-size:.85rem">Ще немає коментарів — будьте першим</div>`;
-            }
+            document.getElementById('nv-comment-delete-confirm')?.remove();
+            // Перезавантажуємо весь список замість точкового видалення з DOM —
+            // видалення кореневого коментаря з відповідями інакше лишало б
+            // "осиротілий" блок відповідей без самого коментаря над ним.
+            await this._loadComments(this._commentsNewsId);
         } catch (e) {
             Toast.error('Помилка', e.message);
+            if (btn) { btn.disabled = false; btn.textContent = 'Видалити'; }
+        }
+    },
+
+    // Остаточне видалення — лише для superadmin, окреме підтвердження з
+    // явним попередженням про незворотність (на відміну від звичайного
+    // "м'якого" видалення, тут коментар зникає з БД повністю, без сліду).
+    _purgeComment(id) {
+        document.getElementById('nv-comment-purge-confirm')?.remove();
+        const el = document.createElement('div');
+        el.id = 'nv-comment-purge-confirm';
+        el.className = 'center-confirm-backdrop';
+        el.innerHTML = `
+            <div class="center-confirm-box">
+                <h3>Видалити назавжди?</h3>
+                <p>Коментар (і всі відповіді на нього, якщо це кореневий коментар) буде видалено з бази даних <strong style="color:var(--danger)">без можливості відновлення</strong>.</p>
+                <div class="center-confirm-actions">
+                    <button class="btn btn-ghost" onclick="document.getElementById('nv-comment-purge-confirm').remove()">Скасувати</button>
+                    <button class="btn btn-danger" id="nv-confirm-purge-btn" onclick="NewsPage._confirmPurgeComment('${id}')">Видалити назавжди</button>
+                </div>
+            </div>`;
+        document.body.appendChild(el);
+        el.addEventListener('click', e => { if (e.target === el) el.remove(); });
+    },
+
+    async _confirmPurgeComment(id) {
+        const btn = document.getElementById('nv-confirm-purge-btn');
+        if (btn) { btn.disabled = true; btn.textContent = '...'; }
+        try {
+            await API.newsComments.hardDelete(id);
+            document.getElementById('nv-comment-purge-confirm')?.remove();
+            await this._loadComments(this._commentsNewsId);
+        } catch (e) {
+            Toast.error('Помилка', e.message);
+            if (btn) { btn.disabled = false; btn.textContent = 'Видалити назавжди'; }
         }
     },
 

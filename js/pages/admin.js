@@ -5454,8 +5454,14 @@ const AdminPage = {
         <div class="fbm-sidebar-head">
             <div class="fbm-sidebar-title"><i class="fa-regular fa-comments"></i> Зворотний зв'язок</div>
             <div class="fbm-filters">
-                ${[['all','Усі'],['new','🔴 Нові'],['seen','👁 Бачено'],['in_progress','🔧 В роботі'],['resolved','✅ Вирішено']].map(([s,l]) =>
-                    `<button class="fbm-filter${s==='all'?' active':''}" data-status="${s}" onclick="AdminPage._fbmFilter('${s}',this)">${l}</button>`
+                ${[
+                    ['all','fa-solid fa-layer-group','Усі','#6366f1'],
+                    ['new','fa-solid fa-circle-exclamation','Нові','#ef4444'],
+                    ['seen','fa-regular fa-eye','Бачено','#9ca3af'],
+                    ['in_progress','fa-solid fa-wrench','В роботі','#f59e0b'],
+                    ['resolved','fa-solid fa-check','Вирішено','#10b981'],
+                ].map(([s,icon,l,c]) =>
+                    `<button class="fbm-filter${s==='all'?' active':''}" data-status="${s}" style="--fc:${c}" title="${l}" onclick="AdminPage._fbmFilter('${s}',this)"><i class="${icon}"></i></button>`
                 ).join('')}
             </div>
         </div>
@@ -5472,81 +5478,90 @@ const AdminPage = {
     </div>
 </div>
 <style>
-.fbm-shell { display:flex;height:calc(100vh - 290px);min-height:360px;max-height:680px;border:1.5px solid var(--border);border-radius:16px;overflow:hidden;margin-top:4px;margin-right:190px; }
-.fbm-sidebar { width:310px;flex-shrink:0;display:flex;flex-direction:column;border-right:1.5px solid var(--border);background:var(--bg-surface); }
-.fbm-sidebar-head { padding:14px 14px 10px;border-bottom:1px solid var(--border);flex-shrink:0; }
-.fbm-sidebar-title { font-size:.9rem;font-weight:700;color:var(--text-primary);margin-bottom:10px;display:flex;align-items:center;gap:7px; }
-.fbm-filters { display:flex;gap:4px;flex-wrap:wrap; }
-.fbm-filter { padding:3px 9px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:.7rem;font-weight:600;cursor:pointer;transition:all .15s; }
-.fbm-filter:hover { border-color:var(--primary);color:var(--primary); }
-.fbm-filter.active { border-color:var(--primary);background:var(--primary);color:#fff; }
+.fbm-shell { display:flex;height:calc(100vh - 290px);min-height:360px;max-height:680px;border:1px solid var(--border);border-radius:18px;overflow:hidden;margin-top:4px;margin-right:190px;box-shadow:0 16px 40px -24px rgba(0,0,0,.35);background:var(--bg-surface); }
+.fbm-sidebar { width:310px;flex-shrink:0;display:flex;flex-direction:column;border-right:1px solid var(--border);background:var(--bg-surface); }
+.fbm-sidebar-head { padding:16px 16px 12px;border-bottom:1px solid var(--border);flex-shrink:0;background:linear-gradient(180deg,rgba(99,102,241,.06),transparent); }
+.fbm-sidebar-title { font-size:.92rem;font-weight:700;color:var(--text-primary);margin-bottom:12px;display:flex;align-items:center;gap:8px; }
+.fbm-sidebar-title i { width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;display:flex;align-items:center;justify-content:center;font-size:.72rem; }
+/* Іконки замість тексту — 5 фільтрів в один рядок навіть у вузькому
+   сайдбарі (310px); повна назва — у title (нативний тултип на hover). */
+.fbm-filters { display:flex;gap:6px; }
+.fbm-filter { width:32px;height:32px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-raised);color:var(--text-muted);font-size:.8rem;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;flex-shrink:0; }
+.fbm-filter:hover { border-color:var(--fc,#6366f1);color:var(--fc,#6366f1);transform:translateY(-1px);box-shadow:0 4px 10px -5px var(--fc,#6366f1); }
+.fbm-filter.active { border-color:var(--fc,#6366f1);background:var(--fc,#6366f1);color:#fff;box-shadow:0 4px 12px -4px var(--fc,#6366f1); }
 .fbm-list { flex:1;overflow-y:auto; }
 .fbm-list-empty { display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-size:.82rem;padding:20px;text-align:center; }
-.fbm-item { display:flex;align-items:flex-start;gap:10px;padding:11px 14px;cursor:pointer;border-bottom:1px solid var(--border);transition:background .12s;position:relative; }
+.fbm-item { display:flex;align-items:flex-start;gap:11px;padding:12px 15px;cursor:pointer;border-bottom:1px solid var(--border);transition:background .15s;position:relative; }
 .fbm-item:hover { background:var(--bg-hover); }
-.fbm-item.active { background:rgba(99,102,241,.09); }
-.fbm-item.active::before { content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:#6366f1;border-radius:0 2px 2px 0; }
-.fbm-item-ico { width:36px;height:36px;border-radius:50%;background:var(--bg-raised);display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0; }
+.fbm-item.active { background:rgba(99,102,241,.1); }
+.fbm-item.active::before { content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(180deg,#6366f1,#8b5cf6);border-radius:0 3px 3px 0; }
+.fbm-item-ico { width:38px;height:38px;border-radius:12px;background:var(--bg-raised);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0; }
+.fbm-item.active .fbm-item-ico { border-color:rgba(99,102,241,.4);background:rgba(99,102,241,.1); }
 .fbm-item-body { flex:1;min-width:0; }
 .fbm-item-top { display:flex;align-items:baseline;gap:5px;margin-bottom:2px; }
 .fbm-item-name { font-size:.8rem;font-weight:700;color:var(--text-primary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
 .fbm-item-time { font-size:.66rem;color:var(--text-muted);flex-shrink:0; }
-.fbm-item-preview { font-size:.74rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:4px; }
+.fbm-item-preview { font-size:.74rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:5px; }
 .fbm-item-foot { display:flex;align-items:center;gap:5px; }
-.fbm-dot { width:7px;height:7px;border-radius:50%;flex-shrink:0; }
-.fbm-dot-new  { background:#ef4444; }
-.fbm-dot-seen { background:#9ca3af; }
-.fbm-dot-prog { background:#f59e0b; }
-.fbm-dot-done { background:#10b981; }
-.fbm-item-status { font-size:.66rem;color:var(--text-muted); }
-.fbm-unread { width:17px;height:17px;border-radius:50%;background:#ef4444;color:#fff;font-size:.6rem;font-weight:700;display:flex;align-items:center;justify-content:center;margin-left:auto;flex-shrink:0; }
+.fbm-dot { width:7px;height:7px;border-radius:50%;flex-shrink:0;box-shadow:0 0 0 3px currentColor;opacity:.9; }
+.fbm-dot-new  { background:#ef4444;color:rgba(239,68,68,.15); }
+.fbm-dot-seen { background:#9ca3af;color:rgba(156,163,175,.15); }
+.fbm-dot-prog { background:#f59e0b;color:rgba(245,158,11,.15); }
+.fbm-dot-done { background:#10b981;color:rgba(16,185,129,.15); }
+.fbm-item-status { font-size:.66rem;color:var(--text-muted);font-weight:600; }
+.fbm-unread { width:17px;height:17px;border-radius:50%;background:#ef4444;color:#fff;font-size:.6rem;font-weight:700;display:flex;align-items:center;justify-content:center;margin-left:auto;flex-shrink:0;box-shadow:0 0 0 3px rgba(239,68,68,.15); }
 .fbm-item-deleted { opacity:.55; }
 .fbm-item-deleted .fbm-item-name { text-decoration:line-through; }
-.fbm-deleted-notice { padding:10px 18px;background:var(--bg-raised);border-top:1px solid var(--border);font-size:.8rem;color:var(--text-muted);display:flex;align-items:center;gap:8px;flex-shrink:0; }
+.fbm-deleted-notice { padding:11px 18px;background:var(--bg-raised);border-top:1px solid var(--border);font-size:.8rem;color:var(--text-muted);display:flex;align-items:center;gap:8px;flex-shrink:0; }
 /* Right panel */
 .fbm-chat-panel { flex:1;display:flex;flex-direction:column;min-width:0;background:var(--bg-surface); }
 .fbm-empty { display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:10px;color:var(--text-muted); }
-.fbm-empty-ico { font-size:3.5rem;opacity:.2; }
-.fbm-chat-head { display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1.5px solid var(--border);flex-shrink:0;background:var(--bg-surface); }
-.fbm-chat-head-ico { width:40px;height:40px;border-radius:50%;background:var(--bg-raised);display:flex;align-items:center;justify-content:center;font-size:1.3rem;flex-shrink:0; }
+.fbm-empty-ico { width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,rgba(99,102,241,.12),rgba(139,92,246,.08));display:flex;align-items:center;justify-content:center;font-size:2rem;color:#6366f1; }
+.fbm-chat-head { display:flex;align-items:center;gap:13px;padding:14px 20px;border-bottom:1px solid var(--border);flex-shrink:0;background:linear-gradient(180deg,rgba(99,102,241,.05),transparent); }
+.fbm-chat-head-ico { width:42px;height:42px;border-radius:13px;background:linear-gradient(135deg,rgba(99,102,241,.16),rgba(139,92,246,.12));border:1px solid rgba(99,102,241,.25);display:flex;align-items:center;justify-content:center;font-size:1.3rem;flex-shrink:0; }
 .fbm-chat-head-info { flex:1;min-width:0; }
-.fbm-chat-head-name { font-size:.9rem;font-weight:700;color:var(--text-primary); }
-.fbm-chat-head-sub  { font-size:.72rem;color:var(--text-muted);margin-top:1px; }
+.fbm-chat-head-name { font-size:.92rem;font-weight:700;color:var(--text-primary); }
+.fbm-chat-head-sub  { font-size:.72rem;color:var(--text-muted);margin-top:2px; }
 .fbm-head-actions { display:flex;align-items:center;gap:8px;flex-shrink:0; }
-.fbm-status-sel { padding:5px 10px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.78rem;cursor:pointer;font-weight:600;transition:border-color .2s,color .2s; }
+.fbm-status-sel { padding:6px 11px;border-radius:9px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.78rem;cursor:pointer;font-weight:600;transition:border-color .2s,color .2s,box-shadow .2s; }
+.fbm-status-sel:hover { box-shadow:0 2px 8px -2px rgba(0,0,0,.15); }
 .fbm-status-sel[data-status="new"]         { border-color:#3b82f6;color:#3b82f6; }
 .fbm-status-sel[data-status="seen"]        { border-color:#6b7280;color:#6b7280; }
 .fbm-status-sel[data-status="in_progress"] { border-color:#f59e0b;color:#f59e0b; }
 .fbm-status-sel[data-status="resolved"]    { border-color:#10b981;color:#10b981; }
-.fbm-msgs { flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:14px; }
+.fbm-delete-btn { width:34px;height:34px;border-radius:9px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.85rem;transition:all .15s;flex-shrink:0; }
+.fbm-delete-btn:hover { border-color:#ef4444;color:#ef4444;background:rgba(239,68,68,.08); }
+.fbm-msgs { flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:16px;
+    background-image:radial-gradient(var(--border) .6px,transparent .6px);background-size:22px 22px;background-position:-8px -8px; }
 .fbm-bwrap { display:flex;align-items:flex-end;gap:9px; }
 .fbm-bwrap-user  { flex-direction:row-reverse; }
-.fbm-avatar { width:32px;height:32px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.82rem;font-weight:700;flex-shrink:0; }
+.fbm-avatar { width:32px;height:32px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.82rem;font-weight:700;flex-shrink:0;overflow:hidden;box-shadow:0 2px 6px -2px rgba(0,0,0,.25); }
 .fbm-avatar-user  { background:rgba(99,102,241,.15);color:#6366f1; }
 .fbm-avatar-admin { background:rgba(16,185,129,.15);color:#10b981; }
 .fbm-sender-lbl { font-size:.7rem;font-weight:700;color:#10b981;margin-bottom:3px;padding-left:2px; }
-.fbm-bubble { padding:10px 14px;border-radius:16px;font-size:.875rem;line-height:1.55; }
-.fbm-bubble-user  { background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border-bottom-right-radius:4px; }
-.fbm-bubble-admin { display:inline-block;background:var(--bg-hover);color:var(--text-primary);border:1.5px solid var(--border);border-bottom-left-radius:4px; }
+.fbm-bubble { padding:11px 15px;border-radius:17px;font-size:.875rem;line-height:1.55;box-shadow:0 3px 10px -6px rgba(0,0,0,.3); }
+.fbm-bubble-user  { background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border-bottom-right-radius:5px; }
+.fbm-bubble-admin { display:inline-block;background:var(--bg-surface);color:var(--text-primary);border:1px solid var(--border);border-bottom-left-radius:5px; }
 .fbm-bubble-text  { white-space:pre-line;word-break:break-word; }
-.fbm-bubble-time  { font-size:.66rem;margin-top:5px;opacity:.55;text-align:right; }
+.fbm-bubble-time  { font-size:.66rem;margin-top:5px;opacity:.6;text-align:right; }
 .fbm-bubble-admin .fbm-bubble-time { text-align:left; }
 .fbm-bubble-imgs  { display:flex;gap:6px;flex-wrap:wrap;margin-top:8px; }
-.fbm-bubble-img   { width:80px;height:60px;object-fit:cover;border-radius:7px;cursor:pointer;border:1.5px solid rgba(255,255,255,.25);transition:opacity .15s; }
-.fbm-bubble-img:hover { opacity:.8; }
-.fbm-img-ph { width:80px;height:60px;border-radius:7px;border:1.5px solid rgba(255,255,255,.2);background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.6);font-size:.85rem; }
-.fbm-pending { text-align:center;font-size:.8rem;color:var(--text-muted);padding:14px;border:1.5px dashed var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;gap:7px; }
-.fbm-paste-strip { display:flex;flex-wrap:wrap;gap:8px;padding:8px 18px 0;border-top:1.5px solid var(--border);background:var(--bg-surface); }
-.fbm-paste-chip { position:relative;width:64px;height:48px;border-radius:8px;overflow:hidden;border:1.5px solid var(--border); }
+.fbm-bubble-img   { width:80px;height:60px;object-fit:cover;border-radius:8px;cursor:pointer;border:1.5px solid rgba(255,255,255,.25);transition:transform .15s,opacity .15s; }
+.fbm-bubble-img:hover { opacity:.85;transform:scale(1.03); }
+.fbm-img-ph { width:80px;height:60px;border-radius:8px;border:1.5px solid rgba(255,255,255,.2);background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.6);font-size:.85rem; }
+.fbm-pending { text-align:center;font-size:.8rem;color:var(--text-muted);padding:15px;border:1.5px dashed var(--border);border-radius:12px;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--bg-surface); }
+.fbm-pending i { color:#f59e0b; }
+.fbm-paste-strip { display:flex;flex-wrap:wrap;gap:8px;padding:10px 18px 0;border-top:1px solid var(--border);background:var(--bg-surface); }
+.fbm-paste-chip { position:relative;width:64px;height:48px;border-radius:9px;overflow:hidden;border:1.5px solid var(--border); }
 .fbm-paste-thumb { width:100%;height:100%;object-fit:cover;display:block; }
 .fbm-paste-rm { position:absolute;top:1px;right:1px;width:16px;height:16px;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;border:none;cursor:pointer;font-size:.7rem;line-height:16px;text-align:center;padding:0; }
 .fbm-paste-rm:hover { background:#ef4444; }
-.fbm-input-area { display:flex;align-items:flex-end;gap:10px;padding:12px 18px 14px;border-top:none;flex-shrink:0; }
-.fbm-input-ta { flex:1;resize:none;padding:10px 14px;border-radius:12px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-family:inherit;font-size:.875rem;line-height:1.45;transition:border-color .15s;box-sizing:border-box; }
-.fbm-input-ta:focus { outline:none;border-color:#6366f1; }
-.fbm-send-btn { width:42px;height:42px;border-radius:12px;border:none;flex-shrink:0;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.95rem;transition:opacity .15s,transform .15s; }
-.fbm-send-btn:hover { opacity:.88;transform:translateY(-1px); }
-.fbm-send-btn:disabled { opacity:.4;cursor:not-allowed;transform:none; }
+.fbm-input-area { display:flex;align-items:flex-end;gap:10px;padding:14px 18px 16px;border-top:1px solid var(--border);flex-shrink:0;background:var(--bg-surface); }
+.fbm-input-ta { flex:1;resize:none;padding:11px 15px;border-radius:14px;border:1.5px solid var(--border);background:var(--bg-raised);color:var(--text-primary);font-family:inherit;font-size:.875rem;line-height:1.45;transition:border-color .15s,box-shadow .15s;box-sizing:border-box; }
+.fbm-input-ta:focus { outline:none;border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,.14);background:var(--bg-surface); }
+.fbm-send-btn { width:44px;height:44px;border-radius:14px;border:none;flex-shrink:0;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.95rem;box-shadow:0 6px 16px -6px rgba(99,102,241,.6);transition:opacity .15s,transform .15s,box-shadow .15s; }
+.fbm-send-btn:hover { opacity:.92;transform:translateY(-2px);box-shadow:0 10px 22px -6px rgba(99,102,241,.7); }
+.fbm-send-btn:disabled { opacity:.4;cursor:not-allowed;transform:none;box-shadow:none; }
 </style>`;
         await this._fbmLoadList();
     },
@@ -5573,7 +5588,7 @@ const AdminPage = {
 
             const profileIds = [...new Set(items.map(i => i.user_id).filter(Boolean))];
             if (profileIds.length) {
-                const { data: profs } = await supabase.from('profiles').select('id,full_name,job_position,email').in('id', profileIds);
+                const { data: profs } = await supabase.from('profiles').select('id,full_name,job_position,email,avatar_url').in('id', profileIds);
                 this._fbProfileMap = {};
                 (profs || []).forEach(p => this._fbProfileMap[p.id] = p);
             }
@@ -5664,6 +5679,9 @@ const AdminPage = {
         const hasScreens = item?.screenshot_urls?.length;
         const showFallback = item?.reply && !messages.length;
         const initials = prof.full_name ? prof.full_name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase() : '?';
+        const userAvatar = prof.avatar_url
+            ? `<img src="${Fmt.esc(prof.avatar_url)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
+            : initials;
         const adminName = (sid) => Fmt.esc(senderMap[sid] || 'Адміністратор');
 
         chatEl.innerHTML = `
@@ -5681,6 +5699,10 @@ const AdminPage = {
         <select class="fbm-status-sel" data-status="${item?.status||'new'}" onchange="AdminPage._fbmSetStatus('${item?.id}',this.value);this.dataset.status=this.value">
             ${statusOpts.map(s=>`<option value="${s}"${s===item?.status?' selected':''}>${statusLabel[s]}</option>`).join('')}
         </select>
+        ${item?.status === 'resolved' && !item?.is_deleted ? `
+        <button class="fbm-delete-btn" title="Видалити вирішене звернення" onclick="AdminPage._fbmDeleteThread('${item.id}')">
+            <i class="fa-solid fa-trash-can"></i>
+        </button>` : ''}
     </div>
 </div>
 <div class="fbm-msgs" id="fbm-msgs">
@@ -5694,7 +5716,7 @@ const AdminPage = {
             </div>` : ''}
             <div class="fbm-bubble-time">${Fmt.datetime(item?.created_at)}</div>
         </div>
-        <div class="fbm-avatar fbm-avatar-user">${initials}</div>
+        <div class="fbm-avatar fbm-avatar-user">${userAvatar}</div>
     </div>
 
     ${messages.map(m => {
@@ -5722,7 +5744,7 @@ const AdminPage = {
             ${imgHtml}
             <div class="fbm-bubble-time">${Fmt.datetime(m.created_at)}</div>
         </div>
-        <div class="fbm-avatar fbm-avatar-user">${initials}</div>
+        <div class="fbm-avatar fbm-avatar-user">${userAvatar}</div>
     </div>`;
     }).join('')}
 
@@ -5898,11 +5920,75 @@ ${item?.is_deleted ? `
             if (stEl) stEl.textContent = `${statusLabel[status]||status} · ${typeLabel[item?.type]||''}`;
             const sel = document.querySelector('.fbm-status-sel');
             if (sel) sel.dataset.status = status;
+            // Кнопка видалення з'являється лише для "Вирішено" — оновлюємо
+            // її наявність без повного перерендеру чату.
+            const actions = document.querySelector('.fbm-head-actions');
+            const delBtn = actions?.querySelector('.fbm-delete-btn');
+            if (status === 'resolved' && !item?.is_deleted && !delBtn && actions) {
+                actions.insertAdjacentHTML('beforeend', `
+                    <button class="fbm-delete-btn" title="Видалити вирішене звернення" onclick="AdminPage._fbmDeleteThread('${id}')">
+                        <i class="fa-solid fa-trash-can"></i>
+                    </button>`);
+            } else if (status !== 'resolved' && delBtn) {
+                delBtn.remove();
+            }
             Toast.success('Статус оновлено');
             // Refresh top bar badge
             if (typeof App !== 'undefined') App._pollFeedbackBell().catch(() => {});
         } catch(e) {
             console.error('_fbmSetStatus error:', e);
+            Toast.error('Помилка', e.message);
+        }
+    },
+
+    // Центрована модалка (не глобальний Modal.open — той відкривається
+    // боковою панеллю на весь екран праворуч, для такого маленького
+    // підтвердження це виглядає незручно; той самий підхід, що й у
+    // NewsPage._deleteComment).
+    _fbmDeleteThread(id) {
+        document.getElementById('fbm-delete-confirm')?.remove();
+        const el = document.createElement('div');
+        el.id = 'fbm-delete-confirm';
+        el.className = 'center-confirm-backdrop';
+        el.innerHTML = `
+            <div class="center-confirm-box">
+                <h3>Видалити звернення?</h3>
+                <p>Це видалить вирішене звернення та всю переписку.<br>Цю дію не можна скасувати.</p>
+                <div class="center-confirm-actions">
+                    <button class="btn btn-ghost" onclick="document.getElementById('fbm-delete-confirm').remove()">Скасувати</button>
+                    <button class="btn btn-danger" id="fbm-confirm-del-btn" onclick="AdminPage._fbmConfirmDeleteThread('${id}')">Видалити</button>
+                </div>
+            </div>`;
+        document.body.appendChild(el);
+        el.addEventListener('click', e => { if (e.target === el) el.remove(); });
+    },
+
+    async _fbmConfirmDeleteThread(id) {
+        const btn = document.getElementById('fbm-confirm-del-btn');
+        if (btn) { btn.disabled = true; btn.textContent = '...'; }
+        try {
+            await API.feedback.remove(id);
+            document.getElementById('fbm-delete-confirm')?.remove();
+            this._fbItems = this._fbItems.filter(i => i.id !== id);
+            document.getElementById(`fbm-item-${id}`)?.remove();
+            if (this._fbSelectedId === id) {
+                this._fbSelectedId = null;
+                const chatEl = document.getElementById('fbm-chat-panel');
+                if (chatEl) chatEl.innerHTML = `
+                    <div class="fbm-empty">
+                        <div class="fbm-empty-ico"><i class="fa-regular fa-comments"></i></div>
+                        <div style="font-size:.9rem;font-weight:600">Оберіть звернення зі списку</div>
+                        <div style="font-size:.8rem">Щоб переглянути переписку</div>
+                    </div>`;
+            }
+            if (!this._fbItems.length) {
+                const listEl = document.getElementById('fbm-list');
+                if (listEl) listEl.innerHTML = `<div class="fbm-list-empty">Звернень не знайдено</div>`;
+            }
+            Toast.success('Видалено', 'Звернення прибрано зі списку');
+            if (typeof App !== 'undefined') App._pollFeedbackBell().catch(() => {});
+        } catch(e) {
+            if (btn) { btn.disabled = false; btn.textContent = 'Видалити'; }
             Toast.error('Помилка', e.message);
         }
     },

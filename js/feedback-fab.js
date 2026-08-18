@@ -70,7 +70,7 @@ const FeedbackFab = {
         if (!msgEl) return; // "new feedback" form isn't open — nothing to save
         const title   = document.getElementById('sgfb-title')?.value || '';
         const message = msgEl.value || '';
-        const type    = document.querySelector('.sgfb-type.active')?.dataset.type || 'bug';
+        const type    = document.getElementById('sgfb-type-sel')?.value || '';
         this._fbDraft = (title || message) ? { title, message, type } : null;
     },
 
@@ -285,29 +285,56 @@ const FeedbackFab = {
     <button class="sgfb-close-btn" onclick="FeedbackFab._closeModal()"><i class="fa-solid fa-xmark"></i></button>
 </div>
 <div class="sgfb-body">
-    <div class="sgfb-types">
-        <button class="sgfb-type active" data-type="bug"        onclick="FeedbackFab._fbType(this)">🐛 Помилка</button>
-        <button class="sgfb-type"        data-type="suggestion" onclick="FeedbackFab._fbType(this)">💡 Пропозиція</button>
-        <button class="sgfb-type"        data-type="question"   onclick="FeedbackFab._fbType(this)">❓ Питання</button>
-        <button class="sgfb-type"        data-type="other"      onclick="FeedbackFab._fbType(this)">💬 Інше</button>
+    <div class="sgfb-form-group">
+        <label class="sgfb-field-lbl" for="sgfb-type-trigger">Тип звернення <span class="sgfb-field-req">*</span></label>
+        <div class="sgfb-select-wrap">
+            <button type="button" class="sgfb-select-trigger" id="sgfb-type-trigger" data-empty="true" onclick="FeedbackFab._fbToggleTypeMenu()">
+                <span class="sgfb-select-trigger-icon" id="sgfb-type-trigger-icon"><i class="fa-regular fa-square-caret-down"></i></span>
+                <span class="sgfb-select-trigger-label" id="sgfb-type-trigger-label">Оберіть тип звернення…</span>
+                <i class="fa-solid fa-chevron-down sgfb-select-caret"></i>
+            </button>
+            <div class="sgfb-select-menu" id="sgfb-type-menu" hidden>
+                <button type="button" class="sgfb-select-opt" data-type="bug" data-label="Помилка" data-icon="fa-solid fa-bug" style="--opt-c:#ef4444" onclick="FeedbackFab._fbPickType(this)">
+                    <span class="sgfb-opt-ico"><i class="fa-solid fa-bug"></i></span>
+                    <span class="sgfb-opt-text"><span class="sgfb-opt-title">Помилка</span><span class="sgfb-opt-sub">Щось працює не так, як очікувалось</span></span>
+                    <i class="fa-solid fa-check sgfb-opt-check"></i>
+                </button>
+                <button type="button" class="sgfb-select-opt" data-type="suggestion" data-label="Пропозиція" data-icon="fa-solid fa-lightbulb" style="--opt-c:#f59e0b" onclick="FeedbackFab._fbPickType(this)">
+                    <span class="sgfb-opt-ico"><i class="fa-solid fa-lightbulb"></i></span>
+                    <span class="sgfb-opt-text"><span class="sgfb-opt-title">Пропозиція</span><span class="sgfb-opt-sub">Ідея, як зробити краще</span></span>
+                    <i class="fa-solid fa-check sgfb-opt-check"></i>
+                </button>
+                <button type="button" class="sgfb-select-opt" data-type="question" data-label="Питання" data-icon="fa-solid fa-circle-question" style="--opt-c:#0ea5e9" onclick="FeedbackFab._fbPickType(this)">
+                    <span class="sgfb-opt-ico"><i class="fa-solid fa-circle-question"></i></span>
+                    <span class="sgfb-opt-text"><span class="sgfb-opt-title">Питання</span><span class="sgfb-opt-sub">Не зрозуміло, як щось працює</span></span>
+                    <i class="fa-solid fa-check sgfb-opt-check"></i>
+                </button>
+                <button type="button" class="sgfb-select-opt" data-type="other" data-label="Інше" data-icon="fa-solid fa-comment-dots" style="--opt-c:#8b5cf6" onclick="FeedbackFab._fbPickType(this)">
+                    <span class="sgfb-opt-ico"><i class="fa-solid fa-comment-dots"></i></span>
+                    <span class="sgfb-opt-text"><span class="sgfb-opt-title">Інше</span><span class="sgfb-opt-sub">Щось, що не підходить під інші варіанти</span></span>
+                    <i class="fa-solid fa-check sgfb-opt-check"></i>
+                </button>
+            </div>
+            <input type="hidden" id="sgfb-type-sel" value="">
+        </div>
     </div>
     <div class="sgfb-form-group">
         <label class="sgfb-field-lbl" for="sgfb-title">Заголовок <span class="sgfb-field-opt">(необов'язково)</span></label>
-        <input id="sgfb-title" class="sgfb-input" placeholder="Коротко про суть…" autocomplete="off">
+        <input id="sgfb-title" class="sgfb-input" placeholder="Коротко про суть…" autocomplete="off" disabled>
     </div>
     <div class="sgfb-form-group">
         <label class="sgfb-field-lbl" for="sgfb-msg">Опис <span class="sgfb-field-req">*</span></label>
-        <textarea id="sgfb-msg" class="sgfb-textarea" placeholder="Опишіть що сталося або що хочете запропонувати…" rows="5"></textarea>
+        <textarea id="sgfb-msg" class="sgfb-textarea" placeholder="Спочатку оберіть тип звернення вище…" rows="5" disabled></textarea>
     </div>
     <div class="sgfb-form-group" style="margin-bottom:0">
         <label class="sgfb-field-lbl">Скриншоти</label>
-        <div id="sgfb-drop" class="sgfb-drop" ondragover="event.preventDefault()" ondrop="FeedbackFab._fbDrop(event)">
+        <div id="sgfb-drop" class="sgfb-drop sgfb-drop-disabled" ondragover="event.preventDefault()" ondrop="FeedbackFab._fbDrop(event)">
             <i class="fa-solid fa-cloud-arrow-up sgfb-drop-icon"></i>
             <div class="sgfb-drop-text">
                 Перетягніть або <label for="sgfb-file" class="sgfb-browse">оберіть файл</label>
             </div>
             <div class="sgfb-drop-hint">PNG, JPG · до 4 файлів · або Ctrl+V</div>
-            <input type="file" id="sgfb-file" accept="image/*" multiple style="display:none" onchange="FeedbackFab._fbAddFiles(this.files)">
+            <input type="file" id="sgfb-file" accept="image/*" multiple style="display:none" onchange="FeedbackFab._fbAddFiles(this.files)" disabled>
         </div>
         <div id="sgfb-previews" class="sgfb-previews"></div>
     </div>
@@ -325,13 +352,69 @@ const FeedbackFab = {
             const m = document.getElementById('sgfb-msg');
             if (t) t.value = this._fbDraft.title;
             if (m) m.value = this._fbDraft.message;
-            const typeBtn = document.querySelector(`.sgfb-type[data-type="${this._fbDraft.type}"]`);
-            if (typeBtn) { document.querySelectorAll('.sgfb-type').forEach(b => b.classList.remove('active')); typeBtn.classList.add('active'); }
+            if (this._fbDraft.type) this._fbApplyType(this._fbDraft.type, false);
         }
-        setTimeout(() => document.getElementById('sgfb-msg')?.focus(), 50);
+        setTimeout(() => document.getElementById(this._fbDraft?.type ? 'sgfb-msg' : 'sgfb-type-trigger')?.focus(), 50);
     },
 
-    _fbType(btn) { document.querySelectorAll('.sgfb-type').forEach(b => b.classList.remove('active')); btn.classList.add('active'); },
+    _fbToggleTypeMenu() {
+        const menu = document.getElementById('sgfb-type-menu');
+        const trigger = document.getElementById('sgfb-type-trigger');
+        if (!menu) return;
+        const show = menu.hasAttribute('hidden');
+        if (show) {
+            menu.removeAttribute('hidden');
+            trigger?.classList.add('open');
+            setTimeout(() => document.addEventListener('click', FeedbackFab._fbTypeOutside), 0);
+        } else {
+            menu.setAttribute('hidden', '');
+            trigger?.classList.remove('open');
+        }
+    },
+
+    _fbTypeOutside(e) {
+        const wrap = document.querySelector('.sgfb-select-wrap');
+        if (wrap && !wrap.contains(e.target)) {
+            document.getElementById('sgfb-type-menu')?.setAttribute('hidden', '');
+            document.getElementById('sgfb-type-trigger')?.classList.remove('open');
+            document.removeEventListener('click', FeedbackFab._fbTypeOutside);
+        }
+    },
+
+    _fbPickType(btn) { this._fbApplyType(btn.dataset.type, true); },
+
+    // Поки не обрано тип звернення — заголовок/опис/скриншоти заблоковані,
+    // щоб людина спочатку визначилась, про що пише (а не почала друкувати
+    // й лише потім згадала обрати тип).
+    _fbApplyType(type, closeMenu) {
+        const optBtn = document.querySelector(`.sgfb-select-opt[data-type="${type}"]`);
+        if (!optBtn) return;
+        const hidden = document.getElementById('sgfb-type-sel');
+        if (hidden) hidden.value = type;
+        const trigger     = document.getElementById('sgfb-type-trigger');
+        const triggerIcon = document.getElementById('sgfb-type-trigger-icon');
+        const triggerLbl  = document.getElementById('sgfb-type-trigger-label');
+        if (triggerIcon) { triggerIcon.innerHTML = `<i class="${optBtn.dataset.icon}"></i>`; triggerIcon.style.color = optBtn.style.getPropertyValue('--opt-c'); triggerIcon.style.background = `color-mix(in srgb, ${optBtn.style.getPropertyValue('--opt-c')} 16%, transparent)`; }
+        if (triggerLbl) triggerLbl.textContent = optBtn.dataset.label;
+        trigger?.setAttribute('data-empty', 'false');
+        trigger?.classList.remove('invalid');
+        document.querySelectorAll('.sgfb-select-opt').forEach(o => o.classList.toggle('active', o === optBtn));
+        if (closeMenu) {
+            document.getElementById('sgfb-type-menu')?.setAttribute('hidden', '');
+            trigger?.classList.remove('open');
+            document.removeEventListener('click', FeedbackFab._fbTypeOutside);
+        }
+
+        const title = document.getElementById('sgfb-title');
+        const msg   = document.getElementById('sgfb-msg');
+        const file  = document.getElementById('sgfb-file');
+        const drop  = document.getElementById('sgfb-drop');
+        if (title) title.disabled = false;
+        if (msg)   msg.disabled   = false;
+        if (file)  file.disabled  = false;
+        if (drop)  drop.classList.remove('sgfb-drop-disabled');
+        if (closeMenu) msg?.focus();
+    },
     _fbDrop(e)   { e.preventDefault(); this._fbAddFiles([...e.dataTransfer.files].filter(f => f.type.startsWith('image/'))); },
 
     _fbAddFiles(files) {
@@ -359,9 +442,16 @@ const FeedbackFab = {
     },
 
     async _submitFeedback() {
+        const type = document.getElementById('sgfb-type-sel')?.value;
+        if (!type) {
+            const trigger = document.getElementById('sgfb-type-trigger');
+            trigger?.classList.add('invalid');
+            trigger?.focus();
+            setTimeout(() => trigger?.classList.remove('invalid'), 900);
+            return;
+        }
         const msg = document.getElementById('sgfb-msg')?.value.trim();
         if (!msg) { const t = document.getElementById('sgfb-msg'); t.style.borderColor='#ef4444'; t.focus(); return; }
-        const type  = document.querySelector('.sgfb-type.active')?.dataset.type || 'other';
         const title = document.getElementById('sgfb-title')?.value.trim() || '';
         const btn   = document.getElementById('sgfb-send-btn');
         if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Надсилання…'; }
@@ -589,12 +679,62 @@ body.sidebar-collapsed .sgfb-modal { margin-left:var(--sidebar-w-col); max-width
 .sgfb-st-done { background:rgba(16,185,129,.12);color:#059669; }
 .sgfb-reply-dot { font-size:.7rem;color:#6366f1; }
 .sgfb-item-arr { font-size:.7rem;color:var(--text-muted);opacity:.4; }
-.sgfb-types { display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px; }
-.sgfb-type {
-    padding:6px 12px;border-radius:20px;border:1.5px solid var(--border);
-    background:var(--bg-surface);color:var(--text-muted);font-size:.8rem;cursor:pointer;transition:all .15s;
+/* ── Custom "type" dropdown ──────────────────────────────────────── */
+.sgfb-select-wrap { position:relative; }
+.sgfb-select-trigger {
+    width:100%;display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;
+    border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);
+    font-family:inherit;font-size:.875rem;cursor:pointer;text-align:left;box-sizing:border-box;
+    transition:border-color .18s,box-shadow .18s;
 }
-.sgfb-type.active { border-color:#6366f1;background:rgba(99,102,241,.1);color:#6366f1;font-weight:600; }
+.sgfb-select-trigger:hover { border-color:#8385f0; }
+.sgfb-select-trigger.open,
+.sgfb-select-trigger:focus-visible { border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,.14);outline:none; }
+.sgfb-select-trigger.invalid { border-color:#ef4444;box-shadow:0 0 0 3px rgba(239,68,68,.14);animation:sgfbShake .35s; }
+@keyframes sgfbShake { 25%{transform:translateX(-3px)} 75%{transform:translateX(3px)} }
+.sgfb-select-trigger-icon {
+    width:26px;height:26px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+    background:var(--bg-hover);color:var(--text-muted);font-size:.8rem;transition:background .18s,color .18s;
+}
+.sgfb-select-trigger-label { flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.sgfb-select-trigger[data-empty="true"] .sgfb-select-trigger-label { color:var(--text-muted); }
+.sgfb-select-caret { font-size:.68rem;color:var(--text-muted);transition:transform .2s;flex-shrink:0; }
+.sgfb-select-trigger.open .sgfb-select-caret { transform:rotate(180deg); }
+
+.sgfb-select-menu {
+    position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:20;
+    background:var(--bg-surface);border:1px solid var(--border);border-radius:12px;
+    box-shadow:0 14px 34px rgba(0,0,0,.3);padding:6px;
+    display:flex;flex-direction:column;gap:2px;
+    animation:sgfbMenuIn .15s cubic-bezier(.4,0,.2,1);
+}
+/* .sgfb-select-menu{display:flex} — це author-правило класу, тож завжди
+   перебиває UA-стиль [hidden]{display:none} (найнижчий пріоритет у каскаді
+   незалежно від специфічності), і атрибут hidden не приховує меню. Явно
+   повертаємо йому пріоритет. */
+.sgfb-select-menu[hidden] { display:none; }
+@keyframes sgfbMenuIn { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
+.sgfb-select-opt {
+    display:flex;align-items:center;gap:10px;padding:8px 9px;border-radius:8px;border:none;
+    background:transparent;cursor:pointer;font-family:inherit;text-align:left;width:100%;box-sizing:border-box;
+    transition:background .13s;
+}
+.sgfb-select-opt:hover { background:var(--bg-hover); }
+.sgfb-select-opt.active { background:color-mix(in srgb, var(--opt-c) 10%, transparent); }
+.sgfb-opt-ico {
+    width:30px;height:30px;border-radius:9px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+    background:color-mix(in srgb, var(--opt-c) 16%, transparent);color:var(--opt-c);font-size:.85rem;
+}
+.sgfb-opt-text { display:flex;flex-direction:column;gap:1px;min-width:0; }
+.sgfb-opt-title { font-size:.85rem;font-weight:600;color:var(--text-primary); }
+.sgfb-opt-sub { font-size:.71rem;color:var(--text-muted); }
+.sgfb-opt-check { margin-left:auto;font-size:.7rem;color:var(--opt-c);opacity:0;flex-shrink:0;transition:opacity .13s; }
+.sgfb-select-opt.active .sgfb-opt-check { opacity:1; }
+
+.sgfb-input:disabled, .sgfb-textarea:disabled, #sgfb-file:disabled {
+    opacity:.5;cursor:not-allowed;background:var(--bg-hover);
+}
+.sgfb-drop-disabled { opacity:.5;pointer-events:none; }
 .sgfb-form-group { margin-bottom:14px; }
 .sgfb-field-lbl { display:block;font-size:.72rem;font-weight:700;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em; }
 .sgfb-field-opt { font-weight:400;opacity:.6;text-transform:none;letter-spacing:0; }

@@ -2668,7 +2668,28 @@ const API = {
                 })
                 .select('id').single();
             if (error) throw error;
-            // Notify all superadmins
+
+            // Сповіщаємо адмінів/суперадмінів через глобальний дзвоник
+            // (ntf-bell-btn, Realtime на таблиці notifications) — без цього
+            // рядка вкладка "Зворотний зв'язок" мовчить, доки хтось вручну не
+            // оновить сторінку (окремий feedback-admin-bell лише опитує раз
+            // на хвилину і показується не всім).
+            try {
+                const { data: staff } = await supabase.from('profiles')
+                    .select('id').in('role', ['admin', 'superadmin']).eq('is_active', true);
+                const typeLabel = { bug: 'Помилка', suggestion: 'Пропозиція', question: 'Питання', other: 'Інше' }[type] || type;
+                const rows = (staff || []).filter(p => p.id !== uid).map(p => ({
+                    user_id: p.id,
+                    title: `Нове звернення: ${typeLabel}`,
+                    message: (title || message || '').slice(0, 140),
+                    type: 'info',
+                    link: 'admin?tab=feedback',
+                    created_by: uid,
+                    is_read: false,
+                }));
+                if (rows.length) await supabase.from('notifications').insert(rows);
+            } catch(_) {}
+
             return data?.id;
         },
 
@@ -2769,6 +2790,21 @@ const API = {
             });
             if (fmErr) throw fmErr;
 
+            // Сповіщаємо автора звернення через ntf-bell-btn — інакше він
+            // побачить відповідь лише після перезавантаження сторінки.
+            if (report?.user_id) {
+                try {
+                    await supabase.from('notifications').insert({
+                        user_id: report.user_id,
+                        title: 'Відповідь на ваше звернення',
+                        message: reply.slice(0, 140),
+                        type: 'info',
+                        link: null,
+                        created_by: AppState.user?.id || null,
+                        is_read: false,
+                    });
+                } catch(_) {}
+            }
         },
     },
 
@@ -2819,7 +2855,7 @@ const API = {
     companyBdayMessages: {
         async getByYear(year) {
             const { data, error } = await supabase.from('company_bday_messages')
-                .select('id, message, created_at, year, user:profiles(id, full_name, avatar_url, job_position)')
+                .select('id, message, created_at, year, user:profiles!user_id(id, full_name, avatar_url, job_position)')
                 .eq('year', year).order('created_at', { ascending: true });
             if (error) throw error;
             return data || [];
@@ -2840,22 +2876,45 @@ const API = {
     // ── Коментарі до новин ──────────────────────────────────────────
     newsComments: {
         async getByNewsId(newsId) {
+            // Видалені коментарі не фільтруємо тут — для звичайних
+            // користувачів вони показуються плейсхолдером "Коментар
+            // видалено", а для адмінів — курсивом з ким/коли видалено
+            // (js/pages/news.js).
             const { data, error } = await supabase.from('news_comments')
-                .select('id, content, created_at, user:profiles(id, full_name, avatar_url, job_position)')
-                .eq('news_id', newsId).order('created_at', { ascending: true });
+                .select('id, content, created_at, updated_at, deleted_at, parent_id, user:profiles!user_id(id, full_name, avatar_url, job_position), deleter:profiles!deleted_by(full_name)')
+                .eq('news_id', newsId)
+                .order('created_at', { ascending: true });
             if (error) throw error;
             return data || [];
         },
-        async add(newsId, content) {
+        async add(newsId, content, parentId = null) {
             const { data, error } = await supabase.from('news_comments')
-                .insert({ news_id: newsId, user_id: AppState.user.id, content: content.trim() })
-                .select('id, content, created_at, user:profiles(id, full_name, avatar_url, job_position)')
+                .insert({ news_id: newsId, user_id: AppState.user.id, content: content.trim(), parent_id: parentId })
+                .select('id, content, created_at, updated_at, parent_id, user:profiles!user_id(id, full_name, avatar_url, job_position)')
                 .single();
             if (error) throw error;
             return data;
         },
+        async update(id, content) {
+            const { data, error } = await supabase.from('news_comments')
+                .update({ content: content.trim(), updated_at: new Date().toISOString() })
+                .eq('id', id)
+                .select('id, content, created_at, updated_at, user:profiles!user_id(id, full_name, avatar_url, job_position)')
+                .single();
+            if (error) throw error;
+            return data;
+        },
+        // М'яке видалення — фіксуємо коли й ким, рядок лишається в БД для
+        // аудиту. Каскадом позначає видаленими й усі прямі відповіді на цей
+        // коментар (RPC SECURITY DEFINER — звичайна RLS-політика UPDATE не
+        // дозволила б автору позначити чужі відповіді видаленими напряму).
         async remove(id) {
-            const { error } = await supabase.from('news_comments').delete().eq('id', id);
+            const { error } = await supabase.rpc('delete_news_comment_cascade', { p_comment_id: id });
+            if (error) throw error;
+        },
+        // Остаточне видалення — лише superadmin (перевіряється в самій RPC).
+        async hardDelete(id) {
+            const { error } = await supabase.rpc('hard_delete_news_comment', { p_comment_id: id });
             if (error) throw error;
         }
     },

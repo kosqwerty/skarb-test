@@ -83,9 +83,14 @@ const Toast = {
             const label = t.querySelector('.toast-mac-time');
             if (!label) return;
             const ageSec = Math.floor((Date.now() - Number(t.dataset.createdAt)) / 1000);
+            const ageMin = Math.floor(ageSec / 60);
+            const hours  = Math.floor(ageMin / 60);
+            const mins   = ageMin % 60;
             label.textContent = ageSec < 45 ? 'щойно'
                 : ageSec < 90 ? 'хвилину тому'
-                : `${Math.round(ageSec / 60)} хв тому`;
+                : ageMin < 60 ? `${ageMin} хв тому`
+                : mins === 0 ? `${hours} год тому`
+                : `${hours} год ${mins} хв тому`;
         });
     },
 

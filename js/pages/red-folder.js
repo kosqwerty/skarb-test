@@ -82,6 +82,8 @@ const RedFolderPage = {
             .rf-content-docs-header i { font-size: .8rem; }
             .rf-content-add-btn { margin-left: auto; display: inline-flex; align-items: center; gap: .3rem; padding: .2rem .6rem; border-radius: 5px; border: 1px dashed rgba(239,68,68,.4); background: transparent; color: rgba(239,68,68,.7); cursor: pointer; font-size: .72rem; font-weight: 600; transition: all .15s; font-family: inherit; white-space: nowrap; }
             .rf-content-add-btn:hover { border-color: #ef4444; color: #ef4444; background: rgba(239,68,68,.05); }
+            .rf-content-link-btn { margin-left: .5rem; display: inline-flex; align-items: center; gap: .3rem; padding: .2rem .6rem; border-radius: 5px; border: 1px dashed rgba(239,68,68,.4); background: transparent; color: rgba(239,68,68,.7); cursor: pointer; font-size: .72rem; font-weight: 600; transition: all .15s; font-family: inherit; white-space: nowrap; }
+            .rf-content-link-btn:hover { border-color: #ef4444; color: #ef4444; background: rgba(239,68,68,.05); }
             /* ── Header docs ─────────────────────────────────────────── */
             .rf-hdr-zone { border: 1px solid rgba(239,68,68,.2); border-radius: var(--radius-xl); background: var(--bg-surface); padding: .9rem 1.1rem; margin-bottom: 1rem; display: flex; flex-direction: column; gap: .6rem; }
             .rf-hdr-title { display: flex; align-items: center; gap: .5rem; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #ef4444; }
@@ -659,6 +661,7 @@ const RedFolderPage = {
                     <i class="fa-solid fa-file-lines" style="color:#ef4444"></i>
                     Документи
                     ${canManage ? `<button class="rf-content-add-btn" onclick="RedFolderPage._uploadModal('${item.id}',${JSON.stringify(item.title).replace(/"/g,'&quot;')})"><i class="fa-solid fa-plus"></i> Завантажити</button>` : ''}
+                    ${canManage ? `<button class="rf-content-link-btn" onclick="RedFolderPage._linkedMaterialsModal('${item.id}')"><i class="fa-solid fa-link"></i> Пов'язані матеріали${pageIds.length ? ` (${pageIds.length})` : ''}</button>` : ''}
                 </div>
                 <div style="display:flex;flex-direction:column;gap:.4rem;margin-top:.55rem">${docsHtml}</div>
             </div>
@@ -799,15 +802,6 @@ const RedFolderPage = {
                 <i class="fa-solid ${o.icon}" style="color:${o.color};font-size:.85rem"></i>
                 <span>${Fmt.esc(o.label)}</span>
             </button>`).join('');
-        const curPageIds = new Set(item?.page_ids != null ? item.page_ids : (item?.page_id ? [item.page_id] : []));
-        const allPageCheckboxes = this._pages.length
-            ? this._pages.map(p => `
-                <label class="rf-page-chk-row">
-                    <input type="checkbox" class="rf-page-chk" value="${p.id}" ${curPageIds.has(p.id) ? 'checked' : ''} onchange="RedFolderPage._updateSelCount()">
-                    <span>${Fmt.esc(p.title)}</span>
-                </label>`).join('')
-            : `<div style="font-size:.82rem;color:var(--text-muted);padding:.4rem 0">Немає доступних колекцій</div>`;
-        const selCount = curPageIds.size;
         Modal.open({
             title: item ? 'Редагувати рядок' : 'Додати рядок',
             size: 'lg',
@@ -842,10 +836,6 @@ const RedFolderPage = {
                 .rfm-info { margin-top:.5rem;padding:.55rem .7rem;border-radius:var(--radius-md);background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.18);display:flex;align-items:flex-start;gap:.45rem; }
                 .rfm-info i { color:#ef4444;font-size:.75rem;margin-top:.1rem;flex-shrink:0; }
                 .rfm-info span { font-size:.71rem;color:var(--text-secondary);line-height:1.45; }
-                .rfm-search { display:flex;align-items:center;gap:.4rem;padding:.2rem .6rem;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-surface);margin-bottom:.35rem; }
-                .rfm-search i { color:var(--text-muted);font-size:.75rem;flex-shrink:0; }
-                .rfm-search input { border:none;background:transparent;outline:none;font-size:.82rem;color:var(--text-primary);font-family:inherit;width:100%;padding:.2rem 0; }
-                .rfm-chk-list { max-height:110px;overflow-y:auto; }
             </style>
             <div class="rfm-wrap">
                 <!-- ── Left: form ─────────────────────────── -->
@@ -900,28 +890,6 @@ const RedFolderPage = {
                         </div>
                     </div>
 
-                    <hr class="rfm-divider">
-
-                    <!-- §3 Пов'язані матеріали -->
-                    <div class="rfm-sec">
-                        <div class="rfm-sec-hdr">
-                            <span class="rfm-ico"><i class="fa-solid fa-link"></i></span>
-                            <span class="rfm-sec-title">Пов'язані матеріали</span>
-                            <span class="rfm-badge sel" id="rf-sel-cnt">${selCount} вибрано</span>
-                        </div>
-                        <div class="rfm-sub">Позначте сторінки-колекції, до яких належить цей документ</div>
-                        <div>
-                            <div class="rfm-search search-clear-wrap">
-                                <i class="fa-solid fa-magnifying-glass"></i>
-                                <input type="text" placeholder="Пошук сторінок-колекцій" oninput="RedFolderPage._filterPages(this.value)">
-                                <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
-                            </div>
-                            <div class="rfm-chk-list" id="rf-chk-list">
-                                ${allPageCheckboxes}
-                            </div>
-                        </div>
-                    </div>
-
                 </div>
 
                 <!-- ── Right: tips ────────────────────────── -->
@@ -934,10 +902,6 @@ const RedFolderPage = {
                     <div class="rfm-tip">
                         <div class="rfm-tip-title">Коментар</div>
                         <div class="rfm-tip-text">Додайте пояснення або примітки для отримувачів (за потреби).</div>
-                    </div>
-                    <div class="rfm-tip">
-                        <div class="rfm-tip-title">Пов'язані матеріали</div>
-                        <div class="rfm-tip-text">Оберіть сторінки-колекції, до яких відноситься цей документ.</div>
                     </div>
                     <div class="rfm-info">
                         <i class="fa-solid fa-circle-info"></i>
@@ -992,29 +956,13 @@ const RedFolderPage = {
         document.getElementById('rf-icon-drop').style.display = 'none';
     },
 
-    _filterPages(q) {
-        const list = document.getElementById('rf-chk-list');
-        if (!list) return;
-        const lq = q.toLowerCase();
-        list.querySelectorAll('.rf-page-chk-row').forEach(row => {
-            row.style.display = row.textContent.toLowerCase().includes(lq) ? '' : 'none';
-        });
-    },
-
-    _updateSelCount() {
-        const cnt = document.querySelectorAll('.rf-page-chk:checked').length;
-        const el = document.getElementById('rf-sel-cnt');
-        if (el) el.textContent = cnt + ' вибрано';
-    },
-
     async _save(id) {
         const title = Dom.val('rf-inp-title').trim();
         const responsible = Dom.val('rf-inp-responsible').trim();
         const icon = document.getElementById('rf-inp-icon')?.value || null;
-        const page_ids = Array.from(document.querySelectorAll('.rf-page-chk:checked')).map(c => c.value);
         const tov_text = document.getElementById('rf-inp-tov')?.value.trim() || null;
         if (!title) { Toast.warning('Заповніть назву документу'); return; }
-        const fields = { title, responsible, icon: icon || null, page_ids, tov_text };
+        const fields = { title, responsible, icon: icon || null, tov_text };
         try {
             Loader.show();
             if (id) {
@@ -1023,7 +971,7 @@ const RedFolderPage = {
             } else {
                 const maxNum = this._items.length ? Math.max(...this._items.map(i => i.number)) : 0;
                 const tabId = this._selectedTab || null;
-                const newItem = await API.redFolderItems.create({ ...fields, number: maxNum + 1, tab_id: tabId });
+                const newItem = await API.redFolderItems.create({ ...fields, page_ids: [], number: maxNum + 1, tab_id: tabId });
                 this._selectedItem = newItem?.id || null;
             }
             Modal.close();
@@ -1034,6 +982,142 @@ const RedFolderPage = {
         } finally {
             Loader.hide();
         }
+    },
+
+    // ── Пов'язані матеріали (сторінки-колекції) ─────────────────────────
+    // Клікабельні картки замість чекбоксів + живі чіпи вибраного вгорі —
+    // адмін одразу бачить прев'ю того, що з'явиться під документом, без
+    // потреби прокручувати весь список і шукати галочки.
+
+    _linkedMaterialsModal(id) {
+        const item = this._items.find(x => x.id === id);
+        if (!item) return;
+        this._linkedItemId = id;
+        this._linkedSel    = new Set(item.page_ids != null ? item.page_ids : (item.page_id ? [item.page_id] : []));
+        this._linkedPages  = this._pages;
+        this._linkedFilter = '';
+
+        Modal.open({
+            title: '<i class="fa-solid fa-link" style="color:#ef4444;margin-right:.4rem"></i> Пов\'язані матеріали',
+            body: `
+            <style>
+                .rflm-intro { display:flex;gap:.55rem;align-items:flex-start;padding:.65rem .8rem;border-radius:var(--radius-md);background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.18);margin-bottom:1rem; }
+                .rflm-intro i { color:#ef4444;font-size:.8rem;margin-top:.15rem;flex-shrink:0; }
+                .rflm-intro span { font-size:.78rem;color:var(--text-secondary);line-height:1.5; }
+                .rflm-intro strong { color:var(--text-primary); }
+                .rflm-target { color:#ef4444;font-weight:700; }
+                .rflm-search-wrap { position:relative;margin-bottom:.85rem; }
+                .rflm-search-wrap input { width:100%;height:44px;padding:0 40px;border-radius:12px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.86rem;outline:none;transition:border-color .2s,box-shadow .2s;box-sizing:border-box;font-family:inherit; }
+                .rflm-search-wrap input:focus { border-color:#ef4444;box-shadow:0 0 0 3px rgba(239,68,68,.12); }
+                .rflm-search-wrap input::placeholder { color:var(--text-muted); }
+                .rflm-search-wrap i.fa-magnifying-glass { position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:.8rem;pointer-events:none; }
+                .rflm-list-head { display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem; }
+                .rflm-list-head span:first-child { font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted); }
+                .rflm-count-badge { font-size:.68rem;font-weight:700;padding:.15rem .55rem;border-radius:999px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#ef4444;min-width:16px;text-align:center; }
+                .rflm-chips-wrap { margin-bottom:1rem; }
+                .rflm-chips { display:flex;flex-wrap:wrap;gap:.4rem; }
+                .rflm-chip { display:inline-flex;align-items:center;gap:.35rem;padding:.3rem .4rem .3rem .7rem;border-radius:999px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#ef4444;font-size:.76rem;font-weight:600;animation:rflmPop .18s cubic-bezier(.4,0,.2,1); }
+                .rflm-chip button { border:none;background:rgba(239,68,68,.18);color:#ef4444;width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:.55rem;flex-shrink:0;transition:background .15s,color .15s;padding:0; }
+                .rflm-chip button:hover { background:#ef4444;color:#fff; }
+                .rflm-chips-empty { display:flex;align-items:center;gap:.4rem;font-size:.78rem;color:var(--text-muted);font-style:italic; }
+                @keyframes rflmPop { from{opacity:0;transform:scale(.7)} to{opacity:1;transform:scale(1)} }
+                .rflm-list { display:flex;flex-direction:column;gap:.4rem;overflow-y:auto;padding:2px 2px 2px 0; }
+                .rflm-card { display:flex;align-items:center;gap:.7rem;padding:.6rem .75rem;border:1.5px solid var(--border);border-radius:var(--radius-md);background:var(--bg-raised);cursor:pointer;transition:border-color .15s,background .15s,transform .1s;animation:rflmIn .22s cubic-bezier(.4,0,.2,1) backwards;animation-delay:calc(var(--i,0) * 25ms); }
+                .rflm-card:hover { border-color:rgba(239,68,68,.5);background:rgba(239,68,68,.05); }
+                .rflm-card:active { transform:scale(.99); }
+                .rflm-card.selected { border-color:#ef4444;background:rgba(239,68,68,.08); }
+                .rflm-card-icon { width:30px;height:30px;border-radius:8px;background:rgba(239,68,68,.12);color:#ef4444;display:flex;align-items:center;justify-content:center;font-size:.8rem;flex-shrink:0; }
+                .rflm-card-title { flex:1;min-width:0;font-size:.86rem;font-weight:500;color:var(--text-primary);word-break:break-word; }
+                .rflm-card-check { width:20px;height:20px;border-radius:6px;border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;color:transparent;font-size:.62rem;transition:all .15s;flex-shrink:0; }
+                .rflm-card.selected .rflm-card-check { background:#ef4444;border-color:#ef4444;color:#fff; }
+                .rflm-empty-list { text-align:center;padding:2rem 1rem;color:var(--text-muted);font-size:.85rem;display:flex;flex-direction:column;align-items:center;gap:.5rem; }
+                .rflm-empty-list i { font-size:1.4rem;opacity:.5; }
+                @keyframes rflmIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+                @media (prefers-reduced-motion: reduce) { .rflm-card, .rflm-chip { animation:none; } }
+            </style>
+            <div class="rflm-intro">
+                <i class="fa-solid fa-circle-info"></i>
+                <span><strong>Навіщо це?</strong> Позначені сторінки-колекції з'являться швидкими посиланнями під документом <span class="rflm-target">«${Fmt.esc(item.title)}»</span> — співробітник перейде до них одним кліком.</span>
+            </div>
+            <div class="rflm-search-wrap">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" placeholder="Пошук сторінок-колекцій…" autocomplete="off" oninput="RedFolderPage._filterLinkedPages(this.value)">
+            </div>
+            <div class="rflm-chips-wrap" id="rflm-chips-wrap"></div>
+            <div class="rflm-list-head">
+                <span>Доступні сторінки-колекції</span>
+                <span class="rflm-count-badge" id="rflm-count-badge"></span>
+            </div>
+            <div class="rflm-list" id="rflm-list"></div>`,
+            footer: `
+                <button class="btn btn-ghost btn-sm" onclick="Modal.close()">Скасувати</button>
+                <button class="btn btn-sm" style="background:linear-gradient(135deg,#ef4444,#b91c1c);color:#fff;border:none" onclick="RedFolderPage._saveLinkedMaterials()">
+                    <i class="fa-solid fa-check"></i> Зберегти
+                </button>`
+        });
+        this._renderLinkedList();
+        this._renderLinkedChips();
+    },
+
+    _renderLinkedList() {
+        const list = document.getElementById('rflm-list');
+        if (!list) return;
+        if (!this._linkedPages.length) {
+            list.innerHTML = `<div class="rflm-empty-list"><i class="fa-regular fa-folder-open"></i><div>Немає доступних сторінок-колекцій</div></div>`;
+            return;
+        }
+        list.innerHTML = this._linkedPages.map((p, i) => {
+            const sel = this._linkedSel.has(p.id);
+            return `
+            <div class="rflm-card${sel ? ' selected' : ''}" data-id="${p.id}" data-title="${Fmt.esc(p.title.toLowerCase())}" style="--i:${i}" onclick="RedFolderPage._toggleLinkedPage('${p.id}')">
+                <span class="rflm-card-icon"><i class="fa-solid fa-layer-group"></i></span>
+                <span class="rflm-card-title">${Fmt.esc(p.title)}</span>
+                <span class="rflm-card-check"><i class="fa-solid fa-check"></i></span>
+            </div>`;
+        }).join('');
+        if (this._linkedFilter) this._filterLinkedPages(this._linkedFilter);
+    },
+
+    _renderLinkedChips() {
+        const wrap  = document.getElementById('rflm-chips-wrap');
+        const badge = document.getElementById('rflm-count-badge');
+        if (badge) badge.textContent = this._linkedSel.size || '0';
+        if (!wrap) return;
+        if (!this._linkedSel.size) {
+            wrap.innerHTML = `<div class="rflm-chips-empty"><i class="fa-regular fa-hand-pointer"></i> Ще нічого не вибрано — натисніть на картку нижче</div>`;
+            return;
+        }
+        const chips = [...this._linkedSel].map(pid => {
+            const p = this._linkedPages.find(x => x.id === pid);
+            return `<span class="rflm-chip">${Fmt.esc(p?.title || '—')}<button type="button" onclick="event.stopPropagation();RedFolderPage._toggleLinkedPage('${pid}')" title="Прибрати"><i class="fa-solid fa-xmark"></i></button></span>`;
+        }).join('');
+        wrap.innerHTML = `<div class="rflm-chips">${chips}</div>`;
+    },
+
+    _toggleLinkedPage(id) {
+        if (this._linkedSel.has(id)) this._linkedSel.delete(id); else this._linkedSel.add(id);
+        document.querySelector(`.rflm-card[data-id="${id}"]`)?.classList.toggle('selected', this._linkedSel.has(id));
+        this._renderLinkedChips();
+    },
+
+    _filterLinkedPages(q) {
+        this._linkedFilter = q;
+        const term = q.toLowerCase();
+        document.querySelectorAll('#rflm-list .rflm-card').forEach(card => {
+            card.style.display = card.dataset.title.includes(term) ? '' : 'none';
+        });
+    },
+
+    async _saveLinkedMaterials() {
+        const id = this._linkedItemId;
+        const page_ids = [...(this._linkedSel || [])];
+        try {
+            Loader.show();
+            await API.redFolderItems.update(id, { page_ids });
+            Modal.close();
+            Toast.success('Пов\'язані матеріали оновлено');
+            await this._load();
+        } catch(e) { Toast.error('Помилка', e.message); } finally { Loader.hide(); }
     },
 
     async _moveItem(id, dir) {

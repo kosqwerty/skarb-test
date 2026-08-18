@@ -19,7 +19,6 @@ const ResourcesPage = {
     _pendingResource: null,
     _pendingDownloadFile: false,
     _kbViewMode: localStorage.getItem('kb_view') || 'grid',
-    _docsViewMode: localStorage.getItem('docs_view') || 'list',
     _kbSort: 'newest',
     _kbTypeFilter: 'all',
     _kbCatFilter: 'all',
@@ -29,6 +28,7 @@ const ResourcesPage = {
     _docsSort: 'priority',
     _docsTreeStatus: '',
     _docsTreeTov: '',
+    _docsShowAll: false,
     _allDovirenosti: [],
     _myDovirenosti: [],
 
@@ -459,6 +459,84 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
         }
     },
 
+    _ensureDocsTableStyles() {
+        if (document.getElementById('docs-tree-styles')) return;
+        const st = document.createElement('style');
+        st.id = 'docs-tree-styles';
+        st.textContent = `
+            .dtl-toolbar { display:flex;gap:.6rem;flex-wrap:nowrap;align-items:center;margin-bottom:.7rem }
+            .dtl-sel { width:220px;flex-shrink:0;padding:.6rem .8rem;border-radius:var(--radius-md);border:1px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.82rem;font-family:inherit;outline:none }
+            .dtl-chip-row { display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:1rem }
+            .dtl-chip { display:inline-flex;align-items:center;gap:.35rem;padding:.4rem .8rem;border-radius:999px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-secondary);font-size:.8rem;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s }
+            .dtl-chip:hover { border-color:var(--primary);color:var(--text-primary) }
+            .dtl-chip .n { font-size:.68rem;opacity:.75 }
+            .dtl-chip.on { border-color:var(--primary);background:rgba(99,102,241,.14);color:var(--primary) }
+            .dtl-chip.unread { border-color:rgba(239,68,68,.35) }
+            .dtl-chip.unread .dot { width:6px;height:6px;border-radius:50%;background:#ef4444;display:inline-block }
+            .dtl-reset { display:inline-flex;align-items:center;gap:.3rem;padding:.4rem .7rem;border-radius:999px;border:1.5px dashed var(--border);background:transparent;color:#ef4444;font-size:.78rem;font-weight:600;cursor:pointer;font-family:inherit;flex-shrink:0;white-space:nowrap }
+            .dtl-reset:hover { border-color:#ef4444;background:rgba(239,68,68,.06) }
+            .dtl-tbl-wrap { border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;background:var(--bg-surface) }
+            .dtl-tbl-wrap table { width:100%;border-collapse:collapse }
+            .dtl-tbl-wrap thead th { text-align:center;font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);padding:.65rem .9rem;border-bottom:1px solid var(--border);background:var(--bg-raised);white-space:nowrap }
+            .dtl-tbl-wrap thead th.sortable { cursor:pointer;user-select:none }
+            .dtl-tbl-wrap thead th.sortable .sort-ic { margin-left:.3rem;font-size:.6rem;opacity:.35 }
+            .dtl-tbl-wrap thead th.sorted { color:var(--primary) }
+            .dtl-tbl-wrap thead th.sorted .sort-ic { opacity:1 }
+            .dtl-tbl-wrap thead th.dtl-col-fit { text-align:center }
+            .dtl-row { border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s }
+            .dtl-row:last-child { border-bottom:none }
+            .dtl-row:hover { background:var(--bg-hover) }
+            .dtl-row td { padding:.6rem .9rem;font-size:.83rem;vertical-align:middle }
+            .dtl-td-doc { display:flex;align-items:center;gap:.65rem;min-width:420px }
+            .dtl-col-doc { width:45% }
+            .dtl-doc-ic { width:34px;height:34px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.85rem }
+            .dtl-doc-title { font-weight:700;color:var(--text-primary);line-height:1.3;display:flex;align-items:center;gap:.4rem;flex-wrap:wrap }
+            .dtl-doc-desc { font-size:.72rem;color:var(--text-muted);margin-top:2px;max-width:540px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
+            .dtl-type-pill { display:inline-flex;align-items:center;gap:.35rem;font-size:.76rem;font-weight:600;color:var(--text-secondary);white-space:nowrap }
+            .dtl-type-pill .sw { width:7px;height:7px;border-radius:50%;flex-shrink:0 }
+            .dtl-tov { font-size:.76rem;color:var(--text-secondary) }
+            .dtl-col-fit { width:165px;white-space:nowrap;text-align:center }
+            .dtl-col-type { width:150px;white-space:nowrap }
+            .dtl-status { display:flex;flex-direction:column;align-items:center;gap:.2rem;white-space:nowrap }
+            .dtl-row-actions { display:flex;gap:.3rem;justify-content:flex-end }
+            .dtl-icon-btn { width:28px;height:28px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text-muted);display:inline-flex;align-items:center;justify-content:center;font-size:.75rem;cursor:pointer;text-decoration:none }
+            .dtl-icon-btn:hover { border-color:var(--primary);color:var(--primary) }
+
+            /* ── Status detail modal — sectioned layout ─────────────── */
+            .stm-sec { display:flex;flex-direction:column;gap:.6rem;padding:.9rem 1rem;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--bg-raised) }
+            .stm-sec-hdr { display:flex;align-items:center;gap:.55rem }
+            .stm-ico { width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:.75rem;flex-shrink:0 }
+            .stm-sec-title { font-size:.82rem;font-weight:700;color:var(--text-primary) }
+            .stm-pct { margin-left:auto;font-size:1.05rem;font-weight:800 }
+            .stm-bar { background:var(--bg-base);border-radius:6px;height:8px;overflow:hidden }
+            .stm-bar-fill { height:100%;transition:width .4s }
+            .stm-stat-row { display:flex;gap:.5rem;flex-wrap:wrap }
+            .stm-stat { display:inline-flex;align-items:center;gap:.35rem;font-size:.76rem;font-weight:600;padding:.3rem .65rem;border-radius:999px;border:1px solid transparent }
+            .stm-stat b { font-weight:800 }
+            .stm-stat.ok { background:rgba(16,185,129,.1);color:#10b981;border-color:rgba(16,185,129,.25) }
+            .stm-stat.pending { background:var(--bg-base);color:var(--text-muted);border-color:var(--border) }
+            .stm-stat.overdue { background:rgba(239,68,68,.1);color:#ef4444;border-color:rgba(239,68,68,.25) }
+            .stm-count-badge { margin-left:auto;font-size:.68rem;font-weight:700;padding:.15rem .55rem;border-radius:999px;background:var(--bg-base);color:var(--text-muted);border:1px solid var(--border) }
+            .stm-search { position:relative }
+            .stm-search input { width:100%;height:40px;padding:0 2.4rem;border-radius:var(--radius-md);border:1px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.84rem;font-family:inherit;outline:none;box-sizing:border-box;transition:border-color .15s }
+            .stm-search input:focus { border-color:var(--primary) }
+            .stm-search i.fa-magnifying-glass { position:absolute;left:.8rem;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:.8rem }
+            .stm-list { display:flex;flex-direction:column;gap:.4rem;max-height:360px;overflow-y:auto;padding-right:.2rem }
+            .stm-row { display:flex;align-items:center;gap:.7rem;padding:.55rem .7rem;border:1px solid var(--border);border-left:3px solid transparent;border-radius:var(--radius-md);background:var(--bg-surface);transition:background .1s }
+            .stm-row:hover { background:var(--bg-hover) }
+            .stm-row.acked { border-left-color:#10b981 }
+            .stm-row.overdue { border-left-color:#ef4444 }
+            .stm-row.soon { border-left-color:#f59e0b }
+            .stm-avatar { width:32px;height:32px;border-radius:50%;background:rgba(99,102,241,.12);color:var(--primary);display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:800;flex-shrink:0 }
+            .stm-row-body { flex:1;min-width:0 }
+            .stm-row-name { font-size:.85rem;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis }
+            .stm-row-pos { font-size:.72rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis }
+            .stm-row-status { font-size:.78rem;font-weight:600;white-space:nowrap;flex-shrink:0 }
+            .stm-empty { text-align:center;padding:2rem 1rem;color:var(--text-muted);font-size:.85rem }
+        `;
+        document.head.appendChild(st);
+    },
+
     switchTab(tab, el, { skipLoad = false } = {}) {
         if (this._activeTab === tab) return; // повторний клік — нічого не робимо
         this._activeTab = tab;
@@ -478,64 +556,46 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
         this._category = '';
         this._docsTreeStatus = '';
         this._docsTreeTov = '';
+        this._docsShowAll = false;
         document.querySelectorAll('.docs-cat-chip').forEach(b => { b.classList.remove('btn-primary'); b.classList.add('btn-ghost'); });
 
         if (tab === 'list') {
-            if (!document.getElementById('docs-tree-styles')) {
-                const st = document.createElement('style');
-                st.id = 'docs-tree-styles';
-                st.textContent = `
-                    .dt-sidebar { width:270px;flex-shrink:0;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;position:sticky;top:72px }
-                    .dt-sec { border-bottom:1px solid var(--border) }
-                    .dt-sec:last-child { border-bottom:none }
-                    .dt-sec-title { padding:.5rem .85rem;font-size:.83rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);background:var(--bg-raised) }
-                    .dt-item { display:flex;align-items:center;gap:.45rem;padding:.42rem .85rem;font-size:.82rem;color:var(--text-secondary);cursor:pointer;border:none;background:transparent;width:100%;text-align:left;font-family:inherit;transition:background .1s,color .1s }
-                    .dt-item:hover { background:rgba(99,102,241,.07);color:var(--text-primary) }
-                    .dt-item.active { background:rgba(99,102,241,.12);color:var(--primary);font-weight:600 }
-                    .dt-item i { font-size:1.1rem;width:16px;text-align:center;flex-shrink:0 }
-                    .dt-ic-x { display:none }
-                    .dt-item.active.dt-removable .dt-ic { display:none }
-                    .dt-item.active.dt-removable .dt-ic-x { display:inline-block;color:#ef4444 }
-                    .dt-count { margin-left:auto;font-size:.63rem;background:var(--bg-raised);color:var(--text-muted);padding:.1rem .35rem;border-radius:4px;border:1px solid var(--border) }
-                    .dt-item.active .dt-count { background:rgba(99,102,241,.15);color:var(--primary);border-color:rgba(99,102,241,.3) }
-                    .dt-reset { display:none;width:100%;padding:.5rem .85rem;font-size:.75rem;font-weight:600;color:#ef4444;background:transparent;border:none;border-top:1px solid var(--border);cursor:pointer;text-align:left;font-family:inherit;transition:background .1s }
-                    .dt-reset:hover { background:rgba(239,68,68,.06) }
-                    .dt-reset.visible { display:block }
-                    .docs-view-btn { display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:var(--radius-md);border:1px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;transition:all .15s;font-size:.85rem }
-                    .docs-view-btn:hover { border-color:var(--primary);color:var(--primary) }
-                    .docs-view-btn.active { background:var(--primary);border-color:var(--primary);color:#fff }
-                    .resource-list-docs-grid { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem }
-                `;
-                document.head.appendChild(st);
-            }
+            this._ensureDocsTableStyles();
             content.innerHTML = `
-                <div style="display:flex;gap:1rem;align-items:flex-start">
-                    <div class="dt-sidebar" id="docs-filter-sidebar">
-                        <div style="padding:.75rem;text-align:center;color:var(--text-muted);font-size:.98rem"><i class="fa-solid fa-spinner fa-spin"></i></div>
+                <div class="dtl-toolbar">
+                    <div class="search-clear-wrap" style="position:relative;flex:1;min-width:200px;max-width:360px">
+                        <i class="fa-solid fa-magnifying-glass" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:.85rem;pointer-events:none"></i>
+                        <input type="text" id="resource-search" placeholder="Пошук за назвою або описом..." value="${this._search}"
+                               style="width:100%;padding-left:2.1rem;box-sizing:border-box" oninput="ResourcesPage.onSearch(event)">
+                        <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
                     </div>
-                    <div style="flex:1;min-width:0">
-                        <div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem">
-                            <div class="search-clear-wrap" style="position:relative;flex:1;min-width:200px;max-width:360px">
-                                <i class="fa-solid fa-magnifying-glass" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:.85rem;pointer-events:none"></i>
-                                <input type="text" id="resource-search" placeholder="Пошук за назвою або описом..." value="${this._search}"
-                                       style="width:100%;padding-left:2.1rem;box-sizing:border-box" oninput="ResourcesPage.onSearch(event)">
-                                <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
-                            </div>
-                            <select id="docs-sort-sel" onchange="ResourcesPage._docsSetSort(this.value)" style="width:auto">
-                                <option value="priority" ${this._docsSort==='priority'?'selected':''}>🔴 Нові / оновлені першими</option>
-                                <option value="newest" ${this._docsSort==='newest'?'selected':''}>↓ Дата додавання</option>
-                                <option value="name_az" ${this._docsSort==='name_az'?'selected':''}>A → Я назва</option>
-                                <option value="status_asc" ${this._docsSort==='status_asc'?'selected':''}>✅ Ознайомлені першими</option>
-                            </select>
-                            <div style="display:flex;gap:.3rem">
-                                <button class="docs-view-btn${this._docsViewMode==='list'?' active':''}" title="Список" onclick="ResourcesPage._docsSetView('list',this)"><i class="fa-solid fa-list"></i></button>
-                                <button class="docs-view-btn${this._docsViewMode==='grid'?' active':''}" title="2 стовпці" onclick="ResourcesPage._docsSetView('grid',this)"><i class="fa-solid fa-table-columns"></i></button>
-                            </div>
-                        </div>
-                        <div id="resource-list" class="${this._docsViewMode==='grid'?'resource-list-docs-grid':'resource-list-docs'}"></div>
-                        <div id="resources-pagination" style="display:flex;justify-content:center;gap:.5rem;margin-top:1.5rem;margin-bottom:2rem"></div>
+                    <select id="docs-sort-sel" onchange="ResourcesPage._docsSetSort(this.value)" style="width:auto;flex-shrink:0">
+                        <option value="priority" ${this._docsSort==='priority'?'selected':''}>🔴 Нові / оновлені першими</option>
+                        <option value="newest" ${this._docsSort==='newest'?'selected':''}>↓ Дата додавання</option>
+                        <option value="name_az" ${this._docsSort==='name_az'?'selected':''}>A → Я назва</option>
+                        <option value="status_asc" ${this._docsSort==='status_asc'?'selected':''}>✅ Ознайомлені першими</option>
+                    </select>
+                    <div id="docs-facet-sels" style="display:flex;gap:.6rem;flex-shrink:0">
+                        <div style="padding:.6rem;color:var(--text-muted);font-size:.85rem"><i class="fa-solid fa-spinner fa-spin"></i></div>
                     </div>
-                </div>`;
+                </div>
+                <div class="dtl-chip-row" id="docs-cat-chip-row"></div>
+                <div class="dtl-tbl-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th class="sortable dtl-col-doc" onclick="ResourcesPage._docsSetSort('name_az')" data-sort="name_az">Документ <i class="fa-solid fa-arrow-down sort-ic"></i></th>
+                                <th class="sortable dtl-col-type" onclick="ResourcesPage._docsSetSort('type_az')" data-sort="type_az">Тип <i class="fa-solid fa-arrow-down sort-ic"></i></th>
+                                <th class="sortable" onclick="ResourcesPage._docsSetSort('tov_az')" data-sort="tov_az">ТОВ <i class="fa-solid fa-arrow-down sort-ic"></i></th>
+                                <th class="sortable dtl-col-fit" onclick="ResourcesPage._docsSetSort('status_asc')" data-sort="status_asc">Статус <i class="fa-solid fa-arrow-down sort-ic"></i></th>
+                                <th class="sortable dtl-col-fit" onclick="ResourcesPage._docsSetSort('newest')" data-sort="newest">Оновлено <i class="fa-solid fa-arrow-down sort-ic"></i></th>
+                                <th>Дії</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resource-list"></tbody>
+                    </table>
+                </div>
+                <div id="resources-pagination" style="display:flex;justify-content:center;gap:.5rem;margin-top:1.5rem;margin-bottom:2rem"></div>`;
             if (!skipLoad) this.load();
         } else if (tab === 'branch') {
             content.innerHTML = `
@@ -553,40 +613,79 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
         }
     },
 
-    _statusCache: null, // { docs, employees, ackMap }
-    _modalState: { docId: null, filter: 'all', search: '', page: 0 },
+    _statusCache: null, // { docs, employees, allEmps, ackMap, mgrOptions }
+    _statusRaw: null,   // { allDocs, allEmps } — сирі дані, щоб перерендерювати без повторного запиту
+    _modalState: { docId: null, filter: 'all', search: '', page: 0, mgrFilter: 'all' },
     _modalPageSize: 25,
     _renderToken: 0,
 
+    // Рекурсивно збирає всіх підлеглих (прямих і непрямих) заданого керівника
+    _collectDescendants(rootId, allEmps) {
+        const out = [];
+        const queue = [rootId];
+        while (queue.length) {
+            const cur = queue.shift();
+            for (const e of allEmps) {
+                if (e.manager_id === cur) { out.push(e); queue.push(e.id); }
+            }
+        }
+        return out;
+    },
+
     async _renderStatusTab(content) {
         const token = ++this._renderToken;
+        this._ensureDocsTableStyles();
         content.innerHTML = `<div style="display:flex;justify-content:center;padding:3rem"><div class="spinner"></div></div>`;
         try {
-            const isOwner = AppState.isSuperAdmin();
             const [docsRes, allEmps] = await Promise.all([
                 API.resources.getAll({ trackedOnly: true, pageSize: 200 }),
                 API.documentDownloads.getAllEmployees()
             ]);
-            const allDocs = docsRes.data || [];
+            if (token !== this._renderToken) return;
+            this._statusRaw = { allDocs: docsRes.data || [], allEmps };
+            await this._renderStatusContent(content, token);
+        } catch (e) {
+            content.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>${Fmt.esc(e.message)}</h3></div>`;
+        }
+    },
+
+    async _renderStatusContent(content, token) {
+        const { allDocs, allEmps } = this._statusRaw;
+        try {
+            const isOwner = AppState.isSuperAdmin();
             let docs = AppState.canSchedule() ? allDocs : allDocs.filter(r => AccessGroupsPage.checkAccess(r.access_group));
 
-            if (token !== this._renderToken) return;
-
-            let employees = allEmps;
+            // "Моя команда" — усі підлеглі керівника, прямі й непрямі (наприклад,
+            // користувачі підпорядкованого керівника теж входять сюди). Власник
+            // (superadmin) бачить компанію повністю без обмеження по команді.
+            let myTeam = allEmps;
+            let myDirects = [];
+            let mgrOptions = [];
             if (!isOwner) {
                 const myId = AppState.profile.id;
-                const subordinates = allEmps.filter(e => e.manager_id === myId);
-                if (!subordinates.length) {
+                myTeam = this._collectDescendants(myId, allEmps);
+                if (!myTeam.length) {
                     content.innerHTML = `<div class="empty-state"><div class="empty-icon">👤</div><h3>Немає підлеглих</h3><p>Жодного співробітника не призначено до вас як керівника.</p></div>`;
                     return;
                 }
-                employees = subordinates;
+                myDirects = allEmps.filter(e => e.manager_id === myId && e.role !== 'manager');
+                mgrOptions = myTeam.filter(e => e.role === 'manager');
+            } else {
+                mgrOptions = allEmps.filter(e => e.role === 'manager');
+            }
 
-                // Залишаємо тільки документи релевантні для підлеглих:
-                // документ без довіреностей — видний всім,
-                // документ з довіреностями — тільки якщо хоча б один підлеглий має таку довіреність
+            // Фільтр "показати команду конкретного підпорядкованого керівника"
+            // живе в модалці "Деталі" (§ Фільтр), а не тут — таблиця завжди
+            // показує статистику по всій команді.
+            const employees = myTeam;
+
+            if (!isOwner) {
+                // Залишаємо тільки документи релевантні для команди керівника
+                // (усіх підлеглих, а не лише прямих): документ без довіреностей —
+                // видний всім, документ з довіреностями — тільки якщо хоча б
+                // хтось із команди має таку довіреність
                 const subDovIds = new Set(
-                    subordinates.flatMap(e => (e.profile_dovirenosti || []).map(d => d.dovirenost_id))
+                    myTeam.flatMap(e => (e.profile_dovirenosti || []).map(d => d.dovirenost_id))
                 );
                 docs = docs.filter(doc => {
                     const rdovs = doc.resource_dovirenosti || [];
@@ -606,7 +705,8 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
             }
 
             const ackMap = await API.documentDownloads.getAckStatus(docs.map(d => d.id));
-            this._statusCache = { docs, employees, allEmps, ackMap };
+            if (token !== this._renderToken) return;
+            this._statusCache = { docs, employees, allEmps, ackMap, mgrOptions, myDirects, isOwner };
 
             const cards = docs.map(doc => {
                 const acks = ackMap[doc.id] || [];
@@ -641,26 +741,49 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
                     ? `<span style="font-size:.8rem;color:#10b981">✅ Всі ознайомились</span>`
                     : `<span style="font-size:.8rem;color:var(--text-muted)">${notDoneCount} не ознайомились${overdueCount ? ` · <span style="color:#dc2626">🔴 ${overdueCount} прострочено</span>` : ''}</span>`;
 
-                return `<div style="background:var(--bg-raised);border:1px solid var(--border);border-radius:var(--radius-md);padding:.875rem 1rem;display:flex;flex-direction:column;gap:.4rem">
-                    <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap">
-                        <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;flex:1;min-width:0">
-                            <span style="font-weight:600;font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><i class="fa-regular fa-file-pdf"></i> ${Fmt.esc(doc.title)}</span>
-                            ${versionBadge}${deadlineInfo}
+                return `
+                <tr class="dtl-row" onclick="ResourcesPage._openStatusModal('${doc.id}')">
+                    <td>
+                        <div class="dtl-td-doc">
+                            <div class="dtl-doc-ic resource-icon pdf"><i class="fa-regular fa-file-pdf"></i></div>
+                            <div style="min-width:0">
+                                <div class="dtl-doc-title">${Fmt.esc(doc.title)}${versionBadge}</div>
+                            </div>
                         </div>
-                        <div style="display:flex;align-items:center;gap:.75rem;flex-shrink:0">
-                            <span style="font-size:.85rem;color:${countColor};font-weight:700">${ackedCount}/${total}</span>
-                            <button class="btn btn-ghost btn-sm" onclick="ResourcesPage._openStatusModal('${doc.id}')"><i class="fa-solid fa-eye"></i> Деталі</button>
+                    </td>
+                    <td>
+                        <div style="display:flex;align-items:center;gap:.6rem">
+                            <div style="flex:1;min-width:80px;background:var(--bg-base);border-radius:4px;height:6px;overflow:hidden">
+                                <div style="height:100%;width:${pct}%;background:${barColor};transition:width .4s"></div>
+                            </div>
+                            <span style="font-size:.8rem;font-weight:700;color:${countColor};white-space:nowrap">${ackedCount}/${total}</span>
                         </div>
-                    </div>
-                    <div style="background:var(--bg-base);border-radius:4px;height:6px;overflow:hidden">
-                        <div style="height:100%;width:${pct}%;background:${barColor};transition:width .4s"></div>
-                    </div>
-                    <div>${statusLine}</div>
-                </div>`;
+                    </td>
+                    <td class="dtl-col-fit">${statusLine}</td>
+                    <td class="dtl-col-fit">${deadlineInfo || '—'}</td>
+                    <td onclick="event.stopPropagation()" style="text-align:center">
+                        <button class="dtl-icon-btn" title="Деталі" onclick="ResourcesPage._openStatusModal('${doc.id}')"><i class="fa-solid fa-eye"></i></button>
+                    </td>
+                </tr>`;
             }).join('');
 
             if (token !== this._renderToken) return;
-            content.innerHTML = `<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.625rem">${cards}</div>`;
+
+            content.innerHTML = `
+                <div class="dtl-tbl-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th class="dtl-col-doc">Документ</th>
+                                <th>Прогрес</th>
+                                <th class="dtl-col-fit">Статус</th>
+                                <th class="dtl-col-fit">Дедлайн</th>
+                                <th style="width:60px">Дії</th>
+                            </tr>
+                        </thead>
+                        <tbody>${cards}</tbody>
+                    </table>
+                </div>`;
 
             // Автооновлення кожні 30 секунд поки вкладка активна
             clearInterval(ResourcesPage._statusRefreshTimer);
@@ -683,7 +806,7 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
     _openStatusModal(docId) {
         if (!this._statusCache) return;
         const defaultFilter = AppState.isSuperAdmin() ? 'all' : 'acked';
-        this._modalState = { docId, filter: defaultFilter, search: '', page: 0 };
+        this._modalState = { docId, filter: defaultFilter, search: '', page: 0, mgrFilter: 'all' };
         const doc = this._statusCache.docs.find(d => d.id === docId);
         if (!doc) return;
         Modal.open({
@@ -695,8 +818,11 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
     },
 
     _buildStatusModalBody() {
-        const { docId, filter, search, page } = this._modalState;
-        const { docs, employees, allEmps, ackMap } = this._statusCache;
+        const { docId, filter, search, page, mgrFilter } = this._modalState;
+        const { docs, employees: teamEmployees, allEmps, ackMap, mgrOptions, myDirects, isOwner } = this._statusCache;
+        const employees = mgrFilter === 'all' ? teamEmployees
+            : mgrFilter === 'mine' ? myDirects
+            : this._collectDescendants(mgrFilter, allEmps);
         const doc = docs.find(d => d.id === docId);
         const acks = ackMap[docId] || [];
         const ackedMap = {};
@@ -756,29 +882,35 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
 
         // Row HTML
         const rowsHtml = pageRows.map(r => {
-            let statusHtml;
+            let statusHtml, rowClass;
             if (r.status === 'acked') {
-                statusHtml = `<span style="color:#10b981;font-size:.8rem;white-space:nowrap">✅ ${Fmt.dateShort(r.ack.at)}</span>`;
+                rowClass = 'acked';
+                statusHtml = `<span style="color:#10b981"><i class="fa-solid fa-check"></i> ${Fmt.dateShort(r.ack.at)}</span>`;
             } else if (r.status === 'overdue') {
-                statusHtml = `<span style="color:#dc2626;font-size:.8rem;white-space:nowrap">🔴 Прострочено</span>`;
+                rowClass = 'overdue';
+                statusHtml = `<span style="color:#ef4444"><i class="fa-solid fa-triangle-exclamation"></i> Прострочено</span>`;
             } else if (r.status === 'soon') {
+                rowClass = 'soon';
                 const d = Math.ceil((deadlineMs - Date.now()) / 86400000);
-                statusHtml = `<span style="color:#d97706;font-size:.8rem;white-space:nowrap">⏰ ${d} ${d === 1 ? 'день' : 'дні'}</span>`;
+                statusHtml = `<span style="color:#f59e0b"><i class="fa-solid fa-hourglass-half"></i> ${d} ${d === 1 ? 'день' : 'дні'}</span>`;
             } else {
-                statusHtml = `<span style="color:var(--text-muted);font-size:.8rem;white-space:nowrap">— Не ознайомлено</span>`;
+                rowClass = '';
+                statusHtml = `<span style="color:var(--text-muted)">— Не ознайомлено</span>`;
             }
-            return `<div style="display:flex;align-items:center;padding:.5rem .25rem;border-bottom:1px solid var(--border);gap:.75rem">
-                <div style="flex:1;min-width:0">
-                    <div style="font-size:.875rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Fmt.esc(r.full_name || '—')}</div>
-                    ${r.job_position ? `<div style="font-size:.75rem;color:var(--text-muted)">${Fmt.esc(r.job_position)}</div>` : ''}
+            return `
+            <div class="stm-row ${rowClass}">
+                <div class="stm-avatar">${Fmt.esc(Fmt.initials(r.full_name || '?'))}</div>
+                <div class="stm-row-body">
+                    <div class="stm-row-name">${Fmt.esc(r.full_name || '—')}</div>
+                    ${r.job_position ? `<div class="stm-row-pos">${Fmt.esc(r.job_position)}</div>` : ''}
                 </div>
-                ${statusHtml}
+                <div class="stm-row-status">${statusHtml}</div>
             </div>`;
-        }).join('') || `<div style="padding:1.5rem;text-align:center;color:var(--text-muted)">Нічого не знайдено</div>`;
+        }).join('') || `<div class="stm-empty"><i class="fa-solid fa-magnifying-glass" style="font-size:1.4rem;opacity:.3;display:block;margin-bottom:.5rem"></i>Нічого не знайдено</div>`;
 
         // Pagination HTML
         const pagesHtml = totalPages > 1 ? `
-            <div style="display:flex;align-items:center;justify-content:center;gap:.5rem;margin-top:.75rem;flex-wrap:wrap">
+            <div style="display:flex;align-items:center;justify-content:center;gap:.5rem;margin-top:.2rem;flex-wrap:wrap">
                 <button class="btn btn-ghost btn-sm" ${curPage === 0 ? 'disabled' : ''}
                     onclick="ResourcesPage._statusModalPage(${curPage - 1})" style="display:inline-flex;align-items:center;gap:.35rem"><i class="fa-solid fa-angle-left"></i></button>
                 <span style="font-size:.8rem;color:var(--text-muted)">${curPage + 1} / ${totalPages}</span>
@@ -786,39 +918,77 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
                     onclick="ResourcesPage._statusModalPage(${curPage + 1})">›</button>
             </div>` : '';
 
-        const tabStyle = (f) => `btn btn-sm ${filter === f ? 'btn-primary' : 'btn-ghost'}`;
+        const chipCls = (f) => `dtl-chip${filter === f ? ' on' : ''}`;
 
         return `
-            <div style="display:flex;flex-direction:column;gap:.875rem">
-                <div style="display:flex;align-items:center;gap:1rem">
-                    <div style="flex:1;background:var(--bg-base);border-radius:6px;height:8px;overflow:hidden">
-                        <div style="height:100%;width:${pct}%;background:${barColor};transition:width .4s"></div>
+            <div style="display:flex;flex-direction:column;gap:.9rem">
+
+                <!-- §1 Прогрес -->
+                <div class="stm-sec">
+                    <div class="stm-sec-hdr">
+                        <span class="stm-ico" style="background:rgba(16,185,129,.12);color:#10b981"><i class="fa-solid fa-chart-simple"></i></span>
+                        <span class="stm-sec-title">Прогрес ознайомлення</span>
+                        <span class="stm-pct" style="color:${barColor}">${pct}%</span>
                     </div>
-                    <span style="font-size:.875rem;font-weight:700;color:${barColor};white-space:nowrap">${counts.acked}/${rows.length} (${pct}%)</span>
-                </div>
-                <div style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;flex-wrap:wrap">
-                    <div style="display:flex;gap:.4rem;flex-wrap:wrap">
-                        <button class="${tabStyle('all')}" onclick="ResourcesPage._statusModalFilter('all')">Всі (${counts.all})</button>
-                        <button class="${tabStyle('acked')}" onclick="ResourcesPage._statusModalFilter('acked')">✅ Ознайомились (${counts.acked})</button>
-                        <button class="${tabStyle('pending')}" onclick="ResourcesPage._statusModalFilter('pending')">⏳ Не ознайомились (${counts.all - counts.acked})</button>
-                        ${counts.overdue ? `<button class="${tabStyle('overdue')}" onclick="ResourcesPage._statusModalFilter('overdue')">🔴 Прострочені (${counts.overdue})</button>` : ''}
+                    <div class="stm-bar"><div class="stm-bar-fill" style="width:${pct}%;background:${barColor}"></div></div>
+                    <div class="stm-stat-row">
+                        <span class="stm-stat ok"><i class="fa-solid fa-check"></i> Ознайомились <b>${counts.acked}</b></span>
+                        <span class="stm-stat pending"><i class="fa-solid fa-hourglass-half"></i> Не ознайомились <b>${counts.all - counts.acked}</b></span>
+                        ${counts.overdue ? `<span class="stm-stat overdue"><i class="fa-solid fa-triangle-exclamation"></i> Прострочено <b>${counts.overdue}</b></span>` : ''}
                     </div>
-                    <button class="btn btn-ghost btn-sm" onclick="ResourcesPage._exportStatusList()" style="white-space:nowrap"><i class="fa-solid fa-download"></i> Експорт</button>
                 </div>
-                <div class="search-clear-wrap" style="width:100%">
-                    <input type="text" placeholder="Пошук за іменем або посадою…" value="${search}"
-                        style="width:100%" oninput="ResourcesPage._statusModalSearch(this.value)">
-                    <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
+
+                <!-- §2 Фільтр і пошук -->
+                <div class="stm-sec">
+                    <div class="stm-sec-hdr">
+                        <span class="stm-ico" style="background:rgba(99,102,241,.12);color:#6366f1"><i class="fa-solid fa-filter"></i></span>
+                        <span class="stm-sec-title">Фільтр і пошук</span>
+                        <button class="dtl-icon-btn" title="Експорт у файл" onclick="ResourcesPage._exportStatusList()" style="margin-left:auto"><i class="fa-solid fa-download"></i></button>
+                    </div>
+                    ${mgrOptions.length ? `
+                    <select class="dtl-sel" style="width:100%" onchange="ResourcesPage._statusModalSetMgrFilter(this.value)">
+                        <option value="all"${mgrFilter==='all'?' selected':''}>👥 ${isOwner ? 'Всі користувачі' : 'Мій блок'} (${teamEmployees.length})</option>
+                        ${myDirects.length ? `<option value="mine"${mgrFilter==='mine'?' selected':''}>🙋 Мої експерти (${myDirects.length})</option>` : ''}
+                        ${mgrOptions.map(m => {
+                            const cnt = this._collectDescendants(m.id, allEmps).length;
+                            return `<option value="${m.id}"${mgrFilter===m.id?' selected':''}>${Fmt.esc(m.full_name)} (${cnt})</option>`;
+                        }).join('')}
+                    </select>` : ''}
+                    <div class="dtl-chip-row" style="margin-bottom:0">
+                        <button type="button" class="${chipCls('all')}" onclick="ResourcesPage._statusModalFilter('all')">Всі <span class="n">${counts.all}</span></button>
+                        <button type="button" class="${chipCls('acked')}" onclick="ResourcesPage._statusModalFilter('acked')"><i class="fa-solid fa-check" style="font-size:.65rem;color:#10b981;margin-right:.15rem"></i>Ознайомились <span class="n">${counts.acked}</span></button>
+                        <button type="button" class="${chipCls('pending')}" onclick="ResourcesPage._statusModalFilter('pending')"><i class="fa-solid fa-hourglass-half" style="font-size:.65rem;color:var(--text-muted);margin-right:.15rem"></i>Не ознайомились <span class="n">${counts.all - counts.acked}</span></button>
+                        ${counts.overdue ? `<button type="button" class="${chipCls('overdue')}" onclick="ResourcesPage._statusModalFilter('overdue')"><i class="fa-solid fa-triangle-exclamation" style="font-size:.65rem;color:#ef4444;margin-right:.15rem"></i>Прострочені <span class="n">${counts.overdue}</span></button>` : ''}
+                    </div>
+                    <div class="stm-search">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input type="text" placeholder="Пошук за іменем або посадою…" value="${Fmt.esc(search)}" oninput="ResourcesPage._statusModalSearch(this.value)">
+                    </div>
                 </div>
-                <div style="max-height:400px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-md);padding:0 .5rem">
-                    ${rowsHtml}
+
+                <!-- §3 Список співробітників -->
+                <div class="stm-sec">
+                    <div class="stm-sec-hdr">
+                        <span class="stm-ico" style="background:rgba(245,158,11,.12);color:#f59e0b"><i class="fa-solid fa-users"></i></span>
+                        <span class="stm-sec-title">Співробітники</span>
+                        <span class="stm-count-badge">${filtered.length}</span>
+                    </div>
+                    <div class="stm-list">${rowsHtml}</div>
+                    ${pagesHtml}
                 </div>
-                ${pagesHtml}
+
             </div>`;
     },
 
     _statusModalFilter(filter) {
         this._modalState.filter = filter;
+        this._modalState.page = 0;
+        const body = document.getElementById('modal-body');
+        if (body) body.innerHTML = this._buildStatusModalBody();
+    },
+
+    _statusModalSetMgrFilter(val) {
+        this._modalState.mgrFilter = val;
         this._modalState.page = 0;
         const body = document.getElementById('modal-body');
         if (body) body.innerHTML = this._buildStatusModalBody();
@@ -838,8 +1008,11 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
     },
 
     _exportStatusList() {
-        const { docId, filter, search } = this._modalState;
-        const { docs, employees, ackMap } = this._statusCache;
+        const { docId, filter, search, mgrFilter } = this._modalState;
+        const { docs, employees: teamEmployees, allEmps, ackMap, myDirects } = this._statusCache;
+        const employees = mgrFilter === 'all' ? teamEmployees
+            : mgrFilter === 'mine' ? myDirects
+            : this._collectDescendants(mgrFilter, allEmps);
         const doc = docs.find(d => d.id === docId);
         if (!doc) return;
 
@@ -956,16 +1129,15 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
 
     _docsSetSort(val) {
         this._docsSort = val;
+        const sel = document.getElementById('docs-sort-sel');
+        if (sel) sel.value = val;
         this.load();
     },
 
-    _docsSetView(mode, btn) {
-        this._docsViewMode = mode;
-        localStorage.setItem('docs_view', mode);
-        document.querySelectorAll('.docs-view-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        const list = document.getElementById('resource-list');
-        if (list) list.className = mode === 'grid' ? 'resource-list-docs-grid' : 'resource-list-docs';
+    _syncSortHeaders() {
+        document.querySelectorAll('.dtl-tbl-wrap thead th.sortable').forEach(th => {
+            th.classList.toggle('sorted', th.dataset.sort === this._docsSort);
+        });
     },
 
     _docsResetFilters() {
@@ -988,24 +1160,38 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
         this.load();
     },
 
-    _renderDocsFilterSidebar(allDocs) {
-        const sb = document.getElementById('docs-filter-sidebar');
-        if (!sb) return;
+    _docsSetStatusSel(val) {
+        this._docsTreeStatus = val;
+        this._page = 0;
+        this.load();
+    },
 
-        // Category counts (all main doc categories)
-        const catDefs = [
-            { key: 'Наказ',          label: 'Накази',         icon: 'fa-gavel',         color: '#ef4444' },
-            { key: 'Розпорядження',  label: 'Розпорядження',  icon: 'fa-file-contract', color: '#f59e0b' },
-            { key: 'Список НПА',     label: 'Список НПА',     icon: 'fa-book',          color: '#6366f1' },
-        ];
+    _docsSetTovSel(val) {
+        this._docsTreeTov = val;
+        this._page = 0;
+        this.load();
+    },
+
+    // Category color/icon lookup shared between the filter chips and the
+    // "Тип" column of the docs table.
+    _docCatDefs: [
+        { key: 'Наказ',          label: 'Накази',         icon: 'fa-gavel',         color: '#ef4444' },
+        { key: 'Розпорядження',  label: 'Розпорядження',  icon: 'fa-file-contract', color: '#f59e0b' },
+        { key: 'Список НПА',     label: 'Список НПА',     icon: 'fa-book',          color: '#6366f1' },
+    ],
+
+    _renderDocsFilters(allDocs) {
+        const chipWrap   = document.getElementById('docs-cat-chip-row');
+        const facetWrap  = document.getElementById('docs-facet-sels');
+        if (!chipWrap || !facetWrap) return;
+
+        const catDefs = this._docCatDefs;
         const otherCats = [...new Set(allDocs.map(r => r.category).filter(c => c && !catDefs.find(d => d.key === c) && c.toLowerCase() !== 'general' && c.toLowerCase() !== 'реєстри нпа' && c.toLowerCase() !== 'реєстри' && c.toLowerCase() !== 'анкета'))].sort();
 
-        // Status counts — лише трековані документи (нетраковані теж
-        // показують "Ознайомлено" на самій картці, але в цей розділ не
-        // потрапляють)
-        const trackedDocs = allDocs.filter(r => r.is_tracked_download);
-        const unreadCount = trackedDocs.filter(r => { const dl = this._myDownloads[r.id]; return !dl || r.doc_version > (dl.version||1); }).length;
-        const readCount   = trackedDocs.length - unreadCount;
+        // Status counts — за тим самим статусом, що видно на бейджі кожного
+        // документа в таблиці (усі документи, не лише "трековані").
+        const unreadCount = allDocs.filter(r => { const dl = this._myDownloads[r.id]; return !dl || r.doc_version > (dl.version||1); }).length;
+        const readCount   = allDocs.length - unreadCount;
 
         // TOV counts
         const tovMap = {};
@@ -1026,54 +1212,45 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
         const _ptzt    = _allEntries.filter(([k]) =>  _isPtZt(k)).sort((a,b) => a[0].localeCompare(b[0], 'uk'));
         const tovEntries = [..._regular, ..._ptzt];
 
-        const mkItem = (isActive, onclick, iconHtml, label, count, removable = true) => `
-            <button class="dt-item${isActive ? ' active' : ''}${removable ? ' dt-removable' : ''}" onclick="${onclick}">
-                <i class="fa-solid fa-xmark dt-ic-x" style="width:13px;text-align:center;font-size:.7rem"></i>
-                <span class="dt-ic">${iconHtml}</span>
-                ${label}
-                <span class="dt-count">${count}</span>
-            </button>`;
+        // ── Category chip row ──
+        const mkChip = (isActive, onclick, iconHtml, label, count) => `
+            <button type="button" class="dtl-chip${isActive ? ' on' : ''}" onclick="${onclick}">${iconHtml}${Fmt.esc(label)} <span class="n">${count}</span></button>`;
 
-        const catItems = [
-            mkItem(!this._category, "ResourcesPage._setCatFilter('',null)",
-                `<i class="fa-solid fa-layer-group" style="color:var(--primary)"></i>`, 'Всі', allDocs.length, false),
+        const catChips = [
+            mkChip(!this._category, "ResourcesPage._setCatFilter('',null)", '', 'Всі', allDocs.length),
             ...catDefs.map(c => {
                 const cnt = allDocs.filter(r => r.category === c.key).length;
                 if (!cnt) return '';
-                return mkItem(this._category === c.key, `ResourcesPage._setCatFilter(${JSON.stringify(c.key).replace(/"/g,'&quot;')},null)`,
-                    `<i class="fa-solid ${c.icon}" style="color:${c.color}"></i>`, c.label, cnt);
+                return mkChip(this._category === c.key, `ResourcesPage._setCatFilter(${JSON.stringify(c.key).replace(/"/g,'&quot;')},null)`,
+                    `<i class="fa-solid ${c.icon}" style="font-size:.7rem;color:${c.color};margin-right:.3rem"></i>`, c.label, cnt);
             }),
             ...otherCats.map(c => {
                 const cnt = allDocs.filter(r => r.category === c).length;
-                return mkItem(this._category === c, `ResourcesPage._setCatFilter(${JSON.stringify(c).replace(/"/g,'&quot;')},null)`,
-                    `<i class="fa-solid fa-tag" style="color:var(--text-muted)"></i>`, Fmt.esc(c), cnt);
+                return mkChip(this._category === c, `ResourcesPage._setCatFilter(${JSON.stringify(c).replace(/"/g,'&quot;')},null)`,
+                    `<i class="fa-solid fa-tag" style="font-size:.7rem;color:var(--text-muted);margin-right:.3rem"></i>`, c, cnt);
             }),
         ].filter(Boolean).join('');
 
-        const statusItems = [
-            mkItem(this._docsTreeStatus === 'unread', "ResourcesPage._docsSetStatus('unread')",
-                `<i class="fa-solid fa-circle" style="color:#ef4444;font-size:.5rem"></i>`, 'Непрочитані', unreadCount),
-            mkItem(this._docsTreeStatus === 'read', "ResourcesPage._docsSetStatus('read')",
-                `<i class="fa-solid fa-circle" style="color:#10b981;font-size:.5rem"></i>`, 'Прочитані', readCount),
-        ].join('');
+        const unreadChip = allDocs.length
+            ? `<button type="button" class="dtl-chip unread${this._docsTreeStatus==='unread' ? ' on' : ''}" onclick="ResourcesPage._docsSetStatus('unread')"><span class="dot"></span>Не ознайомлені <span class="n">${unreadCount}</span></button>`
+            : '';
 
-        const mkTovItems = (entries) => entries.map(([n, cnt]) =>
-            mkItem(this._docsTreeTov === n, `ResourcesPage._docsSetTov(${JSON.stringify(n).replace(/"/g,'&quot;')})`,
-                `<i class="fa-solid fa-building" style="color:var(--text-muted)"></i>`, Fmt.esc(n), cnt)
-        ).join('');
+        chipWrap.innerHTML = catChips + unreadChip;
+
+        // ── ТОВ / Статус facet selects ──
+        const tovOptions = `<option value="">ТОВ: усі</option>` +
+            tovEntries.map(([n, cnt]) => `<option value="${Fmt.esc(n)}"${this._docsTreeTov===n?' selected':''}>${Fmt.esc(n)} (${cnt})</option>`).join('');
+        const statusOptions = `
+            <option value="">Статус: усі</option>
+            <option value="unread"${this._docsTreeStatus==='unread'?' selected':''}>Не ознайомлені (${unreadCount})</option>
+            <option value="read"${this._docsTreeStatus==='read'?' selected':''}>Ознайомлені (${readCount})</option>`;
 
         const hasFilter = this._category || this._docsTreeStatus || this._docsTreeTov;
 
-        sb.innerHTML = `
-            <div class="dt-sec">${catItems}</div>
-            <div class="dt-sec">
-                <div class="dt-sec-title">Статус</div>
-                ${statusItems}
-            </div>
-            ${tovEntries.length ? `<div class="dt-sec"><div class="dt-sec-title">ТОВ</div>${mkTovItems(tovEntries)}</div>` : ''}
-            <button class="dt-reset${hasFilter ? ' visible' : ''}" onclick="ResourcesPage._docsResetFilters()">
-                <i class="fa-solid fa-xmark" style="margin-right:.3rem"></i> Скинути фільтри
-            </button>
+        facetWrap.innerHTML = `
+            ${tovEntries.length ? `<select class="dtl-sel" onchange="ResourcesPage._docsSetTovSel(this.value)">${tovOptions}</select>` : ''}
+            ${allDocs.length ? `<select class="dtl-sel" onchange="ResourcesPage._docsSetStatusSel(this.value)">${statusOptions}</select>` : ''}
+            ${hasFilter ? `<button type="button" class="dtl-reset" onclick="ResourcesPage._docsResetFilters()"><i class="fa-solid fa-xmark"></i> Скинути фільтри</button>` : ''}
         `;
     },
 
@@ -1082,6 +1259,12 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
         const isNewVersion = dl && resource.doc_version > (dl.version || 1);
         if (!dl || isNewVersion) return 0;   // потребує ознайомлення / оновлено
         return 1;                             // вже ознайомлено
+    },
+
+    _docTovLabel(resource) {
+        return (resource.resource_dovirenosti || []).length
+            ? resource.resource_dovirenosti.map(rd => rd.dovirenosti?.name).filter(Boolean).join(', ')
+            : 'Для всіх ТОВ';
     },
 
     _sortDocs(items) {
@@ -1099,6 +1282,8 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
                 if (pa !== pb) return pb - pa; // ознайомлені першими
                 return new Date(b.created_at) - new Date(a.created_at);
             },
+            type_az: (a, b) => (a.category || '').localeCompare(b.category || '', 'uk') || (a.title || '').localeCompare(b.title || '', 'uk'),
+            tov_az: (a, b) => this._docTovLabel(a).localeCompare(this._docTovLabel(b), 'uk') || (a.title || '').localeCompare(b.title || '', 'uk'),
         };
         return [...items].sort(sorts[this._docsSort] || sorts.priority);
     },
@@ -1426,14 +1611,18 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
             }
 
             if (!filtered || !filtered.length) {
-                list.className = this._view === 'docs' ? 'resource-list-docs' : '';
-                list.innerHTML = `
+                if (this._view === 'docs') {
+                    list.innerHTML = `<tr><td colspan="6"><div class="empty-state" style="border:none"><div class="empty-icon">📋</div><h3>Документів не знайдено</h3><p>Спробуйте змінити пошук або фільтри.</p></div></td></tr>`;
+                } else {
+                    list.className = '';
+                    list.innerHTML = `
                     <div class="${this._view === 'kb' ? 'kb-empty' : 'empty-state'}" style="${this._view!=='kb'?'grid-column:1/-1':''}">
-                        <div class="${this._view==='kb'?'kb-empty-ico':'empty-icon'}">${this._view === 'docs' ? '📋' : '📚'}</div>
+                        <div class="${this._view==='kb'?'kb-empty-ico':'empty-icon'}">📚</div>
                         ${this._view==='kb'
                             ? `<div class="kb-empty-head">Матеріали не знайдені</div><div class="kb-empty-txt">Спробуйте змінити пошук або фільтри</div>`
                             : `<h3>Документів не знайдено</h3><p>Спробуйте змінити пошук або фільтри.</p>`}
                     </div>`;
+                }
                 document.getElementById('resources-pagination').innerHTML = '';
                 return;
             }
@@ -1464,24 +1653,24 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
                         </button>`).join('');
                 }
 
-                // Populate filter sidebar (use full unfiltered docs for counts)
-                this._renderDocsFilterSidebar(filtered);
+                // Populate facet selects + category chips (use full unfiltered docs for counts)
+                this._renderDocsFilters(filtered);
 
                 // apply category filter frontend-side
                 if (this._category) {
                     filtered = filtered.filter(r => r.category === this._category);
                 }
-                // apply tree status filter — лише трековані документи
-                // (розділ "Статус" у сайдбарі стосується тільки них)
+                // apply tree status filter — за тим самим статусом, що й
+                // видно на бейджі кожного документа (усі документи, не
+                // лише "трековані" — is_tracked_download більше не звужує
+                // цей фільтр, щоб лічильник збігався з тим, що видно в таблиці)
                 if (this._docsTreeStatus === 'unread') {
                     filtered = filtered.filter(r => {
-                        if (!r.is_tracked_download) return false;
                         const dl = this._myDownloads[r.id];
                         return !dl || r.doc_version > (dl.version || 1);
                     });
                 } else if (this._docsTreeStatus === 'read') {
                     filtered = filtered.filter(r => {
-                        if (!r.is_tracked_download) return false;
                         const dl = this._myDownloads[r.id];
                         return dl && !(r.doc_version > (dl.version || 1));
                     });
@@ -1493,10 +1682,10 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
                 filtered = this._sortDocs(filtered);
             }
 
-            if (this._view === 'docs') list.className = this._docsViewMode === 'grid' ? 'resource-list-docs-grid' : 'resource-list-docs';
             if (this._view === 'docs') {
+                this._syncSortHeaders();
                 const start = this._page * this._pageSize;
-                const pageItems = filtered.slice(start, start + this._pageSize);
+                const pageItems = this._docsShowAll ? filtered : filtered.slice(start, start + this._pageSize);
                 list.innerHTML = pageItems.map(resource => this._renderResourceItem(resource)).join('');
                 this._renderPagination(filtered.length);
             } else {
@@ -1504,7 +1693,9 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
                 this._renderPagination(count);
             }
         } catch (e) {
-            list.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>${e.message}</h3></div>`;
+            list.innerHTML = this._view === 'docs'
+                ? `<tr><td colspan="6"><div class="empty-state" style="border:none"><div class="empty-icon">⚠️</div><h3>${Fmt.esc(e.message)}</h3></div></td></tr>`
+                : `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>${Fmt.esc(e.message)}</h3></div>`;
             document.getElementById('resources-pagination').innerHTML = '';
         }
     },
@@ -1525,9 +1716,9 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
             // Візуальний статус "Ознайомлено"/"Не ознайомлено" тепер однаковий
             // для ВСІХ документів (трекованих і ні) — раніше нетраковані
             // показували нейтральне сіре "Відкрито", що виглядало
-            // неузгоджено. is_tracked_download і далі впливає лише на розділ
-            // "Статус" у сайдбарі (_renderDocsFilterSidebar) — туди
-            // потрапляють тільки трековані документи.
+            // неузгоджено. is_tracked_download і далі впливає лише на фільтр
+            // "Статус" (_renderDocsFilters) — туди потрапляють тільки
+            // трековані документи.
             let statusBadge;
             if (isNewVersion) {
                 statusBadge = `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.73rem;color:#d97706;font-weight:500"><i class="fa-solid fa-rotate" style="font-size:.65rem"></i> Нова версія</span>`;
@@ -1539,42 +1730,46 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
 
             const deadlineBadge = this._deadlineBadge(resource, dlStatus);
 
-            const docClass = dlAt && !isNewVersion ? 'doc-acked' : 'doc-needs-ack';
-
             const ackDotClass = (dlAt && !isNewVersion) ? 'res-read' : 'res-unread';
             const ackDotTitle = (dlAt && !isNewVersion) ? 'Ознайомлено' : (isNewVersion ? 'Нова версія — потрібне повторне ознайомлення' : 'Не ознайомлено');
             const ackDot = `<span class="res-ack-dot ${ackDotClass}" title="${ackDotTitle}" data-doc-dot="${resource.id}"></span>`;
 
-            // inline border-left-color інакше й далі перебивав би клас
-            // .doc-acked/.doc-needs-ack кольором за типом файлу
-            const tc = (dlAt && !isNewVersion) ? '#10b981' : '#ef4444';
+            const catDef = this._docCatDefs.find(c => c.key === resource.category);
+            const typeSwatch = catDef ? catDef.color : (resource.category ? 'var(--text-muted)' : 'transparent');
+            const typeLabel = resource.category ? Fmt.esc(resource.category) : '—';
+
+            const tovLabel = Fmt.esc(this._docTovLabel(resource));
+
+            const lockIcon = resource.download_allowed === false
+                ? `<i class="fa-solid fa-ban" style="font-size:.65rem;color:#ef4444" title="Тільки перегляд"></i>`
+                : '';
+            const accessIcon = resource.access_group
+                ? `<i class="fa-solid ${resource.access_group.is_public ? 'fa-globe' : 'fa-lock'}" style="font-size:.65rem;color:var(--primary)" title="${Fmt.esc(resource.access_group.name)}"></i>`
+                : '';
+
             return `
-                <div class="resource-item ${docClass}" data-id="${resource.id}" onclick="ResourcesPage.openViewer('${resource.id}')" style="cursor:pointer;border-left-color:${tc}">
-                    ${ackDot}
-                    <div class="res-ic-wrap"><div class="resource-icon ${resource.type || 'file'}">${icon}</div></div>
-                    <div class="resource-info">
-                        <div class="resource-title" style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
-                            <span>${this._highlight(resource.title, this._search)}</span>
-                            <span data-status-row style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;font-weight:400">${statusBadge}${deadlineBadge}</span>
+                <tr class="dtl-row" data-id="${resource.id}" onclick="ResourcesPage.openViewer('${resource.id}')">
+                    <td>
+                        <div class="dtl-td-doc">
+                            <div class="res-ic-wrap">${ackDot}<div class="dtl-doc-ic resource-icon ${resource.type || 'file'}">${icon}</div></div>
+                            <div style="min-width:0">
+                                <div class="dtl-doc-title">${this._highlight(resource.title, this._search)}${lockIcon}${accessIcon}</div>
+                                ${resource.description ? `<div class="dtl-doc-desc" title="${Fmt.esc(resource.description)}">${this._highlight(resource.description, this._search)}</div>` : ''}
+                            </div>
                         </div>
-                        ${resource.description ? `<div style="font-size:.8rem;color:var(--text-secondary);margin-top:.2rem;white-space:normal;word-break:break-word;line-height:1.5">${this._highlight(resource.description, this._search)}</div>` : ''}
-                        <div class="resource-meta">
-                            ${resource.category ? `<span class="resource-meta-chip" style="background:rgba(99,102,241,.08);color:var(--primary);border-color:rgba(99,102,241,.2)"><i class="fa-solid fa-tag" style="font-size:.6rem"></i>${Fmt.esc(resource.category)}</span>` : ''}
-                            ${resource.access_group ? `<span class="resource-meta-chip" style="background:rgba(99,102,241,.08);color:var(--primary);border-color:rgba(99,102,241,.2)">${resource.access_group.is_public ? '🌐' : '🔐'} ${Fmt.esc(resource.access_group.name)}</span>` : ''}
-                            ${resource.download_allowed !== false
-                                ? `<span class="resource-meta-chip" style="background:rgba(16,185,129,.08);color:#059669;border-color:rgba(16,185,129,.25)"><i class="fa-solid fa-download" style="font-size:.6rem"></i>Завантаження</span>`
-                                : `<span class="resource-meta-chip" style="background:rgba(239,68,68,.06);color:#ef4444;border-color:rgba(239,68,68,.2)"><i class="fa-solid fa-ban" style="font-size:.6rem"></i>Тільки перегляд</span>`}
-                            ${(resource.resource_dovirenosti||[]).length
-                                ? (resource.resource_dovirenosti).map(rd => rd.dovirenosti?.name ? `<span class="resource-meta-chip" style="background:rgba(245,158,11,.08);color:#d97706;border-color:rgba(245,158,11,.25)"><i class="fa-solid fa-building" style="font-size:.6rem"></i>${Fmt.esc(rd.dovirenosti.name)}</span>` : '').join('')
-                                : `<span class="resource-meta-chip" style="background:rgba(16,185,129,.08);color:#059669;border-color:rgba(16,185,129,.25)"><i class="fa-solid fa-globe" style="font-size:.6rem"></i>Для всіх ТОВ</span>`}
+                    </td>
+                    <td class="dtl-col-type" style="text-align:center"><span class="dtl-type-pill"><span class="sw" style="background:${typeSwatch}"></span>${typeLabel}</span></td>
+                    <td style="text-align:center"><span class="dtl-tov">${tovLabel}</span></td>
+                    <td class="dtl-col-fit"><div class="dtl-status" data-status-row>${statusBadge}${deadlineBadge}</div></td>
+                    <td class="dtl-col-fit" style="color:var(--text-muted)">${dlAt ? Fmt.dateShort(dlAt) : (resource.created_at ? Fmt.dateShort(resource.created_at) : '—')}</td>
+                    <td onclick="event.stopPropagation()">
+                        <div class="dtl-row-actions">
+                            <a class="dtl-icon-btn" href="#/resource/${resource.id}?from=documents" onclick="return ResourcesPage._onOpenClick(event,'${resource.id}')" title="Відкрити"><i class="fa-solid fa-eye"></i></a>
+                            <a class="dtl-icon-btn" href="#/resource/${resource.id}?from=documents" target="_blank" rel="noopener noreferrer" title="Відкрити в новому вікні"><i class="fa-solid fa-up-right-from-square"></i></a>
+                            ${AppState.isStaff() && AppState.canMutate() ? `<button class="dtl-icon-btn" title="Редагувати" onclick="ResourcesPage.openEdit('${resource.id}')"><i class="fa-solid fa-pen"></i></button><button class="dtl-icon-btn res-del-btn" title="Видалити" onclick="ResourcesPage.deleteResource('${resource.id}',${JSON.stringify(resource.title||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-trash"></i></button>` : ''}
                         </div>
-                    </div>
-                    <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center" onclick="event.stopPropagation()">
-                        <a class="btn btn-ghost btn-sm" href="#/resource/${resource.id}?from=documents" onclick="return ResourcesPage._onOpenClick(event,'${resource.id}')"><i class="fa-solid fa-eye"></i> Відкрити</a>
-                        <a class="btn btn-ghost btn-sm" href="#/resource/${resource.id}?from=documents" target="_blank" rel="noopener noreferrer" title="Відкрити в новому вікні"><i class="fa-solid fa-up-right-from-square"></i></a>
-                        ${AppState.isStaff() && AppState.canMutate() ? `<button class="btn btn-ghost btn-sm" onclick="ResourcesPage.openEdit('${resource.id}')"><i class="fa-solid fa-pen"></i></button><button class="btn btn-ghost btn-sm res-del-btn" title="Видалити" onclick="ResourcesPage.deleteResource('${resource.id}',${JSON.stringify(resource.title||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-trash"></i></button>` : ''}
-                    </div>
-                </div>`;
+                    </td>
+                </tr>`;
         }
 
         return this._kbViewMode === 'list'
@@ -1800,7 +1995,7 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
     },
 
     _refreshDocCard(resource) {
-        const card = document.querySelector(`.resource-item[data-id="${resource.id}"]`);
+        const card = document.querySelector(`.dtl-row[data-id="${resource.id}"]`);
         if (!card) return;
         const dlStatus = (this._myDownloads || {})[resource.id];
         const dlAt = dlStatus?.at;
@@ -1829,12 +2024,6 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
             dot.title = isRead ? 'Ознайомлено' : (isNewVersion ? 'Нова версія — потрібне повторне ознайомлення' : 'Не ознайомлено');
         }
 
-        // Update card class + смужку зліва (inline border-left-color з
-        // початкового рендеру інакше й далі перебивав би клас кольором типу файлу)
-        const isAcked = !!(dlAt && !isNewVersion);
-        card.classList.toggle('doc-acked', isAcked);
-        card.classList.toggle('doc-needs-ack', !isAcked);
-        card.style.borderLeftColor = isAcked ? '#10b981' : '#ef4444';
     },
 
     _toggleDrawerBookmark(id, title, icon, category) {
@@ -2765,9 +2954,17 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
     },
 
     _renderPagination(total) {
-        const pages = Math.ceil(total / this._pageSize);
         const container = document.getElementById('resources-pagination');
         if (!container) return;
+
+        if (this._view === 'docs' && this._docsShowAll) {
+            container.innerHTML = `
+                <span style="color:var(--text-muted);font-size:.82rem">Показано всі ${total} документів</span>
+                <button class="btn btn-ghost btn-sm" onclick="ResourcesPage._docsToggleShowAll(false)"><i class="fa-solid fa-table-list"></i> Розбити на сторінки</button>`;
+            return;
+        }
+
+        const pages = Math.ceil(total / this._pageSize);
         if (pages <= 1) { container.innerHTML = ''; return; }
         const cur = this._page;
         const btn = (i) => `<button class="btn ${i === cur ? 'btn-primary' : 'btn-ghost'} btn-sm" onclick="ResourcesPage.setPage(${i})">${i + 1}</button>`;
@@ -2781,7 +2978,16 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
             html += btn(i);
             prev = i;
         }
+        if (this._view === 'docs') {
+            html += `<button class="btn btn-ghost btn-sm" style="margin-left:.5rem" onclick="ResourcesPage._docsToggleShowAll(true)"><i class="fa-solid fa-list"></i> Показати всі ${total}</button>`;
+        }
         container.innerHTML = html;
+    },
+
+    _docsToggleShowAll(val) {
+        this._docsShowAll = val;
+        this._page = 0;
+        this.load();
     },
 
     // Центрована модалка (не глобальний Modal.open — той відкривається

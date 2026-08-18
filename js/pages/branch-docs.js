@@ -104,8 +104,8 @@ const BranchDocsPage = {
             .bd-collection-card:hover { border-color: #6366f1; box-shadow: 0 2px 8px rgba(99,102,241,.15); }
             .bd-collection-icon { width: 28px; height: 28px; border-radius: 6px; background: rgba(99,102,241,.12); color: #6366f1; display: flex; align-items: center; justify-content: center; font-size: .75rem; flex-shrink: 0; }
             .bd-collection-title { font-size: .88rem; font-weight: 500; color: var(--text-primary); }
-            .bd-page-chk-row { display: flex; align-items: center; gap: .5rem; padding: .3rem .4rem; border-radius: 5px; cursor: pointer; font-size: .85rem; color: var(--text-primary); transition: background var(--transition); }
-            .bd-page-chk-row:hover { background: var(--bg-hover); }
+            .bd-content-link-btn { margin-left: .5rem; display: inline-flex; align-items: center; gap: .3rem; padding: .2rem .6rem; border-radius: 5px; border: 1px dashed rgba(99,102,241,.4); background: transparent; color: rgba(99,102,241,.7); cursor: pointer; font-size: .72rem; font-weight: 600; transition: all .15s; font-family: inherit; white-space: nowrap; }
+            .bd-content-link-btn:hover { border-color: #6366f1; color: #6366f1; background: rgba(99,102,241,.05); }
 
             /* ── Doc cards ────────────────────────────────────────── */
             .bd-doc-card { border: 1px solid var(--border); border-radius: 8px; padding: .6rem .85rem; display: flex; align-items: center; gap: .5rem; cursor: pointer; transition: border-color .13s, background .13s; background: var(--bg-raised); }
@@ -726,6 +726,7 @@ const BranchDocsPage = {
                     <i class="fa-solid fa-file-lines" style="color:#6366f1"></i>
                     Документи
                     ${canManage ? `<button class="bd-content-add-btn" onclick="BranchDocsPage._uploadModal(${b.number},${displayNum},${JSON.stringify(b.title).replace(/"/g,'&quot;')})"><i class="fa-solid fa-plus"></i> Завантажити</button>` : ''}
+                    ${canManage ? `<button class="bd-content-link-btn" onclick="BranchDocsPage._linkedMaterialsModal('${b.id}')"><i class="fa-solid fa-link"></i> Пов'язані матеріали${(b.page_ids||[]).length ? ` (${b.page_ids.length})` : ''}</button>` : ''}
                 </div>
                 <div style="display:flex;flex-direction:column;gap:.4rem;margin-top:.55rem">${docsHtml}</div>
             </div>
@@ -866,16 +867,6 @@ const BranchDocsPage = {
                 <span>${Fmt.esc(o.label)}</span>
             </button>`).join('');
 
-        const curPageIds = new Set(b?.page_ids || []);
-        const pageCheckboxes = this._pages.length
-            ? this._pages.filter(p => p.is_published || AppState.isAdmin()).map(p => `
-                <label class="bd-page-chk-row">
-                    <input type="checkbox" class="bd-page-chk" value="${p.id}" ${curPageIds.has(p.id) ? 'checked' : ''} onchange="BranchDocsPage._updateSelCount()">
-                    <span>${Fmt.esc(p.title)}</span>
-                </label>`).join('')
-            : `<div style="font-size:.82rem;color:var(--text-muted);padding:.4rem 0">Немає доступних колекцій</div>`;
-
-        const selCount = curPageIds.size;
         Modal.open({
             title: b ? 'Редагувати рядок' : 'Додати рядок',
             size: 'lg',
@@ -910,10 +901,6 @@ const BranchDocsPage = {
                 .bdm-info { margin-top:.5rem;padding:.55rem .7rem;border-radius:var(--radius-md);background:rgba(99,102,241,.06);border:1px solid rgba(99,102,241,.18);display:flex;align-items:flex-start;gap:.45rem; }
                 .bdm-info i { color:#6366f1;font-size:.75rem;margin-top:.1rem;flex-shrink:0; }
                 .bdm-info span { font-size:.71rem;color:var(--text-secondary);line-height:1.45; }
-                .bdm-search { display:flex;align-items:center;gap:.4rem;padding:.2rem .6rem;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-surface);margin-bottom:.35rem; }
-                .bdm-search i { color:var(--text-muted);font-size:.75rem;flex-shrink:0; }
-                .bdm-search input { border:none;background:transparent;outline:none;font-size:.82rem;color:var(--text-primary);font-family:inherit;width:100%;padding:.2rem 0; }
-                .bdm-chk-list { max-height:110px;overflow-y:auto; }
             </style>
             <div class="bdm-wrap">
                 <!-- ── Left: form ─────────────────────────── -->
@@ -968,28 +955,6 @@ const BranchDocsPage = {
                         </div>
                     </div>
 
-                    <hr class="bdm-divider">
-
-                    <!-- §3 Пов'язані матеріали -->
-                    <div class="bdm-sec">
-                        <div class="bdm-sec-hdr">
-                            <span class="bdm-ico"><i class="fa-solid fa-link"></i></span>
-                            <span class="bdm-sec-title">Пов'язані матеріали</span>
-                            <span class="bdm-badge sel" id="bd-sel-cnt">${selCount} вибрано</span>
-                        </div>
-                        <div class="bdm-sub">Позначте сторінки-колекції, до яких належить цей документ</div>
-                        <div>
-                            <div class="bdm-search search-clear-wrap">
-                                <i class="fa-solid fa-magnifying-glass"></i>
-                                <input type="text" placeholder="Пошук сторінок-колекцій" oninput="BranchDocsPage._filterPages(this.value)">
-                                <button type="button" class="search-clear-btn" onclick="UI.clearSearchInput(this)"><i class="fa-solid fa-xmark"></i></button>
-                            </div>
-                            <div class="bdm-chk-list" id="bd-chk-list">
-                                ${pageCheckboxes}
-                            </div>
-                        </div>
-                    </div>
-
                 </div>
 
                 <!-- ── Right: tips ────────────────────────── -->
@@ -1002,10 +967,6 @@ const BranchDocsPage = {
                     <div class="bdm-tip">
                         <div class="bdm-tip-title">Для кого</div>
                         <div class="bdm-tip-text">Додайте пояснення або примітки для отримувачів (за потреби).</div>
-                    </div>
-                    <div class="bdm-tip">
-                        <div class="bdm-tip-title">Пов'язані матеріали</div>
-                        <div class="bdm-tip-text">Оберіть сторінки-колекції, до яких відноситься цей документ.</div>
                     </div>
                     <div class="bdm-info">
                         <i class="fa-solid fa-circle-info"></i>
@@ -1060,42 +1021,161 @@ const BranchDocsPage = {
         document.getElementById('bd-icon-drop').style.display = 'none';
     },
 
-    _filterPages(q) {
-        const list = document.getElementById('bd-chk-list');
-        if (!list) return;
-        const term = q.toLowerCase();
-        list.querySelectorAll('.bd-page-chk-row').forEach(row => {
-            const text = row.querySelector('span')?.textContent.toLowerCase() || '';
-            row.style.display = text.includes(term) ? '' : 'none';
-        });
-    },
-
-    _updateSelCount() {
-        const cnt = document.querySelectorAll('.bd-page-chk:checked').length;
-        const el = document.getElementById('bd-sel-cnt');
-        if (el) el.textContent = `${cnt} вибрано`;
-    },
-
     async _saveBlock(id) {
         const title    = document.getElementById('bd-bl-title')?.value.trim();
         const dept     = document.getElementById('bd-bl-dept')?.value.trim() || null;
         const icon     = document.getElementById('bd-bl-icon')?.value || null;
         const tov_text = document.getElementById('bd-bl-tov')?.value.trim() || null;
-        const page_ids = Array.from(document.querySelectorAll('.bd-page-chk:checked')).map(c => c.value);
         if (!title) { Toast.warning('Введіть назву'); return; }
         try {
             Loader.show();
             if (id) {
                 const cur = this._blocks.find(x => x.id === id);
-                await API.branchDocBlocks.update(id, { number: cur?.number, title, dept, icon, tov_text, order_index: cur?.number, page_ids });
+                await API.branchDocBlocks.update(id, { number: cur?.number, title, dept, icon, tov_text, order_index: cur?.number });
                 if (!this._selectedBlock) this._selectedBlock = id;
             } else {
                 const maxNum = this._blocks.reduce((m, x) => Math.max(m, x.number), 0);
                 const tabId = this._selectedTab || null;
-                await API.branchDocBlocks.create({ number: maxNum + 1, title, dept, icon, tov_text, order_index: maxNum + 1, page_ids, tab_id: tabId });
+                await API.branchDocBlocks.create({ number: maxNum + 1, title, dept, icon, tov_text, order_index: maxNum + 1, page_ids: [], tab_id: tabId });
             }
             Modal.close();
             Toast.success(id ? 'Блок оновлено' : 'Блок додано');
+            await this._reload(true);
+        } catch(e) { Toast.error('Помилка', e.message); } finally { Loader.hide(); }
+    },
+
+    // ── Пов'язані матеріали (сторінки-колекції) ─────────────────────────
+    // Клікабельні картки замість чекбоксів + живі чіпи вибраного вгорі —
+    // адмін одразу бачить прев'ю того, що з'явиться під документом, без
+    // потреби прокручувати весь список і шукати галочки.
+
+    _linkedMaterialsModal(id) {
+        const b = this._blocks.find(x => x.id === id);
+        if (!b) return;
+        this._linkedBlockId = id;
+        this._linkedSel     = new Set(b.page_ids || []);
+        this._linkedPages   = this._pages.filter(p => p.is_published || AppState.isAdmin());
+        this._linkedFilter  = '';
+
+        Modal.open({
+            title: '<i class="fa-solid fa-link" style="color:#6366f1;margin-right:.4rem"></i> Пов\'язані матеріали',
+            body: `
+            <style>
+                .bdlm-intro { display:flex;gap:.55rem;align-items:flex-start;padding:.65rem .8rem;border-radius:var(--radius-md);background:rgba(99,102,241,.06);border:1px solid rgba(99,102,241,.18);margin-bottom:1rem; }
+                .bdlm-intro i { color:#6366f1;font-size:.8rem;margin-top:.15rem;flex-shrink:0; }
+                .bdlm-intro span { font-size:.78rem;color:var(--text-secondary);line-height:1.5; }
+                .bdlm-intro strong { color:var(--text-primary); }
+                .bdlm-target { color:#6366f1;font-weight:700; }
+                .bdlm-search-wrap { position:relative;margin-bottom:.85rem; }
+                .bdlm-search-wrap input { width:100%;height:44px;padding:0 40px;border-radius:12px;border:1.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);font-size:.86rem;outline:none;transition:border-color .2s,box-shadow .2s;box-sizing:border-box;font-family:inherit; }
+                .bdlm-search-wrap input:focus { border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,.12); }
+                .bdlm-search-wrap input::placeholder { color:var(--text-muted); }
+                .bdlm-search-wrap i.fa-magnifying-glass { position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:.8rem;pointer-events:none; }
+                .bdlm-list-head { display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem; }
+                .bdlm-list-head span:first-child { font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted); }
+                .bdlm-count-badge { font-size:.68rem;font-weight:700;padding:.15rem .55rem;border-radius:999px;background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.3);color:#6366f1;min-width:16px;text-align:center; }
+                .bdlm-chips-wrap { margin-bottom:1rem; }
+                .bdlm-chips { display:flex;flex-wrap:wrap;gap:.4rem; }
+                .bdlm-chip { display:inline-flex;align-items:center;gap:.35rem;padding:.3rem .4rem .3rem .7rem;border-radius:999px;background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.3);color:#6366f1;font-size:.76rem;font-weight:600;animation:bdlmPop .18s cubic-bezier(.4,0,.2,1); }
+                .bdlm-chip button { border:none;background:rgba(99,102,241,.18);color:#6366f1;width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:.55rem;flex-shrink:0;transition:background .15s,color .15s;padding:0; }
+                .bdlm-chip button:hover { background:#6366f1;color:#fff; }
+                .bdlm-chips-empty { display:flex;align-items:center;gap:.4rem;font-size:.78rem;color:var(--text-muted);font-style:italic; }
+                @keyframes bdlmPop { from{opacity:0;transform:scale(.7)} to{opacity:1;transform:scale(1)} }
+                .bdlm-list { display:flex;flex-direction:column;gap:.4rem;overflow-y:auto;padding:2px 2px 2px 0; }
+                .bdlm-card { display:flex;align-items:center;gap:.7rem;padding:.6rem .75rem;border:1.5px solid var(--border);border-radius:var(--radius-md);background:var(--bg-raised);cursor:pointer;transition:border-color .15s,background .15s,transform .1s;animation:bdlmIn .22s cubic-bezier(.4,0,.2,1) backwards;animation-delay:calc(var(--i,0) * 25ms); }
+                .bdlm-card:hover { border-color:rgba(99,102,241,.5);background:rgba(99,102,241,.05); }
+                .bdlm-card:active { transform:scale(.99); }
+                .bdlm-card.selected { border-color:#6366f1;background:rgba(99,102,241,.08); }
+                .bdlm-card-icon { width:30px;height:30px;border-radius:8px;background:rgba(99,102,241,.12);color:#6366f1;display:flex;align-items:center;justify-content:center;font-size:.8rem;flex-shrink:0; }
+                .bdlm-card-title { flex:1;min-width:0;font-size:.86rem;font-weight:500;color:var(--text-primary);word-break:break-word; }
+                .bdlm-card-check { width:20px;height:20px;border-radius:6px;border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;color:transparent;font-size:.62rem;transition:all .15s;flex-shrink:0; }
+                .bdlm-card.selected .bdlm-card-check { background:#6366f1;border-color:#6366f1;color:#fff; }
+                .bdlm-empty-list { text-align:center;padding:2rem 1rem;color:var(--text-muted);font-size:.85rem;display:flex;flex-direction:column;align-items:center;gap:.5rem; }
+                .bdlm-empty-list i { font-size:1.4rem;opacity:.5; }
+                @keyframes bdlmIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+                @media (prefers-reduced-motion: reduce) { .bdlm-card, .bdlm-chip { animation:none; } }
+            </style>
+            <div class="bdlm-intro">
+                <i class="fa-solid fa-circle-info"></i>
+                <span><strong>Навіщо це?</strong> Позначені сторінки-колекції з'являться швидкими посиланнями під документом <span class="bdlm-target">«${Fmt.esc(b.title)}»</span> — співробітник перейде до них одним кліком.</span>
+            </div>
+            <div class="bdlm-search-wrap">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" placeholder="Пошук сторінок-колекцій…" autocomplete="off" oninput="BranchDocsPage._filterLinkedPages(this.value)">
+            </div>
+            <div class="bdlm-chips-wrap" id="bdlm-chips-wrap"></div>
+            <div class="bdlm-list-head">
+                <span>Доступні сторінки-колекції</span>
+                <span class="bdlm-count-badge" id="bdlm-count-badge"></span>
+            </div>
+            <div class="bdlm-list" id="bdlm-list"></div>`,
+            footer: `
+                <button class="btn btn-ghost btn-sm" onclick="Modal.close()">Скасувати</button>
+                <button class="btn btn-sm" style="background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;border:none" onclick="BranchDocsPage._saveLinkedMaterials()">
+                    <i class="fa-solid fa-check"></i> Зберегти
+                </button>`
+        });
+        this._renderLinkedList();
+        this._renderLinkedChips();
+    },
+
+    _renderLinkedList() {
+        const list = document.getElementById('bdlm-list');
+        if (!list) return;
+        if (!this._linkedPages.length) {
+            list.innerHTML = `<div class="bdlm-empty-list"><i class="fa-regular fa-folder-open"></i><div>Немає доступних сторінок-колекцій</div></div>`;
+            return;
+        }
+        list.innerHTML = this._linkedPages.map((p, i) => {
+            const sel = this._linkedSel.has(p.id);
+            return `
+            <div class="bdlm-card${sel ? ' selected' : ''}" data-id="${p.id}" data-title="${Fmt.esc(p.title.toLowerCase())}" style="--i:${i}" onclick="BranchDocsPage._toggleLinkedPage('${p.id}')">
+                <span class="bdlm-card-icon"><i class="fa-solid fa-layer-group"></i></span>
+                <span class="bdlm-card-title">${Fmt.esc(p.title)}</span>
+                <span class="bdlm-card-check"><i class="fa-solid fa-check"></i></span>
+            </div>`;
+        }).join('');
+        if (this._linkedFilter) this._filterLinkedPages(this._linkedFilter);
+    },
+
+    _renderLinkedChips() {
+        const wrap  = document.getElementById('bdlm-chips-wrap');
+        const badge = document.getElementById('bdlm-count-badge');
+        if (badge) badge.textContent = this._linkedSel.size || '0';
+        if (!wrap) return;
+        if (!this._linkedSel.size) {
+            wrap.innerHTML = `<div class="bdlm-chips-empty"><i class="fa-regular fa-hand-pointer"></i> Ще нічого не вибрано — натисніть на картку нижче</div>`;
+            return;
+        }
+        const chips = [...this._linkedSel].map(pid => {
+            const p = this._linkedPages.find(x => x.id === pid);
+            return `<span class="bdlm-chip">${Fmt.esc(p?.title || '—')}<button type="button" onclick="event.stopPropagation();BranchDocsPage._toggleLinkedPage('${pid}')" title="Прибрати"><i class="fa-solid fa-xmark"></i></button></span>`;
+        }).join('');
+        wrap.innerHTML = `<div class="bdlm-chips">${chips}</div>`;
+    },
+
+    _toggleLinkedPage(id) {
+        if (this._linkedSel.has(id)) this._linkedSel.delete(id); else this._linkedSel.add(id);
+        document.querySelector(`.bdlm-card[data-id="${id}"]`)?.classList.toggle('selected', this._linkedSel.has(id));
+        this._renderLinkedChips();
+    },
+
+    _filterLinkedPages(q) {
+        this._linkedFilter = q;
+        const term = q.toLowerCase();
+        document.querySelectorAll('#bdlm-list .bdlm-card').forEach(card => {
+            card.style.display = card.dataset.title.includes(term) ? '' : 'none';
+        });
+    },
+
+    async _saveLinkedMaterials() {
+        const id = this._linkedBlockId;
+        const page_ids = [...(this._linkedSel || [])];
+        try {
+            Loader.show();
+            await API.branchDocBlocks.update(id, { page_ids });
+            Modal.close();
+            Toast.success('Пов\'язані матеріали оновлено');
             await this._reload(true);
         } catch(e) { Toast.error('Помилка', e.message); } finally { Loader.hide(); }
     },

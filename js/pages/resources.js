@@ -501,6 +501,18 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
             .dtl-row-actions { display:flex;gap:.3rem;justify-content:flex-end }
             .dtl-icon-btn { width:28px;height:28px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text-muted);display:inline-flex;align-items:center;justify-content:center;font-size:.75rem;cursor:pointer;text-decoration:none }
             .dtl-icon-btn:hover { border-color:var(--primary);color:var(--primary) }
+            .dtl-dov-row { display:flex;gap:.3rem;flex-wrap:wrap;margin-top:.3rem }
+            .dtl-dov-chip { display:inline-flex;align-items:center;gap:.3rem;font-size:.68rem;font-weight:600;padding:.1rem .5rem;border-radius:999px;border:1px solid transparent;white-space:nowrap }
+            .dtl-dov-chip.has { background:rgba(245,158,11,.08);color:#d97706;border-color:rgba(245,158,11,.25) }
+            .dtl-dov-chip.all { background:rgba(16,185,129,.08);color:#059669;border-color:rgba(16,185,129,.25) }
+
+            /* ── Right-click context menu on document title ─────────── */
+            .dtl-ctxmenu { position:fixed;z-index:100000;min-width:220px;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:0 12px 32px rgba(0,0,0,.28);padding:.3rem;animation:dtlCtxIn .12s cubic-bezier(.4,0,.2,1) }
+            @keyframes dtlCtxIn { from{opacity:0;transform:scale(.96)} to{opacity:1;transform:scale(1)} }
+            .dtl-ctxmenu-item { display:flex;align-items:center;gap:.6rem;width:100%;padding:.5rem .7rem;border:none;background:transparent;color:var(--text-primary);font-size:.85rem;font-family:inherit;text-align:left;cursor:pointer;border-radius:var(--radius-sm);text-decoration:none;box-sizing:border-box }
+            .dtl-ctxmenu-item:hover { background:var(--bg-hover);color:var(--primary) }
+            .dtl-ctxmenu-item i { width:16px;text-align:center;flex-shrink:0;color:var(--text-muted) }
+            .dtl-ctxmenu-item:hover i { color:var(--primary) }
 
             /* ── Status detail modal — sectioned layout ─────────────── */
             .stm-sec { display:flex;flex-direction:column;gap:.6rem;padding:.9rem 1rem;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--bg-raised) }
@@ -632,6 +644,15 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
         return out;
     },
 
+    // Документ без прив'язаних довіреностей видно всім; якщо довіреності
+    // задані — стосується лише тих, у кого є хоч одна з них.
+    _docAppliesToEmployee(doc, employee) {
+        const rdovs = doc.resource_dovirenosti || [];
+        if (!rdovs.length) return true;
+        const empDovIds = new Set((employee.profile_dovirenosti || []).map(d => d.dovirenost_id));
+        return rdovs.some(rd => empDovIds.has(rd.dovirenost_id));
+    },
+
     async _renderStatusTab(content) {
         const token = ++this._renderToken;
         this._ensureDocsTableStyles();
@@ -709,10 +730,14 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
             this._statusCache = { docs, employees, allEmps, ackMap, mgrOptions, myDirects, isOwner };
 
             const cards = docs.map(doc => {
+                // Рахуємо тільки тих, у кого справді є доступ до цього
+                // документа (за довіреністю) — інакше люди без доступу
+                // штучно занижують % і показуються як "не ознайомились".
+                const relevantEmployees = employees.filter(e => this._docAppliesToEmployee(doc, e));
                 const acks = ackMap[doc.id] || [];
                 const ackedIds = new Set(acks.filter(a => (a.version || 1) >= (doc.doc_version || 1)).map(a => a.userId));
-                const ackedCount = employees.filter(e => ackedIds.has(e.id)).length;
-                const total = employees.length;
+                const ackedCount = relevantEmployees.filter(e => ackedIds.has(e.id)).length;
+                const total = relevantEmployees.length;
                 const notDoneCount = total - ackedCount;
                 const pct = total ? Math.round(ackedCount / total * 100) : 0;
                 const barColor = pct === 100 ? '#10b981' : pct >= 60 ? '#f59e0b' : '#ef4444';
@@ -737,6 +762,11 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
                     ? `<span style="font-size:.7rem;background:var(--bg-base);color:var(--text-muted);padding:1px 6px;border-radius:8px;border:1px solid var(--border)">v${doc.doc_version}</span>`
                     : '';
 
+                const dovNames = (doc.resource_dovirenosti || []).map(rd => rd.dovirenosti?.name).filter(Boolean);
+                const dovRow = dovNames.length
+                    ? `<div class="dtl-dov-row">${dovNames.map(n => `<span class="dtl-dov-chip has"><i class="fa-solid fa-building" style="font-size:.6rem"></i>${Fmt.esc(n)}</span>`).join('')}</div>`
+                    : `<div class="dtl-dov-row"><span class="dtl-dov-chip all"><i class="fa-solid fa-globe" style="font-size:.6rem"></i>Для всіх ТОВ</span></div>`;
+
                 const statusLine = pct === 100
                     ? `<span style="font-size:.8rem;color:#10b981">✅ Всі ознайомились</span>`
                     : `<span style="font-size:.8rem;color:var(--text-muted)">${notDoneCount} не ознайомились${overdueCount ? ` · <span style="color:#dc2626">🔴 ${overdueCount} прострочено</span>` : ''}</span>`;
@@ -748,6 +778,7 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
                             <div class="dtl-doc-ic resource-icon pdf"><i class="fa-regular fa-file-pdf"></i></div>
                             <div style="min-width:0">
                                 <div class="dtl-doc-title">${Fmt.esc(doc.title)}${versionBadge}</div>
+                                ${dovRow}
                             </div>
                         </div>
                     </td>
@@ -820,10 +851,12 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
     _buildStatusModalBody() {
         const { docId, filter, search, page, mgrFilter } = this._modalState;
         const { docs, employees: teamEmployees, allEmps, ackMap, mgrOptions, myDirects, isOwner } = this._statusCache;
-        const employees = mgrFilter === 'all' ? teamEmployees
+        const doc = docs.find(d => d.id === docId);
+        const teamScoped = mgrFilter === 'all' ? teamEmployees
             : mgrFilter === 'mine' ? myDirects
             : this._collectDescendants(mgrFilter, allEmps);
-        const doc = docs.find(d => d.id === docId);
+        // Лише ті, у кого справді є доступ (довіреність) до цього документа
+        const employees = teamScoped.filter(e => this._docAppliesToEmployee(doc, e));
         const acks = ackMap[docId] || [];
         const ackedMap = {};
         acks.filter(a => (a.version || 1) >= (doc.doc_version || 1))
@@ -936,6 +969,11 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
                         <span class="stm-stat pending"><i class="fa-solid fa-hourglass-half"></i> Не ознайомились <b>${counts.all - counts.acked}</b></span>
                         ${counts.overdue ? `<span class="stm-stat overdue"><i class="fa-solid fa-triangle-exclamation"></i> Прострочено <b>${counts.overdue}</b></span>` : ''}
                     </div>
+                    <div class="dtl-dov-row">${
+                        (doc.resource_dovirenosti || []).map(rd => rd.dovirenosti?.name).filter(Boolean).length
+                            ? doc.resource_dovirenosti.map(rd => rd.dovirenosti?.name).filter(Boolean).map(n => `<span class="dtl-dov-chip has"><i class="fa-solid fa-building" style="font-size:.6rem"></i>${Fmt.esc(n)}</span>`).join('')
+                            : `<span class="dtl-dov-chip all"><i class="fa-solid fa-globe" style="font-size:.6rem"></i>Для всіх ТОВ</span>`
+                    }</div>
                 </div>
 
                 <!-- §2 Фільтр і пошук -->
@@ -1010,11 +1048,12 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
     _exportStatusList() {
         const { docId, filter, search, mgrFilter } = this._modalState;
         const { docs, employees: teamEmployees, allEmps, ackMap, myDirects } = this._statusCache;
-        const employees = mgrFilter === 'all' ? teamEmployees
-            : mgrFilter === 'mine' ? myDirects
-            : this._collectDescendants(mgrFilter, allEmps);
         const doc = docs.find(d => d.id === docId);
         if (!doc) return;
+        const teamScoped = mgrFilter === 'all' ? teamEmployees
+            : mgrFilter === 'mine' ? myDirects
+            : this._collectDescendants(mgrFilter, allEmps);
+        const employees = teamScoped.filter(e => this._docAppliesToEmployee(doc, e));
 
         const acks = ackMap[docId] || [];
         const ackedMap = {};
@@ -1753,7 +1792,7 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
                         <div class="dtl-td-doc">
                             <div class="res-ic-wrap">${ackDot}<div class="dtl-doc-ic resource-icon ${resource.type || 'file'}">${icon}</div></div>
                             <div style="min-width:0">
-                                <div class="dtl-doc-title">${this._highlight(resource.title, this._search)}${lockIcon}${accessIcon}</div>
+                                <div class="dtl-doc-title" oncontextmenu="return ResourcesPage._docCtxMenu(event,'${resource.id}')">${this._highlight(resource.title, this._search)}${lockIcon}${accessIcon}</div>
                                 ${resource.description ? `<div class="dtl-doc-desc" title="${Fmt.esc(resource.description)}">${this._highlight(resource.description, this._search)}</div>` : ''}
                             </div>
                         </div>
@@ -1846,6 +1885,40 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
         e.preventDefault();
         this.openViewer(id);
         return false;
+    },
+
+    // Праве клацання по назві документа в таблиці — контекстне меню
+    // "Відкрити" / "Відкрити в новому вікні".
+    _docCtxMenu(e, id) {
+        e.preventDefault();
+        e.stopPropagation();
+        document.getElementById('dtl-ctxmenu')?.remove();
+
+        const menu = document.createElement('div');
+        menu.id = 'dtl-ctxmenu';
+        menu.className = 'dtl-ctxmenu';
+        menu.innerHTML = `
+            <button type="button" class="dtl-ctxmenu-item" onclick="ResourcesPage._ctxMenuOpen('${id}')"><i class="fa-solid fa-eye"></i> Відкрити</button>
+            <a class="dtl-ctxmenu-item" href="#/resource/${id}?from=documents" target="_blank" rel="noopener noreferrer" onclick="ResourcesPage._closeCtxMenu()"><i class="fa-solid fa-up-right-from-square"></i> Відкрити в новому вікні</a>`;
+        document.body.appendChild(menu);
+
+        // Позиціонуємо біля курсора, але не даємо вилізти за край екрана
+        const { innerWidth: vw, innerHeight: vh } = window;
+        const { offsetWidth: mw, offsetHeight: mh } = menu;
+        menu.style.left = Math.min(e.clientX, vw - mw - 8) + 'px';
+        menu.style.top = Math.min(e.clientY, vh - mh - 8) + 'px';
+
+        setTimeout(() => document.addEventListener('click', ResourcesPage._closeCtxMenu, { once: true }), 0);
+        return false;
+    },
+
+    _ctxMenuOpen(id) {
+        this._closeCtxMenu();
+        this.openViewer(id);
+    },
+
+    _closeCtxMenu() {
+        document.getElementById('dtl-ctxmenu')?.remove();
     },
 
     openViewer(id) {
@@ -2324,27 +2397,28 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
         await this._trackedAction(id, true);
     },
 
+    // Автоматичне ознайомлення (скрол PDF/перегляд відео до кінця) — жодного
+    // кліку користувача немає, тому не показуємо повноекранний Loader: він
+    // виглядав як несподіване перезавантаження сторінки просто під час
+    // читання. Статус оновлюється мовчки (бейдж у футері + крапка в списку).
     async acknowledgeDoc(id) {
-        await this._trackedAction(id, false);
+        await this._trackedAction(id, false, { silent: true });
     },
 
-    async _trackedAction(id, downloadFile) {
-        Loader.show();
-        let resource;
+    async _trackedAction(id, downloadFile, { silent = false } = {}) {
+        if (!silent) Loader.show();
         try {
-            resource = await API.resources.getById(id);
+            const resource = await API.resources.getById(id);
+            const shiftLoc = await API.documentDownloads.getTodayShiftLocation().catch(() => null);
+            if (shiftLoc) {
+                await this._doTrackedDownload(resource, shiftLoc.id, false, downloadFile, { silent });
+            } else {
+                await this._doTrackedDownload(resource, null, true, downloadFile, { silent });
+            }
         } catch (e) {
             Toast.error('Помилка', e.message);
-            Loader.hide();
-            return;
-        }
-        Loader.hide();
-
-        const shiftLoc = await API.documentDownloads.getTodayShiftLocation().catch(() => null);
-        if (shiftLoc) {
-            await this._doTrackedDownload(resource, shiftLoc.id, false, downloadFile);
-        } else {
-            await this._doTrackedDownload(resource, null, true, downloadFile);
+        } finally {
+            if (!silent) Loader.hide();
         }
     },
 
@@ -2386,8 +2460,8 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
         await this._doTrackedDownload(resource, locId, true, downloadFile);
     },
 
-    async _doTrackedDownload(resource, locationId, isOffShift, downloadFile = true) {
-        Loader.show();
+    async _doTrackedDownload(resource, locationId, isOffShift, downloadFile = true, { silent = false } = {}) {
+        if (!silent) Loader.show();
         try {
             if (downloadFile) {
                 const filename = this._buildFilename(resource);
@@ -2430,7 +2504,7 @@ body:not(.light-theme) .kb-card-footer{border-top-color:var(--border)}
         } catch (e) {
             Toast.error('Помилка', e.message);
         } finally {
-            Loader.hide();
+            if (!silent) Loader.hide();
         }
     },
 

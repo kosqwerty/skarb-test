@@ -119,10 +119,12 @@ const Toast = {
         }
         // Показуємо лише після того, як усі активні тости зникли — поки
         // стек видно, годинник лише заважав би (та й стоїть на тому самому
-        // місці, з того ж правого краю).
+        // місці, з того ж правого краю). На головній сторінці історію не
+        // показуємо взагалі — минув час, тост зник і на цьому все.
         const container = document.getElementById('toast-container');
         const hasActive = container?.querySelector('.toast:not(.removing)');
-        btn.classList.toggle('visible', this._history.length > 0 && !hasActive);
+        const onDashboard = typeof Router !== 'undefined' && Router.current() === 'dashboard';
+        btn.classList.toggle('visible', this._history.length > 0 && !hasActive && !onDashboard);
     },
 
     _toggleHistPanel(btn) {
@@ -207,6 +209,12 @@ const Toast = {
     warning(title, msg)  { return this.show('warning', title, msg); },
     info(title, msg)     { return this.show('info', title, msg); }
 };
+
+// Кнопка історії сповіщень ховається на головній сторінці (_syncHistBtn) —
+// перерахувати її видимість і при самій зміні маршруту, а не лише при
+// появі/зникненні тоста, інакше вона не з'явиться назад після переходу з
+// дашборду, поки не прилетить новий тост.
+window.addEventListener('hashchange', () => Toast._syncHistBtn());
 
 const Modal = {
     open({ title = '', body = '', footer = '', size = '', noHeader = false, onClose } = {}) {

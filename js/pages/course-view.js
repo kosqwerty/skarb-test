@@ -4,7 +4,6 @@
 
 const CourseViewPage = {
     _course: null,
-    _scheduleData: null,
     _enrolled: false,
     _from: null,
 
@@ -104,6 +103,20 @@ const CourseViewPage = {
             .cv-sidebar-thumb{position:absolute;inset:0;background-size:contain;background-repeat:no-repeat;background-position:center;z-index:1}
             .cv-sidebar-thumb-def{height:200px;background:linear-gradient(135deg,rgba(99,102,241,.15),rgba(139,92,246,.25));display:flex;align-items:center;justify-content:center;font-size:3.5rem}
             .cv-sidebar-body{padding:1.25rem}
+            /* Медаль за проходження — показує, яку нагороду отримає
+               користувач після завершення курсу (мотиваційний елемент,
+               не пов'язаний з керуванням — badge_url керується з адмінки). */
+            .cv-badge-card{display:flex;align-items:center;gap:.85rem;padding:.85rem;border-radius:12px;margin-bottom:1rem;cursor:pointer;transition:transform .15s,box-shadow .15s;
+                background:linear-gradient(135deg,rgba(99,102,241,.1),rgba(139,92,246,.06));border:1px solid rgba(99,102,241,.22)}
+            .cv-badge-card:hover{transform:translateY(-1px);box-shadow:0 6px 18px -8px rgba(99,102,241,.35)}
+            .cv-badge-card.earned{background:linear-gradient(135deg,rgba(16,185,129,.12),rgba(16,185,129,.05));border-color:rgba(16,185,129,.3)}
+            .cv-badge-card.earned:hover{box-shadow:0 6px 18px -8px rgba(16,185,129,.4)}
+            .cv-badge-img-wrap{width:52px;height:52px;flex-shrink:0;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 3px 8px rgba(0,0,0,.25))}
+            .cv-badge-img-wrap img{width:100%;height:100%;object-fit:contain}
+            .cv-badge-info{flex:1;min-width:0}
+            .cv-badge-label{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--primary)}
+            .cv-badge-card.earned .cv-badge-label{color:#10b981}
+            .cv-badge-text{font-size:.8rem;color:var(--text-secondary);margin-top:.15rem;line-height:1.4}
             .cv-enroll-btn{width:100%;padding:.85rem;border-radius:var(--radius-md);border:2px solid rgba(255,255,255,.85);background:rgba(255,255,255,.12);backdrop-filter:blur(8px);color:#fff;font-size:1rem;font-weight:700;cursor:pointer;transition:background .18s,border-color .18s,transform .15s,box-shadow .18s;display:flex;align-items:center;justify-content:center;gap:.5rem;letter-spacing:.01em;box-shadow:0 2px 16px rgba(0,0,0,.18)}
             .cv-enroll-btn:hover{background:rgba(255,255,255,.22);border-color:#fff;transform:translateY(-2px);box-shadow:0 6px 24px rgba(0,0,0,.25)}
             .cv-manage-btn{display:flex;align-items:center;gap:.6rem;padding:.6rem .9rem;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-raised);color:var(--text-secondary);font-size:.84rem;cursor:pointer;transition:all .15s;width:100%}
@@ -132,65 +145,19 @@ const CourseViewPage = {
             .cvi-text{font-size:.83rem;line-height:1.6;color:var(--text-secondary);margin:0}
             .cvi-empty{text-align:center;padding:1.5rem;color:var(--text-muted);font-size:.85rem}
 
-            .cvt-wrap{display:flex;gap:1.5rem;min-height:380px}
-            .cvt-timeline{width:210px;flex-shrink:0;padding:.5rem 0;border-right:1px solid var(--border);padding-right:1rem}
-            .cvt-tl-header{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);padding-bottom:.6rem;border-bottom:1px solid var(--border);margin-bottom:.55rem;display:flex;align-items:center;gap:.4rem}
-            .cvt-tl-list{display:flex;flex-direction:column;gap:.05rem}
-            .cvt-tl-item{display:flex;align-items:stretch;gap:.55rem;padding:.4rem .45rem;border-radius:10px;cursor:pointer;transition:background .15s,box-shadow .15s}
-            .cvt-tl-item:hover{background:var(--bg-raised)}
-            .cvt-tl-item.active{background:rgba(99,102,241,.08);box-shadow:inset 0 0 0 1.5px rgba(99,102,241,.3)}
-            .cvt-tl-node{display:flex;flex-direction:column;align-items:center;flex-shrink:0;width:30px}
-            .cvt-tl-dot{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:800;color:#fff;flex-shrink:0;position:relative;transition:transform .2s,box-shadow .18s}
-            .cvt-tl-item.active .cvt-tl-dot{transform:scale(1.12)}
-            .cvt-status-icon{position:absolute;bottom:-3px;right:-3px;width:13px;height:13px;border-radius:50%;border:2px solid var(--bg-surface);display:flex;align-items:center;justify-content:center;font-size:.42rem;color:#fff}
-            .cvt-tl-line{flex:1;width:2px;background:var(--border);border-radius:1px;margin:.25rem 0;min-height:8px}
-            .cvt-tl-info{flex:1;min-width:0;padding-top:.15rem}
-            .cvt-tl-day{font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)}
-            .cvt-tl-title{font-size:.8rem;font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.3;margin-top:.05rem}
-            .cvt-tl-badge{font-size:.6rem;font-weight:700;padding:.08rem .4rem;border-radius:999px;margin-top:.25rem;display:inline-block;letter-spacing:.02em}
-            .cvt-panel{flex:1;min-width:0}
-            @keyframes cvt-in{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:translateX(0)}}
-            .cvt-panel-inner{animation:cvt-in .22s ease}
-            .cvt-hero{border-radius:14px;padding:1.2rem 1.35rem;margin-bottom:1.1rem;display:flex;align-items:flex-start;gap:1rem;position:relative;overflow:hidden}
-            .cvt-hero::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(0,0,0,.2) 0%,rgba(0,0,0,.04) 100%);pointer-events:none}
-            .cvt-hero>*{position:relative;z-index:1}
-            .cvt-hero-numwrap{width:56px;height:56px;border-radius:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:1.55rem;font-weight:900;color:rgba(255,255,255,.95);background:rgba(255,255,255,.18);backdrop-filter:blur(8px)}
-            .cvt-hero-info{flex:1;min-width:0}
-            .cvt-hero-num-label{font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:rgba(255,255,255,.6);margin-bottom:.12rem}
-            .cvt-hero-title{font-size:1.05rem;font-weight:800;color:#fff;line-height:1.25;margin-bottom:.5rem;text-shadow:0 1px 8px rgba(0,0,0,.25)}
-            .cvt-hero-chips{display:flex;flex-wrap:wrap;gap:.35rem}
-            .cvt-hero-chip{display:inline-flex;align-items:center;gap:.3rem;font-size:.72rem;font-weight:600;padding:.18rem .6rem;border-radius:20px;background:rgba(255,255,255,.18);color:rgba(255,255,255,.95);backdrop-filter:blur(6px)}
-            .cvt-hero-status{position:absolute;top:.85rem;right:.85rem;font-size:.68rem;font-weight:700;padding:.2rem .6rem;border-radius:999px;backdrop-filter:blur(8px);z-index:2;letter-spacing:.03em;display:inline-flex;align-items:center;gap:.3rem}
-            .cvt-hero-status.pass{background:rgba(16,185,129,.3);color:#6ee7b7;border:1px solid rgba(16,185,129,.5)}
-            .cvt-hero-status.fail{background:rgba(239,68,68,.25);color:#fca5a5;border:1px solid rgba(239,68,68,.4)}
-            .cvt-section{margin-bottom:.9rem}
-            .cvt-section-label{display:flex;align-items:center;gap:.5rem;font-size:.67rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:.55rem}
-            .cvt-section-line{flex:1;height:1px;background:var(--border)}
-            .cvt-topic-list{display:flex;flex-direction:column;gap:.4rem}
-            .cvt-topic-item{display:flex;align-items:flex-start;gap:.7rem;padding:.6rem .8rem;background:var(--bg-raised);border-radius:10px;border:1px solid var(--border);transition:border-color .15s}
-            .cvt-topic-item:hover{border-color:var(--primary)}
-            .cvt-topic-num{width:24px;height:24px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:800;color:#fff;flex-shrink:0;margin-top:.05rem}
-            .cvt-topic-name{font-size:.875rem;font-weight:600;color:var(--text-primary)}
-            .cvt-topic-desc{font-size:.775rem;color:var(--text-secondary);margin-top:.15rem;line-height:1.45}
-            .cvt-callout{display:flex;align-items:flex-start;gap:.7rem;padding:.8rem 1rem;border-radius:10px;background:rgba(99,102,241,.07);border:1px solid rgba(99,102,241,.2);margin-bottom:.85rem}
-            .cvt-callout-icon{width:28px;height:28px;border-radius:8px;background:rgba(99,102,241,.15);display:flex;align-items:center;justify-content:center;color:var(--primary);flex-shrink:0;font-size:.8rem;margin-top:.08rem}
-            .cvt-callout-text{font-size:.82rem;color:var(--text-secondary);line-height:1.55}
-            .cvt-test-card{display:flex;align-items:center;gap:.8rem;padding:.85rem 1rem;border-radius:12px;border:1.5px solid;cursor:pointer;transition:all .18s;font-family:inherit;width:100%;text-align:left;margin-bottom:.4rem;background:var(--bg-raised)}
-            .cvt-test-card:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,.1)}
-            .cvt-test-card.neutral{border-color:rgba(245,158,11,.3);background:rgba(245,158,11,.05)}
-            .cvt-test-card.pass{border-color:rgba(16,185,129,.4);background:rgba(16,185,129,.06)}
-            .cvt-test-card.fail{border-color:rgba(239,68,68,.35);background:rgba(239,68,68,.06)}
-            .cvt-test-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:.85rem;flex-shrink:0}
-            .cvt-test-info{flex:1;min-width:0}
-            .cvt-test-title{font-size:.875rem;font-weight:700;color:var(--text-primary)}
-            .cvt-test-hint{font-size:.72rem;color:var(--text-muted);margin-top:.1rem}
-            .cvt-test-pct{font-size:.9rem;font-weight:800;flex-shrink:0}
-            .cvt-test-pct.pass{color:#10b981}
-            .cvt-test-pct.fail{color:#ef4444}
-            .cvt-kb-list{display:flex;flex-wrap:wrap;gap:.4rem}
-            .cvt-kb-chip{display:inline-flex;align-items:center;gap:.4rem;padding:.3rem .75rem;border-radius:20px;border:1px solid var(--border);background:var(--bg-raised);color:var(--text-primary);text-decoration:none;font-size:.78rem;transition:all .15s;max-width:240px}
-            .cvt-kb-chip:hover{border-color:var(--primary);background:rgba(99,102,241,.06);color:var(--primary)}
-            .cvt-kb-chip-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+            /* ── Зміст курсу — послідовний список SCORM + тестів ── */
+            .cvc-item{display:flex;align-items:center;gap:.9rem;padding:.9rem 1rem;border-radius:12px;border:1.5px solid var(--border);background:var(--bg-raised);margin-bottom:.55rem;transition:all .18s;cursor:pointer}
+            .cvc-item:hover{border-color:var(--primary);transform:translateY(-1px)}
+            .cvc-item.locked{cursor:not-allowed;opacity:.6}
+            .cvc-item.locked:hover{transform:none;border-color:var(--border)}
+            .cvc-item.done{border-color:rgba(16,185,129,.4);background:rgba(16,185,129,.06)}
+            .cvc-num{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:.85rem;font-weight:800;color:#fff;flex-shrink:0}
+            .cvc-info{flex:1;min-width:0}
+            .cvc-title{font-size:.9rem;font-weight:700;color:var(--text-primary)}
+            .cvc-hint{font-size:.74rem;color:var(--text-muted);margin-top:.15rem;display:flex;align-items:center;gap:.35rem}
+            .cvc-status{flex-shrink:0;font-size:.7rem;font-weight:700;padding:.2rem .65rem;border-radius:999px;letter-spacing:.02em}
+            .cvc-status.done{background:rgba(16,185,129,.15);color:#10b981}
+            .cvc-status.locked{background:var(--bg-surface);color:var(--text-muted)}
         </style>
 
         <div style="display:grid;grid-template-columns:1fr 300px;gap:2rem;align-items:start">
@@ -242,29 +209,16 @@ const CourseViewPage = {
 
                 <div class="cv-info-tabs">
                     <div class="cv-info-tab-bar">
-                        <button class="cv-info-tab-btn active" style="position:relative" onclick="CourseViewPage._switchInfoTab('about')">
+                        <button class="cv-info-tab-btn active" style="position:relative;cursor:default">
                             <span class="cv-tab-icon">📖</span>
                             <span class="cv-tab-label">Про курс</span>
                             ${AppState.isStaff() && AppState.canMutate() ? `<span onclick="event.stopPropagation();CourseViewPage._editCourseInfo('${course.id}')" style="position:absolute;top:6px;right:6px;display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;color:var(--text-muted);border:1px solid var(--border);background:var(--bg-raised);transition:all .15s" onmouseenter="this.style.borderColor='var(--primary)';this.style.color='var(--primary)'" onmouseleave="this.style.borderColor='var(--border)';this.style.color='var(--text-muted)'"><i class="fa-solid fa-pen-to-square" style="font-size:.65rem"></i></span>` : ''}
                         </button>
-                        ${course.schedule?.length || AppState.isStaff() ? `
-                        <button class="cv-info-tab-btn" onclick="CourseViewPage._switchInfoTab('schedule')">
-                            <span class="cv-tab-icon">📅</span>
-                            <span class="cv-tab-label">Розклад</span>
-                        </button>` : ''}
-                        ${(course.course_info?.meet_url || AppState.isStaff()) ? `
-                        <button class="cv-info-tab-btn" onclick="CourseViewPage._switchInfoTab('meet')" style="position:relative">
-                            <span class="cv-tab-icon">🎥</span>
-                            <span class="cv-tab-label">Онлайн лекція</span>
-                            ${AppState.isStaff() && AppState.canMutate() ? `<span onclick="event.stopPropagation();CourseViewPage._editMeetUrl('${course.id}')" style="position:absolute;top:6px;right:6px;display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;color:var(--text-muted);border:1px solid var(--border);background:var(--bg-raised);transition:all .15s" onmouseenter="this.style.borderColor='var(--primary)';this.style.color='var(--primary)'" onmouseleave="this.style.borderColor='var(--border)';this.style.color='var(--text-muted)'"><i class="fa-solid fa-pen-to-square" style="font-size:.65rem"></i></span>` : ''}
-                        </button>` : ''}
                     </div>
                     <div id="cv-info-tab-about" class="cv-info-tab-pane">${this._renderCourseInfoBody(course)}</div>
-                    ${course.schedule?.length || AppState.isStaff() ? `<div id="cv-info-tab-schedule" class="cv-info-tab-pane" style="display:none"></div>` : ''}
-                    ${(course.course_info?.meet_url || AppState.isStaff()) ? `<div id="cv-info-tab-meet" class="cv-info-tab-pane" style="display:none">${enrolled || AppState.isStaff() ? this._renderMeetTab(course) : this._renderEnrollPrompt(course.id)}</div>` : ''}
                 </div>
 
-                <div id="tests-section" style="margin-top:2rem"></div>
+                <div id="cv-content-section" style="margin-top:2rem"></div>
             </div>
 
             <div>
@@ -276,6 +230,7 @@ const CourseViewPage = {
                         ` : `<div class="cv-sidebar-thumb-def">📖</div>`}
                     </div>
                     <div class="cv-sidebar-body">
+                        ${this._renderBadgeCard(course)}
                         ${this._renderRunBlock(course, enrolled)}
                         ${enrolled ? this._renderEnrolledActions(course) : ''}
                         <div id="cv-enrollees" style="margin-top:.5rem"><div style="display:flex;justify-content:center;padding:1rem"><div class="spinner"></div></div></div>
@@ -284,9 +239,8 @@ const CourseViewPage = {
             </div>
         </div>`;
 
-        this._loadTests(course.id, enrolled);
+        this._loadContent(course.id, enrolled);
         this._loadEnrollees(course.id);
-        if (course.schedule?.length || AppState.isStaff()) this._loadScheduleTab(course.schedule || []);
     },
 
     async _uploadThumb(courseId, input) {
@@ -396,76 +350,6 @@ const CourseViewPage = {
                 </div>` : `<div class="cvi-empty"><i class="fa-regular fa-file-lines" style="font-size:1.5rem;display:block;margin-bottom:.4rem"></i>Опис курсу ще не заповнений</div>`;
 
         return content;
-    },
-
-    _switchInfoTab(tab) {
-        document.querySelectorAll('.cv-info-tab-btn').forEach(b => b.classList.remove('active'));
-        const active = [...document.querySelectorAll('.cv-info-tab-btn')].find(b => b.onclick?.toString().includes(`'${tab}'`));
-        if (active) active.classList.add('active');
-        ['about','schedule','meet'].forEach(t => {
-            const el = document.getElementById('cv-info-tab-' + t);
-            if (el) el.style.display = t === tab ? '' : 'none';
-        });
-        if (tab === 'schedule') this._loadScheduleTab(this._course?.schedule || []);
-    },
-
-    _renderMeetTab(course) {
-        const url = course.course_info?.meet_url || '';
-        if (!url) return `
-            <div style="padding:2rem;text-align:center;color:var(--text-muted)">
-                <div style="font-size:2.5rem;margin-bottom:.75rem">🎥</div>
-                <div style="font-weight:600;margin-bottom:.35rem">Посилання не додано</div>
-                ${AppState.isStaff() ? `<div style="font-size:.82rem">Натисніть олівець на вкладці щоб додати посилання на Google Meet</div>` : '<div style="font-size:.82rem">Посилання з\'явиться тут після налаштування викладачем</div>'}
-            </div>`;
-        return `
-            <div style="padding:1.5rem;display:flex;flex-direction:column;align-items:center;gap:1.25rem;text-align:center">
-                <div style="width:72px;height:72px;border-radius:20px;background:linear-gradient(135deg,#00ac47,#0066da);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(0,166,71,.3)">
-                    <i class="fa-solid fa-video" style="font-size:2rem;color:#fff"></i>
-                </div>
-                <div>
-                    <div style="font-size:1.1rem;font-weight:700;margin-bottom:.35rem">Google Meet</div>
-                    <div style="font-size:.82rem;color:var(--text-muted)">Онлайн-заняття з курсу</div>
-                </div>
-                <a href="${Fmt.safeUrl(url)}" target="_blank" rel="noopener noreferrer"
-                   style="display:inline-flex;align-items:center;gap:.6rem;padding:.75rem 2rem;border-radius:12px;background:linear-gradient(135deg,#00ac47,#0066da);color:#fff;font-size:.95rem;font-weight:700;text-decoration:none;transition:opacity .15s;box-shadow:0 4px 16px rgba(0,102,218,.3)"
-                   onmouseenter="this.style.opacity='.88'" onmouseleave="this.style.opacity='1'">
-                    <i class="fa-solid fa-arrow-up-right-from-square"></i> Приєднатися до зустрічі
-                </a>
-                <div style="font-size:.75rem;color:var(--text-muted);word-break:break-all;max-width:400px">${Fmt.esc(url)}</div>
-            </div>`;
-    },
-
-    _editMeetUrl(courseId) {
-        const current = this._course?.course_info?.meet_url || '';
-        Modal.open({
-            title: '🎥 Посилання на Google Meet',
-            size: 'sm',
-            body: `
-            <div style="display:flex;flex-direction:column;gap:.75rem">
-                <div style="font-size:.82rem;color:var(--text-muted)">Вставте посилання на Google Meet для онлайн-занять з курсу</div>
-                <input id="meet-url-input" type="url" class="form-control" placeholder="https://meet.google.com/xxx-xxxx-xxx" value="${Fmt.esc(current)}">
-            </div>`,
-            footer: `
-                <button class="btn btn-primary" onclick="CourseViewPage._saveMeetUrl('${courseId}')">Зберегти</button>
-                <button class="btn btn-ghost" onclick="Modal.close()">Скасувати</button>`
-        });
-    },
-
-    async _saveMeetUrl(courseId) {
-        const url = document.getElementById('meet-url-input')?.value.trim() || '';
-        Loader.show();
-        try {
-            const { data: fresh } = await supabase.from('courses').select('course_info').eq('id', courseId).single();
-            const info = { ...(fresh?.course_info || {}), meet_url: url };
-            const { error: updErr } = await supabase.from('courses').update({ course_info: info }).eq('id', courseId);
-            if (updErr) { Toast.error('Помилка збереження', updErr.message); return; }
-            if (this._course) { this._course.course_info = info; }
-            Modal.close();
-            const el = document.getElementById('cv-info-tab-meet');
-            if (el) el.innerHTML = this._renderMeetTab(this._course);
-            Toast.success('Збережено');
-        } catch(e) { Toast.error('Помилка', e.message); }
-        finally { Loader.hide(); }
     },
 
     _openRunModal(courseId) {
@@ -589,68 +473,6 @@ const CourseViewPage = {
         finally { Loader.hide(); }
     },
 
-    async _editSchedule(courseId) {
-        const el = document.getElementById('cv-info-tab-schedule');
-        if (!el) return;
-        el.innerHTML = `<div style="padding:1rem 0;text-align:center;color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin"></i></div>`;
-        AdminPage._scheduleDays = (this._course?.schedule || []).map(d => ({
-            ...d,
-            items: [...(d.items || [])],
-            tests: d.tests ? [...d.tests] : (d.test_id ? [{ id: d.test_id, title: d.test_title || '' }] : []),
-            kb_resources: [...(d.kb_resources || [])]
-        }));
-        try {
-            const [profRes, tests, kbRes] = await Promise.all([
-                API.profiles.getAll({ pageSize: 500 }),
-                API.tests.getAll(),
-                API.resources.getAll({ pageSize: 500 })
-            ]);
-            AdminPage._scheduleProfiles = (profRes.data || []).sort((a, b) => (a.full_name || '').localeCompare(b.full_name || '', 'uk'));
-            AdminPage._scheduleTests    = tests || [];
-            AdminPage._scheduleKbAll    = kbRes.data || [];
-        } catch(e) { AdminPage._scheduleProfiles = []; AdminPage._scheduleTests = []; AdminPage._scheduleKbAll = []; }
-        el.innerHTML = `
-        <div id="c-schedule-builder" style="display:flex;flex-direction:column;gap:.65rem"></div>
-        <button type="button" class="btn btn-ghost btn-sm" style="margin-top:.35rem;width:100%;justify-content:center;border:1.5px dashed var(--border)"
-            onclick="AdminPage._scheduleAddDay()">
-            <i class="fa-solid fa-plus"></i> Додати день
-        </button>
-        <div style="display:flex;gap:.5rem;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)">
-            <button class="btn btn-primary" onclick="CourseViewPage._saveSchedule('${courseId}')">
-                <i class="fa-solid fa-floppy-disk"></i> Зберегти
-            </button>
-            <button class="btn btn-ghost" onclick="CourseViewPage._loadScheduleTab(CourseViewPage._course?.schedule||[])">Скасувати</button>
-        </div>`;
-        AdminPage._scheduleRender();
-    },
-
-    async _saveSchedule(courseId) {
-        const schedule = AdminPage._scheduleDays.map(d => ({
-            title:        d.title || '',
-            icon:         d.icon || '',
-            time_range:   d.time_range || '',
-            teacher_id:   d.teacher_id || null,
-            teacher_name: d.teacher_name || '',
-            tests:        (d.tests || []).filter(t => t.id),
-            instructions: d.instructions || '',
-            items:        (d.items || []).map(it => typeof it === 'object' ? { title:(it.title||'').trim(), desc:(it.desc||'').trim() } : { title:it.trim(), desc:'' }).filter(it => it.title),
-            kb_resources: (d.kb_resources || [])
-        }));
-        Loader.show();
-        try {
-            await API.courses.update(courseId, { schedule });
-            if (this._course) this._course.schedule = schedule;
-            await this._loadScheduleTab(schedule);
-            Toast.success('Збережено');
-        } catch(e) { Toast.error('Помилка', e.message); }
-        finally { Loader.hide(); }
-    },
-
-    _kbIcon(type) {
-        const map = { pdf:'fa-file-pdf', video:'fa-circle-play', link:'fa-link', scorm:'fa-cube', image:'fa-image', document:'fa-file-lines', file:'fa-file' };
-        return map[type] || 'fa-file';
-    },
-
     _renderEnrollPrompt(courseId) {
         return `
         <div style="padding:2.5rem 1.5rem;text-align:center;display:flex;flex-direction:column;align-items:center;gap:1rem">
@@ -663,193 +485,100 @@ const CourseViewPage = {
         </div>`;
     },
 
-    async _loadScheduleTab(schedule) {
-        const el = document.getElementById('cv-info-tab-schedule');
+    // ── Зміст курсу: послідовний список SCORM-пакетів і тестів ──────
+    // Порядок і склад зберігаються в courses.course_info.content_items
+    // (керується з форми редагування курсу в CoursesPage). Наступний
+    // елемент розблоковується, як тільки попередній має ХОЧ ЯКУ спробу/
+    // завершення — не обов'язково успішне — інакше користувач, що провалив
+    // тест чи не зміг завершити SCORM, назавжди застрягає (той самий підхід,
+    // що й у послідовних групах тестів, tests-manager.js `locked`).
+    async _loadContent(courseId, enrolled) {
+        const el = document.getElementById('cv-content-section');
         if (!el) return;
-        if (!this._enrolled && !AppState.isStaff()) {
-            el.innerHTML = this._renderEnrollPrompt(this._course?.id || '');
+        const items = this._course?.course_info?.content_items || [];
+        if (!items.length) { el.innerHTML = ''; return; }
+        if (!enrolled && !AppState.isStaff()) {
+            el.innerHTML = `
+                <div class="cv-section-head">
+                    <div class="cv-section-icon" style="background:linear-gradient(135deg,#6366f1,#8b5cf6)"><i class="fa-solid fa-route"></i></div>
+                    <div class="cv-section-title">Зміст курсу</div>
+                </div>` + this._renderEnrollPrompt(courseId);
             return;
         }
-        const testIds = [...new Set(schedule.flatMap(d =>
-            d.tests?.length ? d.tests.map(t => t.id) : (d.test_id ? [d.test_id] : [])
-        ).filter(Boolean))];
-        const attemptsMap = {};
-        if (testIds.length) {
-            await Promise.all(testIds.map(async id => {
-                try {
-                    const list = await API.attempts.getByTest(id);
-                    const completed = (list || []).filter(a => a.completed_at);
-                    const best = completed.sort((a, b) => (b.passed ? 1 : 0) - (a.passed ? 1 : 0) || b.percentage - a.percentage)[0];
-                    if (best) attemptsMap[id] = best;
-                } catch {}
-            }));
-        }
-        const courseId = this._course?.id || '';
-        el.innerHTML = (AppState.isStaff() && AppState.canMutate() ? `
-            <div style="display:flex;justify-content:flex-end;margin-bottom:.75rem">
-                <button class="btn btn-ghost btn-sm" onclick="CourseViewPage._editSchedule('${courseId}')">
-                    <i class="fa-solid fa-pen-to-square"></i> Редагувати
-                </button>
-            </div>` : '') + this._renderScheduleCards(schedule, attemptsMap);
-    },
 
-    _renderScheduleCards(schedule, attemptsMap = {}) {
-        const dayColors = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#0ea5e9'];
-        this._scheduleData = { schedule, attemptsMap, dayColors };
-        const n = schedule.length;
-        const label = n === 1 ? '1 день' : n < 5 ? n + ' дні' : n + ' днів';
+        const testIds  = items.filter(i => i.type === 'test').map(i => i.id);
+        const scormIds = items.filter(i => i.type === 'scorm').map(i => i.id);
+        const doneSet = new Set();
+        const passMap = {};
+        try {
+            if (testIds.length) {
+                const { data: attempts } = await supabase.from('test_attempts')
+                    .select('test_id,passed,completed_at')
+                    .eq('user_id', AppState.user.id)
+                    .in('test_id', testIds)
+                    .not('completed_at', 'is', null);
+                (attempts || []).forEach(a => {
+                    doneSet.add('test:' + a.test_id);
+                    if (a.passed) passMap['test:' + a.test_id] = true;
+                });
+            }
+            if (scormIds.length) {
+                const { data: pkgs } = await supabase.from('scorm_packages')
+                    .select('id,resource_id').in('resource_id', scormIds);
+                const pkgByResource = {};
+                (pkgs || []).forEach(p => pkgByResource[p.resource_id] = p.id);
+                const pkgIds = (pkgs || []).map(p => p.id);
+                if (pkgIds.length) {
+                    const { data: progress } = await supabase.from('scorm_progress')
+                        .select('scorm_package_id,completion_status,success_status')
+                        .eq('user_id', AppState.user.id)
+                        .in('scorm_package_id', pkgIds);
+                    const byPkg = {};
+                    (progress || []).forEach(p => byPkg[p.scorm_package_id] = p);
+                    scormIds.forEach(resId => {
+                        const pkgId = pkgByResource[resId];
+                        const p = pkgId ? byPkg[pkgId] : null;
+                        if (p?.completion_status === 'completed') {
+                            doneSet.add('scorm:' + resId);
+                            if (p.success_status === 'passed') passMap['scorm:' + resId] = true;
+                        }
+                    });
+                }
+            }
+        } catch(_) {}
 
-        const timelineItems = schedule.map((d, i) => {
-            const color = dayColors[i % dayColors.length];
-            const tests = d.tests?.length ? d.tests : (d.test_id ? [{ id: d.test_id, title: d.test_title || 'Тест дня' }] : []);
-            const attempted = tests.filter(t => attemptsMap[t.id]);
-            const allPassed = tests.length > 0 && attempted.length === tests.length && attempted.every(t => attemptsMap[t.id].passed);
-            const anyFailed = attempted.some(t => !attemptsMap[t.id].passed);
-
-            const statusIcon = allPassed
-                ? `<span class="cvt-status-icon" style="background:#10b981"><i class="fa-solid fa-check"></i></span>`
-                : anyFailed
-                ? `<span class="cvt-status-icon" style="background:#ef4444"><i class="fa-solid fa-xmark"></i></span>`
-                : '';
-            const badge = allPassed
-                ? `<span class="cvt-tl-badge" style="background:rgba(16,185,129,.12);color:#10b981"><i class="fa-solid fa-trophy" style="font-size:.55rem"></i> Пройдено</span>`
-                : anyFailed
-                ? `<span class="cvt-tl-badge" style="background:rgba(239,68,68,.1);color:#ef4444"><i class="fa-solid fa-rotate-right" style="font-size:.55rem"></i> Повторити</span>`
-                : '';
-            const isLast = i === schedule.length - 1;
-
-            return `
-            <div class="cvt-tl-item${i === 0 ? ' active' : ''}" onclick="CourseViewPage._cvsDayOpen(${i})">
-                <div class="cvt-tl-node">
-                    <div class="cvt-tl-dot" style="background:${color}">${i + 1}${statusIcon}</div>
-                    ${!isLast ? '<div class="cvt-tl-line"></div>' : ''}
-                </div>
-                <div class="cvt-tl-info">
-                    <div class="cvt-tl-day">День ${i + 1}</div>
-                    ${d.title ? `<div class="cvt-tl-title">${Fmt.esc(d.title)}</div>` : ''}
-                    ${badge}
-                </div>
-            </div>`;
-        }).join('');
-
-        return `
-        <div class="cvt-wrap">
-            <div class="cvt-timeline">
-                <div class="cvt-tl-header"><i class="fa-solid fa-route"></i> Програма • ${label}</div>
-                <div class="cvt-tl-list">${timelineItems}</div>
+        el.innerHTML = `
+            <div class="cv-section-head">
+                <div class="cv-section-icon" style="background:linear-gradient(135deg,#6366f1,#8b5cf6)"><i class="fa-solid fa-route"></i></div>
+                <div class="cv-section-title">Зміст курсу</div>
+                <span style="margin-left:auto;font-size:.78rem;color:var(--text-muted)">${items.length} ${items.length===1?'елемент':'елементів'}</span>
             </div>
-            <div class="cvt-panel" id="cvt-panel">${this._dayCardHtml(0)}</div>
-        </div>`;
-    },
-
-    _dayCardHtml(idx) {
-        const { schedule, attemptsMap, dayColors } = this._scheduleData || {};
-        const d = schedule?.[idx];
-        if (!d) return '';
-        const color = dayColors[idx % dayColors.length];
-        const tests = d.tests?.length ? d.tests : (d.test_id ? [{ id: d.test_id, title: d.test_title || 'Тест дня' }] : []);
-        const attempted = tests.filter(t => attemptsMap[t.id]);
-        const allPassed = tests.length > 0 && attempted.length === tests.length && attempted.every(t => attemptsMap[t.id].passed);
-        const anyFailed = attempted.some(t => !attemptsMap[t.id].passed);
-
-        const statusHtml = allPassed
-            ? `<span class="cvt-hero-status pass"><i class="fa-solid fa-trophy"></i> Завершено</span>`
-            : anyFailed
-            ? `<span class="cvt-hero-status fail"><i class="fa-solid fa-rotate-right"></i> Повторити тест</span>`
-            : '';
-
-        const topicsHtml = d.items?.length ? `
-            <div class="cvt-section">
-                <div class="cvt-section-label">
-                    <i class="fa-solid fa-list-check" style="color:${color}"></i> Теми заняття
-                    <div class="cvt-section-line"></div>
-                </div>
-                <div class="cvt-topic-list">
-                    ${d.items.map((item, ti) => {
-                        const t = typeof item === 'object' ? item : { title: item, desc: '' };
-                        return `<div class="cvt-topic-item">
-                            <div class="cvt-topic-num" style="background:${color}">${ti + 1}</div>
-                            <div>
-                                <div class="cvt-topic-name">${Fmt.esc(t.title || '')}</div>
-                                ${t.desc ? `<div class="cvt-topic-desc">${Fmt.esc(t.desc)}</div>` : ''}
-                            </div>
-                        </div>`;
-                    }).join('')}
-                </div>
-            </div>` : '';
-
-        const noteHtml = d.instructions ? `
-            <div class="cvt-callout">
-                <div class="cvt-callout-icon"><i class="fa-solid fa-circle-info"></i></div>
-                <div class="cvt-callout-text">${Fmt.esc(d.instructions)}</div>
-            </div>` : '';
-
-        const testsHtml = tests.length ? `
-            <div class="cvt-section">
-                <div class="cvt-section-label">
-                    <i class="fa-solid fa-pen-to-square" style="color:#f59e0b"></i> Тест до заняття
-                    <div class="cvt-section-line"></div>
-                </div>
-                ${tests.map(t => {
-                    const att = attemptsMap[t.id];
-                    const done = !!att;
-                    const passed = att?.passed;
-                    const pct = att?.percentage ?? 0;
-                    const cardCls = done ? (passed ? 'pass' : 'fail') : 'neutral';
-                    const iconBg = done
-                        ? `background:linear-gradient(135deg,${passed ? '#10b981,#0ea5e9' : '#ef4444,#f59e0b'})`
-                        : 'background:linear-gradient(135deg,#f59e0b,#ef4444)';
-                    const iconName = done ? (passed ? 'fa-circle-check' : 'fa-circle-xmark') : 'fa-pen-to-square';
-                    const resultHtml = done
-                        ? `<span class="cvt-test-pct ${passed ? 'pass' : 'fail'}">${Math.round(pct)}%</span>`
-                        : `<i class="fa-solid fa-chevron-right" style="color:var(--text-muted);font-size:.75rem;flex-shrink:0"></i>`;
-                    return `<button class="cvt-test-card ${cardCls}" onclick="Router.go('tests/${t.id}')">
-                        <div class="cvt-test-icon" style="${iconBg}"><i class="fa-solid ${iconName}"></i></div>
-                        <div class="cvt-test-info">
-                            <div class="cvt-test-title">${Fmt.esc(t.title || 'Тест дня')}</div>
-                            <div class="cvt-test-hint">${done ? (passed ? 'Пройдено · ' + Math.round(pct) + '%' : 'Не пройдено · ' + Math.round(pct) + '%') : 'Пройдіть після лекції'}</div>
-                        </div>
-                        ${resultHtml}
-                    </button>`;
-                }).join('')}
-            </div>` : '';
-
-        const kbHtml = d.kb_resources?.length ? `
-            <div class="cvt-section">
-                <div class="cvt-section-label">
-                    <i class="fa-solid fa-paperclip" style="color:#6366f1"></i> Матеріали
-                    <div class="cvt-section-line"></div>
-                </div>
-                <div class="cvt-kb-list">
-                    ${d.kb_resources.map(r => `
-                    <a href="#" onclick="event.preventDefault();Router.go('resource/${r.id}')" class="cvt-kb-chip">
-                        <i class="fa-solid ${this._kbIcon(r.type)}" style="color:var(--primary);font-size:.72rem;flex-shrink:0"></i>
-                        <span class="cvt-kb-chip-name">${Fmt.esc(r.title)}</span>
-                    </a>`).join('')}
-                </div>
-            </div>` : '';
-
-        return `<div class="cvt-panel-inner">
-            <div class="cvt-hero" style="background:${color}">
-                ${statusHtml}
-                <div class="cvt-hero-numwrap">${idx + 1}</div>
-                <div class="cvt-hero-info">
-                    <div class="cvt-hero-num-label">День ${idx + 1}</div>
-                    <div class="cvt-hero-title">${d.title ? Fmt.esc(d.title) : 'Заняття'}</div>
-                    <div class="cvt-hero-chips">
-                        ${d.teacher_name ? `<span class="cvt-hero-chip"><i class="fa-solid fa-chalkboard-user"></i> ${Fmt.esc(d.teacher_name)}</span>` : ''}
-                        ${d.time_range ? `<span class="cvt-hero-chip"><i class="fa-regular fa-clock"></i> ${Fmt.esc(d.time_range)}</span>` : ''}
+            ${items.map((it, i) => {
+                const key   = it.type + ':' + it.id;
+                const done  = doneSet.has(key);
+                const passed = passMap[key];
+                const staffBypass = AppState.isStaff();
+                const locked = !staffBypass && i > 0 && !doneSet.has(items[i-1].type + ':' + items[i-1].id);
+                const icon  = it.type === 'scorm' ? 'fa-cube' : 'fa-pen-to-square';
+                const color = it.type === 'scorm' ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : 'linear-gradient(135deg,#f59e0b,#ef4444)';
+                const typeLabel = it.type === 'scorm' ? 'SCORM' : 'Тест';
+                const clickAttr = locked ? '' : (it.type === 'scorm'
+                    ? `onclick="Router.go('resource/${it.id}')"`
+                    : `onclick="Router.go('tests/${it.id}${this._from === 'expert-path' ? '?from=expert-path' : ''}')"`);
+                let statusHtml = '';
+                if (locked) statusHtml = `<span class="cvc-status locked"><i class="fa-solid fa-lock"></i> Заблоковано</span>`;
+                else if (done) statusHtml = `<span class="cvc-status done"><i class="fa-solid fa-check"></i> ${it.type==='test' ? (passed?'Зараховано':'Не зараховано') : 'Завершено'}</span>`;
+                return `
+                <div class="cvc-item${locked?' locked':''}${done?' done':''}" ${clickAttr}>
+                    <div class="cvc-num" style="background:${color}">${done ? '<i class="fa-solid fa-check"></i>' : (i+1)}</div>
+                    <div class="cvc-info">
+                        <div class="cvc-title">${Fmt.esc(it.title)}</div>
+                        <div class="cvc-hint"><i class="fa-solid ${icon}" style="font-size:.68rem"></i> ${typeLabel}</div>
                     </div>
-                </div>
-            </div>
-            ${topicsHtml}${noteHtml}${testsHtml}${kbHtml}
-        </div>`;
-    },
-
-    _cvsDayOpen(idx) {
-        document.querySelectorAll('.cvt-tl-item').forEach((el, i) => el.classList.toggle('active', i === idx));
-        const panel = document.getElementById('cvt-panel');
-        if (panel) panel.innerHTML = this._dayCardHtml(idx);
+                    ${statusHtml}
+                    ${!locked && !done ? `<i class="fa-solid fa-chevron-right" style="color:var(--text-muted);font-size:.8rem"></i>` : ''}
+                </div>`;
+            }).join('')}`;
     },
 
     _editCourseInfo(courseId) {
@@ -907,6 +636,51 @@ const CourseViewPage = {
             Toast.success('Збережено');
         } catch(e) { Toast.error('Помилка', e.message); }
         finally { Loader.hide(); }
+    },
+
+    _renderBadgeCard(course) {
+        if (!course.badge_url) return '';
+        const earned = !!this._enrollmentRow?.completed_at;
+        const recipientName = AppState.profile?.full_name || '';
+        return `
+            <div class="cv-badge-card${earned ? ' earned' : ''}" onclick="CourseViewPage._viewBadge(${JSON.stringify(course.badge_url).replace(/"/g,'&quot;')},${JSON.stringify(course.title||'').replace(/"/g,'&quot;')})" title="Натисніть, щоб розглянути">
+                <div class="cv-badge-img-wrap"><img src="${Fmt.safeUrl(course.badge_url)}" alt="Медаль курсу"></div>
+                <div class="cv-badge-info">
+                    <div class="cv-badge-label">${earned ? '<i class="fa-solid fa-check"></i> Отримано' : 'Нагорода за проходження'}</div>
+                    <div class="cv-badge-text">${earned ? `Вручено: ${Fmt.esc(recipientName)}` : 'Завершіть курс, щоб отримати цю медаль'}</div>
+                </div>
+                <i class="fa-solid fa-magnifying-glass-plus" style="color:var(--text-muted);font-size:.8rem;flex-shrink:0"></i>
+            </div>`;
+    },
+
+    // Медаль стає "іменною" лише для того, хто її заслужив — сам файл
+    // badge_url спільний для всіх (одне зображення, завантажене в адмінці),
+    // а ім'я одержувача підставляється з AppState.profile саме того, хто
+    // зараз дивиться сторінку, тож кожен бачить підпис зі своїм іменем.
+    _viewBadge(url, title) {
+        const earned = !!this._enrollmentRow?.completed_at;
+        const recipientName = AppState.profile?.full_name || '';
+        const dateStr = earned ? Fmt.date(this._enrollmentRow.completed_at) : '';
+        Modal.open({
+            title: '🏅 Медаль курсу',
+            size: 'sm',
+            noHeader: false,
+            body: `
+                <div style="display:flex;flex-direction:column;align-items:center;gap:.85rem;padding:.5rem 0 1rem">
+                    <div style="width:340px;height:340px;max-width:100%;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 10px 28px rgba(0,0,0,.35))">
+                        <img src="${Fmt.safeUrl(url)}" alt="Медаль курсу" style="max-width:100%;max-height:100%;object-fit:contain">
+                    </div>
+                    <div style="font-size:.9rem;font-weight:600;text-align:center">${Fmt.esc(title || '')}</div>
+                    ${earned ? `
+                    <div style="width:100%;text-align:center;padding-top:.85rem;border-top:1px dashed var(--border)">
+                        <div style="font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.3rem">Вручається</div>
+                        <div style="font-family:Georgia,'Times New Roman',serif;font-style:italic;font-size:1.25rem;font-weight:700;color:var(--text-primary)">${Fmt.esc(recipientName)}</div>
+                        <div style="font-size:.72rem;color:var(--text-muted);margin-top:.35rem">${dateStr}</div>
+                    </div>` : `
+                    <div style="font-size:.78rem;color:var(--text-muted);text-align:center">Завершіть курс, щоб медаль стала іменною</div>`}
+                </div>`,
+            footer: `<button class="btn btn-secondary" onclick="Modal.close()">Закрити</button>`
+        });
     },
 
     _renderRunBlock(course, enrolled) {
@@ -1123,43 +897,6 @@ const CourseViewPage = {
             this._loadEnrollees(courseId);
         } catch(e) { Toast.error('Помилка', e.message); }
         finally { Loader.hide(); }
-    },
-
-    async _loadTests(courseId, enrolled) {
-        const el = document.getElementById('tests-section');
-        if (!el) return;
-        try {
-            const tests   = await API.tests.getByCourse(courseId);
-            const visible = tests.filter(t => t.is_published || AppState.isStaff());
-            if (!visible.length) { el.innerHTML = ''; return; }
-            el.innerHTML = `
-                <div class="cv-section-head">
-                    <div class="cv-section-icon" style="background:linear-gradient(135deg,#f59e0b,#ef4444)"><i class="fa-solid fa-pen-to-square"></i></div>
-                    <div class="cv-section-title">Тести курсу</div>
-                    <span style="margin-left:auto;font-size:.78rem;color:var(--text-muted)">${visible.length} тест${visible.length===1?'':'ів'}</span>
-                </div>
-                ${visible.map(t => `
-                    <div class="cv-lesson" ${enrolled || AppState.isStaff() ? `onclick="Router.go('tests/${t.id}${this._from === 'expert-path' ? '?from=expert-path' : ''}')"` : ''}>
-                        <div class="cv-lesson-num" style="background:linear-gradient(135deg,#f59e0b,#ef4444)">
-                            <i class="fa-solid fa-pen-to-square" style="font-size:.75rem"></i>
-                        </div>
-                        <div style="flex:1;min-width:0">
-                            <div class="cv-lesson-title">${Fmt.esc(t.title)}</div>
-                            <div class="cv-lesson-meta">
-                                ${t.max_attempts ? `<span><i class="fa-solid fa-rotate-right"></i> ${t.max_attempts} спроб</span>` : '<span>Безліміт спроб</span>'}
-                                ${t.time_limit_minutes ? `<span><i class="fa-regular fa-clock"></i> ${t.time_limit_minutes} хв</span>` : ''}
-                                ${t.passing_score ? `<span><i class="fa-solid fa-bullseye"></i> ${t.passing_score}% поріг</span>` : ''}
-                            </div>
-                        </div>
-                        <div style="display:flex;align-items:center;gap:.4rem">
-                            ${!t.is_published ? '<span class="badge badge-muted">Чернетка</span>' : '<i class="fa-solid fa-chevron-right" style="color:var(--text-muted);font-size:.8rem"></i>'}
-                            ${AppState.isStaff() && AppState.canMutate() ? `
-                                <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();TestsPage.openEdit('${t.id}')"><i class="fa-solid fa-pen"></i></button>
-                                <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();TestsPage.deleteTest('${t.id}',${JSON.stringify(t.title||'').replace(/"/g,'&quot;')})"><i class="fa-solid fa-trash"></i></button>
-                            ` : ''}
-                        </div>
-                    </div>`).join('')}`;
-        } catch(e) { el.innerHTML = ''; }
     },
 
     async enroll(courseId, runId = null) {

@@ -151,6 +151,14 @@ const App = {
 
             'tests/:id': async ({ container, params }) => {
                 if (!requireTrusted()) return;
+                if (!AppState.isStaff()) {
+                    const gate = await API.courses.checkContentGate('test', params.id).catch(() => null);
+                    if (gate?.locked) {
+                        Toast.warning('Заблоковано', `Спочатку пройдіть попередній елемент курсу «${gate.courseTitle}»`);
+                        Router.go('courses/' + gate.courseId);
+                        return;
+                    }
+                }
                 await TestsPage.init(container, params);
             },
 
@@ -235,6 +243,14 @@ const App = {
 
             'resource/:id': async ({ container, params }) => {
                 if (!requireTrusted(true)) return;
+                if (!AppState.isStaff()) {
+                    const gate = await API.courses.checkContentGate('scorm', params.id).catch(() => null);
+                    if (gate?.locked) {
+                        Toast.warning('Заблоковано', `Спочатку пройдіть попередній елемент курсу «${gate.courseTitle}»`);
+                        Router.go('courses/' + gate.courseId);
+                        return;
+                    }
+                }
                 await ResourceViewPage.init(container, params);
                 return () => ResourceViewPage.destroy?.();
             },
@@ -432,6 +448,7 @@ const App = {
         const subordinates = await API.profiles.getSubordinates(AppState.user.id).catch(() => []);
         const allUsers     = await API.profiles.getAll({ pageSize: 500 }).then(r => r.data).catch(() => []);
         const manager      = allUsers.find(u => u.id === profile?.manager_id);
+        const badges       = await API.enrollments.getMyBadges().catch(() => []);
 
         const field = (label, value) => value ? `
             <div style="min-width:0">
@@ -494,6 +511,28 @@ const App = {
         </div>
     </div>
 
+    <!-- Медалі -->
+    ${badges.length ? `
+    <div style="background: var(--bg-surface); border-radius: var(--radius-xl); box-shadow: var(--shadow-md); border: 1px solid var(--border); overflow: hidden; margin-bottom: 24px;">
+        <div style="padding: 20px 28px; border-bottom: 1px solid var(--border);">
+            <h3 style="margin: 0; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
+                <span>🏅 Медалі</span>
+                <span style="background: var(--bg-raised); color: var(--text-secondary); padding: 2px 10px; border-radius: var(--radius-full); font-size: 0.8rem; border: 1px solid var(--border-light);">${badges.length}</span>
+            </h3>
+        </div>
+        <div style="padding: 24px 28px; display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 20px">
+            ${badges.map(b => `
+                <div style="display:flex;flex-direction:column;align-items:center;gap:.5rem;cursor:pointer;text-align:center"
+                     onclick="App._viewProfileBadge(${JSON.stringify(b.course.badge_url).replace(/"/g,'&quot;')},${JSON.stringify(b.course.title||'').replace(/"/g,'&quot;')},${JSON.stringify(Fmt.date(b.completed_at)).replace(/"/g,'&quot;')})">
+                    <div style="width:80px;height:80px;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 6px 14px rgba(0,0,0,.25));transition:transform .15s"
+                         onmouseenter="this.style.transform='scale(1.08)'" onmouseleave="this.style.transform='scale(1)'">
+                        <img src="${Fmt.esc(b.course.badge_url)}" alt="Медаль" style="max-width:100%;max-height:100%;object-fit:contain">
+                    </div>
+                    <div style="font-size:.78rem;font-weight:600;color:var(--text-primary);line-height:1.3">${Fmt.esc(b.course.title || '')}</div>
+                </div>`).join('')}
+        </div>
+    </div>` : ''}
+
     <!-- Блок подчинённых -->
     ${subordinates.length ? `
     <div style="background: var(--bg-surface); border-radius: var(--radius-xl); box-shadow: var(--shadow-md); border: 1px solid var(--border); overflow: hidden;">
@@ -549,6 +588,28 @@ function fieldStyled(label, value) {
     async editProfile() {
         const container = document.getElementById('page-content');
         await ProfilePage.openAsSelf(container, () => App.renderProfile(container));
+    },
+
+    // Той самий "сертифікатний" стиль, що й CourseViewPage._viewBadge —
+    // ім'я одержувача тут завжди AppState.profile (це власний профіль).
+    _viewProfileBadge(url, courseTitle, dateStr) {
+        Modal.open({
+            title: '🏅 Медаль курсу',
+            size: 'sm',
+            body: `
+                <div style="display:flex;flex-direction:column;align-items:center;gap:.85rem;padding:.5rem 0 1rem">
+                    <div style="width:340px;height:340px;max-width:100%;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 10px 28px rgba(0,0,0,.35))">
+                        <img src="${Fmt.safeUrl(url)}" alt="Медаль курсу" style="max-width:100%;max-height:100%;object-fit:contain">
+                    </div>
+                    <div style="font-size:.9rem;font-weight:600;text-align:center">${Fmt.esc(courseTitle || '')}</div>
+                    <div style="width:100%;text-align:center;padding-top:.85rem;border-top:1px dashed var(--border)">
+                        <div style="font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.3rem">Вручається</div>
+                        <div style="font-family:Georgia,'Times New Roman',serif;font-style:italic;font-size:1.25rem;font-weight:700;color:var(--text-primary)">${Fmt.esc(AppState.profile?.full_name || '')}</div>
+                        <div style="font-size:.72rem;color:var(--text-muted);margin-top:.35rem">${Fmt.esc(dateStr || '')}</div>
+                    </div>
+                </div>`,
+            footer: `<button class="btn btn-secondary" onclick="Modal.close()">Закрити</button>`
+        });
     },
 
     async _pollFeedbackBell() {

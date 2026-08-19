@@ -228,6 +228,71 @@ const API = {
 
         async removeBadge(courseId) {
             await this.update(courseId, { badge_url: null });
+        },
+
+        // ── Зміст курсу: гейтинг послідовного проходження ──────────────
+        // Той самий критерій "завершено", що й у CourseViewPage._loadContent
+        // (будь-яка спроба/завершення, не обов'язково успішне — інакше
+        // користувач, що провалив тест чи не зміг завершити SCORM, назавжди
+        // застрягає). Централізовано тут, бо перевіряється і зі сторінки
+        // курсу (для відображення), і з роутера (щоб не можна було
+        // "перестрибнути" елемент прямим переходом за посиланням).
+        async _contentItemDone(item) {
+            if (item.type === 'test') {
+                const { data } = await supabase.from('test_attempts')
+                    .select('id').eq('user_id', AppState.user.id).eq('test_id', item.id)
+                    .not('completed_at', 'is', null).limit(1);
+                return !!data?.length;
+            }
+            if (item.type === 'scorm') {
+                const { data: pkg } = await supabase.from('scorm_packages')
+                    .select('id').eq('resource_id', item.id).maybeSingle();
+                if (!pkg) return false;
+                const { data: prog } = await supabase.from('scorm_progress')
+                    .select('completion_status').eq('user_id', AppState.user.id)
+                    .eq('scorm_package_id', pkg.id).maybeSingle();
+                return prog?.completion_status === 'completed';
+            }
+            return false;
+        },
+
+        // Перевіряє, чи цей тест/SCORM-ресурс входить у чиюсь послідовність
+        // "Зміст курсу", і якщо так — чи розблокований для поточного
+        // користувача (попередній елемент має бути завершений). Повертає
+        // null, якщо елемент взагалі не входить у жодну послідовність
+        // (прямий доступ дозволений як і раніше).
+        async checkContentGate(type, id) {
+            const { data: courses } = await supabase.from('courses')
+                .select('id,title,course_info')
+                .not('course_info->content_items', 'is', null);
+            for (const c of courses || []) {
+                const items = c.course_info?.content_items || [];
+                const idx = items.findIndex(it => it.type === type && it.id === id);
+                if (idx === -1) continue;
+                if (idx === 0) return { locked: false, courseId: c.id, courseTitle: c.title };
+                const prevDone = await this._contentItemDone(items[idx - 1]);
+                return { locked: !prevDone, courseId: c.id, courseTitle: c.title };
+            }
+            return null;
+        },
+
+        // Позначає enrollments.completed_at, коли ВСІ елементи "Зміст курсу"
+        // завершені. Викликається після завершення тесту (attempts.complete)
+        // і після завершення SCORM (scorm.saveProgress). Сам запис у
+        // enrollments користувач напряму оновити не може (RLS-політика
+        // "enrollments: update admin" дозволяє UPDATE лише адмінам), тож
+        // фактичну перевірку "все завершено" і сам запис робить RPC
+        // mark_enrollment_complete (SECURITY DEFINER, migration_v202) —
+        // тут лише знаходимо, які курси взагалі містять цей елемент.
+        async _checkAndMarkCompletion(type, id) {
+            const { data: courses } = await supabase.from('courses')
+                .select('id,course_info')
+                .not('course_info->content_items', 'is', null);
+            for (const c of courses || []) {
+                const items = c.course_info?.content_items || [];
+                if (!items.some(it => it.type === type && it.id === id)) continue;
+                await supabase.rpc('mark_enrollment_complete', { p_course_id: c.id }).catch(() => {});
+            }
         }
     },
 
@@ -297,6 +362,21 @@ const API = {
                 (e.completed_at) ||
                 (e.run && e.run.end_date && e.run.end_date < today)
             );
+        },
+
+        // Медалі для профілю — лише реально завершені курси (completed_at
+        // проставляється або mark_enrollment_complete для нового "Зміст
+        // курсу", або старим update_course_progress() для lessons-курсів),
+        // і лише ті, де адмін завантажив badge_url (без нього немає що
+        // показати — курс без badge_url на профілі не з'являється).
+        async getMyBadges() {
+            const { data, error } = await supabase.from('enrollments')
+                .select(`completed_at, course:courses(id, title, badge_url)`)
+                .eq('user_id', AppState.user.id)
+                .not('completed_at', 'is', null)
+                .order('completed_at', { ascending: false });
+            if (error) throw error;
+            return (data || []).filter(e => e.course?.badge_url);
         },
 
         async getRunParticipants(courseId, runId) {
@@ -735,6 +815,12 @@ const API = {
                 onConflict: 'user_id,scorm_package_id'
             });
             if (error) throw error;
+
+            if (progressData.completion_status === 'completed') {
+                const { data: pkg } = await supabase.from('scorm_packages')
+                    .select('resource_id').eq('id', scormPackageId).maybeSingle();
+                if (pkg?.resource_id) API.courses._checkAndMarkCompletion('scorm', pkg.resource_id).catch(() => {});
+            }
         },
 
         async getAllProgress(courseId) {
@@ -1293,14 +1379,14 @@ const API = {
 
         async complete(attemptId, { score, maxScore, percentage, passed, timeSpent, answers, needsReview = false }) {
             // Save attempt result
-            const { error: e1 } = await supabase.from('test_attempts')
+            const { data: attemptRow, error: e1 } = await supabase.from('test_attempts')
                 .update({
                     score, max_score: maxScore,
                     percentage, passed,
                     completed_at: new Date().toISOString(),
                     time_spent_seconds: timeSpent,
                     needs_review: needsReview
-                }).eq('id', attemptId);
+                }).eq('id', attemptId).select('test_id').single();
             if (e1) throw e1;
 
             // Save per-question answers
@@ -1316,6 +1402,10 @@ const API = {
                     }))
                 );
                 if (e2) throw e2;
+            }
+
+            if (attemptRow?.test_id) {
+                API.courses._checkAndMarkCompletion('test', attemptRow.test_id).catch(() => {});
             }
         },
 

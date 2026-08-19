@@ -554,6 +554,11 @@ body.light-theme .ep-hero-deco i{color:#b4870f;filter:drop-shadow(0 4px 10px rgb
 
         const enrolledMap = new Map(enrollments.map(e => [e.course_id, e]));
         const completed   = enrollments.filter(e => e.completed_at);
+        // "Записані" — лише активні (ще не завершені) записи. Раніше сюди
+        // потрапляли й завершені курси теж (enrollments містить усі записи
+        // без фільтра), тому один і той самий курс одночасно показувався і
+        // в "Записані", і в "Завершені" — конфлікт лічильників.
+        const activeEnrolled = enrollments.filter(e => !e.completed_at);
 
         const grads = [
             'linear-gradient(135deg,#6366f1,#8b5cf6)',
@@ -655,7 +660,7 @@ body.light-theme .ep-hero-deco i{color:#b4870f;filter:drop-shadow(0 4px 10px rgb
         this._courseCardsFn = cardsFn;
         this._courseTabs   = [
             { id: 'all',      label: `Всі (${(allCourses||[]).length})`,  courses: allCourses || [] },
-            { id: 'enrolled', label: `Записані (${enrollments.length})`,  courses: enrollments.map(e => e.course).filter(Boolean) },
+            { id: 'enrolled', label: `Записані (${activeEnrolled.length})`,  courses: activeEnrolled.map(e => e.course).filter(Boolean) },
             { id: 'done',     label: `Завершені (${completed.length})`,   courses: completed.map(e => e.course).filter(Boolean) },
         ];
         this._courseSubTab = 'all';

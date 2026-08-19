@@ -221,7 +221,17 @@ const CoursesPage = {
                         <input type="checkbox" id="c-featured" ${course?.is_featured ? 'checked' : ''}>
                         <span>Рекомендований курс</span>
                     </label>
-                </div>`,
+                </div>
+                ${isEdit ? `
+                <div class="form-group">
+                    <label>Зміст курсу — SCORM і тести, у порядку проходження</label>
+                    <div id="cw-content-list"></div>
+                    <div style="display:flex;gap:.5rem;margin-top:.5rem">
+                        <button type="button" class="btn btn-ghost btn-sm" onclick="CoursesPage._toggleContentPicker('scorm')"><i class="fa-solid fa-cube"></i> Додати SCORM</button>
+                        <button type="button" class="btn btn-ghost btn-sm" onclick="CoursesPage._toggleContentPicker('test')"><i class="fa-solid fa-pen-to-square"></i> Додати тест</button>
+                    </div>
+                    <div id="cw-content-picker" style="display:none;margin-top:.5rem;max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:.35rem"></div>
+                </div>` : ''}`,
             footer: `
                 <button class="btn btn-secondary" onclick="Modal.close()">Скасувати</button>
                 <button class="btn btn-primary" onclick="CoursesPage.saveCourse('${course?.id || ''}')">
@@ -230,11 +240,91 @@ const CoursesPage = {
         });
 
         this._thumbFile = null;
+        this._courseInfoBase = course?.course_info || {};
+        this._contentItems = (course?.course_info?.content_items || []).map(it => ({ ...it }));
+        this._contentPickerType = null;
         const zone = document.getElementById('thumb-upload-zone');
         if (zone) {
             const input = FileUpload.createDropZone(zone, { accept: 'image/*', label: 'Завантажити обкладинку', hint: 'PNG, JPG до 5 МБ' });
             input.addEventListener('change', () => { this._thumbFile = input.files[0]; });
         }
+        if (isEdit) this._renderContentList();
+    },
+
+    // ── Зміст курсу: ордерований список SCORM-пакетів і тестів ──────
+    // Зберігається в courses.course_info.content_items — порядок масиву й
+    // визначає послідовність проходження (гейтинг на CourseViewPage._loadContent).
+    _renderContentList() {
+        const el = document.getElementById('cw-content-list');
+        if (!el) return;
+        if (!this._contentItems.length) {
+            el.innerHTML = `<div style="color:var(--text-muted);font-size:.82rem;padding:.3rem 0">Порожньо — додайте SCORM або тест нижче</div>`;
+            return;
+        }
+        el.innerHTML = this._contentItems.map((it, i) => `
+            <div style="display:flex;align-items:center;gap:.5rem;padding:.5rem .65rem;border:1px solid var(--border);border-radius:8px;margin-bottom:.4rem;background:var(--bg-raised)">
+                <span style="width:24px;height:24px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.72rem;color:#fff;background:${it.type === 'scorm' ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : 'linear-gradient(135deg,#f59e0b,#ef4444)'}">
+                    <i class="fa-solid ${it.type === 'scorm' ? 'fa-cube' : 'fa-pen-to-square'}"></i>
+                </span>
+                <span style="flex:1;font-size:.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Fmt.esc(it.title)}</span>
+                <button type="button" class="btn btn-ghost btn-sm" ${i === 0 ? 'disabled' : ''} onclick="CoursesPage._moveContentItem(${i},-1)" title="Вгору"><i class="fa-solid fa-arrow-up"></i></button>
+                <button type="button" class="btn btn-ghost btn-sm" ${i === this._contentItems.length - 1 ? 'disabled' : ''} onclick="CoursesPage._moveContentItem(${i},1)" title="Вниз"><i class="fa-solid fa-arrow-down"></i></button>
+                <button type="button" class="btn btn-danger btn-sm" onclick="CoursesPage._removeContentItem(${i})" title="Прибрати"><i class="fa-solid fa-xmark"></i></button>
+            </div>`).join('');
+    },
+
+    _moveContentItem(i, dir) {
+        const j = i + dir;
+        if (j < 0 || j >= this._contentItems.length) return;
+        [this._contentItems[i], this._contentItems[j]] = [this._contentItems[j], this._contentItems[i]];
+        this._renderContentList();
+    },
+
+    _removeContentItem(i) {
+        this._contentItems.splice(i, 1);
+        this._renderContentList();
+    },
+
+    async _toggleContentPicker(type) {
+        const panel = document.getElementById('cw-content-picker');
+        if (!panel) return;
+        if (this._contentPickerType === type && panel.style.display !== 'none') {
+            panel.style.display = 'none';
+            this._contentPickerType = null;
+            return;
+        }
+        this._contentPickerType = type;
+        panel.style.display = '';
+        panel.innerHTML = `<div style="display:flex;justify-content:center;padding:.75rem"><div class="spinner"></div></div>`;
+        try {
+            let items = [];
+            if (type === 'scorm') {
+                const { data } = await API.resources.getAll({ pageSize: 500, includeLessonResources: true });
+                items = (data || []).filter(r => r.type === 'scorm');
+            } else {
+                items = await TestsManagerAPI.getAllStandalone() || [];
+            }
+            const addedIds = new Set(this._contentItems.filter(x => x.type === type).map(x => x.id));
+            items = items.filter(x => !addedIds.has(x.id));
+            panel.innerHTML = items.length
+                ? items.map(x => `
+                    <div onclick="CoursesPage._addContentItem('${type}','${x.id}',${JSON.stringify(x.title || '').replace(/"/g, '&quot;')})"
+                        style="padding:.5rem .65rem;cursor:pointer;border-radius:6px;font-size:.85rem"
+                        onmouseenter="this.style.background='var(--bg-hover)'" onmouseleave="this.style.background=''">
+                        ${Fmt.esc(x.title)}
+                    </div>`).join('')
+                : `<div style="color:var(--text-muted);font-size:.82rem;padding:.5rem">${type === 'scorm' ? 'У базі знань немає SCORM-пакетів' : 'У розділі "Тести" немає доступних тестів'}</div>`;
+        } catch(e) {
+            panel.innerHTML = `<div style="color:var(--danger);font-size:.82rem">${Fmt.esc(e.message)}</div>`;
+        }
+    },
+
+    _addContentItem(type, id, title) {
+        this._contentItems.push({ type, id, title });
+        const panel = document.getElementById('cw-content-picker');
+        if (panel) panel.style.display = 'none';
+        this._contentPickerType = null;
+        this._renderContentList();
     },
 
     async saveCourse(id) {
@@ -250,6 +340,9 @@ const CoursesPage = {
             is_published:  document.getElementById('c-published').checked,
             is_featured:   document.getElementById('c-featured').checked
         };
+        if (id) {
+            fields.course_info = { ...(this._courseInfoBase || {}), content_items: this._contentItems || [] };
+        }
 
         Loader.show();
         try {

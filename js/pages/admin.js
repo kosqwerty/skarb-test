@@ -3419,6 +3419,8 @@ const AdminPage = {
         this._cfTab = 'main';
         this._kbSelected = (course?.course_info?.kb_resources || []);
         this._courseInfoBase = course?.course_info || {};
+        this._contentItems = (course?.course_info?.content_items || []).map(it => ({ ...it }));
+        this._contentPickerType = null;
         const isEdit = !!course;
         const id = course?.id || '';
 
@@ -3427,8 +3429,8 @@ const AdminPage = {
             { id: 'media',     icon: 'fa-photo-film',         label: 'Медіа',      color: '#ec4899' },
             ...(isEdit ? [
                 { id: 'runs',      icon: 'fa-users-rectangle', label: 'Групи',     color: '#f59e0b' },
+                { id: 'content',   icon: 'fa-route',           label: 'Зміст',     color: '#0ea5e9' },
             ] : []),
-            { id: 'schedule',  icon: 'fa-calendar-days',      label: 'Розклад',   color: '#0ea5e9' },
         ];
 
         el.innerHTML = `
@@ -3571,20 +3573,23 @@ const AdminPage = {
                 </div>
             </div>` : ''}
 
-            <!-- РОЗКЛАД -->
-            <div class="cf-tab-pane cf-pane" data-tab="schedule" style="display:none">
+            <!-- ЗМІСТ (SCORM + тести, послідовність проходження) -->
+            ${isEdit ? `
+            <div class="cf-tab-pane cf-pane" data-tab="content" style="display:none">
                 <div class="cf-section">
-                    <div style="display:flex;align-items:center;justify-content:space-between">
-                        <div class="cf-section-title" style="margin:0">Розклад занять</div>
-                        <button class="btn btn-ghost btn-sm" onclick="AdminPage._scheduleAddDay()"><i class="fa-solid fa-plus"></i> Додати день</button>
+                    <div class="cf-section-title" style="margin:0">Зміст курсу — SCORM і тести, у порядку проходження</div>
+                    <div id="cw-content-list"></div>
+                    <div style="display:flex;gap:.5rem">
+                        <button type="button" class="btn btn-ghost btn-sm" onclick="AdminPage._toggleContentPicker('scorm')"><i class="fa-solid fa-cube"></i> Додати SCORM</button>
+                        <button type="button" class="btn btn-ghost btn-sm" onclick="AdminPage._toggleContentPicker('test')"><i class="fa-solid fa-pen-to-square"></i> Додати тест</button>
                     </div>
-                    <div id="c-schedule-builder" style="display:flex;flex-direction:column;gap:.75rem"></div>
+                    <div id="cw-content-picker" style="display:none;max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:.35rem"></div>
                 </div>
                 <div class="cf-footer">
                     <button class="btn btn-secondary" onclick="AdminPage._renderCourses(AdminPage._coursesEl)">Скасувати</button>
                     <button class="btn btn-primary" onclick="AdminPage._saveCourse('${id}')"><i class="fa-regular fa-floppy-disk"></i> Зберегти</button>
                 </div>
-            </div>
+            </div>` : ''}
 
         </div>`;
 
@@ -3610,10 +3615,87 @@ const AdminPage = {
             input.addEventListener('change', () => { this._courseBadgeFile = input.files[0]; });
         }
 
-        this._scheduleInit(course?.schedule || []);
         if (isEdit) {
             this._runsLoad(course.id);
+            this._renderContentList();
         }
+    },
+
+    // ── Зміст курсу: ордерований список SCORM-пакетів і тестів ──────
+    // Той самий підхід, що й CoursesPage._renderContentList — зберігається
+    // в courses.course_info.content_items, порядок масиву визначає
+    // послідовність проходження (гейтинг на CourseViewPage._loadContent).
+    _renderContentList() {
+        const el = document.getElementById('cw-content-list');
+        if (!el) return;
+        if (!this._contentItems.length) {
+            el.innerHTML = `<div style="color:var(--text-muted);font-size:.82rem;padding:.3rem 0">Порожньо — додайте SCORM або тест нижче</div>`;
+            return;
+        }
+        el.innerHTML = this._contentItems.map((it, i) => `
+            <div style="display:flex;align-items:center;gap:.5rem;padding:.5rem .65rem;border:1px solid var(--border);border-radius:8px;margin-bottom:.4rem;background:var(--bg-raised)">
+                <span style="width:24px;height:24px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.72rem;color:#fff;background:${it.type === 'scorm' ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : 'linear-gradient(135deg,#f59e0b,#ef4444)'}">
+                    <i class="fa-solid ${it.type === 'scorm' ? 'fa-cube' : 'fa-pen-to-square'}"></i>
+                </span>
+                <span style="flex:1;font-size:.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Fmt.esc(it.title)}</span>
+                <button type="button" class="btn btn-ghost btn-sm" ${i === 0 ? 'disabled' : ''} onclick="AdminPage._moveContentItem(${i},-1)" title="Вгору"><i class="fa-solid fa-arrow-up"></i></button>
+                <button type="button" class="btn btn-ghost btn-sm" ${i === this._contentItems.length - 1 ? 'disabled' : ''} onclick="AdminPage._moveContentItem(${i},1)" title="Вниз"><i class="fa-solid fa-arrow-down"></i></button>
+                <button type="button" class="btn btn-danger btn-sm" onclick="AdminPage._removeContentItem(${i})" title="Прибрати"><i class="fa-solid fa-xmark"></i></button>
+            </div>`).join('');
+    },
+
+    _moveContentItem(i, dir) {
+        const j = i + dir;
+        if (j < 0 || j >= this._contentItems.length) return;
+        [this._contentItems[i], this._contentItems[j]] = [this._contentItems[j], this._contentItems[i]];
+        this._renderContentList();
+    },
+
+    _removeContentItem(i) {
+        this._contentItems.splice(i, 1);
+        this._renderContentList();
+    },
+
+    async _toggleContentPicker(type) {
+        const panel = document.getElementById('cw-content-picker');
+        if (!panel) return;
+        if (this._contentPickerType === type && panel.style.display !== 'none') {
+            panel.style.display = 'none';
+            this._contentPickerType = null;
+            return;
+        }
+        this._contentPickerType = type;
+        panel.style.display = '';
+        panel.innerHTML = `<div style="display:flex;justify-content:center;padding:.75rem"><div class="spinner"></div></div>`;
+        try {
+            let items = [];
+            if (type === 'scorm') {
+                const { data } = await API.resources.getAll({ pageSize: 500, includeLessonResources: true });
+                items = (data || []).filter(r => r.type === 'scorm');
+            } else {
+                items = await TestsManagerAPI.getAllStandalone() || [];
+            }
+            const addedIds = new Set(this._contentItems.filter(x => x.type === type).map(x => x.id));
+            items = items.filter(x => !addedIds.has(x.id));
+            panel.innerHTML = items.length
+                ? items.map(x => `
+                    <div onclick="AdminPage._addContentItem('${type}','${x.id}',${JSON.stringify(x.title || '').replace(/"/g, '&quot;')})"
+                        style="padding:.5rem .65rem;cursor:pointer;border-radius:6px;font-size:.85rem"
+                        onmouseenter="this.style.background='var(--bg-hover)'" onmouseleave="this.style.background=''">
+                        ${Fmt.esc(x.title)}
+                    </div>`).join('')
+                : `<div style="color:var(--text-muted);font-size:.82rem;padding:.5rem">${type === 'scorm' ? 'У базі знань немає SCORM-пакетів' : 'У розділі "Тести" немає доступних тестів'}</div>`;
+        } catch(e) {
+            panel.innerHTML = `<div style="color:var(--danger);font-size:.82rem">${Fmt.esc(e.message)}</div>`;
+        }
+    },
+
+    _addContentItem(type, id, title) {
+        this._contentItems.push({ type, id, title });
+        const panel = document.getElementById('cw-content-picker');
+        if (panel) panel.style.display = 'none';
+        this._contentPickerType = null;
+        this._renderContentList();
     },
 
     // ── Course Runs (admin) ───────────────────────────────────────────
@@ -3756,240 +3838,6 @@ const AdminPage = {
         finally { Loader.hide(); }
     },
 
-    // ── Schedule builder ──────────────────────────────────────────────
-    _scheduleDays: [],
-    _scheduleProfiles: [],
-    _scheduleTests: [],
-    _scheduleKbAll: [],
-
-    async _scheduleInit(existing) {
-        this._scheduleDays = existing.length
-            ? existing.map(d => ({
-                ...d,
-                items:        [...(d.items || [])],
-                tests:        d.tests ? [...d.tests] : (d.test_id ? [{ id: d.test_id, title: d.test_title || '' }] : []),
-                kb_resources: [...(d.kb_resources || [])],
-              }))
-            : [];
-        try {
-            const [profRes, tests, kbRes] = await Promise.all([
-                API.profiles.getAll({ pageSize: 500 }),
-                API.tests.getAll(),
-                API.resources.getAll({ pageSize: 500 }),
-            ]);
-            this._scheduleProfiles = (profRes.data || []).sort((a, b) => (a.full_name || '').localeCompare(b.full_name || '', 'uk'));
-            this._scheduleTests    = tests || [];
-            this._scheduleKbAll    = kbRes.data || [];
-        } catch(e) { this._scheduleProfiles = []; this._scheduleTests = []; this._scheduleKbAll = []; }
-        this._scheduleRender();
-    },
-
-    _scheduleRender(containerId = 'c-schedule-builder') {
-        const el = document.getElementById(containerId);
-        if (!el) return;
-        if (!this._scheduleDays.length) {
-            el.innerHTML = `<div style="color:var(--text-muted);font-size:.82rem;padding:.5rem 0">Розклад не заповнено</div>`;
-            return;
-        }
-        el.innerHTML = this._scheduleDays.map((day, di) => `
-            <div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:.85rem;background:var(--bg-raised)">
-                <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.75rem">
-                    <span style="font-weight:700;min-width:60px;color:var(--primary)">День ${di + 1}</span>
-                    <input type="text" placeholder="Назва дня (необов'язково)"
-                        value="${Fmt.esc(day.title || '')}"
-                        onchange="AdminPage._scheduleDays[${di}].title=this.value"
-                        style="flex:1;font-size:.85rem">
-                    <button type="button" class="btn btn-danger btn-sm" onclick="AdminPage._scheduleRemoveDay(${di})">
-                        <i class="fa-solid fa-trash"></i>
-                    </button>
-                </div>
-                <div style="margin-bottom:.65rem">
-                    <label style="font-size:.75rem;color:var(--text-muted);margin-bottom:.25rem;display:block">Викладач</label>
-                    <select onchange="AdminPage._scheduleDays[${di}].teacher_id=this.value;AdminPage._scheduleDays[${di}].teacher_name=this.options[this.selectedIndex].dataset.name||''"
-                        style="width:100%;font-size:.82rem">
-                        <option value="" data-name="">— Не вказано —</option>
-                        ${this._scheduleProfiles.map(p => `
-                            <option value="${p.id}" data-name="${Fmt.esc(p.full_name || p.email)}" ${day.teacher_id === p.id ? 'selected' : ''}>${Fmt.esc(p.full_name || p.email)}</option>
-                        `).join('')}
-                    </select>
-                </div>
-                <div style="margin-bottom:.65rem">
-                    <label style="font-size:.75rem;color:var(--text-muted);margin-bottom:.25rem;display:flex;align-items:center;justify-content:space-between">
-                        <span>Тести дня</span>
-                        <button type="button" class="btn btn-ghost btn-sm" style="font-size:.75rem" onclick="AdminPage._scheduleAddTest(${di})">
-                            <i class="fa-solid fa-plus"></i> Додати тест
-                        </button>
-                    </label>
-                    <div style="display:flex;flex-direction:column;gap:.35rem">
-                        ${(day.tests || []).map((t, ti) => `
-                            <div style="display:flex;gap:.35rem">
-                                <select onchange="AdminPage._scheduleDays[${di}].tests[${ti}]={id:this.value,title:this.options[this.selectedIndex].dataset.title||''}"
-                                    style="flex:1;font-size:.82rem">
-                                    <option value="">— Оберіть тест —</option>
-                                    ${this._scheduleTests.map(st => `
-                                        <option value="${st.id}" data-title="${Fmt.esc(st.title)}" ${t.id === st.id ? 'selected' : ''}>${Fmt.esc(st.title)}</option>
-                                    `).join('')}
-                                </select>
-                                <button type="button" class="btn btn-ghost btn-sm" onclick="AdminPage._scheduleRemoveTest(${di},${ti})">
-                                    <i class="fa-solid fa-xmark"></i>
-                                </button>
-                            </div>`).join('')}
-                        ${!(day.tests?.length) ? `<div style="font-size:.78rem;color:var(--text-muted)">Тести не призначено</div>` : ''}
-                    </div>
-                </div>
-                <div style="margin-bottom:.65rem">
-                    <label style="font-size:.75rem;color:var(--text-muted);margin-bottom:.25rem;display:block">Інструкції для дня</label>
-                    <textarea placeholder="Що потрібно підготувати, як пройти день, особливі умови..."
-                        rows="2"
-                        onchange="AdminPage._scheduleDays[${di}].instructions=this.value"
-                        style="width:100%;font-size:.82rem;resize:vertical">${Fmt.esc(day.instructions || '')}</textarea>
-                </div>
-                <div>
-                    <label style="font-size:.75rem;color:var(--text-muted);margin-bottom:.25rem;display:block">Теми / заняття</label>
-                    <div style="display:flex;flex-direction:column;gap:.35rem">
-                        ${(day.items || []).map((item, ii) => {
-                            const t = typeof item === 'object' ? item : { title: item, desc: '' };
-                            return `
-                            <div style="display:flex;gap:.35rem;align-items:flex-start">
-                                <div style="flex:1;display:flex;flex-direction:column;gap:.2rem">
-                                    <input type="text" value="${Fmt.esc(t.title || '')}" placeholder="Назва теми..."
-                                        onchange="AdminPage._schedItemSet(${di},${ii},'title',this.value)"
-                                        style="font-size:.82rem">
-                                    <input type="text" value="${Fmt.esc(t.desc || '')}" placeholder="Короткий опис (необов'язково)..."
-                                        onchange="AdminPage._schedItemSet(${di},${ii},'desc',this.value)"
-                                        style="font-size:.78rem">
-                                </div>
-                                <button type="button" class="btn btn-ghost btn-sm" onclick="AdminPage._scheduleRemoveItem(${di},${ii})">
-                                    <i class="fa-solid fa-xmark"></i>
-                                </button>
-                            </div>`;}).join('')}
-                    </div>
-                    <button type="button" class="btn btn-ghost btn-sm" style="margin-top:.35rem;font-size:.78rem"
-                        onclick="AdminPage._scheduleAddItem(${di})">
-                        <i class="fa-solid fa-plus"></i> Додати тему
-                    </button>
-                </div>
-                <div style="border-top:1px solid var(--border);padding-top:.65rem;margin-top:.65rem">
-                    <label style="font-size:.75rem;color:var(--text-muted);margin-bottom:.4rem;display:flex;align-items:center;gap:.4rem">
-                        <i class="fa-solid fa-folder-open" style="color:var(--primary)"></i> Файли з бази знань
-                        ${(day.kb_resources||[]).length ? `<span style="background:var(--primary);color:#fff;border-radius:10px;padding:0 6px;font-size:.65rem;font-weight:700">${(day.kb_resources||[]).length}</span>` : ''}
-                    </label>
-                    <div id="skb-chips-${di}" style="display:flex;flex-wrap:wrap;gap:.3rem;${(day.kb_resources||[]).length ? 'margin-bottom:.4rem' : ''}">
-                        ${this._schedKbChipsHtml(di)}
-                    </div>
-                    <button class="btn btn-ghost btn-sm" onclick="AdminPage._schedKbOpenModal(${di})" style="font-size:.78rem">
-                        <i class="fa-solid fa-plus"></i> Додати файл з бази знань
-                    </button>
-                </div>
-            </div>`).join('');
-    },
-
-    _scheduleAddDay() {
-        this._scheduleDays.push({ title: '', teacher_id: '', teacher_name: '', tests: [], instructions: '', items: [], kb_resources: [] });
-        this._scheduleRender();
-    },
-
-    _schedKbAdd(di, id) {
-        const res = this._scheduleKbAll.find(r => r.id === id);
-        if (!res) return;
-        if (!this._scheduleDays[di].kb_resources) this._scheduleDays[di].kb_resources = [];
-        if (this._scheduleDays[di].kb_resources.some(r => r.id === id)) return;
-        this._scheduleDays[di].kb_resources.push({ id: res.id, title: res.title, type: res.type });
-    },
-
-    _schedKbRemove(di, ri) {
-        this._scheduleDays[di].kb_resources.splice(ri, 1);
-        const chips = document.getElementById(`skb-chips-${di}`);
-        if (chips) chips.innerHTML = this._schedKbChipsHtml(di);
-        if (this._schedKbModalRender) this._schedKbModalRender(document.getElementById('skb-modal-search')?.value || '');
-    },
-
-    _schedKbOpenModal(di) {
-        const render = (term = '') => {
-            const selected = this._scheduleDays[di].kb_resources || [];
-            const filtered = this._scheduleKbAll
-                .filter(r => !selected.some(s => s.id === r.id))
-                .filter(r => !term || r.title.toLowerCase().includes(term.toLowerCase()))
-                .slice(0, 50);
-            const list = document.getElementById('skb-modal-list');
-            if (!list) return;
-            list.innerHTML = filtered.length
-                ? filtered.map(r => `
-                <div onclick="AdminPage._schedKbAdd(${di},'${r.id}');AdminPage._schedKbModalRefresh(${di})"
-                    style="display:flex;align-items:center;gap:.6rem;padding:.5rem .75rem;cursor:pointer;border-bottom:1px solid var(--border);border-radius:6px"
-                    onmouseenter="this.style.background='var(--bg-raised)'" onmouseleave="this.style.background=''">
-                    <i class="fa-solid ${this._kbIcon(r.type)}" style="color:var(--primary);font-size:.8rem;width:14px;flex-shrink:0"></i>
-                    <span style="font-size:.83rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Fmt.esc(r.title)}</span>
-                </div>`).join('')
-                : `<div style="padding:1.5rem;text-align:center;color:var(--text-muted);font-size:.85rem">Файли не знайдено</div>`;
-        };
-        this._schedKbModalDi = di;
-        this._schedKbModalRender = render;
-        Modal.open({
-            title: '<i class="fa-solid fa-folder-open" style="color:var(--primary)"></i> База знань — вибір файлу',
-            size: 'lg',
-            body: `
-                <input id="skb-modal-search" type="text" class="form-control" placeholder="🔍 Пошук файлу..."
-                    oninput="AdminPage._schedKbModalRender(this.value)"
-                    style="margin-bottom:.75rem">
-                <div id="skb-modal-list" style="max-height:360px;overflow-y:auto;border:1px solid var(--border);border-radius:10px"></div>`,
-            footer: `<button class="btn btn-secondary" onclick="Modal.close()">Закрити</button>`
-        });
-        setTimeout(() => {
-            render('');
-            document.getElementById('skb-modal-search')?.focus();
-        }, 50);
-    },
-
-    _schedKbModalRefresh(di) {
-        const term = document.getElementById('skb-modal-search')?.value || '';
-        if (this._schedKbModalRender) this._schedKbModalRender(term);
-        // Update chips without full re-render
-        const chips = document.getElementById(`skb-chips-${di}`);
-        if (chips) chips.innerHTML = this._schedKbChipsHtml(di);
-    },
-
-    _schedKbChipsHtml(di) {
-        const day = this._scheduleDays[di];
-        return (day.kb_resources || []).map((r, ri) => `
-            <span style="display:inline-flex;align-items:center;gap:.3rem;background:color-mix(in srgb,var(--primary) 8%,transparent);border:1px solid color-mix(in srgb,var(--primary) 25%,transparent);border-radius:6px;padding:.18rem .5rem;font-size:.73rem">
-                <i class="fa-solid ${this._kbIcon(r.type)}" style="color:var(--primary);font-size:.65rem"></i>
-                <span style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${Fmt.esc(r.title)}</span>
-                <button onclick="AdminPage._schedKbRemove(${di},${ri})" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:0;line-height:1"><i class="fa-solid fa-xmark" style="font-size:.6rem"></i></button>
-            </span>`).join('');
-    },
-
-    _scheduleAddTest(di) {
-        if (!this._scheduleDays[di].tests) this._scheduleDays[di].tests = [];
-        this._scheduleDays[di].tests.push({ id: '', title: '' });
-        this._scheduleRender();
-    },
-
-    _scheduleRemoveTest(di, ti) {
-        this._scheduleDays[di].tests.splice(ti, 1);
-        this._scheduleRender();
-    },
-
-    _scheduleRemoveDay(di) {
-        this._scheduleDays.splice(di, 1);
-        this._scheduleRender();
-    },
-
-    _scheduleAddItem(di) {
-        this._scheduleDays[di].items.push({ title: '', desc: '' });
-        this._scheduleRender();
-    },
-
-    _scheduleRemoveItem(di, ii) {
-        this._scheduleDays[di].items.splice(ii, 1);
-        this._scheduleRender();
-    },
-
-    _schedItemSet(di, ii, key, val) {
-        const item = this._scheduleDays[di].items[ii];
-        if (typeof item === 'object') item[key] = val;
-        else this._scheduleDays[di].items[ii] = { title: item, desc: '', [key]: val };
-    },
 
     _kbAllResources: [],
 
@@ -4058,17 +3906,6 @@ const AdminPage = {
     async _saveCourse(id) {
         const title = Dom.val('c-title').trim();
         if (!title) { Toast.error('Помилка', 'Вкажіть назву курсу'); return; }
-        const schedule = (this._scheduleDays || [])
-            .map(d => ({
-                title:        d.title || '',
-                teacher_id:   d.teacher_id || null,
-                teacher_name: d.teacher_name || '',
-                tests:        (d.tests || []).filter(t => t.id),
-                instructions: d.instructions || '',
-                items:        (d.items || []).map(it => typeof it === 'object' ? it : { title: it, desc: '' }).filter(it => (it.title || '').trim()),
-                kb_resources: (d.kb_resources || [])
-            }))
-            .filter(d => d.items.length || d.title || d.teacher_id || d.tests.length || d.instructions || d.kb_resources.length);
         const fields = {
             title,
             description:    Dom.val('c-desc').trim() || null,
@@ -4077,14 +3914,13 @@ const AdminPage = {
             duration_hours: parseInt(Dom.val('c-duration')) || 0,
             is_published:   document.getElementById('c-published').checked,
             is_featured:    document.getElementById('c-featured').checked,
-            schedule
         };
         Loader.show();
         try {
             let course = id ? await API.courses.update(id, fields) : await API.courses.create(fields);
-            // merge kb_resources into course_info without touching other fields (outcomes, goals, etc.)
+            // merge kb_resources/content_items into course_info without touching other fields (outcomes, goals, etc.)
             const { data: fresh } = await supabase.from('courses').select('course_info').eq('id', course.id).single();
-            const mergedInfo = { ...(fresh?.course_info || {}), kb_resources: this._kbSelected };
+            const mergedInfo = { ...(fresh?.course_info || {}), kb_resources: this._kbSelected, content_items: this._contentItems || [] };
             await supabase.from('courses').update({ course_info: mergedInfo }).eq('id', course.id);
             if (this._courseThumbFile) await API.courses.uploadThumbnail(course.id, this._courseThumbFile);
             if (this._courseBadgeFile) await API.courses.uploadBadge(course.id, this._courseBadgeFile);

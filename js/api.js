@@ -1220,6 +1220,42 @@ const API = {
             return { url, path };
         },
 
+        // Той самий XHR-підхід, що й API.resources.uploadToStorageWithProgress —
+        // supabase-js .upload() йде через fetch і не віддає прогрес байтів,
+        // тому для реального відсотка завантаження потрібен сирий XHR.
+        async uploadWithProgress(file, testId, questionId, onProgress) {
+            const ext  = file.name.split('.').pop().toLowerCase();
+            const path = `${testId}/${questionId}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+            const { data: { session } } = await supabase.auth.getSession();
+            const token = session?.access_token || APP_CONFIG.anonKey;
+            const url = `${APP_CONFIG.supabaseUrl}/storage/v1/object/${APP_CONFIG.buckets.testImages}/${path}`;
+
+            await new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', url, true);
+                xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+                xhr.setRequestHeader('apikey', APP_CONFIG.anonKey);
+                xhr.setRequestHeader('x-upsert', 'true');
+                xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+                xhr.upload.onprogress = (e) => {
+                    if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
+                };
+                xhr.onload = () => {
+                    if (xhr.status >= 200 && xhr.status < 300) { resolve(); return; }
+                    let msg = `Помилка завантаження файлу (${xhr.status})`;
+                    try {
+                        const body = JSON.parse(xhr.responseText);
+                        if (body?.message) msg += `: ${body.message}`;
+                    } catch (_) {}
+                    reject(new Error(msg));
+                };
+                xhr.onerror = () => reject(new Error('Помилка мережі під час завантаження файлу'));
+                xhr.send(file);
+            });
+
+            return { url: `${APP_CONFIG.storagePublicUrl}/${APP_CONFIG.buckets.testImages}/${path}`, path };
+        },
+
         async remove(url) {
             const prefix = `${APP_CONFIG.storagePublicUrl}/${APP_CONFIG.buckets.testImages}/`;
             const path   = url.startsWith(prefix) ? url.slice(prefix.length) : null;

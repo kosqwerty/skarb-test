@@ -353,12 +353,37 @@ const TestsManagerPage = {
     _dirty:          false,
     _dirtyEnabled:   false,
     _markDirty() { if (this._dirtyEnabled) this._dirty = true; },
-    async _checkDirty() {
-        if (!this._dirty) return true;
-        const ok = await Modal.confirm({ title: 'Незбережені зміни', message: 'Питання має незбережені зміни. Зберегти перед переходом?', confirmText: 'Зберегти', cancelText: 'Не зберігати' });
-        if (ok) await this.saveCurrentQuestion();
-        this._dirty = false;
-        return true;
+    // Центрована модалка (не глобальний Modal.confirm — той відкривається
+    // боковою панеллю на весь екран праворуч, для такого короткого
+    // підтвердження це виглядає незручно; той самий підхід, що й
+    // NewsPage._deleteComment).
+    _checkDirty() {
+        if (!this._dirty) return Promise.resolve(true);
+        return new Promise(resolve => {
+            document.getElementById('tm-dirty-confirm')?.remove();
+            const el = document.createElement('div');
+            el.id = 'tm-dirty-confirm';
+            el.className = 'center-confirm-backdrop';
+            const finish = async (save) => {
+                el.remove();
+                if (save) await TestsManagerPage.saveCurrentQuestion();
+                TestsManagerPage._dirty = false;
+                resolve(true);
+            };
+            el.innerHTML = `
+                <div class="center-confirm-box">
+                    <h3>Незбережені зміни</h3>
+                    <p>Питання має незбережені зміни.<br>Зберегти перед переходом?</p>
+                    <div class="center-confirm-actions">
+                        <button class="btn btn-ghost" id="tm-dirty-discard">Не зберігати</button>
+                        <button class="btn btn-primary" id="tm-dirty-save">Зберегти</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(el);
+            el.addEventListener('click', e => { if (e.target === el) finish(false); });
+            document.getElementById('tm-dirty-discard').onclick = () => finish(false);
+            document.getElementById('tm-dirty-save').onclick = () => finish(true);
+        });
     },
     _quillSetupDone: false,
     _pendingCoverFile: null,
@@ -1929,26 +1954,52 @@ button.te-save-btn-ghost:hover{background:color-mix(in srgb,var(--zc-color,var(-
 .te-zone-green{--zc-color:#10b981;--zc-border:rgba(16,185,129,.22);--zc-bg:rgba(16,185,129,.03);--zc-head:rgba(16,185,129,.08)}
 .te-zone-amber{--zc-color:#f59e0b;--zc-border:rgba(245,158,11,.22);--zc-bg:rgba(245,158,11,.03);--zc-head:rgba(245,158,11,.08)}
 .te-quill-wrap{border:1.5px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:18px}
-.te-quill-wrap .ql-toolbar{border:none;border-bottom:1px solid var(--border);padding:8px 12px;background:var(--bg-raised)}
+.te-quill-wrap .ql-toolbar{border:none;border-bottom:1px solid var(--border);padding:7px 10px;background:var(--bg-raised)}
 .te-quill-wrap .ql-container{border:none;font-size:.92rem;min-height:90px;background:var(--bg-surface)}
 .te-quill-wrap .ql-editor{padding:12px 14px;min-height:90px;color:var(--text-primary);background:var(--bg-surface);font-size:16px}
-/* Icon chips stand out against the gray toolbar strip instead of blending into it */
+
+/* ── Quill toolbar — one consistent control grid ──
+   Quill's own stylesheet gives plain buttons, picker labels and color
+   swatches three different box models (padding/margin/line-height), so
+   bumping icon size on top of that made every control a slightly
+   different height and let neighbouring groups collide. Resetting the
+   shared metrics here once — same fixed box, same centering, real gaps
+   instead of Quill's baked-in margins — fixes all of them together
+   instead of patching each control separately. */
+.ql-toolbar.ql-snow{
+    display:flex;align-items:center;flex-wrap:wrap;gap:3px;box-sizing:border-box;
+}
+.ql-toolbar.ql-snow .ql-formats{
+    display:flex;align-items:center;gap:3px;
+    margin:2px 7px 2px 0!important;padding-right:7px;
+    border-right:1px solid var(--border);
+}
+.ql-toolbar.ql-snow .ql-formats:last-child{border-right:none;margin-right:0;padding-right:0}
 .ql-toolbar.ql-snow button,
 .ql-toolbar.ql-snow .ql-picker-label{
-    background:var(--bg-surface);border-radius:6px;transition:background .12s;
+    box-sizing:border-box;display:flex;align-items:center;justify-content:center;
+    height:32px;min-width:32px;padding:0 7px;margin:0;
+    border:1px solid transparent;border-radius:7px;background:var(--bg-surface);
+    color:var(--text-secondary);transition:background .12s,border-color .12s;flex-shrink:0;
 }
+.ql-toolbar.ql-snow button{padding:0;width:32px}
+.ql-toolbar.ql-snow .ql-picker-label{gap:4px;font-size:.8rem;font-weight:600;color:var(--text-primary)}
 .ql-toolbar.ql-snow button:hover,
 .ql-toolbar.ql-snow button.ql-active,
 .ql-toolbar.ql-snow .ql-picker-label:hover,
 .ql-toolbar.ql-snow .ql-picker.ql-expanded .ql-picker-label{
     background:color-mix(in srgb,var(--primary) 14%,var(--bg-surface));
+    border-color:color-mix(in srgb,var(--primary) 30%,transparent);
 }
-/* Збільшені іконки тулбару — за замовчуванням Quill дає 28px кнопку/18px svg,
-   на щільній тест-панелі це занадто дрібно */
-.ql-toolbar.ql-snow button{width:34px;height:34px}
-.ql-toolbar.ql-snow button svg{width:22px;height:22px}
-.ql-toolbar.ql-snow .ql-picker-label{display:flex;align-items:center;height:34px}
-.ql-toolbar.ql-snow .ql-picker-label svg{width:22px;height:22px}
+.ql-toolbar.ql-snow button.ql-active .ql-stroke{stroke:var(--primary)}
+.ql-toolbar.ql-snow button.ql-active .ql-fill{fill:var(--primary)}
+/* Real format-icon buttons get a bigger, centered glyph; the font/size
+   picker's caret stays its own small triangle so it doesn't balloon into
+   an oversized arrow next to the text label. */
+.ql-toolbar.ql-snow button svg{width:19px;height:19px}
+.ql-toolbar.ql-snow .ql-picker-label svg{width:14px;height:14px;flex-shrink:0}
+.ql-toolbar.ql-snow .ql-color .ql-picker-label,
+.ql-toolbar.ql-snow .ql-background .ql-picker-label{padding:0 6px;min-width:38px}
 
 /* Options */
 .te-options{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
@@ -2012,12 +2063,16 @@ button.te-save-btn-ghost:hover{background:color-mix(in srgb,var(--zc-color,var(-
 .te-empty-q{display:flex;flex-direction:column;align-items:center;padding:2rem 1rem;text-align:center;color:var(--text-muted);font-size:.85rem}
 .te-empty-q-ico{font-size:2.5rem;margin-bottom:.75rem;opacity:.4}
 
-/* Media panel */
+/* Media panel — themed with the parent zone's accent (--zc-color/--zc-head/
+   --zc-bg, set by .te-zone-blue etc.) so it reads as part of "Текст питання",
+   not a bolted-on gray box. */
 .te-media-panel{position:relative}
-.te-media-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
-.te-media-thumbs{display:flex;flex-wrap:wrap;gap:10px}
-.te-media-thumb{position:relative;width:76px;height:76px;border-radius:10px;overflow:hidden;border:1.5px solid var(--border);flex-shrink:0;cursor:pointer;transition:border-color .15s,box-shadow .15s}
-.te-media-thumb:hover{border-color:var(--primary);box-shadow:0 4px 14px rgba(0,0,0,.18)}
+.te-media-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.te-media-head-label{display:flex;align-items:center;gap:7px;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted)}
+.te-media-count{display:inline-flex;align-items:center;justify-content:center;min-width:19px;height:19px;padding:0 5px;border-radius:999px;background:var(--zc-head,rgba(99,102,241,.1));color:var(--zc-color,var(--primary));font-size:.68rem;font-weight:800}
+.te-media-thumbs{display:flex;flex-wrap:wrap;gap:11px}
+.te-media-thumb{position:relative;width:86px;height:86px;border-radius:12px;overflow:hidden;border:1.5px solid var(--border);flex-shrink:0;cursor:pointer;box-shadow:0 2px 7px rgba(15,23,42,.07);transition:border-color .15s,box-shadow .15s,transform .15s}
+.te-media-thumb:hover{border-color:var(--zc-color,var(--primary));box-shadow:0 10px 22px -8px rgba(15,23,42,.3);transform:translateY(-2px)}
 .te-media-thumb img{width:100%;height:100%;object-fit:cover;display:block;cursor:zoom-in}
 .te-media-thumb-actions{position:absolute;inset:0;background:linear-gradient(180deg,rgba(15,23,42,.15),rgba(15,23,42,.65));opacity:0;display:flex;align-items:center;justify-content:center;gap:7px;transition:opacity .15s}
 .te-media-thumb:hover .te-media-thumb-actions{opacity:1}
@@ -2027,8 +2082,24 @@ button.te-save-btn-ghost:hover{background:color-mix(in srgb,var(--zc-color,var(-
 .te-media-thumb-act-insert:hover{background:#2563eb;transform:scale(1.12)!important}
 .te-media-thumb-act-del{background:#ef4444}
 .te-media-thumb-act-del:hover{background:#dc2626;transform:scale(1.12)!important}
-.te-upload-lbl{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:8px;border:1.5px dashed var(--border);background:transparent;color:var(--text-muted);font-size:.78rem;cursor:pointer;transition:all .15s}
-.te-upload-lbl:hover{border-color:var(--primary);color:var(--primary)}
+/* Позначка на мініатюрі, яка вже вставлена в якийсь варіант відповіді */
+.te-media-thumb.used{border-color:#10b981}
+.te-media-thumb-used{
+    position:absolute;top:5px;left:5px;z-index:1;width:18px;height:18px;border-radius:50%;
+    background:#10b981;color:#fff;display:flex;align-items:center;justify-content:center;
+    font-size:.6rem;box-shadow:0 2px 6px rgba(0,0,0,.35);
+}
+.te-media-panel{outline:none;border-radius:12px;transition:box-shadow .15s}
+.te-media-panel.drag-active{box-shadow:0 0 0 2px var(--zc-color,var(--primary))}
+.te-media-panel.drag-active .te-media-empty,.te-media-panel.drag-active .te-media-add{border-color:var(--zc-color,var(--primary));background:var(--zc-head,rgba(99,102,241,.06))}
+.te-media-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;padding:20px 16px;border-radius:12px;border:1.5px dashed var(--border);background:var(--zc-bg,var(--bg-raised));color:var(--text-muted);text-align:center;cursor:pointer;transition:border-color .15s,background .15s}
+.te-media-empty:hover{border-color:var(--zc-color,var(--primary));background:var(--zc-head,rgba(99,102,241,.06))}
+.te-media-empty i{font-size:1.3rem;color:var(--zc-color,var(--primary));opacity:.55;margin-bottom:2px;transition:opacity .15s}
+.te-media-empty:hover i{opacity:.85}
+.te-media-empty b{font-size:.8rem;color:var(--text-secondary);font-weight:700}
+.te-media-empty span{font-size:.72rem;line-height:1.45;max-width:34ch}
+.te-media-add{width:86px;height:86px;border-radius:12px;border:1.5px dashed var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-muted);font-size:1.05rem;transition:all .15s}
+.te-media-add:hover{border-color:var(--zc-color,var(--primary));color:var(--zc-color,var(--primary));background:var(--zc-head,rgba(99,102,241,.06))}
 /* Answer image */
 .te-opt-img{width:46px;height:46px;border-radius:8px;object-fit:cover;border:1.5px solid var(--border);flex-shrink:0;cursor:zoom-in}
 .te-opt-img-btn{width:32px;height:32px;border-radius:8px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.85rem;flex-shrink:0;transition:all .15s}
@@ -2122,7 +2193,19 @@ button.te-save-btn-ghost:hover{background:color-mix(in srgb,var(--zc-color,var(-
 /* Picker dropdowns — pinned to position:fixed by _ensurePickerEscapeHatch() once opened,
    so they escape the scroll/clip containers (te-left-content etc.) instead of being cut off. */
 .ql-snow .ql-picker.ql-expanded{position:relative;z-index:99999!important}
-.ql-snow .ql-picker.ql-expanded .ql-picker-options{z-index:99999!important;max-height:260px;overflow-y:auto}
+.ql-snow .ql-picker.ql-expanded .ql-picker-options{
+    z-index:99999!important;max-height:260px;overflow-y:auto;
+    box-sizing:border-box;padding:5px;border:1px solid var(--border)!important;
+    border-radius:9px;background:var(--bg-surface);box-shadow:0 10px 28px rgba(0,0,0,.16);
+}
+.ql-snow .ql-picker-options .ql-picker-item{
+    box-sizing:border-box;height:30px;padding:0 10px!important;border-radius:6px;
+    display:flex;align-items:center;font-size:.82rem;color:var(--text-primary);transition:background .1s;
+}
+.ql-snow .ql-picker-options .ql-picker-item:hover{background:var(--bg-raised)}
+.ql-snow .ql-picker-options .ql-picker-item.ql-selected{background:color-mix(in srgb,var(--primary) 14%,var(--bg-surface));color:var(--primary)}
+.ql-snow .ql-color .ql-picker-options .ql-picker-item,
+.ql-snow .ql-background .ql-picker-options .ql-picker-item{height:22px;width:22px;padding:0!important;border-radius:5px}
 /* Default label font — matches the admin UI (Inter), regardless of which font/size is picked */
 .ql-snow .ql-picker-label{font-family:'Inter',sans-serif}
 /* Font picker — show actual font name in label and dropdown items */
@@ -2254,6 +2337,15 @@ button.te-save-btn-ghost:hover{background:color-mix(in srgb,var(--zc-color,var(-
     async _selectQuestion(idx) {
         await this._checkDirty();
         this._dirty = false;
+        // Must run before _opts is reassigned below: _answerQuills still holds
+        // the PREVIOUS question's live Quill instances at this point (their
+        // own cleanup is deferred inside _initAnswerQuills() via setTimeout).
+        // _renderQuestionEditor() → _renderMediaPanel() → _usedImageUrls()
+        // calls _syncAnswerQuillsToOpts(), which writes live Quill content
+        // into this._opts[i] — without this cleanup that clobbers the
+        // NEWLY loaded question's answers with the previous question's
+        // answer text (via stale index i) before its own Quills even exist.
+        this._cleanupAnswerQuills();
         this._activeIdx = idx;
         const q = this._questions[idx];
         if (!q) return;
@@ -2347,15 +2439,18 @@ button.te-save-btn-ghost:hover{background:color-mix(in srgb,var(--zc-color,var(-
             }
             this._quill.on('text-change', () => { TestsManagerPage._markDirty(); });
 
-            // Clipboard image paste → compress → upload → insert
+            // Clipboard image paste → compress → upload → insert (usually just
+            // one image, but copying several files at once pastes several
+            // clipboard items — handle all of them, not only the first).
             this._quill.root.addEventListener('paste', async e => {
                 const items = Array.from(e.clipboardData?.items || []);
-                const imgItem = items.find(it => it.type.startsWith('image/'));
-                if (!imgItem) return;
+                const imgItems = items.filter(it => it.type.startsWith('image/'));
+                if (!imgItems.length) return;
                 e.preventDefault(); e.stopPropagation();
-                const file = imgItem.getAsFile();
-                if (!file) return;
-                await TestsManagerPage._uploadImageIntoQuill(TestsManagerPage._quill, file);
+                for (const it of imgItems) {
+                    const file = it.getAsFile();
+                    if (file) await TestsManagerPage._uploadImageIntoQuill(TestsManagerPage._quill, file);
+                }
             });
 
             // Image resize/align/scale handles inside Quill
@@ -2672,43 +2767,179 @@ ${this._opts.map((o,i) => `
     _renderMediaPanel() {
         const q = this._questions[this._activeIdx];
         const images = q?.images || [];
-        return `<div class="te-media-panel" id="te-media-panel">
-    <div class="te-media-head">
-        <span style="font-size:.78rem;color:var(--text-muted)">${images.length ? `${images.length} зображень` : 'Немає зображень'}</span>
-        <label class="te-upload-lbl">
-            <i class="fa-solid fa-upload"></i> Завантажити
-            <input type="file" accept="image/*" multiple style="display:none" onchange="TestsManagerPage._uploadImages(this.files)">
-        </label>
-    </div>
-    ${images.length ? `<div class="te-media-thumbs">${images.map(url => `
-        <div class="te-media-thumb">
+        const uploadInput = `<input type="file" accept="image/*" multiple style="display:none" onchange="TestsManagerPage._uploadImages(this.files)">`;
+        const used = images.length ? this._usedImageUrls() : new Set();
+        const thumbsHtml = images.length ? `<div class="te-media-thumbs">${images.map(url => `
+        <div class="te-media-thumb${used.has(url) ? ' used' : ''}">
             <img src="${url}" alt="" draggable="true"
                 ondragstart="TestsManagerPage._onThumbDragStart(event,'${url}')"
                 onclick="TestsManagerPage._openLightbox('${url}')">
+            ${used.has(url) ? '<span class="te-media-thumb-used" title="Використовується у варіанті відповіді"><i class="fa-solid fa-check"></i></span>' : ''}
             <div class="te-media-thumb-actions">
                 <button class="te-media-thumb-act-insert" title="Вставити в текст" onclick="event.stopPropagation();TestsManagerPage._insertImageToQuill('${url}')"><i class="fa-solid fa-file-import"></i></button>
                 <button class="te-media-thumb-act-del" title="Видалити зображення" onclick="event.stopPropagation();TestsManagerPage._deleteImage('${url}')"><i class="fa-solid fa-trash-can"></i></button>
             </div>
-        </div>`).join('')}</div>`
-    : `<div style="font-size:.78rem;color:var(--text-muted);padding:4px 0">Немає зображень</div>`}
+        </div>`).join('')}<label class="te-media-add" title="Додати зображення">${uploadInput}<i class="fa-solid fa-plus"></i></label></div>`
+            : `<label class="te-media-empty">${uploadInput}<i class="fa-regular fa-image"></i><b>Немає зображень</b><span>Натисніть, вставте (Ctrl+V) або перетягніть зображення сюди</span></label>`;
+        return `<div class="te-media-panel" id="te-media-panel" tabindex="0"
+    ondragover="event.preventDefault();this.classList.add('drag-active')"
+    ondragleave="this.classList.remove('drag-active')"
+    ondrop="TestsManagerPage._onMediaPanelDrop(event,this)"
+    onpaste="TestsManagerPage._onMediaPanelPaste(event)">
+    <div class="te-media-head">
+        <span class="te-media-head-label"><i class="fa-regular fa-images"></i> Зображення${images.length ? `<span class="te-media-count">${images.length}</span>` : ''}</span>
+    </div>
+    ${thumbsHtml}
 </div>`;
+    },
+
+    // Позначка на мініатюрі в галереї — це зображення вже використане в
+    // якомусь варіанті відповіді (single/multiple — вбудоване в Quill-текст
+    // відповіді; matching/ordering — задане напряму через image_url).
+    _usedImageUrls() {
+        this._syncAnswerQuillsToOpts();
+        const used = new Set();
+        (this._opts || []).forEach(o => {
+            if (o.image_url) used.add(o.image_url);
+            if (o.html) {
+                const matches = o.html.match(/<img[^>]+src=["']([^"']+)["']/gi) || [];
+                matches.forEach(tag => {
+                    const m = tag.match(/src=["']([^"']+)["']/i);
+                    if (m) used.add(m[1]);
+                });
+            }
+        });
+        return used;
+    },
+
+    _refreshMediaPanel() {
+        const panel = document.getElementById('te-media-panel');
+        if (panel) panel.outerHTML = this._renderMediaPanel();
+    },
+
+    // Drag&drop / paste працюють прямо на самій панелі медіа (не лише в
+    // тексті питання) — так само в порожньому, і в заповненому стані.
+    _onMediaPanelDrop(e, el) {
+        e.preventDefault(); e.stopPropagation();
+        el.classList.remove('drag-active');
+        const files = Array.from(e.dataTransfer?.files || []).filter(f => f.type.startsWith('image/'));
+        if (files.length) this._uploadImages(files);
+    },
+
+    _onMediaPanelPaste(e) {
+        const items = Array.from(e.clipboardData?.items || []);
+        const files = items.filter(it => it.type.startsWith('image/')).map(it => it.getAsFile()).filter(Boolean);
+        if (!files.length) return;
+        e.preventDefault();
+        this._uploadImages(files);
+    },
+
+    // ── Upload progress queue (той самий патерн, що й ResourcesPage._uq*
+    //    у базі знань, — плаваюча панель праворуч-знизу з відсотком і
+    //    смужкою прогресу на файл, а не блокуючий Loader-спінер) ──────
+    _uploadQueue: [],
+
+    _uqEnsureStyles() {
+        if (document.getElementById('tm-uq-styles')) return;
+        const style = document.createElement('style');
+        style.id = 'tm-uq-styles';
+        style.textContent = `
+            .tm-uq-panel{position:fixed;bottom:1.25rem;right:1.25rem;width:300px;max-width:calc(100vw - 2rem);
+                background:var(--bg-surface);border:1px solid var(--border);border-radius:14px;
+                box-shadow:0 16px 40px -14px rgba(0,0,0,.35);z-index:9999;overflow:hidden}
+            .tm-uq-head{display:flex;align-items:center;gap:.5rem;padding:.6rem .9rem;font-size:.82rem;font-weight:700;
+                color:var(--text-primary);border-bottom:1px solid var(--border)}
+            .tm-uq-head i{color:var(--primary)}
+            .tm-uq-list{display:flex;flex-direction:column;max-height:260px;overflow-y:auto}
+            .tm-uq-item{padding:.6rem .9rem;border-bottom:1px solid var(--border)}
+            .tm-uq-item:last-child{border-bottom:none}
+            .tm-uq-row{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-bottom:.35rem}
+            .tm-uq-title{font-size:.8rem;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
+            .tm-uq-pct{font-size:.74rem;color:var(--text-muted);flex-shrink:0}
+            .tm-uq-item.tm-uq-done .tm-uq-pct{color:#10b981}
+            .tm-uq-close{background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:.8rem;padding:2px;flex-shrink:0}
+            .tm-uq-close:hover{color:var(--danger)}
+            .tm-uq-bar{height:5px;border-radius:20px;background:var(--bg-raised);overflow:hidden}
+            .tm-uq-fill{height:100%;background:var(--primary);border-radius:20px;transition:width .2s ease}
+            .tm-uq-item.tm-uq-done .tm-uq-fill{background:#10b981}
+            .tm-uq-item.tm-uq-error .tm-uq-fill{background:var(--danger)}
+            .tm-uq-status{margin-top:.25rem;font-size:.7rem;color:var(--text-muted)}
+            .tm-uq-item.tm-uq-error .tm-uq-status{color:var(--danger)}
+        `;
+        document.head.appendChild(style);
+    },
+
+    _uqAdd(title) {
+        this._uqEnsureStyles();
+        const id = 'uq_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+        this._uploadQueue.push({ id, title, progress: 0, status: 'uploading', error: '' });
+        this._uqRender();
+        return id;
+    },
+
+    _uqUpdate(id, patch) {
+        const item = this._uploadQueue.find(q => q.id === id);
+        if (!item) return;
+        Object.assign(item, patch);
+        this._uqRender();
+    },
+
+    _uqRemove(id) {
+        this._uploadQueue = this._uploadQueue.filter(q => q.id !== id);
+        this._uqRender();
+    },
+
+    _uqRender() {
+        let panel = document.getElementById('tm-upload-queue');
+        if (!this._uploadQueue.length) {
+            panel?.remove();
+            return;
+        }
+        if (!panel) {
+            panel = document.createElement('div');
+            panel.id = 'tm-upload-queue';
+            panel.className = 'tm-uq-panel';
+            document.body.appendChild(panel);
+        }
+        const statusLabel = { uploading: 'Завантаження…', saving: 'Збереження…', done: 'Готово', error: 'Помилка' };
+        panel.innerHTML = `
+            <div class="tm-uq-head"><i class="fa-solid fa-cloud-arrow-up"></i> Завантаження зображень (${this._uploadQueue.length})</div>
+            <div class="tm-uq-list">
+                ${this._uploadQueue.map(q => `
+                    <div class="tm-uq-item tm-uq-${q.status}">
+                        <div class="tm-uq-row">
+                            <span class="tm-uq-title" title="${Fmt.esc(q.title)}">${Fmt.esc(q.title)}</span>
+                            ${q.status === 'error'
+                                ? `<button class="tm-uq-close" onclick="TestsManagerPage._uqRemove('${q.id}')" title="Закрити"><i class="fa-solid fa-xmark"></i></button>`
+                                : `<span class="tm-uq-pct">${q.status === 'done' ? '<i class="fa-solid fa-check"></i>' : q.progress + '%'}</span>`}
+                        </div>
+                        <div class="tm-uq-bar"><div class="tm-uq-fill" style="width:${q.status === 'done' ? 100 : q.progress}%"></div></div>
+                        <div class="tm-uq-status">${q.status === 'error' ? Fmt.esc(q.error || 'Помилка') : statusLabel[q.status]}</div>
+                    </div>
+                `).join('')}
+            </div>`;
     },
 
     async _uploadImages(files) {
         const q = this._questions[this._activeIdx];
         if (!q) return;
-        Loader.show();
-        try {
-            for (const file of files) {
+        for (const file of files) {
+            const qid = this._uqAdd(file.name);
+            try {
                 const comp = await this._compressImage(file);
-                const { url } = await API.testImages.upload(comp, this._curTest.id, q.id);
+                const { url } = await API.testImages.uploadWithProgress(comp, this._curTest.id, q.id, pct => this._uqUpdate(qid, { progress: pct }));
                 if (!q.images) q.images = [];
                 q.images.push(url);
+                this._uqUpdate(qid, { status: 'saving', progress: 100 });
+                await API.questions.update(q.id, { images: q.images });
+                document.getElementById('te-media-panel').outerHTML = this._renderMediaPanel();
+                this._uqUpdate(qid, { status: 'done' });
+                setTimeout(() => this._uqRemove(qid), 3000);
+            } catch(e) {
+                this._uqUpdate(qid, { status: 'error', error: e.message });
+                Toast.error('Помилка завантаження', `«${file.name}»: ${e.message}`);
             }
-            await API.questions.update(q.id, { images: q.images });
-            document.getElementById('te-media-panel').outerHTML = this._renderMediaPanel();
-        } catch(e) { Toast.error('Помилка завантаження', e.message); }
-        finally { Loader.hide(); }
+        }
     },
 
     async _deleteImage(url) {
@@ -2734,7 +2965,14 @@ ${this._opts.map((o,i) => `
     _syncAnswerQuillsToOpts() {
         if (this._qType !== 'single' && this._qType !== 'multiple') return;
         (this._answerQuills || []).forEach((q, i) => {
-            if (q && this._opts[i]) this._opts[i].html = q.root.innerHTML;
+            // q.root.isConnected guards against stale instances from a
+            // question the user has since navigated away from — their DOM
+            // nodes get replaced by _renderQuestionEditor() but cleanup of
+            // this._answerQuills itself is deferred (_initAnswerQuills runs
+            // via setTimeout), so without this check a sync triggered in
+            // that window would overwrite the NEWLY selected question's
+            // _opts with the PREVIOUS question's answer text.
+            if (q && q.root.isConnected && this._opts[i]) this._opts[i].html = q.root.innerHTML;
         });
     },
 
@@ -2855,7 +3093,11 @@ ${this._opts.map((o,i) => `
         }, true);
     },
 
-    _buildQuillModules() {
+    // galleryOnly:true — used for answer editors (see _initAnswerQuills): the
+    // toolbar "image" button opens the question's own media gallery instead
+    // of an OS file dialog, matching the same "answers only get images from
+    // te-media-thumbs" rule as paste/drop for those editors.
+    _buildQuillModules(galleryOnly = false) {
         this._quillSetup();
 
         const toolbarContainer = [
@@ -2872,7 +3114,7 @@ ${this._opts.map((o,i) => `
             toolbar: {
                 container: toolbarContainer,
                 handlers: {
-                    image:  TestsManagerPage._quillImageHandler,
+                    image:  galleryOnly ? TestsManagerPage._quillGalleryImageHandler : TestsManagerPage._quillImageHandler,
                     font:   TestsManagerPage._quillFontHandler,
                     table:  TestsManagerPage._quillTableHandler,
                     source: TestsManagerPage._quillSourceHandler
@@ -2979,12 +3221,65 @@ body.light-theme .tm-src-ta{background:#f6f8fa;color:#24292f;border-color:#d0d7d
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = 'image/*';
+        input.multiple = true;
         input.onchange = async () => {
-            const file = input.files[0];
-            if (!file) return;
-            await TestsManagerPage._uploadImageIntoQuill(quill, file);
+            for (const file of input.files) {
+                await TestsManagerPage._uploadImageIntoQuill(quill, file);
+            }
         };
         input.click();
+    },
+
+    // Toolbar image button for answer editors — opens the question's own
+    // media gallery (te-media-thumbs) instead of an OS file dialog, so
+    // answers can only reuse images already uploaded to the question.
+    _quillGalleryImageHandler() {
+        const quill = this.quill;
+        const anchorEl = this.container?.querySelector('.ql-image');
+        TestsManagerPage._openGalleryImagePicker(quill, anchorEl);
+    },
+
+    _openGalleryImagePicker(quill, anchorEl) {
+        document.getElementById('te-img-picker')?.remove();
+        const q = TestsManagerPage._questions[TestsManagerPage._activeIdx];
+        const images = q?.images || [];
+
+        const picker = document.createElement('div');
+        picker.id = 'te-img-picker';
+        picker.style.cssText = 'position:fixed;z-index:300;background:var(--bg-surface);border:1.5px solid var(--border);border-radius:12px;padding:10px;box-shadow:0 8px 28px rgba(0,0,0,.2);display:flex;flex-wrap:wrap;gap:8px;max-width:310px;max-height:220px;overflow-y:auto';
+        picker.innerHTML = images.length
+            ? images.map(url => `<img src="${url}"
+                style="width:64px;height:64px;object-fit:cover;border-radius:8px;cursor:pointer;border:1.5px solid var(--border);transition:border-color .1s"
+                onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='var(--border)'"
+                onclick="TestsManagerPage._insertGalleryImage('${url}')">`).join('')
+            : '<div style="font-size:.78rem;color:var(--text-muted);padding:8px;max-width:220px">Немає зображень — спершу завантажте їх у панелі "Зображення" над відповідями</div>';
+
+        if (anchorEl) {
+            const rect = anchorEl.getBoundingClientRect();
+            picker.style.top  = (rect.bottom + 6) + 'px';
+            picker.style.left = Math.min(rect.left, window.innerWidth - 330) + 'px';
+        } else {
+            picker.style.top = '50%'; picker.style.left = '50%';
+        }
+        TestsManagerPage._galleryPickerQuill = quill;
+        document.body.appendChild(picker);
+        setTimeout(() => {
+            document.addEventListener('click', function h(e) {
+                if (!picker.contains(e.target) && e.target !== anchorEl) {
+                    picker.remove(); document.removeEventListener('click', h);
+                }
+            });
+        }, 0);
+    },
+
+    _insertGalleryImage(url) {
+        const quill = TestsManagerPage._galleryPickerQuill;
+        document.getElementById('te-img-picker')?.remove();
+        if (!quill) return;
+        const sel = quill.getSelection(true) || { index: quill.getLength() };
+        quill.insertEmbed(sel.index, 'image', url);
+        quill.setSelection(sel.index + 1);
+        TestsManagerPage._refreshMediaPanel();
     },
 
     // Picking a font applies it to the whole editor, not just the current
@@ -3058,20 +3353,25 @@ body.light-theme .tm-src-ta{background:#f6f8fa;color:#24292f;border-color:#d0d7d
     async _uploadImageIntoQuill(quill, file) {
         const qNow = TestsManagerPage._questions[TestsManagerPage._activeIdx];
         if (!qNow) return;
-        Loader.show();
+        const qid = TestsManagerPage._uqAdd(file.name);
         try {
             const comp = await TestsManagerPage._compressImage(file);
-            const { url } = await API.testImages.upload(comp, TestsManagerPage._curTest.id, qNow.id);
+            const { url } = await API.testImages.uploadWithProgress(comp, TestsManagerPage._curTest.id, qNow.id, pct => TestsManagerPage._uqUpdate(qid, { progress: pct }));
             if (!qNow.images) qNow.images = [];
             qNow.images.push(url);
+            TestsManagerPage._uqUpdate(qid, { status: 'saving', progress: 100 });
             await API.questions.update(qNow.id, { images: qNow.images });
             const panel = document.getElementById('te-media-panel');
             if (panel) panel.outerHTML = TestsManagerPage._renderMediaPanel();
             const range = quill.getSelection(true) || { index: quill.getLength() };
             quill.insertEmbed(range.index, 'image', url);
             quill.setSelection(range.index + 1);
-        } catch(ex) { Toast.error('Помилка завантаження', ex.message); }
-        finally { Loader.hide(); }
+            TestsManagerPage._uqUpdate(qid, { status: 'done' });
+            setTimeout(() => TestsManagerPage._uqRemove(qid), 3000);
+        } catch(ex) {
+            TestsManagerPage._uqUpdate(qid, { status: 'error', error: ex.message });
+            Toast.error('Помилка завантаження', ex.message);
+        }
     },
 
 
@@ -3084,7 +3384,7 @@ body.light-theme .tm-src-ta{background:#f6f8fa;color:#24292f;border-color:#d0d7d
             if (!el) return;
             const q = new Quill(`#te-ans-quill-${i}`, {
                 theme: 'snow',
-                modules: this._buildQuillModules()
+                modules: this._buildQuillModules(true)
             });
             this._wireToolbarTooltips(q);
             if (opt.html) {
@@ -3097,19 +3397,20 @@ body.light-theme .tm-src-ta{background:#f6f8fa;color:#24292f;border-color:#d0d7d
             }
             q.on('text-change', () => { TestsManagerPage._markDirty(); });
 
-            // Paste image → upload → insert
-            q.root.addEventListener('paste', async e => {
+            // Варіанти відповідей навмисно НЕ можуть завантажити нове зображення
+            // напряму (ні вставкою з буфера, ні перетягуванням файлу з ОС) —
+            // лише перетягнути вже наявне з галереї "Зображення" питання
+            // (te-media-thumbs). Це тримає всі картинки одного питання в
+            // одному місці замість розкиданих по відповідях дублікатів.
+            q.root.addEventListener('paste', e => {
                 const items = Array.from(e.clipboardData?.items || []);
-                const imgItem = items.find(it => it.type.startsWith('image/'));
-                if (!imgItem) return;
+                if (!items.some(it => it.type.startsWith('image/'))) return;
                 e.preventDefault(); e.stopPropagation();
-                const file = imgItem.getAsFile();
-                if (!file || !qData) return;
-                await TestsManagerPage._uploadImageIntoQuill(q, file);
+                Toast.info('Зображення можна лише перетягнути', 'Спершу завантажте його в галерею "Зображення" вище, потім перетягніть сюди');
             });
 
-            // Gallery drag-in, OS file drop, and native in-editor image reposition
-            this._wireImageDropZone(q);
+            // Gallery drag-in only — no OS file drop upload (galleryOnly:true)
+            this._wireImageDropZone(q, true);
 
             this._answerResizeAborts.push(this._initImageResize(q));
             this._answerTableAborts.push(this._initTableTools(q));
@@ -3117,15 +3418,17 @@ body.light-theme .tm-src-ta{background:#f6f8fa;color:#24292f;border-color:#d0d7d
         });
     },
 
-    // Handles three drop cases on a Quill editor root:
+    // Handles drop cases on a Quill editor root:
     //  1. a thumbnail dragged from the media gallery (_draggedImageUrl)     → insert new embed
     //  2. an image file dragged in from outside the browser (OS/Explorer)  → upload → insert new embed
+    //     (skipped when galleryOnly — answer editors only accept case 1, see _initAnswerQuills)
     //  3. an image already embedded in this editor, dragged to reposition → default browser behaviour (not intercepted)
-    _wireImageDropZone(quill) {
+    _wireImageDropZone(quill, galleryOnly = false) {
         quill.root.addEventListener('dragover', e => {
             e.preventDefault(); // required for 'drop' to fire at all, incl. case 3 (native reposition)
             quill.root.classList.add('drag-active');
-            e.dataTransfer.dropEffect = (TestsManagerPage._draggedImageUrl || e.dataTransfer.types.includes('Files')) ? 'copy' : 'move';
+            const isFileDrag = !galleryOnly && e.dataTransfer.types.includes('Files');
+            e.dataTransfer.dropEffect = (TestsManagerPage._draggedImageUrl || isFileDrag) ? 'copy' : 'move';
         });
         quill.root.addEventListener('dragleave', () => quill.root.classList.remove('drag-active'));
         quill.root.addEventListener('drop', e => {
@@ -3137,12 +3440,22 @@ body.light-theme .tm-src-ta{background:#f6f8fa;color:#24292f;border-color:#d0d7d
                 quill.insertEmbed(sel.index, 'image', url);
                 quill.setSelection(sel.index + 1);
                 TestsManagerPage._draggedImageUrl = null;
+                TestsManagerPage._refreshMediaPanel();
                 return;
             }
-            const file = e.dataTransfer?.files?.[0];
-            if (file && file.type.startsWith('image/')) {
+            if (galleryOnly) {
+                if (e.dataTransfer?.files?.length) {
+                    e.preventDefault(); e.stopPropagation();
+                    Toast.info('Зображення можна лише перетягнути', 'Спершу завантажте його в галерею "Зображення" вище, потім перетягніть сюди');
+                }
+                return;
+            }
+            const dropped = Array.from(e.dataTransfer?.files || []).filter(f => f.type.startsWith('image/'));
+            if (dropped.length) {
                 e.preventDefault(); e.stopPropagation();
-                TestsManagerPage._uploadImageIntoQuill(quill, file);
+                (async () => {
+                    for (const file of dropped) await TestsManagerPage._uploadImageIntoQuill(quill, file);
+                })();
                 return;
             }
             // otherwise: let the browser move the dragged node itself (in-editor reposition)
@@ -3645,11 +3958,13 @@ body.light-theme .tm-src-ta{background:#f6f8fa;color:#24292f;border-color:#d0d7d
     _setAnswerImage(idx, url) {
         this._opts[idx].image_url = url;
         document.getElementById('te-options-area').innerHTML = this._optionsHtml();
+        this._refreshMediaPanel();
     },
 
     _removeAnswerImage(idx) {
         this._opts[idx].image_url = null;
         document.getElementById('te-options-area').innerHTML = this._optionsHtml();
+        this._refreshMediaPanel();
     },
 
     _setAnswerAlign(idx, align) {

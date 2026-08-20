@@ -3006,6 +3006,7 @@ ${this._opts.map((o,i) => `
 
         this._ensurePickerEscapeHatch();
         this._registerTableBlot();
+        this._registerDivBlot();
 
         const icons = Quill.import('ui/icons');
         icons.table  = '<i class="fa-solid fa-table-cells-large"></i>';
@@ -3058,6 +3059,56 @@ ${this._opts.map((o,i) => `
         TableBlot.blotName = 'table';
         TableBlot.tagName  = 'TABLE';
         Quill.register(TableBlot, true);
+    },
+
+    // Registers <div> as a Block Embed blot, same trick as _registerTableBlot —
+    // without this, Quill has no blot for <div> in its Parchment registry, so
+    // when its MutationObserver reconciles DOM set via quill.root.innerHTML =
+    // "..." (the "Переглянути/редагувати HTML-код" source editor writes this
+    // way), any <div> it can't match gets unwrapped/replaced with a plain <p>
+    // and its style="display:flex..." is lost — e.g. a "two images in one row"
+    // flex wrapper silently reverts to stacked images.
+    // Unlike TableBlot (which only needs to preserve innerHTML, styling comes
+    // from global .ql-editor table CSS), a div's OWN attributes (style, class)
+    // carry the meaning here, so value()/create() round-trip the full
+    // outerHTML, not just the inner content.
+    _registerDivBlot() {
+        if (this._divBlotRegistered) return;
+        this._divBlotRegistered = true;
+        const BlockEmbed = Quill.import('blots/block/embed');
+
+        class DivBlot extends BlockEmbed {
+            constructor(domNode) {
+                super(domNode);
+                domNode.setAttribute('contenteditable', 'true');
+            }
+            static create(value) {
+                const node = super.create();
+                node.setAttribute('contenteditable', 'true');
+                if (typeof value === 'string') {
+                    const wrap = document.createElement('div');
+                    wrap.innerHTML = value;
+                    const src = wrap.firstElementChild;
+                    if (src && src.tagName === 'DIV') {
+                        [...src.attributes].forEach(attr => {
+                            if (attr.name !== 'contenteditable') node.setAttribute(attr.name, attr.value);
+                        });
+                        node.innerHTML = src.innerHTML;
+                    } else {
+                        node.innerHTML = value;
+                    }
+                }
+                return node;
+            }
+            static value(node) {
+                const clone = node.cloneNode(true);
+                clone.removeAttribute('contenteditable');
+                return clone.outerHTML;
+            }
+        }
+        DivBlot.blotName = 'div';
+        DivBlot.tagName  = 'DIV';
+        Quill.register(DivBlot, true);
     },
 
     // Quill's picker dropdowns are `position:absolute` inside scroll/clip containers

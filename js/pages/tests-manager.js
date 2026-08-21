@@ -496,6 +496,16 @@ const TestsManagerPage = {
 .tm-act-btn:hover{border-color:var(--primary);color:var(--primary);background:color-mix(in srgb,var(--primary) 8%,transparent)}
 .tm-act-danger:hover{border-color:var(--danger)!important;color:var(--danger)!important;background:rgba(239,68,68,.08)!important}
 
+/* Групування тестів по розділах — той самий вигляд, що й для сторінок
+   (CollectionsPage._renderGroupedRows / .col-tbl-sec-*) */
+.tm-tbl-sec-row{background:var(--bg-raised);cursor:pointer}
+.tm-tbl-sec-row:hover{background:var(--bg-hover)}
+.tm-tbl-sec-th{display:flex;align-items:center;gap:.5rem;padding:.55rem .85rem;font-weight:600;font-size:.82rem;color:var(--text-primary)}
+.tm-tbl-sec-th i.fa-chevron-down,.tm-tbl-sec-th i.fa-chevron-right{font-size:.65rem;color:var(--text-muted);width:10px}
+.tm-tbl-sec-th i.fa-folder,.tm-tbl-sec-th i.fa-folder-open{color:var(--primary);font-size:.85rem}
+.tm-tbl-sec-count{margin-left:.15rem;font-size:.7rem;font-weight:600;color:var(--text-muted);background:var(--bg-surface);border:1px solid var(--border);border-radius:20px;padding:0 7px}
+#tm-tbody.tm-tbl-grouped tr:not(.tm-tbl-sec-row) td:first-child{padding-left:2.3rem}
+
 .tm-sec-tabs{display:inline-flex;gap:4px;margin-bottom:18px;padding:5px;background:var(--bg-surface);border:1px solid var(--border);border-radius:16px;box-shadow:0 2px 10px rgba(15,23,42,.05)}
 body:not(.light-theme) .tm-sec-tabs{box-shadow:0 2px 14px rgba(0,0,0,.2)}
 .tm-sec-tab{padding:9px 18px 9px 10px;border-radius:12px;border:none;background:transparent;color:var(--text-muted);font-size:.85rem;font-weight:600;cursor:pointer;transition:background .18s ease,color .18s ease,transform .12s ease;display:inline-flex;align-items:center;gap:9px}
@@ -561,8 +571,8 @@ body:not(.light-theme) .tm-sec-tabs{box-shadow:0 2px 14px rgba(0,0,0,.2)}
                     <th class="tm-th-actions">Дії</th>
                 </tr>
             </thead>
-            <tbody id="tm-tbody">
-                ${this._tests.map((t, i) => this._rowHtml(t, i)).join('')}
+            <tbody id="tm-tbody" class="tm-tbl-grouped">
+                ${this._renderGroupedTestRows(this._tests)}
             </tbody>
         </table>
     </div>` : `
@@ -1113,6 +1123,55 @@ body:not(.light-theme) .tm-sec-tabs{box-shadow:0 2px 14px rgba(0,0,0,.2)}
         finally { Loader.hide(); }
     },
 
+    // ── Групування списку тестів по розділах (test.section) ────────
+    // Той самий підхід, що й CollectionsPage._renderGroupedRows для
+    // сторінок: групуємо вже завантажений масив у пам'яті (без окремого
+    // запиту/JOIN), назви розділів сортуємо українською локаллю,
+    // "Без розділу" завжди останнім, стан згорнутості — в localStorage.
+    _loadTestSectionCollapse() {
+        try { return new Set(JSON.parse(localStorage.getItem('tm_section_collapsed') || '[]')); }
+        catch { return new Set(); }
+    },
+
+    _toggleTestSection(rowEl) {
+        const key = rowEl.dataset.secKey;
+        const collapsed = this._loadTestSectionCollapse();
+        if (collapsed.has(key)) collapsed.delete(key); else collapsed.add(key);
+        try { localStorage.setItem('tm_section_collapsed', JSON.stringify([...collapsed])); } catch {}
+        this._applyListFilters();
+    },
+
+    _renderGroupedTestRows(rows) {
+        const groups = new Map(); // назва розділу ('' = без розділу) → тести
+        rows.forEach(t => {
+            const key = t.section || '';
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key).push(t);
+        });
+        const names = [...groups.keys()].filter(k => k !== '').sort((a, b) => a.localeCompare(b, 'uk'));
+        if (groups.has('')) names.push(''); // "Без розділу" — завжди останнім
+
+        const collapsed = this._loadTestSectionCollapse();
+        let idx = 0;
+        return names.map(name => {
+            const list = groups.get(name);
+            const label = name || 'Без розділу';
+            const key = name || '__none__';
+            const isCollapsed = collapsed.has(key);
+            const header = `
+                <tr class="tm-tbl-sec-row" data-sec-key="${Fmt.esc(key)}" onclick="TestsManagerPage._toggleTestSection(this)">
+                    <td colspan="4" class="tm-tbl-sec-th">
+                        <i class="fa-solid fa-chevron-${isCollapsed ? 'right' : 'down'}"></i>
+                        <i class="fa-solid fa-folder${isCollapsed ? '' : '-open'}"></i>
+                        <span>${Fmt.esc(label)}</span>
+                        <span class="tm-tbl-sec-count">${list.length}</span>
+                    </td>
+                </tr>`;
+            const body = isCollapsed ? '' : list.map(t => this._rowHtml(t, idx++)).join('');
+            return header + body;
+        }).join('');
+    },
+
     _rowHtml(t, i = 0) {
         const qCount   = t.questions?.length ?? '—';
         const st       = this._listStats?.[t.id];
@@ -1397,27 +1456,38 @@ body:not(.light-theme) .tm-sec-tabs{box-shadow:0 2px 14px rgba(0,0,0,.2)}
     },
 
     _setListSort(mode) {
-        const tbody = document.getElementById('tm-tbody');
-        if (!tbody || !this._tests.length) return;
-        const sorted = [...this._tests];
-        if (mode === 'title')         sorted.sort((a, b) => (a.title||'').localeCompare(b.title||'', 'uk'));
-        else if (mode === 'progress') sorted.sort((a, b) => {
+        if (!this._tests.length) return;
+        if (mode === 'title')         this._tests.sort((a, b) => (a.title||'').localeCompare(b.title||'', 'uk'));
+        else if (mode === 'progress') this._tests.sort((a, b) => {
             const p = t => { const s = this._listStats?.[t.id]; return s?.assigned ? (s.passed?.size||0) / s.assigned : -1; };
             return p(b) - p(a);
         });
-        else sorted.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-        tbody.innerHTML = sorted.map((t, i) => this._rowHtml(t, i)).join('');
+        else this._tests.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
         this._applyListFilters();
     },
 
+    // Фільтр/пошук перерендерює tbody цілком з масиву this._tests (а не
+    // просто ховає/показує вже намальовані рядки) — так само, як
+    // CollectionsPage._renderTableRows. Під час активного пошуку розділи
+    // показуємо плоским відфільтрованим списком (щоб не розгортати вручну
+    // згорнуті розділи заради результату пошуку), без пошуку — знову групуємо.
     _applyListFilters() {
+        const tbody = document.getElementById('tm-tbody');
+        if (!tbody) return;
         const f = this._listFilter || 'all';
         const q = (this._listQuery || '').trim().toLowerCase();
-        document.querySelectorAll('#tm-tbody .tm-row').forEach(row => {
-            const okF = f === 'all' || (f === 'pub') === (row.dataset.pub === 'true');
-            const okQ = !q || (row.dataset.title || '').includes(q);
-            row.style.display = okF && okQ ? '' : 'none';
-        });
+        const matches = t => {
+            const okF = f === 'all' || (f === 'pub') === !!t.is_published;
+            const okQ = !q || (t.title||'').toLowerCase().includes(q);
+            return okF && okQ;
+        };
+        if (q) {
+            tbody.classList.remove('tm-tbl-grouped');
+            tbody.innerHTML = this._tests.filter(matches).map((t, i) => this._rowHtml(t, i)).join('');
+        } else {
+            tbody.classList.add('tm-tbl-grouped');
+            tbody.innerHTML = this._renderGroupedTestRows(this._tests.filter(matches));
+        }
     },
 
     openSettings(testId) {
@@ -1494,6 +1564,12 @@ body:not(.light-theme) .tm-sec-tabs{box-shadow:0 2px 14px rgba(0,0,0,.2)}
 .tset-textarea{min-height:56px;resize:vertical}
 .tset-select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23888' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px;cursor:pointer}
 .tset-row2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.tm-section-combo{position:relative}
+.tm-section-suggest{position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:20;max-height:220px;overflow-y:auto;
+    background:var(--bg-surface);border:1.5px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15);padding:5px}
+.tm-section-suggest-item{padding:.45rem .6rem;border-radius:7px;font-size:.82rem;color:var(--text-primary);cursor:pointer;transition:background .12s}
+.tm-section-suggest-item:hover{background:var(--bg-hover);color:var(--primary)}
+.tm-section-suggest-empty{padding:.45rem .6rem;font-size:.8rem;color:var(--text-muted)}
 
 .tset-toggle-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 @media(max-width:600px){.tset-toggle-grid{grid-template-columns:1fr}}
@@ -1603,6 +1679,18 @@ body:not(.light-theme) .tm-sec-tabs{box-shadow:0 2px 14px rgba(0,0,0,.2)}
                     <div class="tset-field-inner">
                         <label class="tset-label">Опис</label>
                         <textarea id="tm-desc" class="tset-input tset-textarea" rows="2" placeholder="Короткий опис (необов'язково)">${Fmt.esc(test?.description||'')}</textarea>
+                    </div>
+                </div>
+                <div class="tset-field">
+                    <div class="tset-field-icon"><i class="fa-solid fa-folder"></i></div>
+                    <div class="tset-field-inner tm-section-combo">
+                        <label class="tset-label">Розділ</label>
+                        <input id="tm-section-input" class="tset-input" type="text" autocomplete="off"
+                            value="${Fmt.esc(test?.section||'')}" placeholder="Наприклад: Оцінка техніки"
+                            oninput="TestsManagerPage._filterTmSectionSuggest()"
+                            onfocus="TestsManagerPage._filterTmSectionSuggest()"
+                            onblur="setTimeout(()=>TestsManagerPage._hideTmSectionSuggest(),150)">
+                        <div id="tm-section-suggest" class="tm-section-suggest" style="display:none"></div>
                     </div>
                 </div>
                 <div class="tset-field">
@@ -1725,6 +1813,41 @@ body:not(.light-theme) .tm-sec-tabs{box-shadow:0 2px 14px rgba(0,0,0,.2)}
 </div>`;
     },
 
+    // ── Розділ (той самий комбобокс, що й CollectionsPage._filterSectionSuggest
+    //    для сторінок) — вільний текст, підказки з унікальних значень уже
+    //    наявних тестів, нічого окремого в БД керувати не треба ──────────
+    _distinctTestSections() {
+        const set = new Set();
+        (this._tests || []).forEach(t => { if (t.section) set.add(t.section); });
+        return [...set].sort((a, b) => a.localeCompare(b, 'uk'));
+    },
+
+    _filterTmSectionSuggest() {
+        const input = document.getElementById('tm-section-input');
+        const box   = document.getElementById('tm-section-suggest');
+        if (!input || !box) return;
+        const q = input.value.trim().toLowerCase();
+        const list = this._distinctTestSections().filter(s => !q || s.toLowerCase().includes(q));
+        if (!list.length) {
+            box.innerHTML = q ? `<div class="tm-section-suggest-empty">Нових збігів немає — залишиться «${Fmt.esc(input.value.trim())}»</div>` : '';
+            box.style.display = q ? 'block' : 'none';
+            return;
+        }
+        box.innerHTML = list.map(s => `<div class="tm-section-suggest-item" data-val="${Fmt.esc(s)}" onmousedown="event.preventDefault();TestsManagerPage._pickTmSection(this.dataset.val)">${Fmt.esc(s)}</div>`).join('');
+        box.style.display = 'block';
+    },
+
+    _pickTmSection(val) {
+        const input = document.getElementById('tm-section-input');
+        if (input) input.value = val;
+        this._hideTmSectionSuggest();
+    },
+
+    _hideTmSectionSuggest() {
+        const box = document.getElementById('tm-section-suggest');
+        if (box) box.style.display = 'none';
+    },
+
     async _saveMeta(testId) {
         const title = Dom.val('tm-title').trim();
         if (!title) { Toast.error('Помилка', 'Введіть назву тесту'); return; }
@@ -1732,6 +1855,7 @@ body:not(.light-theme) .tm-sec-tabs{box-shadow:0 2px 14px rgba(0,0,0,.2)}
         const payload = {
             title,
             description:            Dom.val('tm-desc').trim() || null,
+            section:                Dom.val('tm-section-input').trim() || null,
             time_limit_minutes:     parseInt(Dom.val('tm-time')) || null,
             max_attempts:           parseInt(Dom.val('tm-attempts')) || 1,
             passing_score:          Number.isNaN(parseInt(Dom.val('tm-score'))) ? 70 : parseInt(Dom.val('tm-score')),
@@ -4144,6 +4268,7 @@ body.light-theme .tm-src-ta{background:#f6f8fa;color:#24292f;border-color:#d0d7d
             const newTest = await API.tests.create({
                 title:               test.title + ' (копія)',
                 description:         test.description,
+                section:             test.section || null,
                 instructions:        test.instructions,
                 passing_score:       test.passing_score,
                 max_attempts:        test.max_attempts,

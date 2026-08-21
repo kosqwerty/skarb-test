@@ -380,10 +380,13 @@ const API = {
         },
 
         async getRunParticipants(courseId, runId) {
-            const { data, error } = await supabase.from('enrollments')
+            // .eq('run_id', null) серіалізується в run_id=eq.null, який
+            // PostgREST відхиляє 400-кою — для NULL потрібен .is(), не .eq().
+            let q = supabase.from('enrollments')
                 .select(`user:profiles!user_id(id, full_name, avatar_url, city)`)
-                .eq('course_id', courseId)
-                .eq('run_id', runId);
+                .eq('course_id', courseId);
+            q = runId ? q.eq('run_id', runId) : q.is('run_id', null);
+            const { data, error } = await q;
             if (error) throw error;
             return (data || []).map(e => e.user).filter(Boolean);
         },

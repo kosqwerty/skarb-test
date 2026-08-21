@@ -781,7 +781,7 @@ body.light-theme .ep-hero-deco i{color:#b4870f;filter:drop-shadow(0 4px 10px rgb
             const c    = e.course;
             const run  = e.run;
             const parts = participants[i] || [];
-            const dates = [fmtD(run.start_date), fmtD(run.end_date)].filter(Boolean).join(' — ');
+            const dates = run ? [fmtD(run.start_date), fmtD(run.end_date)].filter(Boolean).join(' — ') : '';
             const thumbHtml = c.thumbnail_url
                 ? `<div class="ep-done-thumb-bg" style="background-image:url('${c.thumbnail_url}')"></div><div class="ep-done-thumb-main" style="background-image:url('${c.thumbnail_url}')"></div>`
                 : `<div style="position:absolute;inset:0;background:linear-gradient(135deg,#f59e0b,#ef4444);display:flex;align-items:center;justify-content:center"><i class="fa-solid fa-graduation-cap" style="font-size:2rem;color:rgba(255,255,255,.3)"></i></div>`;
@@ -801,11 +801,12 @@ body.light-theme .ep-hero-deco i{color:#b4870f;filter:drop-shadow(0 4px 10px rgb
                         <div style="font-weight:700;font-size:.9rem;margin-bottom:.25rem;cursor:pointer" onclick="Router.go('courses/${c.id}?from=expert-path')">${Fmt.esc(c.title)}</div>
                         <span class="ep-done-badge green"><i class="fa-solid fa-circle-check"></i> Завершено</span>
                     </div>
+                    ${run ? `
                     <div style="padding:.5rem .7rem;border-radius:10px;background:var(--bg-raised);border:1px solid var(--border)">
                         <div style="font-size:.65rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:.15rem"><i class="fa-solid fa-rotate"></i> Група</div>
                         <div style="font-size:.82rem;font-weight:600">${Fmt.esc(run.title)}</div>
                         ${dates ? `<div style="font-size:.7rem;color:var(--text-muted)">${dates}</div>` : ''}
-                    </div>
+                    </div>` : ''}
                     ${parts.length ? `<div><div style="font-size:.65rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:.3rem"><i class="fa-solid fa-users"></i> Учасники (${parts.length})</div><div class="ep-done-avatars">${avatarsHtml}</div></div>` : ''}
                     <button class="btn-primary-modern btn-sm" style="margin-top:auto;justify-content:center" onclick="Router.go('courses/${c.id}?from=expert-path')">
                         <i class="fa-solid fa-rotate"></i> Записатися повторно
